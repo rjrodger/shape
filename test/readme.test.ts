@@ -5,23 +5,23 @@ import type {
   Node,
   State,
   Update,
-} from '../gubu'
+} from '../shape'
 
 
-import { Gubu as GubuX } from '../gubu'
+import { Shape as ShapeX } from '../shape'
 
 
-// Handle web (Gubu) versus node ({Gubu}) export.
-let GubuModule = require('../gubu')
+// Handle web (Shape) versus node ({Shape}) export.
+let ShapeModule = require('../shape')
 
-if (GubuModule.Gubu) {
-  GubuModule = GubuModule.Gubu
+if (ShapeModule.Shape) {
+  ShapeModule = ShapeModule.Shape
 }
 
 
-const Gubu: GubuX = GubuModule
-const buildize = Gubu.buildize
-const makeErr = Gubu.makeErr
+const Shape: ShapeX = ShapeModule
+const buildize = Shape.buildize
+const makeErr = Shape.makeErr
 
 
 const {
@@ -52,24 +52,24 @@ const {
   Required,
   Skip,
   Some,
-} = Gubu
+} = Shape
 
 
 
 
 describe('readme', () => {
   test('readme-optional', () => {
-    let shape = Gubu(Optional(String))
+    let shape = Shape(Optional(String))
     expect(shape()).toEqual('')
     expect(shape('a')).toEqual('a')
     expect(() => shape(1)).toThrow('type')
 
-    shape = Gubu(Optional(Some(String, Number)))
+    shape = Shape(Optional(Some(String, Number)))
     expect(shape('a')).toEqual('a')
     expect(shape(1)).toEqual(1)
     expect(shape()).toEqual(undefined) // Overrides Some
 
-    shape = Gubu(Some(String, Number))
+    shape = Shape(Some(String, Number))
     expect(shape('a')).toEqual('a')
     expect(shape(1)).toEqual(1)
     expect(() => shape()).toThrow('satisfy')
@@ -77,12 +77,12 @@ describe('readme', () => {
 
 
   test('readme-default', () => {
-    let shape = Gubu(Default('none', String))
+    let shape = Shape(Default('none', String))
     expect(shape()).toEqual('none')
     expect(shape('a')).toEqual('a')
     expect(() => shape(1)).toThrow('type')
 
-    shape = Gubu(Default({ a: null }, { a: Number }))
+    shape = Shape(Default({ a: null }, { a: Number }))
     expect(shape({ a: 1 })).toEqual({ a: 1 })
     expect(shape()).toEqual({ a: null })
     expect(() => shape({ a: 'x' })).toThrow('type')

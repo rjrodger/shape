@@ -5,28 +5,28 @@ import Pkg from '../package.json'
 import type {
   State,
   Update,
-} from '../gubu'
+} from '../shape'
 
 
-import { Gubu as GubuX } from '../gubu'
+import { Shape as ShapeX } from '../shape'
 
 const Large = require('./large')
 const Long = require('./long')
 
 
-// Handle web (Gubu) versus node ({Gubu}) export.
-let GubuModule = require('../gubu')
+// Handle web (Shape) versus node ({Shape}) export.
+let ShapeModule = require('../shape')
 
-if (GubuModule.Gubu) {
-  GubuModule = GubuModule.Gubu
+if (ShapeModule.Shape) {
+  ShapeModule = ShapeModule.Shape
 }
 
 
-const Gubu: GubuX = GubuModule
-const G$ = Gubu.G$
-const stringify = Gubu.stringify
-const truncate = Gubu.truncate
-const nodize = Gubu.nodize
+const Shape: ShapeX = ShapeModule
+const G$ = Shape.G$
+const stringify = Shape.stringify
+const truncate = Shape.truncate
+const nodize = Shape.nodize
 
 const {
   Above,
@@ -54,7 +54,7 @@ const {
   Child,
   Default,
   Optional,
-} = Gubu
+} = Shape
 
 
 
@@ -81,15 +81,15 @@ type Zed = {
 }
 
 
-describe('gubu', () => {
+describe('shape', () => {
 
   test('happy', () => {
-    expect(Gubu()).toBeDefined()
-    expect(Gubu().toString()).toMatch(/\[Gubu G\$\d+ Any\]/)
-    expect(Gubu(undefined, { name: 'foo' }).toString()).toMatch(/\[Gubu foo Any\]/)
-    expect(Gubu('x', { name: 'bar' }).toString()).toMatch(/\[Gubu bar x\]/)
+    expect(Shape()).toBeDefined()
+    expect(Shape().toString()).toMatch(/\[Shape G\$\d+ Any\]/)
+    expect(Shape(undefined, { name: 'foo' }).toString()).toMatch(/\[Shape foo Any\]/)
+    expect(Shape('x', { name: 'bar' }).toString()).toMatch(/\[Shape bar x\]/)
 
-    let g0 = Gubu({
+    let g0 = Shape({
       a: 'foo',
       b: 100
     })
@@ -104,27 +104,27 @@ describe('gubu', () => {
 
   // (tide-display-help-buffer)
   test('type-infer', () => {
-    let s0 = Gubu({ a: String, b: 'B' })
+    let s0 = Shape({ a: String, b: 'B' })
     let v0 = s0({ a: 'A' })
     // console.log('v0', v0)
     expect(v0).toEqual({ a: 'A', b: 'B' })
     v0.a = 'AA'
     v0.b = 'BB'
 
-    let s1 = Gubu('x')
+    let s1 = Shape('x')
     let v1 = s1('y')
     expect(v1).toEqual('y')
 
-    let s2 = Gubu({ x: { y: Required(String) } })
+    let s2 = Shape({ x: { y: Required(String) } })
     let v2 = s2({ x: { y: 'Y' } })
     expect(v2).toEqual({ x: { y: 'Y' } })
 
-    let s3 = Gubu({ x: { y: One(String, Number), z: One(String, Number) } })
+    let s3 = Shape({ x: { y: One(String, Number), z: One(String, Number) } })
     let v3 = s3({ x: { y: 1, z: 'Z' } })
     expect(v3).toEqual({ x: { y: 1, z: 'Z' } })
 
 
-    let s4 = Gubu({ x: Object })
+    let s4 = Shape({ x: Object })
     type rt4 = ReturnType<typeof s4>
     let v4 = s4({ x: { y: 'Y' } } as rt4)
     expect(v4).toEqual({ x: { y: 'Y' } })
@@ -135,7 +135,7 @@ describe('gubu', () => {
 
   // TODO: type support - remove the any's
   test('valid-basic', () => {
-    let g0 = Gubu({ x: 1, y: 'Y' })
+    let g0 = Shape({ x: 1, y: 'Y' })
     let d0 = { x: 2 }
 
     if (g0.valid(d0)) {
@@ -163,7 +163,7 @@ describe('gubu', () => {
     expect(v1e).toEqual({ z: true })
 
 
-    let g0d = Gubu(Open({ x: 1, y: 'Y' }))
+    let g0d = Shape(Open({ x: 1, y: 'Y' }))
     let d0d = { x: 2, z: true }
     let d0do = g0d(d0d)
     expect(d0do).toEqual({ x: 2, y: 'Y', z: true })
@@ -172,7 +172,7 @@ describe('gubu', () => {
     expect(d0do.z).toEqual(true)
 
 
-    let g1 = Gubu(Open({ x: Number, y: 'Y' }))
+    let g1 = Shape(Open({ x: Number, y: 'Y' }))
     let d1 = { x: 2, z: true }
 
     if (g1.valid(d1)) {
@@ -183,7 +183,7 @@ describe('gubu', () => {
     }
 
 
-    let g2 = Gubu(Open({ x: { k: 1 }, y: 'Y' }))
+    let g2 = Shape(Open({ x: { k: 1 }, y: 'Y' }))
     let d2 = { x: { k: 2 }, z: true }
 
     if (g2.valid(d2)) {
@@ -194,7 +194,7 @@ describe('gubu', () => {
     }
 
 
-    const shape = Gubu({ x: 1, y: 'Y' })
+    const shape = Shape({ x: 1, y: 'Y' })
     let data = { x: 2 }
 
     expect(shape.valid(data)).toEqual(true)
@@ -204,7 +204,7 @@ describe('gubu', () => {
     // CONSOLE-LOG(data.q) // UNCOMMENT TO VERIFY COMPILE FAILS
 
 
-    let g3 = Gubu({ ...new Foo(1) })
+    let g3 = Shape({ ...new Foo(1) })
     // let d3 = { a: 11, x: true }
     let d3 = { a: 11 }
     if (g3.valid(d3)) {
@@ -215,7 +215,7 @@ describe('gubu', () => {
     }
 
 
-    let g4 = Gubu(Open({ x: 1 }) as unknown as { x: number })
+    let g4 = Shape(Open({ x: 1 }) as unknown as { x: number })
     let d4 = { z: true }
 
     if (g4.valid(d4)) {
@@ -231,7 +231,7 @@ describe('gubu', () => {
 
     // Property a is optional, must be a Number, and defaults to 1.
     // Property b is required, and must be a String.
-    const shape = Gubu({ a: 1, b: String })
+    const shape = Shape({ a: 1, b: String })
 
     // Object shape is good! Prints `{ a: 99, b: 'foo' }`
     expect(shape({ a: 99, b: 'foo' })).toEqual({ a: 99, b: 'foo' })
@@ -248,7 +248,7 @@ describe('gubu', () => {
 
 
   test('readme-options', () => {
-    const optionShape = Gubu({
+    const optionShape = Shape({
       host: 'localhost',
       port: 8080
     })
@@ -288,7 +288,7 @@ describe('gubu', () => {
 
   test('readme-deep', () => {
 
-    const productListShape = Gubu({
+    const productListShape = Shape({
       products: [
         {
           name: String,
@@ -320,7 +320,7 @@ describe('gubu', () => {
 
 
   test('readme-object', () => {
-    let shape = Gubu({
+    let shape = Shape({
       foo: {
         bar: {
           zed: String,
@@ -347,13 +347,13 @@ describe('gubu', () => {
     })
 
 
-    let openObject = Gubu(Open({ a: 1 }))
+    let openObject = Shape(Open({ a: 1 }))
     expect(openObject({ a: 11, b: 22 })).toEqual({ a: 11, b: 22 })
   })
 
 
   test('readme-regexp', () => {
-    let shape = Gubu({ countryCode: Check(/^[A-Z][A-Z]$/) })
+    let shape = Shape({ countryCode: Check(/^[A-Z][A-Z]$/) })
     expect(shape({ countryCode: 'IE' })).toEqual({ countryCode: 'IE' })
     expect(() => shape({ countryCode: 'BAD' })).toThrow('Validation failed for property "countryCode" with string "BAD" because check "/^[A-Z][A-Z]$/" failed.')
     expect(() => shape({})).toThrow('Validation failed for property "countryCode" with value "undefined" because the value is required.')
@@ -361,7 +361,7 @@ describe('gubu', () => {
   })
 
   test('readme-recursive', () => {
-    let tree = Gubu({
+    let tree = Shape({
       root: Define('BRANCH', {
         value: String,
         left: Refer('BRANCH'),
@@ -428,7 +428,7 @@ describe('gubu', () => {
 
 
   test('scalar-optional-basic', () => {
-    let g0 = Gubu(1)
+    let g0 = Shape(1)
     expect(g0(2)).toEqual(2)
     expect(g0()).toEqual(1)
     expect(() => g0('x')).toThrow('Validation failed for string "x" because the string is not of type number.')
@@ -436,7 +436,7 @@ describe('gubu', () => {
 
 
   test('object-optional-basic', () => {
-    let g0 = Gubu(Open({ x: 1 }))
+    let g0 = Shape(Open({ x: 1 }))
     expect(g0({ x: 2, y: true, z: 's' })).toEqual({ x: 2, y: true, z: 's' })
     expect(g0({ x: 2 })).toEqual({ x: 2 })
     expect(g0({})).toEqual({ x: 1 })
@@ -447,7 +447,7 @@ describe('gubu', () => {
 
 
   test('array-basic-optional', () => {
-    let g0 = Gubu([1])
+    let g0 = Shape([1])
     expect(g0([11, 22, 33])).toEqual([11, 22, 33])
     expect(g0([11, 22])).toEqual([11, 22])
     expect(g0([11])).toEqual([11])
@@ -460,7 +460,7 @@ describe('gubu', () => {
     expect(() => g0([11, 't'])).toThrow('Validation failed for index "1" with string "t" because the string is not of type number.')
     expect(() => g0([11, 22, 't'])).toThrow('Validation failed for index "2" with string "t" because the string is not of type number.')
 
-    let g1 = Gubu([])
+    let g1 = Shape([])
     expect(g1([11, 22, 33])).toEqual([11, 22, 33])
     expect(g1([11, 22])).toEqual([11, 22])
     expect(g1([11])).toEqual([11])
@@ -479,12 +479,12 @@ describe('gubu', () => {
     let f0t = () => true
     let f0f = () => false
 
-    let g0 = Gubu(f0t)
+    let g0 = Shape(f0t)
     expect(g0().toString()).toEqual('() => true')
     expect(g0(f0f).toString()).toEqual('() => false')
     expect(g0(() => null).toString()).toEqual('() => null')
 
-    let g1 = Gubu({ a: f0t })
+    let g1 = Shape({ a: f0t })
     expect(g1().a.toString()).toEqual('() => true')
     expect(g1({ a: f0f }).a.toString()).toEqual('() => false')
     expect(g1({ a: () => null }).a.toString()).toEqual('() => null')
@@ -496,7 +496,7 @@ describe('gubu', () => {
       .toEqual('functionf1t(){returntrue;}')
 
     function f1f() { return false }
-    let g2 = Gubu({ a: f1t })
+    let g2 = Shape({ a: f1t })
     expect(g2({ a: f1f }).a.toString().replace(/\s/g, ''))
       .toEqual('functionf1f(){returnfalse;}')
   })
@@ -511,7 +511,7 @@ describe('gubu', () => {
     }
     const mars = new Planet('Mars')
 
-    let g0 = Gubu(Planet)
+    let g0 = Shape(Planet)
     expect(g0(mars)).toEqual(mars)
     expect(() => g0(1)).toThrow('not an instance of Planet')
     expect(() => g0(Planet)).toThrow('not an instance of Planet')
@@ -519,7 +519,7 @@ describe('gubu', () => {
 
 
   test('array-basic-required', () => {
-    let g1 = Gubu(Array)
+    let g1 = Shape(Array)
     expect(g1([11, 22, 33])).toEqual([11, 22, 33])
     expect(g1([11, 22])).toEqual([11, 22])
     expect(g1([11])).toEqual([11])
@@ -532,7 +532,7 @@ describe('gubu', () => {
     expect(g1([11, 't'])).toEqual([11, 't'])
     expect(g1([11, 22, 't'])).toEqual([11, 22, 't'])
 
-    let g2 = Gubu(Required([]))
+    let g2 = Shape(Required([]))
     expect(g2([11, 22, 33])).toEqual([11, 22, 33])
     expect(g2([11, 22])).toEqual([11, 22])
     expect(g2([11])).toEqual([11])
@@ -548,16 +548,16 @@ describe('gubu', () => {
 
 
   test('spec-revert-skip-required', () => {
-    let or = Gubu(Skip(Required(1)))
+    let or = Shape(Skip(Required(1)))
     expect(or.spec()).toMatchObject({ r: false, p: true, v: 1, t: 'number' })
 
-    let ror = Gubu(Required(Skip(Required(1))))
+    let ror = Shape(Required(Skip(Required(1))))
     expect(ror.spec()).toMatchObject({ r: true, p: false, v: 1, t: 'number' })
 
-    let ro = Gubu(Required(Skip(1)))
+    let ro = Shape(Required(Skip(1)))
     expect(ro.spec()).toMatchObject({ r: true, p: false, v: 1, t: 'number' })
 
-    let oro = Gubu(Skip(Required(Skip(1))))
+    let oro = Shape(Skip(Required(Skip(1))))
     expect(oro.spec()).toMatchObject({ r: false, p: true, v: 1, t: 'number' })
   })
 
@@ -565,7 +565,7 @@ describe('gubu', () => {
   test('match-basic', () => {
     let tmp: any = {}
 
-    let g0 = Gubu(Number)
+    let g0 = Shape(Number)
     expect(g0.match(1)).toEqual(true)
     expect(g0.match('x')).toEqual(false)
     expect(g0.match(true)).toEqual(false)
@@ -573,7 +573,7 @@ describe('gubu', () => {
     expect(g0.match([])).toEqual(false)
 
     // Match does not mutate root
-    let g1 = Gubu({ a: { b: 1 } })
+    let g1 = Shape({ a: { b: 1 } })
     expect(g1.match(tmp.a1 = {})).toEqual(true)
     expect(tmp.a1).toEqual({})
 
@@ -588,7 +588,7 @@ describe('gubu', () => {
 
 
   test('error-basic', () => {
-    let g0 = Gubu(Number)
+    let g0 = Shape(Number)
     expect(g0(1)).toEqual(1)
     expect(() => g0('x'))
       .toThrow('Validation failed for string "x" because the string is not of type number.')
@@ -616,12 +616,12 @@ describe('gubu', () => {
       expect(e.message).toEqual('Validation failed for string "x" because ' +
         'the string is not of type number.')
       expect(e).toMatchObject({
-        gubu: true,
+        shape: true,
         code: 'shape',
       })
       expect(e.desc()).toMatchObject(
         {
-          name: 'GubuError',
+          name: 'ShapeError',
           code: 'shape',
           err: [
             {
@@ -641,7 +641,7 @@ describe('gubu', () => {
       )
     }
 
-    let g1 = Gubu({ q: { a: String, b: Number } })
+    let g1 = Shape({ q: { a: String, b: Number } })
     let ctx1 = { err: [] }
     g1({ q: { a: 1, b: 'x' } }, ctx1)
     expect(ctx1).toMatchObject(
@@ -679,12 +679,12 @@ describe('gubu', () => {
       expect(e.message).toEqual(`Validation failed for property "q.a" with number "1" because the number is not of type string.
 Validation failed for property "q.b" with string "x" because the string is not of type number.`)
       expect(e).toMatchObject({
-        gubu: true,
+        shape: true,
         code: 'shape',
       })
       expect(e.desc()).toMatchObject(
         {
-          name: 'GubuError',
+          name: 'ShapeError',
           code: 'shape',
           err: [
             {
@@ -717,7 +717,7 @@ Validation failed for property "q.b" with string "x" because the string is not o
 
 
   test('error-custom', () => {
-    let g0 = Gubu(Number, { name: 'G0' })
+    let g0 = Shape(Number, { name: 'G0' })
     let ctx0 = { prefix: 'P0', suffix: 'S0' }
     expect(g0(1, ctx0)).toEqual(1)
     expect(() => g0('x', ctx0))
@@ -736,137 +736,137 @@ Validation failed for property "q.b" with string "x" because the string is not o
     let tmp: any = {}
 
 
-    expect(Gubu(String)('x')).toEqual('x')
-    expect(Gubu(Number)(1)).toEqual(1)
-    expect(Gubu(Boolean)(true)).toEqual(true)
-    expect(Gubu(BigInt)(BigInt(1))).toEqual(BigInt(1))
-    expect(Gubu(Object)({ x: 1 })).toEqual({ x: 1 })
-    expect(Gubu(Array)([1])).toEqual([1])
-    expect(Gubu(Function)(tmp.f0 = () => true)).toEqual(tmp.f0)
-    expect(Gubu(Symbol)(tmp.s0 = Symbol('foo'))).toEqual(tmp.s0)
-    expect(Gubu(Error)(tmp.e0 = new Error())).toEqual(tmp.e0)
-    expect(Gubu(Date)(tmp.d0 = new Date())).toEqual(tmp.d0)
-    expect(Gubu(RegExp)(tmp.r0 = /a/)).toEqual(tmp.r0)
-    expect(Gubu(Map)(tmp.m0 = new Map())).toEqual(tmp.m0)
-    expect(Gubu(Foo)(tmp.c0 = new Foo(2))).toEqual(tmp.c0)
+    expect(Shape(String)('x')).toEqual('x')
+    expect(Shape(Number)(1)).toEqual(1)
+    expect(Shape(Boolean)(true)).toEqual(true)
+    expect(Shape(BigInt)(BigInt(1))).toEqual(BigInt(1))
+    expect(Shape(Object)({ x: 1 })).toEqual({ x: 1 })
+    expect(Shape(Array)([1])).toEqual([1])
+    expect(Shape(Function)(tmp.f0 = () => true)).toEqual(tmp.f0)
+    expect(Shape(Symbol)(tmp.s0 = Symbol('foo'))).toEqual(tmp.s0)
+    expect(Shape(Error)(tmp.e0 = new Error())).toEqual(tmp.e0)
+    expect(Shape(Date)(tmp.d0 = new Date())).toEqual(tmp.d0)
+    expect(Shape(RegExp)(tmp.r0 = /a/)).toEqual(tmp.r0)
+    expect(Shape(Map)(tmp.m0 = new Map())).toEqual(tmp.m0)
+    expect(Shape(Foo)(tmp.c0 = new Foo(2))).toEqual(tmp.c0)
 
-    expect(Gubu('a')('x')).toEqual('x')
-    expect(Gubu(0)(1)).toEqual(1)
-    expect(Gubu(false)(true)).toEqual(true)
-    expect(Gubu(BigInt(-1))(BigInt(1))).toEqual(BigInt(1))
-    expect(Gubu({})({ x: 1 })).toEqual({ x: 1 })
-    expect(Gubu([])([1])).toEqual([1])
-    expect(Gubu(() => null)(tmp.f0 = () => false)).toEqual(tmp.f0)
-    expect(Gubu(new Object())({ x: 1 })).toEqual({ x: 1 })
-    expect(Gubu(new Array())([1])).toEqual([1])
+    expect(Shape('a')('x')).toEqual('x')
+    expect(Shape(0)(1)).toEqual(1)
+    expect(Shape(false)(true)).toEqual(true)
+    expect(Shape(BigInt(-1))(BigInt(1))).toEqual(BigInt(1))
+    expect(Shape({})({ x: 1 })).toEqual({ x: 1 })
+    expect(Shape([])([1])).toEqual([1])
+    expect(Shape(() => null)(tmp.f0 = () => false)).toEqual(tmp.f0)
+    expect(Shape(new Object())({ x: 1 })).toEqual({ x: 1 })
+    expect(Shape(new Array())([1])).toEqual([1])
 
     // FIX: no way to tell this apart from `function anonymous() {}` ?
-    // expect(Gubu(new Function())(tmp.nf0 = () => false)).toEqual(tmp.nf0)
+    // expect(Shape(new Function())(tmp.nf0 = () => false)).toEqual(tmp.nf0)
 
-    expect(Gubu(Symbol('bar'))(tmp.s0)).toEqual(tmp.s0)
-    expect(Gubu(new Error('a'))(tmp.e1 = new Error('b'))).toEqual(tmp.e1)
-    expect(Gubu(new Date())(tmp.d1 = new Date(Date.now() - 1111))).toEqual(tmp.d1)
-    // expect(Gubu(new RegExp('a'))(tmp.r1 = /b/)).toEqual(tmp.r1)
-    expect(Gubu(new RegExp('a'))(tmp.r1 = 'a')).toEqual(tmp.r1)
-    expect(Gubu(new Foo(4))(tmp.c1 = new Foo(5))).toEqual(tmp.c1)
-    expect(Gubu(new Bar(6))(tmp.c2 = new Bar(7))).toEqual(tmp.c2)
-    expect(Gubu(G$({ v: () => null }))(tmp.f1 = () => false)).toEqual(tmp.f1)
+    expect(Shape(Symbol('bar'))(tmp.s0)).toEqual(tmp.s0)
+    expect(Shape(new Error('a'))(tmp.e1 = new Error('b'))).toEqual(tmp.e1)
+    expect(Shape(new Date())(tmp.d1 = new Date(Date.now() - 1111))).toEqual(tmp.d1)
+    // expect(Shape(new RegExp('a'))(tmp.r1 = /b/)).toEqual(tmp.r1)
+    expect(Shape(new RegExp('a'))(tmp.r1 = 'a')).toEqual(tmp.r1)
+    expect(Shape(new Foo(4))(tmp.c1 = new Foo(5))).toEqual(tmp.c1)
+    expect(Shape(new Bar(6))(tmp.c2 = new Bar(7))).toEqual(tmp.c2)
+    expect(Shape(G$({ v: () => null }))(tmp.f1 = () => false)).toEqual(tmp.f1)
 
-    expect(Gubu(null)(null)).toEqual(null)
-    expect(() => Gubu(null)(1)).toThrow('Validation failed for number "1" because the number is not of type null.')
+    expect(Shape(null)(null)).toEqual(null)
+    expect(() => Shape(null)(1)).toThrow('Validation failed for number "1" because the number is not of type null.')
 
-    expect(Gubu(Check((_v: any, u: Update) => (u.val = 1, true)))(null)).toEqual(1)
+    expect(Shape(Check((_v: any, u: Update) => (u.val = 1, true)))(null)).toEqual(1)
 
-    expect(() => Gubu(String)(1)).toThrow(/not of type string/)
-    expect(() => Gubu(Number)('x')).toThrow(/not of type number/)
-    expect(() => Gubu(Boolean)('x')).toThrow(/not of type boolean/)
-    expect(() => Gubu(BigInt)('x')).toThrow(/not of type bigint/)
-    expect(() => Gubu(Object)('x')).toThrow(/not of type object/)
-    expect(() => Gubu(Array)('x')).toThrow(/not of type array/)
-    expect(() => Gubu(Function)('x')).toThrow(/not of type function/)
-    expect(() => Gubu(Symbol)('x')).toThrow(/not of type symbol/)
-    expect(() => Gubu(Error)('x')).toThrow(/not an instance of Error/)
-    expect(() => Gubu(Date)(/a/)).toThrow(/not an instance of Date/)
-    expect(() => Gubu(RegExp)(new Date()))
+    expect(() => Shape(String)(1)).toThrow(/not of type string/)
+    expect(() => Shape(Number)('x')).toThrow(/not of type number/)
+    expect(() => Shape(Boolean)('x')).toThrow(/not of type boolean/)
+    expect(() => Shape(BigInt)('x')).toThrow(/not of type bigint/)
+    expect(() => Shape(Object)('x')).toThrow(/not of type object/)
+    expect(() => Shape(Array)('x')).toThrow(/not of type array/)
+    expect(() => Shape(Function)('x')).toThrow(/not of type function/)
+    expect(() => Shape(Symbol)('x')).toThrow(/not of type symbol/)
+    expect(() => Shape(Error)('x')).toThrow(/not an instance of Error/)
+    expect(() => Shape(Date)(/a/)).toThrow(/not an instance of Date/)
+    expect(() => Shape(RegExp)(new Date()))
       .toThrow(/not an instance of RegExp/)
-    expect(() => Gubu(Foo)(tmp.c3 = new Bar(8)))
+    expect(() => Shape(Foo)(tmp.c3 = new Bar(8)))
       .toThrow(/not an instance of Foo/)
-    expect(() => Gubu(Bar)(tmp.c4 = new Foo(9)))
+    expect(() => Shape(Bar)(tmp.c4 = new Foo(9)))
       .toThrow(/not an instance of Bar/)
 
 
-    expect(() => Gubu('a')(1)).toThrow(/not of type string/)
-    expect(() => Gubu(0)('x')).toThrow(/not of type number/)
-    expect(() => Gubu(false)('x')).toThrow(/not of type boolean/)
-    expect(() => Gubu(BigInt(-1))('x')).toThrow(/not of type bigint/)
-    expect(() => Gubu({})('x')).toThrow(/ not of type object/)
-    expect(() => Gubu([])('x')).toThrow(/not of type array/)
-    expect(() => Gubu(() => null)('x'))
+    expect(() => Shape('a')(1)).toThrow(/not of type string/)
+    expect(() => Shape(0)('x')).toThrow(/not of type number/)
+    expect(() => Shape(false)('x')).toThrow(/not of type boolean/)
+    expect(() => Shape(BigInt(-1))('x')).toThrow(/not of type bigint/)
+    expect(() => Shape({})('x')).toThrow(/ not of type object/)
+    expect(() => Shape([])('x')).toThrow(/not of type array/)
+    expect(() => Shape(() => null)('x'))
       .toThrow(/not of type function/)
-    expect(() => Gubu(Symbol('bar'))('x')).toThrow(/not of type symbol/)
-    expect(() => Gubu(new Error('x'))('x')).toThrow(/not an instance of Error/)
-    expect(() => Gubu(new Date())('x')).toThrow(/not an instance of Date/)
-    expect(() => Gubu(new RegExp('a'))('x'))
+    expect(() => Shape(Symbol('bar'))('x')).toThrow(/not of type symbol/)
+    expect(() => Shape(new Error('x'))('x')).toThrow(/not an instance of Error/)
+    expect(() => Shape(new Date())('x')).toThrow(/not an instance of Date/)
+    expect(() => Shape(new RegExp('a'))('x'))
       .toThrow('Validation failed for string \"x\" because the string did not match /a/.')
-    expect(() => Gubu(new Foo(4))('a')).toThrow(/not an instance of Foo/)
-    expect(() => Gubu(new Bar(6))('a')).toThrow(/not an instance of Bar/)
-    expect(() => Gubu(new Foo(10))(new Bar(11)))
+    expect(() => Shape(new Foo(4))('a')).toThrow(/not an instance of Foo/)
+    expect(() => Shape(new Bar(6))('a')).toThrow(/not an instance of Bar/)
+    expect(() => Shape(new Foo(10))(new Bar(11)))
       .toThrow(/not an instance of Foo/)
-    expect(() => Gubu(new Bar(12))(new Foo(12)))
+    expect(() => Shape(new Bar(12))(new Foo(12)))
       .toThrow(/not an instance of Bar/)
 
-    // expect(() => Gubu(G$({ v: () => null }))('x'))
+    // expect(() => Shape(G$({ v: () => null }))('x'))
     //  .toThrow(/not of type function/)
 
 
-    expect(Gubu({ a: String })({ a: 'x' })).toEqual({ a: 'x' })
-    expect(Gubu({ a: Number })({ a: 1 })).toEqual({ a: 1 })
-    expect(Gubu({ a: Boolean })({ a: true })).toEqual({ a: true })
-    expect(Gubu({ a: Object })({ a: { x: 1 } })).toEqual({ a: { x: 1 } })
-    expect(Gubu({ a: RegExp })({ a: /x/ })).toEqual({ a: /x/ })
+    expect(Shape({ a: String })({ a: 'x' })).toEqual({ a: 'x' })
+    expect(Shape({ a: Number })({ a: 1 })).toEqual({ a: 1 })
+    expect(Shape({ a: Boolean })({ a: true })).toEqual({ a: true })
+    expect(Shape({ a: Object })({ a: { x: 1 } })).toEqual({ a: { x: 1 } })
+    expect(Shape({ a: RegExp })({ a: /x/ })).toEqual({ a: /x/ })
 
-    expect(() => Gubu({ a: String })({ a: 1 }))
+    expect(() => Shape({ a: String })({ a: 1 }))
       .toThrow(/not of type string/)
-    expect(() => Gubu({ a: Number })({ a: 'x' }))
+    expect(() => Shape({ a: Number })({ a: 'x' }))
       .toThrow(/not of type number/)
-    expect(() => Gubu({ a: Boolean })({ a: 'x' }))
+    expect(() => Shape({ a: Boolean })({ a: 'x' }))
       .toThrow(/not of type boolean/)
-    expect(() => Gubu({ a: Object })({ a: 'x' }))
+    expect(() => Shape({ a: Object })({ a: 'x' }))
       .toThrow(/not of type object/)
 
-    expect(Gubu([String])([])).toEqual([])
-    expect(Gubu([String])(['x'])).toEqual(['x'])
-    expect(Gubu([String])(['x', 'y'])).toEqual(['x', 'y'])
+    expect(Shape([String])([])).toEqual([])
+    expect(Shape([String])(['x'])).toEqual(['x'])
+    expect(Shape([String])(['x', 'y'])).toEqual(['x', 'y'])
 
-    expect(Gubu([Number])([])).toEqual([])
-    expect(Gubu([Number])([1])).toEqual([1])
-    expect(Gubu([Number])([1, 2])).toEqual([1, 2])
+    expect(Shape([Number])([])).toEqual([])
+    expect(Shape([Number])([1])).toEqual([1])
+    expect(Shape([Number])([1, 2])).toEqual([1, 2])
 
-    expect(Gubu([Boolean])([])).toEqual([])
-    expect(Gubu([Boolean])([true])).toEqual([true])
-    expect(Gubu([Boolean])([true, false])).toEqual([true, false])
+    expect(Shape([Boolean])([])).toEqual([])
+    expect(Shape([Boolean])([true])).toEqual([true])
+    expect(Shape([Boolean])([true, false])).toEqual([true, false])
 
-    expect(Gubu([Object])([])).toEqual([])
-    expect(Gubu([Object])([{ x: 1 }])).toEqual([{ x: 1 }])
-    expect(Gubu([Object])([{ x: 1 }, { y: 2 }])).toEqual([{ x: 1 }, { y: 2 }])
+    expect(Shape([Object])([])).toEqual([])
+    expect(Shape([Object])([{ x: 1 }])).toEqual([{ x: 1 }])
+    expect(Shape([Object])([{ x: 1 }, { y: 2 }])).toEqual([{ x: 1 }, { y: 2 }])
 
-    expect(Gubu([RegExp])([])).toEqual([])
-    expect(Gubu([RegExp])([/a/])).toEqual([/a/])
-    expect(Gubu([RegExp])([/a/, /b/])).toEqual([/a/, /b/])
+    expect(Shape([RegExp])([])).toEqual([])
+    expect(Shape([RegExp])([/a/])).toEqual([/a/])
+    expect(Shape([RegExp])([/a/, /b/])).toEqual([/a/, /b/])
 
-    expect(Gubu([Date])([])).toEqual([])
-    let d0 = new Date(); expect(Gubu([Date])([d0])).toEqual([d0])
-    let d1 = new Date(); expect(Gubu([Date])([d0, d1])).toEqual([d0, d1])
+    expect(Shape([Date])([])).toEqual([])
+    let d0 = new Date(); expect(Shape([Date])([d0])).toEqual([d0])
+    let d1 = new Date(); expect(Shape([Date])([d0, d1])).toEqual([d0, d1])
 
-    expect(() => Gubu([String])([1]))
+    expect(() => Shape([String])([1]))
       .toThrow(/not of type string/)
-    expect(() => Gubu([Number])(['x']))
+    expect(() => Shape([Number])(['x']))
       .toThrow(/not of type number/)
-    expect(() => Gubu([Boolean])(['x']))
+    expect(() => Shape([Boolean])(['x']))
       .toThrow(/not of type boolean/)
-    expect(() => Gubu([Object])([1]))
+    expect(() => Shape([Object])([1]))
       .toThrow(/not of type object/)
-    expect(() => Gubu([RegExp])(['not']))
+    expect(() => Shape([RegExp])(['not']))
       .toThrow(/not an instance of RegExp\./)
   })
 
@@ -874,7 +874,7 @@ Validation failed for property "q.b" with string "x" because the string is not o
   test('shapes-fails', () => {
     let tmp: any = {}
 
-    let string0 = Gubu(String)
+    let string0 = Shape(String)
     expect(string0('x')).toEqual('x')
     expect(string0('xy')).toEqual('xy')
     expect(() => string0('')).toThrow(/Validation failed for string "" because an empty string is not allowed./)
@@ -891,7 +891,7 @@ Validation failed for property "q.b" with string "x" because the string is not o
     expect(() => string0(new Date())).toThrow(/not of type string/)
     expect(() => string0(new Foo(1))).toThrow(/not of type string/)
 
-    let number0 = Gubu(Number)
+    let number0 = Shape(Number)
     expect(number0(1)).toEqual(1)
     expect(number0(Infinity)).toEqual(Infinity)
     expect(() => number0('x')).toThrow(/not of type number/)
@@ -906,7 +906,7 @@ Validation failed for property "q.b" with string "x" because the string is not o
     expect(() => number0(new Date())).toThrow(/not of type number/)
     expect(() => number0(new Foo(1))).toThrow(/not of type number/)
 
-    let object0 = Gubu(Object)
+    let object0 = Shape(Object)
     expect(object0({})).toEqual({})
     expect(object0({ x: 1 })).toEqual({ x: 1 })
     expect(object0(tmp.r0 = /a/)).toEqual(tmp.r0)
@@ -921,7 +921,7 @@ Validation failed for property "q.b" with string "x" because the string is not o
     expect(() => object0(NaN)).toThrow(/not of type object/)
     expect(() => object0(undefined)).toThrow(/value is required/)
 
-    let array0 = Gubu(Array)
+    let array0 = Shape(Array)
     expect(array0([])).toEqual([])
     expect(array0([11])).toEqual([11])
     expect(() => array0('x')).toThrow(/not of type array/)
@@ -940,46 +940,46 @@ Validation failed for property "q.b" with string "x" because the string is not o
 
   test('shapes-builtins', () => {
     let d0 = new Date(2121, 1, 1)
-    let g0 = Gubu({ a: Date })
+    let g0 = Shape({ a: Date })
     expect(g0({ a: d0 })).toEqual({ a: d0 })
     expect(() => g0({})).toThrow('required')
     expect(() => g0({ a: Date })).toThrow('instance')
     expect(() => g0({ a: /QXQ/ })).toThrow(/QXQ.*instance/)
 
-    let g1 = Gubu({ a: Skip(Date) })
+    let g1 = Shape({ a: Skip(Date) })
     expect(g1({ a: d0 })).toEqual({ a: d0 })
     expect(g1({ a: undefined })).toEqual({ a: undefined })
     expect(g1({})).toEqual({})
 
     let r0 = /a/
-    let g2 = Gubu({ a: RegExp })
+    let g2 = Shape({ a: RegExp })
     expect(g2({ a: r0 })).toEqual({ a: r0 })
     expect(() => g2({})).toThrow('required')
     expect(() => g2({ a: RegExp })).toThrow('instance')
     expect(() => g2({ a: d0 })).toThrow(/2121.*instance/)
 
-    let g3 = Gubu({ a: Skip(RegExp) })
+    let g3 = Shape({ a: Skip(RegExp) })
     expect(g3({ a: r0 })).toEqual({ a: r0 })
     expect(g3({})).toEqual({})
   })
 
 
   test('object-basic', () => {
-    let g1 = Gubu({ x: 1 })
+    let g1 = Shape({ x: 1 })
     expect(g1()).toEqual({ x: 1 })
     expect(g1({})).toEqual({ x: 1 })
     expect(g1({ x: 11 })).toEqual({ x: 11 })
     expect(() => g1({ x: 11, y: 22 })).toThrow('Validation failed for object "{x:11,y:22}" because the property "y" is not allowed.')
     expect(() => g1({ x: 11, y: 22, z: 33 })).toThrow('Validation failed for object "{x:11,y:22,z:33}" because the properties "y, z" are not allowed.')
 
-    let g2 = Gubu({ x: 1, y: 2 })
+    let g2 = Shape({ x: 1, y: 2 })
     expect(g2()).toEqual({ x: 1, y: 2 })
     expect(g2({})).toEqual({ x: 1, y: 2 })
     expect(g2({ x: 11 })).toEqual({ x: 11, y: 2 })
     expect(g2({ x: 11, y: 22 })).toEqual({ x: 11, y: 22 })
     expect(() => g2({ x: 11, y: 22, z: 33 })).toThrow('Validation failed for object "{x:11,y:22,z:33}" because the property "z" is not allowed.')
 
-    let g3 = Gubu({ x: 1, y: 2, z: 3 })
+    let g3 = Shape({ x: 1, y: 2, z: 3 })
     expect(g3()).toEqual({ x: 1, y: 2, z: 3 })
     expect(g3({})).toEqual({ x: 1, y: 2, z: 3 })
     expect(g3({ x: 11 })).toEqual({ x: 11, y: 2, z: 3 })
@@ -988,21 +988,21 @@ Validation failed for property "q.b" with string "x" because the string is not o
     expect(() => g3({ x: 11, y: 22, z: 33, k: 44 })).toThrow('Validation failed for object "{x:11,y:22,z:33,k:44}" because the property "k" is not allowed.')
 
 
-    let g1o = Gubu(Open({ x: 1 }))
+    let g1o = Shape(Open({ x: 1 }))
     expect(g1o()).toEqual({ x: 1 })
     expect(g1o({})).toEqual({ x: 1 })
     expect(g1o({ x: 11 })).toEqual({ x: 11 })
     expect(g1o({ x: 11, y: 22 })).toEqual({ x: 11, y: 22 })
     expect(g1o({ x: 11, y: 22, z: 33 })).toEqual({ x: 11, y: 22, z: 33 })
 
-    let g2o = Gubu(Open({ x: 1, y: 2 }))
+    let g2o = Shape(Open({ x: 1, y: 2 }))
     expect(g2o()).toEqual({ x: 1, y: 2 })
     expect(g2o({})).toEqual({ x: 1, y: 2 })
     expect(g2o({ x: 11 })).toEqual({ x: 11, y: 2 })
     expect(g2o({ x: 11, y: 22 })).toEqual({ x: 11, y: 22 })
     expect(g2o({ x: 11, y: 22, z: 33 })).toEqual({ x: 11, y: 22, z: 33 })
 
-    let g3o = Gubu(Open({ x: 1, y: 2, z: 3 }))
+    let g3o = Shape(Open({ x: 1, y: 2, z: 3 }))
     expect(g3o()).toEqual({ x: 1, y: 2, z: 3 })
     expect(g3o({})).toEqual({ x: 1, y: 2, z: 3 })
     expect(g3o({ x: 11 })).toEqual({ x: 11, y: 2, z: 3 })
@@ -1013,7 +1013,7 @@ Validation failed for property "q.b" with string "x" because the string is not o
 
 
 
-    let g1v = Gubu(Child(Number, { x: 1 }))
+    let g1v = Shape(Child(Number, { x: 1 }))
     expect(g1v()).toEqual({ x: 1 })
     expect(g1v({})).toEqual({ x: 1 })
     expect(g1v({ x: 11 })).toEqual({ x: 11 })
@@ -1021,7 +1021,7 @@ Validation failed for property "q.b" with string "x" because the string is not o
     expect(g1v({ x: 11, y: 22, z: 33 })).toEqual({ x: 11, y: 22, z: 33 })
     expect(() => g1v({ x: 11, y: true })).toThrow('Validation failed for property "y" with boolean "true" because the boolean is not of type number.')
 
-    let g2v = Gubu(Child(Number, { x: 1, y: 2 }))
+    let g2v = Shape(Child(Number, { x: 1, y: 2 }))
     expect(g2v()).toEqual({ x: 1, y: 2 })
     expect(g2v({})).toEqual({ x: 1, y: 2 })
     expect(g2v({ x: 11 })).toEqual({ x: 11, y: 2 })
@@ -1029,7 +1029,7 @@ Validation failed for property "q.b" with string "x" because the string is not o
     expect(g2v({ x: 11, y: 22, z: 33 })).toEqual({ x: 11, y: 22, z: 33 })
     expect(() => g2v({ x: 11, y: 22, z: true })).toThrow('Validation failed for property "z" with boolean "true" because the boolean is not of type number.')
 
-    let g3v = Gubu(Child(Number, { x: 1, y: 2, z: 3 }))
+    let g3v = Shape(Child(Number, { x: 1, y: 2, z: 3 }))
     expect(g3v()).toEqual({ x: 1, y: 2, z: 3 })
     expect(g3v({})).toEqual({ x: 1, y: 2, z: 3 })
     expect(g3v({ x: 11 })).toEqual({ x: 11, y: 2, z: 3 })
@@ -1041,13 +1041,13 @@ Validation failed for property "q.b" with string "x" because the string is not o
 
 
     // Empty object is Open
-    let g4 = Gubu({})
+    let g4 = Shape({})
     expect(g4()).toEqual({})
     expect(g4({})).toEqual({})
     expect(g4({ x: 1 })).toEqual({ x: 1 })
     expect(g4({ x: 1, y: 'a' })).toEqual({ x: 1, y: 'a' })
 
-    let g5 = Gubu({ k: {} })
+    let g5 = Shape({ k: {} })
     expect(g5()).toEqual({ k: {} })
     expect(g5({})).toEqual({ k: {} })
     expect(g5({ k: {} })).toEqual({ k: {} })
@@ -1055,22 +1055,22 @@ Validation failed for property "q.b" with string "x" because the string is not o
     expect(g5({ k: { n: true, m: NaN } })).toEqual({ k: { n: true, m: NaN } })
     expect(() => g5({ x: 1 })).toThrow('not allowed')
 
-    expect(() => Gubu({ x: 1 })('q')).toThrow(/type object/)
-    expect(() => Gubu({ y: { x: 1 } })({ y: 'q' })).toThrow(/type object/)
+    expect(() => Shape({ x: 1 })('q')).toThrow(/type object/)
+    expect(() => Shape({ y: { x: 1 } })({ y: 'q' })).toThrow(/type object/)
   })
 
 
   test('required-cover', () => {
 
-    const v0 = Gubu(Required(Any()))
+    const v0 = Shape(Required(Any()))
     expect(v0(1)).toEqual(1)
     expect(() => v0()).toThrow('required')
 
-    const o0 = Gubu({ a: Required(Any()) })
+    const o0 = Shape({ a: Required(Any()) })
     expect(o0({ a: 1 })).toEqual({ a: 1 })
     expect(() => o0({})).toThrow('required')
 
-    const a0 = Gubu([Required(Any())])
+    const a0 = Shape([Required(Any())])
     expect(a0([])).toEqual([]) // empty array is allowed
     expect(a0([1])).toEqual([1])
     expect(a0([1, 2])).toEqual([1, 2])
@@ -1082,42 +1082,42 @@ Validation failed for property "q.b" with string "x" because the string is not o
 
   test('shapes-edges', () => {
     // NaN is actually Not-a-Number (whereas 'number' === typeof(NaN))
-    const num0 = Gubu(1)
+    const num0 = Shape(1)
     expect(num0(1)).toEqual(1)
     expect(() => num0(NaN)).toThrow(/not of type number/)
 
-    const nan0 = Gubu(NaN)
+    const nan0 = Shape(NaN)
     expect(nan0(NaN)).toEqual(NaN)
     expect(() => nan0(1)).toThrow(/not of type nan/)
 
 
     // Empty strings only allowed by Empty() builder.
 
-    const rs0 = Gubu(String)
+    const rs0 = Shape(String)
     expect(rs0('x')).toEqual('x')
     expect(() => rs0('')).toThrow('Validation failed for string "" because an empty string is not allowed.')
 
-    const rs0e = Gubu(Empty(String))
+    const rs0e = Shape(Empty(String))
     expect(rs0e('x')).toEqual('x')
     expect(rs0e('')).toEqual('')
     expect(() => rs0e()).toThrow('required')
     expect(() => rs0e(undefined)).toThrow('required')
 
-    const os0 = Gubu('x')
+    const os0 = Shape('x')
     expect(() => os0('')).toThrow('empty string is not allowed')
     expect(os0()).toEqual('x')
     expect(os0(undefined)).toEqual('x')
     expect(os0('x')).toEqual('x')
     expect(os0('y')).toEqual('y')
 
-    const os0e = Gubu(Empty('x'))
+    const os0e = Shape(Empty('x'))
     expect(os0e('')).toEqual('')
     expect(os0e()).toEqual('x')
     expect(os0e(undefined)).toEqual('x')
     expect(os0e('x')).toEqual('x')
     expect(os0e('y')).toEqual('y')
 
-    const os0e2 = Gubu(Empty(''))
+    const os0e2 = Shape(Empty(''))
     expect(os0e2('')).toEqual('')
     expect(os0e2()).toEqual('')
     expect(os0e2(undefined)).toEqual('')
@@ -1125,7 +1125,7 @@ Validation failed for property "q.b" with string "x" because the string is not o
     expect(os0e2('y')).toEqual('y')
 
     // Use literal '' as a shortcut
-    const os0e3 = Gubu('')
+    const os0e3 = Shape('')
     expect(os0e3('')).toEqual('')
     expect(os0e3()).toEqual('')
     expect(os0e3(undefined)).toEqual('')
@@ -1133,18 +1133,18 @@ Validation failed for property "q.b" with string "x" because the string is not o
     expect(os0e3('y')).toEqual('y')
 
 
-    const os1e = Gubu(Skip(Empty(String)))
+    const os1e = Shape(Skip(Empty(String)))
     expect(os1e()).toEqual(undefined)
     expect(os1e('')).toEqual('')
     expect(os1e('x')).toEqual('x')
 
-    const os2e = Gubu(Skip(String).Empty())
+    const os2e = Shape(Skip(String).Empty())
     expect(os2e()).toEqual(undefined)
     expect(os2e('')).toEqual('')
     expect(os2e('x')).toEqual('x')
 
 
-    const os1eO = Gubu({ a: Skip(Empty(String)) })
+    const os1eO = Shape({ a: Skip(Empty(String)) })
     expect(os1eO({})).toEqual({})
     expect(os1eO({ a: '' })).toEqual({ a: '' })
     expect(os1eO({ a: 'x' })).toEqual({ a: 'x' })
@@ -1152,37 +1152,37 @@ Validation failed for property "q.b" with string "x" because the string is not o
 
     // Long values are truncated in error descriptions.
     expect(() =>
-      Gubu(Number)('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'))
+      Shape(Number)('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'))
       .toThrow('Validation failed for string "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa..." because the string is not of type number.')
 
 
     // Explicit `undefined` and `null`
 
-    const u0 = Gubu({ a: undefined })
+    const u0 = Shape({ a: undefined })
     expect(u0({ a: undefined })).toEqual({ a: undefined })
     expect(u0({})).toEqual({ a: undefined })
 
-    const u0n = Gubu({ a: null })
+    const u0n = Shape({ a: null })
     expect(u0n({ a: null })).toEqual({ a: null })
     expect(u0n({})).toEqual({ a: null })
     expect(() => u0n({ a: 1 })).toThrow('type')
 
-    const u1 = Gubu({ a: Required(undefined) })
+    const u1 = Shape({ a: Required(undefined) })
     expect(u1({ a: undefined })).toEqual({ a: undefined })
     expect(() => u1({})).toThrow('required')
 
-    const u1n = Gubu({ a: Required(null) })
+    const u1n = Shape({ a: Required(null) })
     expect(u1n({ a: null })).toEqual({ a: null })
     expect(() => u1n({})).toThrow('required')
     expect(() => u1n({ a: 1 })).toThrow('type')
 
-    const u2 = Gubu({ a: Required(NaN) })
+    const u2 = Shape({ a: Required(NaN) })
     expect(u2({ a: NaN })).toEqual({ a: NaN })
     expect(() => u2({})).toThrow('required')
 
 
     // Required does inject undefined
-    let r0 = Gubu({ a: Boolean, b: Required({ x: Number }), c: Required([]) })
+    let r0 = Shape({ a: Boolean, b: Required({ x: Number }), c: Required([]) })
     let o0 = {}
     expect(() => r0(o0)).toThrow('required')
     expect(o0).toEqual({})
@@ -1196,7 +1196,7 @@ Validation failed for property "q.b" with string "x" because the string is not o
 
   test('function-basic', () => {
     function Qaz() { }
-    let g0 = Gubu(Func(Qaz)) // needed other Foo is considered a class
+    let g0 = Shape(Func(Qaz)) // needed other Foo is considered a class
 
     let tmp: any = {}
     expect(g0()).toEqual(Qaz)
@@ -1205,18 +1205,18 @@ Validation failed for property "q.b" with string "x" because the string is not o
 
 
   test('regexp-basic', () => {
-    let g0 = Gubu(/a/)
+    let g0 = Shape(/a/)
     expect(g0('a')).toEqual('a')
     expect(g0('xax')).toEqual('xax')
     expect(() => g0('x')).toThrow('Validation failed for string "x" because the string did not match /a/.')
 
-    let g1 = Gubu({ b: /a/ })
+    let g1 = Shape({ b: /a/ })
     expect(g1({ b: 'a' })).toEqual({ b: 'a' })
     expect(g1({ b: 'xax' })).toEqual({ b: 'xax' })
     expect(() => g1({ b: 'x' })).toThrow('Validation failed for property "b" with string "x" because the string did not match /a/.')
     expect(() => g1({})).toThrow('Validation failed for property "b" with value "undefined" because the value is not of type string.')
 
-    let g2 = Gubu({ b: Optional(/a/) })
+    let g2 = Shape({ b: Optional(/a/) })
     expect(g2({ b: 'a' })).toEqual({ b: 'a' })
     expect(g2({ b: 'xax' })).toEqual({ b: 'xax' })
     expect(g2({})).toEqual({})
@@ -1226,9 +1226,9 @@ Validation failed for property "q.b" with string "x" because the string is not o
 
   test('api-object', () => {
     // This is an allowed way to get shape builders
-    const { Required } = Gubu
+    const { Required } = Shape
 
-    let obj01 = Gubu({
+    let obj01 = Shape({
       a: { x: 1 },
       b: Skip({ y: 2 }),
       c: Skip({ z: Skip({ k: 3 }) }),
@@ -1240,7 +1240,7 @@ Validation failed for property "q.b" with string "x" because the string is not o
     expect(obj01({ c: { z: {} } })).toEqual({ a: { x: 1 }, c: { z: { k: 3 } } })
 
 
-    let obj11 = Gubu({
+    let obj11 = Shape({
       people: Required({}).Child({ name: String, age: Number })
     })
 
@@ -1265,7 +1265,7 @@ Validation failed for property "q.b" with string "x" because the string is not o
     expect(() => obj11({})).toThrow('Validation failed for property "people" with value "undefined" because the value is required.')
 
 
-    let shape = Gubu({
+    let shape = Shape({
       foo: Number,
       bar: Required({
         zed: Boolean
@@ -1283,7 +1283,7 @@ Validation failed for property "q.b" with string "x" because the string is not o
     expect(() => shape({ foo: 1, bar: { zed: false, baz: 2 }, qaz: 3 })).toThrow('not allowed') // new properties are not allowed
 
 
-    let strictShape = Gubu({ a: { b: String } })
+    let strictShape = Shape({ a: { b: String } })
 
     // Passes
     expect(strictShape({ a: { b: 'ABC' } })).toEqual({ a: { b: 'ABC' } })
@@ -1292,7 +1292,7 @@ Validation failed for property "q.b" with string "x" because the string is not o
     expect(() => strictShape({})).toThrow('Validation failed for property "a.b" with value "undefined" because the value is required.')
 
 
-    let easyShape = Gubu({ a: Skip({ b: String }) })
+    let easyShape = Shape({ a: Skip({ b: String }) })
 
     // Now both pass
     expect(easyShape({ a: { b: 'ABC' } })).toEqual({ a: { b: 'ABC' } })
@@ -1302,9 +1302,9 @@ Validation failed for property "q.b" with string "x" because the string is not o
     expect(() => easyShape({ a: {} })).toThrow('Validation failed for property "a.b" with value "undefined" because the value is required.')
 
 
-    const { Open } = Gubu
+    const { Open } = Shape
 
-    shape = Gubu(Open({
+    shape = Shape(Open({
       a: 1
     }))
 
@@ -1314,7 +1314,7 @@ Validation failed for property "q.b" with string "x" because the string is not o
     expect(() => shape({ a: 'foo' })).toThrow('type')
 
 
-    shape = Gubu(Open({
+    shape = Shape(Open({
       a: Open({
         b: 1
       })
@@ -1324,8 +1324,8 @@ Validation failed for property "q.b" with string "x" because the string is not o
       .toEqual({ a: { b: 11, c: 22 }, d: 33 })
 
 
-    const { Child } = Gubu
-    shape = Gubu(Child(String, {
+    const { Child } = Shape
+    shape = Shape(Child(String, {
       a: 123,
     }))
 
@@ -1343,7 +1343,7 @@ Validation failed for property "q.b" with string "x" because the string is not o
 
 
   test('api-array', () => {
-    let g1 = Gubu([Number])
+    let g1 = Shape([Number])
     expect(g1()).toEqual([])
     expect(g1([])).toEqual([])
     expect(g1([1])).toEqual([1])
@@ -1352,7 +1352,7 @@ Validation failed for property "q.b" with string "x" because the string is not o
     expect(g1([1, 2, 3, 4])).toEqual([1, 2, 3, 4])
     expect(() => g1([1, 2, 'x'])).toThrow('type')
 
-    let g2 = Gubu([{ x: 1 }])
+    let g2 = Shape([{ x: 1 }])
     expect(g2()).toEqual([])
     expect(g2([])).toEqual([])
     expect(g2([{ x: 123 }])).toEqual([{ x: 123 }])
@@ -1366,7 +1366,7 @@ Validation failed for property "q.b" with string "x" because the string is not o
     expect(() => g2([{ x: 'a' }])).toThrow('type')
     expect(() => g2([{ x: 1 }, { x: 'a' }])).toThrow('type')
 
-    let gc1 = Gubu(Closed([Number, String, Boolean]))
+    let gc1 = Shape(Closed([Number, String, Boolean]))
 
     expect(gc1([123, 'abc', true])).toEqual([123, 'abc', true])
 
@@ -1375,7 +1375,7 @@ Validation failed for property "q.b" with string "x" because the string is not o
     expect(() => gc1([123, 'abc', true, 'extra'])).toThrow('not allowed')
 
 
-    let gc2 = Gubu(Closed([1, 'a', true]))
+    let gc2 = Shape(Closed([1, 'a', true]))
     expect(gc2()).toEqual([1, 'a', true])
     expect(gc2([])).toEqual([1, 'a', true])
     expect(gc2([2])).toEqual([2, 'a', true])
@@ -1386,14 +1386,14 @@ Validation failed for property "q.b" with string "x" because the string is not o
     expect(() => gc2([2, 'b', false, 'bad'])).toThrow('not allowed')
 
     // 2 or more elements, so considered Closed
-    let gc3 = Gubu([{ x: 1 }, Required({ y: true })])
+    let gc3 = Shape([{ x: 1 }, Required({ y: true })])
     expect(gc3([{ x: 2 }, { y: false }])).toEqual([{ x: 2 }, { y: false }])
     expect(gc3([undefined, { y: false }])).toEqual([{ x: 1 }, { y: false }])
     expect(gc3([{ x: 2 }, {}])).toEqual([{ x: 2 }, { y: true }])
     expect(() => gc3([{ x: 2 }, undefined])).toThrow('required')
     expect(() => gc3([{ x: 2 }])).toThrow('required')
 
-    let gc4 = Gubu({ a: Closed([{ x: 1 }, { y: { z: 'Z' } }]) })
+    let gc4 = Shape({ a: Closed([{ x: 1 }, { y: { z: 'Z' } }]) })
     expect(gc4()).toEqual({ 'a': [{ 'x': 1 }, { 'y': { 'z': 'Z' } }] })
     expect(gc4({})).toEqual({
       'a': [{ 'x': 1 }, {
@@ -1410,23 +1410,23 @@ Validation failed for property "q.b" with string "x" because the string is not o
 
 
   test('api-length', () => {
-    let g1 = Gubu(Max(2, []))
+    let g1 = Shape(Max(2, []))
     expect(g1([1])).toEqual([1])
     expect(g1(['a', true])).toEqual(['a', true])
     expect(() => g1([1, 2, 3])).toThrow('maximum length of 2')
 
-    let g2 = Gubu(Min(2, [Number]))
+    let g2 = Shape(Min(2, [Number]))
     expect(g2([11, 22])).toEqual([11, 22])
     expect(g2([11, 22, 33])).toEqual([11, 22, 33])
     expect(() => g2([11])).toThrow('minimum')
     expect(() => g2([])).toThrow('minimum')
 
-    let g3 = Gubu(Max(2, String))
+    let g3 = Shape(Max(2, String))
     expect(g3('a')).toEqual('a')
     expect(g3('ab')).toEqual('ab')
     expect(() => g3('abc')).toThrow('maximum')
 
-    let g4 = Gubu(Max(2, {}))
+    let g4 = Shape(Max(2, {}))
     expect(g4({ a: 1 })).toEqual({ a: 1 })
     expect(g4({ a: 1, b: 2 })).toEqual({ a: 1, b: 2 })
     expect(() => g4({ a: 1, b: 2, c: 3 })).toThrow('maximum')
@@ -1438,8 +1438,8 @@ Validation failed for property "q.b" with string "x" because the string is not o
   test('api-functions', () => {
     let f0 = () => true
     let f1 = () => false
-    let { G$ } = Gubu
-    let shape = Gubu({ fn: G$({ v: f0, f: f0 }) })
+    let { G$ } = Shape
+    let shape = Shape({ fn: G$({ v: f0, f: f0 }) })
 
     expect(shape({})).toEqual({ fn: f0 })
     expect(shape({ fn: f1 })).toEqual({ fn: f1 })
@@ -1447,7 +1447,7 @@ Validation failed for property "q.b" with string "x" because the string is not o
 
     let tmp: any = {}
 
-    shape = Gubu({
+    shape = Shape({
       fn: tmp.d0 = () => true
     })
 
@@ -1457,11 +1457,11 @@ Validation failed for property "q.b" with string "x" because the string is not o
 
 
   test('api-custom', () => {
-    let shape = Gubu({ a: Check((v: any) => 10 < v) })
+    let shape = Shape({ a: Check((v: any) => 10 < v) })
     expect(shape({ a: 11 })).toEqual({ a: 11 }) // passes, as 10 < 11 is true
     expect(() => shape({ a: 9 })).toThrow('Validation failed for property "a" with number "9" because check "(v) => 10 < v" failed.')  // fails, as 10 < 9 is false
 
-    shape = Gubu({
+    shape = Shape({
       a: Check((value: any, update: any) => {
         update.val = value * 2
         return true // Remember to return true to indicate value is valid!
@@ -1471,7 +1471,7 @@ Validation failed for property "q.b" with string "x" because the string is not o
     expect(shape({ a: 3 })).toEqual({ a: 6 })
 
 
-    shape = Gubu({
+    shape = Shape({
       a: Check((_value: any, update: any) => {
         update.err = 'BAD VALUE $VALUE AT $PATH'
         return false // always fails
@@ -1480,7 +1480,7 @@ Validation failed for property "q.b" with string "x" because the string is not o
     expect(() => shape({ a: 3 })).toThrow("BAD VALUE 3 AT a")
 
 
-    shape = Gubu({
+    shape = Shape({
       a: Check((value: any, update: any, state: any) => {
         update.val = value + ` KEY=${state.key}`
         return true
@@ -1494,7 +1494,7 @@ Validation failed for property "q.b" with string "x" because the string is not o
   test('type-default-optional', () => {
     let f0 = () => true
 
-    let g0 = Gubu({
+    let g0 = Shape({
       string: 's',
       number: 1,
       boolean: true,
@@ -1530,7 +1530,7 @@ Validation failed for property "q.b" with string "x" because the string is not o
 
 
   test('type-native-required', () => {
-    let g0 = Gubu({
+    let g0 = Shape({
       string: String,
       number: Number,
       boolean: Boolean,
@@ -1550,7 +1550,7 @@ Validation failed for property "q.b" with string "x" because the string is not o
     expect(g0(o0)).toMatchObject(o0)
 
 
-    let e0 = Gubu({ s0: String, s1: 'x' })
+    let e0 = Shape({ s0: String, s1: 'x' })
     expect(e0({ s0: 'a' })).toMatchObject({ s0: 'a', s1: 'x' })
 
     expect(() => e0({ s0: 1 })).toThrow(/Validation failed for property "s0" with number "1" because the number is not of type string\./)
@@ -1560,10 +1560,10 @@ Validation failed for property "q.b" with string "x" because the string is not o
 
 
   test('type-native-optional', () => {
-    let { Skip } = Gubu
+    let { Skip } = Shape
 
     // Explicit Skip over native type sets no value.
-    let g0 = Gubu({
+    let g0 = Shape({
       string: Skip(String),
       number: Skip(Number),
       boolean: Skip(Boolean),
@@ -1577,7 +1577,7 @@ Validation failed for property "q.b" with string "x" because the string is not o
 
 
   test('array-repeating-elements', () => {
-    let g0 = Gubu({
+    let g0 = Shape({
       a: [String]
     })
 
@@ -1607,13 +1607,13 @@ Validation failed for property "q.b" with string "x" because the string is not o
 
 
     // Zero or more elements of shape.
-    let g1 = Gubu([String])
+    let g1 = Shape([String])
     expect(g1(['X', 'Y'])).toEqual(['X', 'Y'])
     expect(() => g1(['X', 1])).toThrow(/Validation failed for index "1" with number "1" because the number is not of type string\./)
 
 
     // Empty array means any element
-    let g2 = Gubu([])
+    let g2 = Shape([])
     expect(g2()).toEqual([])
     expect(g2([])).toEqual([])
     expect(g2([1])).toEqual([1])
@@ -1625,7 +1625,7 @@ Validation failed for property "q.b" with string "x" because the string is not o
 
 
     // Required with single element is redundant
-    let g3 = Gubu([Required({ x: 1 })])
+    let g3 = Shape([Required({ x: 1 })])
     expect(g3([{ x: 11 }])).toEqual([{ x: 11 }])
     expect(g3([{ x: 11 }, { x: 22 }])).toEqual([{ x: 11 }, { x: 22 }])
     expect(g3([])).toEqual([])
@@ -1634,7 +1634,7 @@ Validation failed for property "q.b" with string "x" because the string is not o
 
     // Single element is the same as Value(...)
 
-    let g4 = Gubu([Number])
+    let g4 = Shape([Number])
     expect(g4()).toEqual([])
     expect(g4([])).toEqual([])
     expect(g4([1])).toEqual([1])
@@ -1646,25 +1646,25 @@ Validation failed for property "q.b" with string "x" because the string is not o
 
 
     // NOTE: array without spec can hold anything.
-    let g6 = Gubu([])
+    let g6 = Shape([])
     expect(g6([null, 1, 'x', true])).toEqual([null, 1, 'x', true])
 
-    let g7 = Gubu([Never()])
+    let g7 = Shape([Never()])
     expect(g7([])).toEqual([])
     expect(() => g7([1])).toThrow('Validation failed for index "0" with number "1" because no value is allowed.')
     expect(() => g7(new Array(1))).toThrow('Validation failed for index "0" with value "undefined" because no value is allowed.')
 
 
-    let g8 = Gubu([1])
+    let g8 = Shape([1])
     expect(g8(new Array(3))).toEqual([1, 1, 1])
     let a0 = [11, 22, 33]
     delete a0[1]
     expect(g8(a0)).toEqual([11, 1, 33])
 
-    let g9 = Gubu([null])
+    let g9 = Shape([null])
     expect(g9([null, null])).toEqual([null, null])
 
-    let g10 = Gubu([{ x: 1 }])
+    let g10 = Shape([{ x: 1 }])
     expect(g10([])).toEqual([])
     expect(g10([{ x: 11 }])).toEqual([{ x: 11 }])
     expect(g10([{ x: 11 }, { x: 22 }])).toEqual([{ x: 11 }, { x: 22 }])
@@ -1688,7 +1688,7 @@ Validation failed for property "q.b" with string "x" because the string is not o
   test('array-closed', () => {
 
     // Exact set of elements.
-    let g2 = Gubu([{ x: 1 }, { y: true }])
+    let g2 = Shape([{ x: 1 }, { y: true }])
     expect(g2([{ x: 2 }, { y: false }])).toEqual([{ x: 2 }, { y: false }])
     expect(() => g2([{ x: 2 }, { y: false }, 'Q'])).toThrow('Validation failed for array "[{x:2},{y:false},Q]" because the index "2" is not allowed.')
     expect(() => g2([{ x: 'X' }, { y: false }])).toThrow('Validation failed for property "0.x" with string "X" because the string is not of type number.')
@@ -1699,14 +1699,14 @@ Validation failed for property "q.b" with string "x" because the string is not o
     expect(g2([, { y: false }])).toEqual([{ x: 1 }, { y: false }])
 
 
-    let g3 = Gubu(Closed([Any()]))
+    let g3 = Shape(Closed([Any()]))
     expect(g3([])).toEqual([])
     expect(g3([1])).toEqual([1])
     expect(() => g3([1, 'x'])).toThrow('not allowed')
     expect(g3(new Array(1))).toEqual([undefined])
     expect(() => g3(new Array(2))).toThrow('not allowed')
 
-    let g4 = Gubu(Closed([1]))
+    let g4 = Shape(Closed([1]))
     expect(g4([])).toEqual([1])
     expect(g4([1])).toEqual([1])
     expect(() => g4(['a'])).toThrow('type')
@@ -1714,7 +1714,7 @@ Validation failed for property "q.b" with string "x" because the string is not o
     expect(g4(new Array(1))).toEqual([1])
     expect(() => g4(new Array(2))).toThrow('not allowed')
 
-    let g5 = Gubu(Closed([Number]))
+    let g5 = Shape(Closed([Number]))
     expect(() => g5([])).toThrow('required')
     expect(g5([1])).toEqual([1])
     expect(() => g5(['a'])).toThrow('type')
@@ -1723,7 +1723,7 @@ Validation failed for property "q.b" with string "x" because the string is not o
     expect(() => g5(new Array(2))).toThrow('not allowed')
 
 
-    let g6 = Gubu(Closed([Number, String, Boolean]))
+    let g6 = Shape(Closed([Number, String, Boolean]))
     expect(g6([1, 'a', true])).toEqual([1, 'a', true])
     expect(g6([0, 'b', false])).toEqual([0, 'b', false])
     expect(() => g6([0, 'b', false, 1])).toThrow('not allowed')
@@ -1737,7 +1737,7 @@ Validation failed for property "q.b" with string "x" because the string is not o
     expect(() => g6(new Array(4))).toThrow('not allowed')
 
 
-    let g7 = Gubu(Closed([1, 'a']))
+    let g7 = Shape(Closed([1, 'a']))
     expect(g7([])).toEqual([1, 'a'])
     expect(g7([, 'b'])).toEqual([1, 'b'])
 
@@ -1747,47 +1747,47 @@ Validation failed for property "q.b" with string "x" because the string is not o
   test('object-properties', () => {
 
     // NOTE: unclosed object without props can hold anything
-    let g0 = Gubu({})
+    let g0 = Shape({})
     expect(g0({ a: null, b: 1, c: 'x', d: true }))
       .toEqual({ a: null, b: 1, c: 'x', d: true })
 
-    let g1 = Gubu(Closed({}))
+    let g1 = Shape(Closed({}))
     expect(g1({})).toEqual({})
     expect(() => g1({ a: null, b: 1, c: 'x', d: true })).toThrow('Validation failed for object "{a:null,b:1,c:x,d:true}" because the properties "a, b, c, d" are not allowed.')
   })
 
 
   test('check-basic', () => {
-    let g0 = Gubu({ a: Check((v: any) => v > 10) })
+    let g0 = Shape({ a: Check((v: any) => v > 10) })
     expect(g0({ a: 11 })).toMatchObject({ a: 11 })
     expect(() => g0({ a: 9 })).toThrow('Validation failed for property "a" with number "9" because check "(v) => v > 10" failed.')
   })
 
 
   test('custom-basic', () => {
-    let g0 = Gubu({ a: Check((v: any) => v > 10) })
+    let g0 = Shape({ a: Check((v: any) => v > 10) })
     expect(g0({ a: 11 })).toMatchObject({ a: 11 })
     expect(() => g0({ a: 9 })).toThrow('Validation failed for property "a" with number "9" because check "(v) => v > 10" failed.')
 
-    let g1 = Gubu({ a: Skip(Check((v: any) => v > 10)) })
+    let g1 = Shape({ a: Skip(Check((v: any) => v > 10)) })
     expect(g1({ a: 11 })).toMatchObject({ a: 11 })
     expect(() => g1({ a: 9 })).toThrow('Validation failed for property "a" with number "9" because check "(v) => v > 10" failed.')
     expect(g1({})).toMatchObject({})
 
-    let g2 = Gubu({ a: Required(Check((v: any) => v > 10)) })
+    let g2 = Shape({ a: Required(Check((v: any) => v > 10)) })
     expect(g1({ a: 11 })).toMatchObject({ a: 11 })
     expect(() => g2({ a: 9 })).toThrow('Validation failed for property "a" with number "9" because check "(v) => v > 10" failed.')
     expect(() => g2({}))
       .toThrow('Validation failed for property "a" with value "undefined" because the value is required.')
 
-    let g3 = Gubu(Check((v: any) => v > 10))
+    let g3 = Shape(Check((v: any) => v > 10))
     expect(g3(11)).toEqual(11)
     expect(() => g3(9)).toThrow('Validation failed for number "9" because check "(v) => v > 10" failed.')
   })
 
 
   test('custom-modify', () => {
-    let g0 = Gubu({
+    let g0 = Shape({
       a: (Skip(Check((v: number, u: Update) => (u.val = v * 2, true)))),
       b: Skip(Check((_v: any, u: Update) => {
         u.err = 'BAD VALUE $VALUE AT $PATH'
@@ -1803,7 +1803,7 @@ Validation failed for property "q.b" with string "x" because the string is not o
     expect(g0({ c: 'x' })).toEqual({ c: 'x (key=c)' })
     expect(g0({ d: 'D' })).toEqual({ d: 'D' })
 
-    let g1 = Gubu(Open({
+    let g1 = Shape(Open({
       a: Skip(Check((_v: any, u: Update, _s: State) => (u.uval = undefined, true)))
     }))
 
@@ -1813,7 +1813,7 @@ Validation failed for property "q.b" with string "x" because the string is not o
 
 
   test('after-multiple', () => {
-    let g0 = Gubu(
+    let g0 = Shape(
       After(
         function v1(v: any, u: any) { u.val = v + 1; return true },
         After(
@@ -1826,27 +1826,27 @@ Validation failed for property "q.b" with string "x" because the string is not o
 
 
   test('deep-object-basic', () => {
-    let a1 = Gubu({ a: 1 })
+    let a1 = Shape({ a: 1 })
     expect(a1({})).toMatchObject({ a: 1 })
 
-    let ab1 = Gubu({ a: { b: 1 } })
+    let ab1 = Shape({ a: { b: 1 } })
     expect(ab1({})).toMatchObject({ a: { b: 1 } })
 
-    let abc1 = Gubu({ a: { b: { c: 1 } } })
+    let abc1 = Shape({ a: { b: { c: 1 } } })
     expect(abc1({})).toMatchObject({ a: { b: { c: 1 } } })
 
 
-    let ab1c2 = Gubu({ a: { b: 1 }, c: 2 })
+    let ab1c2 = Shape({ a: { b: 1 }, c: 2 })
     expect(ab1c2({})).toMatchObject({ a: { b: 1 }, c: 2 })
 
-    let ab1cd2 = Gubu({ a: { b: 1 }, c: { d: 2 } })
+    let ab1cd2 = Shape({ a: { b: 1 }, c: { d: 2 } })
     expect(ab1cd2({})).toMatchObject({ a: { b: 1 }, c: { d: 2 } })
 
-    let abc1ade2f3 = Gubu({ a: { b: { c: 1 }, d: { e: 2 } }, f: 3 })
+    let abc1ade2f3 = Shape({ a: { b: { c: 1 }, d: { e: 2 } }, f: 3 })
     expect(abc1ade2f3({})).toMatchObject({ a: { b: { c: 1 }, d: { e: 2 } }, f: 3 })
 
 
-    let d0 = Gubu({
+    let d0 = Shape({
       a: { b: { c: 1 }, d: { e: { f: 3 } } },
       h: 3,
       i: { j: { k: 4 }, l: { m: 5 } },
@@ -1862,13 +1862,13 @@ Validation failed for property "q.b" with string "x" because the string is not o
 
 
   test('array-special', () => {
-    let a0 = Gubu([1])
+    let a0 = Shape([1])
     expect(a0()).toMatchObject([])
     expect(a0([])).toMatchObject([])
     expect(a0([11])).toMatchObject([11])
     expect(a0([11, 22])).toMatchObject([11, 22])
 
-    let a1 = Gubu([Number, String])
+    let a1 = Shape([Number, String])
     expect(() => a1()).toThrow('required')
     expect(() => a1([])).toThrow('required')
     expect(() => a1([1])).toThrow('required')
@@ -1881,7 +1881,7 @@ Validation failed for property "q.b" with string "x" because the string is not o
       .toThrow('Validation failed for index "1" with number "2" because ' +
         'the number is not of type string.')
 
-    let a2 = Gubu([9, String])
+    let a2 = Shape([9, String])
     expect(() => a2()).toThrow('required')
     expect(() => a2([])).toThrow('required')
     expect(() => a2([1])).toThrow('required')
@@ -1894,7 +1894,7 @@ Validation failed for index "1" with number "1" because the number is not of typ
       .toThrow('Validation failed for index "0" with string "x" because ' +
         'the string is not of type number.')
 
-    let a3 = Gubu([1, 2, 3])
+    let a3 = Shape([1, 2, 3])
     expect(a3()).toEqual([1, 2, 3])
     expect(a3([])).toEqual([1, 2, 3])
     expect(a3([11])).toEqual([11, 2, 3])
@@ -1910,7 +1910,7 @@ Validation failed for index "1" with number "1" because the number is not of typ
     let r0: any = null
     let A0: any = [String]
     A0.x = 1
-    let g3 = Gubu({ a: A0 })
+    let g3 = Shape({ a: A0 })
     expect(g3({})).toEqual({ a: [] })
 
     expect(r0 = g3({ a: undefined })).toEqual({ a: [] })
@@ -1923,7 +1923,7 @@ Validation failed for index "1" with number "1" because the number is not of typ
 
   test('context-basic', () => {
     let c0 = { max: 10 }
-    let g0 = Gubu({
+    let g0 = Shape({
       a: Check((v: any, _u: Update, s: State) => v < s.ctx.max)
     })
     expect(g0({ a: 2 }, c0)).toMatchObject({ a: 2 })
@@ -1931,7 +1931,7 @@ Validation failed for index "1" with number "1" because the number is not of typ
       .toThrow('Validation failed for property "a" with number "11" because ' +
         'check "(v, _u, s) => v < s.ctx.max" failed.')
 
-    let g1 = Gubu({
+    let g1 = Shape({
       a: { b: All(Number, Check((v: any, _u: Update, s: State) => v < s.ctx.max)) }
     })
     expect(g1({ a: { b: 3 } }, c0)).toMatchObject({ a: { b: 3 } })
@@ -1942,14 +1942,14 @@ Validation failed for index "1" with number "1" because the number is not of typ
 
 
   test('error-path', () => {
-    let g0 = Gubu({ a: { b: String } })
+    let g0 = Shape({ a: { b: String } })
     expect(g0({ a: { b: 'x' } })).toEqual({ a: { b: 'x' } })
     expect(() => g0(1)).toThrow('not of type object')
     expect(() => g0({ a: 1 })).toThrow('property "a"')
     expect(() => g0({ a: { b: 1 } })).toThrow('property "a.b"')
     expect(() => g0({ a: { b: { c: 1 } } })).toThrow('property "a.b"')
 
-    let g1 = Gubu(String)
+    let g1 = Shape(String)
     expect(g1('x')).toEqual('x')
     expect(() => g1(1)).toThrow('for number ')
     expect(() => g1(true)).toThrow('for boolean ')
@@ -1962,7 +1962,7 @@ Validation failed for index "1" with number "1" because the number is not of typ
 
 
   test('error-desc', () => {
-    const g0 = Gubu(NaN)
+    const g0 = Shape(NaN)
     let err: any = []
     let o0 = g0(1, { err })
     expect(o0).toEqual(1)
@@ -1982,8 +1982,8 @@ Validation failed for index "1" with number "1" because the number is not of typ
       expect(e.message)
         .toEqual('Validation failed for number "1" because the number is not of type nan.')
       expect(e.code).toEqual('shape')
-      expect(e.gubu).toEqual(true)
-      expect(e.name).toEqual('GubuError')
+      expect(e.shape).toEqual(true)
+      expect(e.name).toEqual('ShapeError')
       expect(e.desc()).toMatchObject({
         code: 'shape',
         ctx: { a: 'A' },
@@ -2001,29 +2001,29 @@ Validation failed for index "1" with number "1" because the number is not of typ
         ]
       })
 
-      expect(JSON.stringify(e)).toEqual('{"gubu":true,"name":"GubuError","code":"shape","gname":"","props":[{"path":"","what":"type","type":"nan","value":1}],"err":[{"type":"nan","node":{"$":{"v$":"' + Pkg.version + '"},"t":"nan","v":null,"f":null,"n":0,"r":false,"p":false,"d":0,"k":[],"e":true,"u":{},"a":[],"b":[],"m":{}},"value":1,"path":"","why":"type","check":"none","args":{},"mark":1050,"text":"Validation failed for number \\"1\\" because the number is not of type nan.","use":{}}],"message":"Validation failed for number \\"1\\" because the number is not of type nan."}')
+      expect(JSON.stringify(e)).toEqual('{"shape":true,"name":"ShapeError","code":"shape","gname":"","props":[{"path":"","what":"type","type":"nan","value":1}],"err":[{"type":"nan","node":{"$":{"v$":"' + Pkg.version + '"},"t":"nan","v":null,"f":null,"n":0,"r":false,"p":false,"d":0,"k":[],"e":true,"u":{},"a":[],"b":[],"m":{}},"value":1,"path":"","why":"type","check":"none","args":{},"mark":1050,"text":"Validation failed for number \\"1\\" because the number is not of type nan.","use":{}}],"message":"Validation failed for number \\"1\\" because the number is not of type nan."}')
     }
   })
 
 
   test('spec-basic', () => {
-    expect(Gubu(Number).spec()).toMatchObject({
-      $: { gubu$: true, v$: Pkg.version },
+    expect(Shape(Number).spec()).toMatchObject({
+      $: { shape$: true, v$: Pkg.version },
       d: 0, r: true, t: 'number', u: {}, v: 0,
     })
 
-    expect(Gubu(String).spec()).toMatchObject({
-      $: { gubu$: true, v$: Pkg.version },
+    expect(Shape(String).spec()).toMatchObject({
+      $: { shape$: true, v$: Pkg.version },
       d: 0, r: true, t: 'string', u: {}, v: '',
     })
 
-    expect(Gubu(BigInt).spec()).toMatchObject({
-      $: { gubu$: true, v$: Pkg.version },
+    expect(Shape(BigInt).spec()).toMatchObject({
+      $: { shape$: true, v$: Pkg.version },
       d: 0, r: true, t: 'bigint', u: {}, v: "0",
     })
 
-    expect(Gubu(null).spec()).toMatchObject({
-      $: { gubu$: true, v$: Pkg.version },
+    expect(Shape(null).spec()).toMatchObject({
+      $: { shape$: true, v$: Pkg.version },
       d: 0, r: false, t: 'null', u: {}, v: null,
     })
 
@@ -2031,24 +2031,24 @@ Validation failed for index "1" with number "1" because the number is not of typ
 
 
   test('spec-required', () => {
-    let g0 = Gubu(Required(1))
+    let g0 = Shape(Required(1))
     expect(g0.spec()).toMatchObject({ d: 0, p: false, r: true, t: 'number', v: 1 })
 
-    let g1 = Gubu(Required({ a: 1 }))
+    let g1 = Shape(Required({ a: 1 }))
     expect(g1.spec()).toMatchObject({
       d: 0, p: false, r: true, t: 'object', v: {
         a: { d: 1, p: false, r: false, t: 'number', v: 1 }
       }
     })
 
-    let g2 = Gubu(Required({ a: Required(1) }))
+    let g2 = Shape(Required({ a: Required(1) }))
     expect(g2.spec()).toMatchObject({
       d: 0, p: false, r: true, t: 'object', v: {
         a: { d: 1, p: false, r: true, t: 'number', v: 1 }
       }
     })
 
-    let g3 = Gubu(Required({ a: Required({ b: 1 }) }))
+    let g3 = Shape(Required({ a: Required({ b: 1 }) }))
     expect(g3.spec()).toMatchObject({
       d: 0, p: false, r: true, t: 'object', v: {
         a: {
@@ -2061,7 +2061,7 @@ Validation failed for index "1" with number "1" because the number is not of typ
       }
     })
 
-    let g4 = Gubu(Required({ a: Skip({ b: 1 }) }))
+    let g4 = Shape(Required({ a: Skip({ b: 1 }) }))
     expect(g4.spec()).toMatchObject({
       d: 0, p: false, r: true, t: 'object', v: {
         a: {
@@ -2074,7 +2074,7 @@ Validation failed for index "1" with number "1" because the number is not of typ
       }
     })
 
-    let g5 = Gubu(Skip({ a: Required({ b: 1 }) }))
+    let g5 = Shape(Skip({ a: Required({ b: 1 }) }))
     expect(g5.spec()).toMatchObject({
       d: 0, p: true, r: false, t: 'object', v: {
         a: {
@@ -2091,11 +2091,11 @@ Validation failed for index "1" with number "1" because the number is not of typ
 
   test('spec-compose', () => {
     let f0 = (v: any) => 1 === v
-    let c0 = Gubu(Check(f0))
-    let c1 = Gubu(Skip(Check(f0)))
+    let c0 = Shape(Check(f0))
+    let c1 = Shape(Skip(Check(f0)))
 
     // TODO
-    let c2 = Gubu(Skip(c0))
+    let c2 = Shape(Skip(c0))
 
     expect(c0.spec()).toMatchObject({
       t: 'check',
@@ -2136,7 +2136,7 @@ Validation failed for index "1" with number "1" because the number is not of typ
 
   test('spec-roundtrip', () => {
     let m0 = { a: 1 }
-    let g0 = Gubu(m0)
+    let g0 = Shape(m0)
     expect(m0).toEqual({ a: 1 })
 
     expect(g0({ a: 2 })).toEqual({ a: 2 })
@@ -2146,7 +2146,7 @@ Validation failed for index "1" with number "1" because the number is not of typ
     expect(m0).toEqual({ a: 1 })
     let s0s = {
       $: {
-        gubu$: true,
+        shape$: true,
         v$: Pkg.version,
       },
       d: 0,
@@ -2163,7 +2163,7 @@ Validation failed for index "1" with number "1" because the number is not of typ
       v: {
         a: {
           $: {
-            gubu$: true,
+            shape$: true,
             v$: Pkg.version,
           },
           d: 1,
@@ -2186,7 +2186,7 @@ Validation failed for index "1" with number "1" because the number is not of typ
     expect(s0).toEqual(s0s)
     expect(g0({ a: 2 })).toEqual({ a: 2 })
 
-    let g0r = Gubu(s0)
+    let g0r = Shape(s0)
     expect(m0).toEqual({ a: 1 })
     expect(s0).toEqual(s0s)
 
@@ -2209,14 +2209,14 @@ Validation failed for index "1" with number "1" because the number is not of typ
 
 
     let m1 = { a: [1] }
-    let g1 = Gubu(m1)
+    let g1 = Shape(m1)
     expect(g1({ a: [2] })).toEqual({ a: [2] })
     expect(m1).toEqual({ a: [1] })
 
     let s1 = g1.spec()
     let s1s = {
       $: {
-        gubu$: true,
+        shape$: true,
         v$: Pkg.version,
       },
       d: 0,
@@ -2233,7 +2233,7 @@ Validation failed for index "1" with number "1" because the number is not of typ
       v: {
         a: {
           $: {
-            gubu$: true,
+            shape$: true,
             v$: Pkg.version,
           },
           d: 1,
@@ -2250,7 +2250,7 @@ Validation failed for index "1" with number "1" because the number is not of typ
           m: {},
           c: {
             $: {
-              gubu$: true,
+              shape$: true,
               v$: Pkg.version,
             },
             d: 2,
@@ -2273,7 +2273,7 @@ Validation failed for index "1" with number "1" because the number is not of typ
 
     expect(s1).toEqual(s1s)
 
-    let g1r = Gubu(s1)
+    let g1r = Shape(s1)
     expect(g1r({ a: [2] })).toEqual({ a: [2] })
     expect(g1({ a: [2] })).toEqual({ a: [2] })
     expect(m1).toEqual({ a: [1] })
@@ -2289,9 +2289,9 @@ Validation failed for index "1" with number "1" because the number is not of typ
 
 
   test('compose', () => {
-    let g0 = Gubu(String)
-    let g1 = Gubu(g0)
-    let g1s = Gubu(g0.spec())
+    let g0 = Shape(String)
+    let g1 = Shape(g0)
+    let g1s = Shape(g0.spec())
 
     expect(g1('x')).toEqual('x')
     expect(() => g1(1)).toThrow()
@@ -2299,21 +2299,21 @@ Validation failed for index "1" with number "1" because the number is not of typ
     expect(() => g1s(1)).toThrow()
 
 
-    let g2 = Gubu({ a: Number })
-    let g3 = Gubu({ b: g2 })
-    let g3s = Gubu({ b: g2.spec() })
+    let g2 = Shape({ a: Number })
+    let g3 = Shape({ b: g2 })
+    let g3s = Shape({ b: g2.spec() })
     expect(g3({ b: { a: 1 } })).toEqual({ b: { a: 1 } })
     expect(() => g3({ b: { a: 'x' } })).toThrow()
     expect(g3s({ b: { a: 1 } })).toEqual({ b: { a: 1 } })
     expect(() => g3s({ b: { a: 'x' } })).toThrow()
 
-    const shape = Gubu({ a: Gubu({ x: Number }) })
+    const shape = Shape({ a: Shape({ x: Number }) })
     expect(shape({ a: { x: 1 } })).toEqual({ a: { x: 1 } })
 
 
-    let c0 = Gubu(String)
-    let c1 = Gubu(Skip(String))
-    let c2 = Gubu(Skip(c0))
+    let c0 = Shape(String)
+    let c1 = Shape(Skip(String))
+    let c2 = Shape(Skip(c0))
 
     expect(c1.spec()).toMatchObject(c2.spec())
   })
@@ -2444,9 +2444,9 @@ Validation failed for index "1" with number "1" because the number is not of typ
     expect(stringify({ a: String })).toEqual('{"a":"String"}')
     expect(stringify({ a: Boolean })).toEqual('{"a":"Boolean"}')
 
-    expect(stringify(Gubu({ a: Number }).spec())).toEqual('{"a":"Number"}')
-    expect(stringify(Gubu({ a: String }).spec())).toEqual('{"a":"String"}')
-    expect(stringify(Gubu({ a: Boolean }).spec())).toEqual('{"a":"Boolean"}')
+    expect(stringify(Shape({ a: Number }).spec())).toEqual('{"a":"Number"}')
+    expect(stringify(Shape({ a: String }).spec())).toEqual('{"a":"String"}')
+    expect(stringify(Shape({ a: Boolean }).spec())).toEqual('{"a":"Boolean"}')
 
     expect(stringify(Required())).toEqual(`"Required"`)
 
@@ -2548,20 +2548,20 @@ Validation failed for index "1" with number "1" because the number is not of typ
 
   test('just-large', () => {
     let m0: any = Large.m0
-    let g0 = Gubu(m0)
+    let g0 = Shape(m0)
     let o0 = g0(Large.i0)
     expect(o0).toEqual(Large.c0)
 
     let m1 = Large.m1
-    let g1 = Gubu(m1)
+    let g1 = Shape(m1)
     let o1 = g1(Large.i1)
     expect(o1).toEqual(Large.c1)
   })
 
 
   test('just-long', () => {
-    expect(Gubu(Long.m0)(Long.i0)).toEqual(Long.i0)
-    expect(Gubu(Long.m1)(Long.i1)).toEqual(Long.i1)
+    expect(Shape(Long.m0)(Long.i0)).toEqual(Long.i0)
+    expect(Shape(Long.m1)(Long.i1)).toEqual(Long.i1)
   })
 
 
@@ -2573,7 +2573,7 @@ Validation failed for index "1" with number "1" because the number is not of typ
     for (let i = 0; i < size; i++) {
       c0 = c0.a = {}
     }
-    let g0 = Gubu(m0)
+    let g0 = Shape(m0)
     expect(g0(m0)).toEqual(m0)
 
     let m1: any = []
@@ -2581,7 +2581,7 @@ Validation failed for index "1" with number "1" because the number is not of typ
     for (let i = 0; i < size; i++) {
       c1 = c1[0] = []
     }
-    let g1 = Gubu(m1)
+    let g1 = Shape(m1)
     expect(g1(m1)).toEqual(m1)
   })
 
@@ -2591,14 +2591,14 @@ Validation failed for index "1" with number "1" because the number is not of typ
     for (let i = 0; i < 11111; i++) {
       m0['a' + i] = true
     }
-    let g0 = Gubu(m0)
+    let g0 = Shape(m0)
     expect(g0(m0)).toEqual(m0)
 
     let m1: any = {}
     for (let i = 0; i < 11111; i++) {
       m1[i] = true
     }
-    let g1 = Gubu(m1)
+    let g1 = Shape(m1)
     expect(g1(m1)).toEqual(m1)
   })
 
@@ -2616,7 +2616,7 @@ Validation failed for index "1" with number "1" because the number is not of typ
     // * default value within One, Some, etc
 
     // 'happy'
-    let opter = Gubu({
+    let opter = Shape({
       a: 1,
       b: { c: 2 },
       d: { e: { f: 3 } },
@@ -2638,13 +2638,13 @@ Validation failed for index "1" with number "1" because the number is not of typ
 
 
     // 'empty'
-    opter = Gubu({ a: 1 })
+    opter = Shape({ a: 1 })
     expect(opter(undefined)).toEqual({ a: 1 })
     // TODO: OPT: expect(opter(null)).toEqual({ a: 1 })
 
 
     // 'array'
-    opter = Gubu([1, 'a'])
+    opter = Shape([1, 'a'])
 
     expect(() => opter({})).toThrow('not of type array')
     expect(opter([])).toEqual([1, 'a'])
@@ -2655,7 +2655,7 @@ Validation failed for index "1" with number "1" because the number is not of typ
       return x + 1
     }
 
-    opter = Gubu({
+    opter = Shape({
       a: G$({ v: fx, f: fx })
     })
 
@@ -2672,14 +2672,14 @@ Validation failed for index "1" with number "1" because the number is not of typ
 
 
     // 'edge'
-    opter = Gubu({
+    opter = Shape({
       a: undefined,
     })
     expect(opter({})).toEqual({})
 
 
     // 'default-types'
-    opter = Gubu({
+    opter = Shape({
       a: 1,
       b: 1.1,
       c: 'x',
@@ -2698,7 +2698,7 @@ Validation failed for index "1" with number "1" because the number is not of typ
 
 
     // 'readme'
-    let optioner = Gubu({
+    let optioner = Shape({
       color: 'red',
       // size: Joi.number().integer().max(5).min(1).default(3),
       size: Max(5, Min(1, 3)),
@@ -2712,7 +2712,7 @@ Validation failed for index "1" with number "1" because the number is not of typ
 
 
     // 'check'
-    optioner = Gubu({
+    optioner = Shape({
       bool: true
     })
 
@@ -2724,12 +2724,12 @@ Validation failed for index "1" with number "1" because the number is not of typ
       optioner({ bool: 'foo' })
       throw new Error('fail')
     } catch (e: any) {
-      expect(e.name).toMatch(/GubuError/)
+      expect(e.name).toMatch(/ShapeError/)
     }
 
 
     // 'ignore'
-    let optioner_ignore = Gubu(Open({
+    let optioner_ignore = Shape(Open({
       a: 1,
     }))
 
@@ -2737,7 +2737,7 @@ Validation failed for index "1" with number "1" because the number is not of typ
     expect(optioner_ignore({ b: 2 })).toEqual({ a: 1, b: 2 })
     expect(optioner_ignore({ a: 1, b: 2 })).toEqual({ a: 1, b: 2 })
 
-    let optioner_fail = Gubu(
+    let optioner_fail = Shape(
       Closed({
         a: 1,
       })
@@ -2749,10 +2749,10 @@ Validation failed for index "1" with number "1" because the number is not of typ
       optioner_fail({ a: 1, b: 2 })
       throw new Error('fail')
     } catch (e: any) {
-      expect(e.name).toMatch(/GubuError/)
+      expect(e.name).toMatch(/ShapeError/)
     }
 
-    let optioner_ignore_deep = Gubu(Open({
+    let optioner_ignore_deep = Shape(Open({
       a: 1,
       b: Open({ c: 2 }),
     }))
@@ -2763,7 +2763,7 @@ Validation failed for index "1" with number "1" because the number is not of typ
       b: { c: 2, d: 3 },
     })
 
-    let optioner_ignore_deep_fail = Gubu(
+    let optioner_ignore_deep_fail = Shape(
       {
         a: 1,
         b: Closed({ c: 2 }),
@@ -2779,12 +2779,12 @@ Validation failed for index "1" with number "1" because the number is not of typ
       })
       throw new Error('fail')
     } catch (e: any) {
-      expect(e.name).toMatch(/GubuError/)
+      expect(e.name).toMatch(/ShapeError/)
     }
 
 
     // 'must_match'
-    let g0 = Gubu(
+    let g0 = Shape(
       {
         a: Exact(1),
       },
@@ -2798,7 +2798,7 @@ Validation failed for index "1" with number "1" because the number is not of typ
     expect(() => g0({ a: 'x' })).toThrow('exactly')
 
 
-    let g1 = Gubu(
+    let g1 = Shape(
       Open({
         a: Exact(1),
         b: Open({ c: Exact(2) }),
@@ -2818,7 +2818,7 @@ Validation failed for index "1" with number "1" because the number is not of typ
     expect(() => g1({ a: 1, b: { c: 'x' } })).toThrow('exactly')
 
 
-    let g2 = Gubu(
+    let g2 = Shape(
       {
         a: Exact(1),
         b: String
@@ -2828,7 +2828,7 @@ Validation failed for index "1" with number "1" because the number is not of typ
     expect(g2({ a: 1, b: 'x' })).toEqual({ a: 1, b: 'x' })
     expect(() => g2({ a: 1, b: 2 })).toThrow('type')
 
-    var g3 = Gubu(
+    var g3 = Shape(
       {
         a: { b: { c: Exact(1) } },
       },
@@ -2838,7 +2838,7 @@ Validation failed for index "1" with number "1" because the number is not of typ
     expect(() => g3({ a: { b: { c: 2 } } })).toThrow('exactly')
 
     // TODO: fix
-    // var g4 = Gubu(
+    // var g4 = Shape(
     //   {
     //     a: [Exact(1)],
     //   },
@@ -2848,7 +2848,7 @@ Validation failed for index "1" with number "1" because the number is not of typ
     // expect(g4({ a: [1, 2] })).toEqual({ a: [1, 2] })
     // expect(() => g4({ a: [2] })).toThrow('exactly')
 
-    // var g5 = Gubu(
+    // var g5 = Shape(
     //   {
     //     a: [Any(), { b: Exact(1) }],
     //   },
@@ -2860,11 +2860,11 @@ Validation failed for index "1" with number "1" because the number is not of typ
     // })
     // expect(() => g5({ a: [{ b: 11, c: 2 }, { b: 3 }] })).toThrow('exactly')
 
-    // var g6 = Gubu([Never(), Exact(1)])
+    // var g6 = Shape([Never(), Exact(1)])
     // expect(g6([1])).toEqual([1])
     // expect(() => g6([2])).toThrow('exactly')
 
-    var g7 = Gubu([{}, { a: Exact(2) }, {}])
+    var g7 = Shape([{}, { a: Exact(2) }, {}])
     expect(g7([{ a: 1 }, { a: 2 }, { a: 3 }])).toEqual([
       { a: 1 },
       { a: 2 },
@@ -2874,7 +2874,7 @@ Validation failed for index "1" with number "1" because the number is not of typ
 
 
     // 'empty-string'
-    let opt0 = Gubu({
+    let opt0 = Shape({
       a: '',
       b: 'x',
     })
@@ -2888,8 +2888,8 @@ Validation failed for index "1" with number "1" because the number is not of typ
 
 
   test('skip-vs-any', () => {
-    let a0 = Gubu({ x: Any() })
-    let s0 = Gubu({ x: Skip() })
+    let a0 = Shape({ x: Any() })
+    let s0 = Shape({ x: Skip() })
     expect(a0()).toEqual({})
     expect(s0()).toEqual({})
     expect(a0({})).toEqual({})
@@ -2899,8 +2899,8 @@ Validation failed for index "1" with number "1" because the number is not of typ
     expect(a0({ x: undefined })).toEqual({ x: undefined })
     expect(s0({ x: undefined })).toEqual({ x: undefined })
 
-    let a1 = Gubu({ x: Required().Any() })
-    let s1 = Gubu({ x: Required().Skip() })
+    let a1 = Shape({ x: Required().Any() })
+    let s1 = Shape({ x: Required().Skip() })
     expect(() => a1()).toThrow('required')
     expect(s1()).toEqual({})
     expect(() => a1({})).toThrow('required')
@@ -2913,7 +2913,7 @@ Validation failed for index "1" with number "1" because the number is not of typ
 
 
   test('non-value-fails', () => {
-    let g0 = Gubu({ x: Number })
+    let g0 = Shape({ x: Number })
     expect(() => g0({ x: null })).toThrow('Validation failed for property "x" with value "null" because the value is not of type number.')
     expect(() => g0({ x: undefined })).toThrow('Validation failed for property "x" with value "undefined" because the value is required.')
     expect(() => g0({ x: NaN })).toThrow('Validation failed for property "x" with value "NaN" because the value is not of type number.')
@@ -2923,14 +2923,14 @@ Validation failed for index "1" with number "1" because the number is not of typ
 
 
   test('frozen', () => {
-    let g0 = Gubu({ x: Object })
+    let g0 = Shape({ x: Object })
     expect(g0({ x: { y: 1 } })).toEqual({ x: { y: 1 } })
     expect(g0({ x: Object.freeze({ y: 1 }) })).toEqual({ x: { y: 1 } })
   })
 
 
   test('context-skipping', () => {
-    let g0 = Gubu({
+    let g0 = Shape({
       a: Number,
       b: Skip(Boolean),
     })
@@ -2939,7 +2939,7 @@ Validation failed for index "1" with number "1" because the number is not of typ
     expect(g0({ a: 1, b: true })).toEqual({ a: 1, b: true })
     expect(() => g0({ a: 1, b: true, c: 'C' })).toThrow('not allowed')
 
-    let g1 = Gubu(Open(g0))
+    let g1 = Shape(Open(g0))
 
     expect(g1({ a: 1 })).toEqual({ a: 1 })
     expect(g1({ a: 1, b: true })).toEqual({ a: 1, b: true })
@@ -2964,7 +2964,7 @@ Validation failed for index "1" with number "1" because the number is not of typ
       .toEqual({ a: 1, b: true, c: 'C' })
 
 
-    let g2 = Gubu({
+    let g2 = Shape({
       a: Number,
       b: { a: Boolean }
     })
@@ -2978,14 +2978,14 @@ Validation failed for index "1" with number "1" because the number is not of typ
 
 
   test('array-regexp', () => {
-    let g0 = Gubu({ x: [/a/] })
+    let g0 = Shape({ x: [/a/] })
     expect(g0.jsonify()).toEqual({ x: ['/a/'] })
     expect(g0.stringify()).toEqual('{"x":["/a/"]}')
     expect(g0({ x: [] })).toEqual({ x: [] })
     expect(g0({ x: ['a'] })).toEqual({ x: ['a'] })
     expect(g0({ x: ['ba', 'ac', 'dad'] })).toEqual({ x: ['ba', 'ac', 'dad'] })
     expect(() => g0({ x: ['q'] })).toThrow('string did not match /a/')
-    let g0r = Gubu.build(g0.jsonify())
+    let g0r = Shape.build(g0.jsonify())
     expect(g0r.stringify()).toEqual('{"x":["/a/"]}')
     expect(g0r({ x: [] })).toEqual({ x: [] })
     expect(g0r({ x: ['a'] })).toEqual({ x: ['a'] })
