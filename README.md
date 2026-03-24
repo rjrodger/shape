@@ -522,6 +522,7 @@ The built-in shape builders help you match the following shapes:
   * [Optional](#optional-builder): Make a value optional.
   * [Skip](#skip-builder): Make a value skippable (no default value is injected if missing).
   * [Default](#default-builder) Specify a default builder.
+  * [Ignore](#ignore-builder): Ignore validation errors for a value (value becomes undefined on error).
 * Value constraints:
   * [Empty](#empty-builder): Allow string values to be empty.
   * [Exact](#exact-builder): The value must match one of an exact list of *literal* values.
@@ -530,6 +531,7 @@ The built-in shape builders help you match the following shapes:
   * [One](#one-builder): Exactly one shape (and no more) must match value.
   * [Any](#any-builder): This shape will match any value.
   * [Never](#never-builder): This shape will never match anything.
+  * [Type](#type-builder): Enforce a specific type by name or constructor.
 * Length constraints (operate on values with a length or numeric value):
   * [Below](#below-builder): Match a value (or length of value) less than the given amount.
   * [Max](#max-builder): Match a value (or length of value) less than or equal to the given amount.
@@ -540,6 +542,7 @@ The built-in shape builders help you match the following shapes:
   * [Closed](#closed-builder): Allow only explicitly defined elements in an array.
   * [Open](#open-builder): Allow arbitrary properties in an object (no constraint on their value).
   * [Child](#child-builder): All non-explicit child values of an object must match this shape.
+  * [Rest](#rest-builder): Remaining array elements must match this shape.
   * [Func](#func-builder): The value is explicitly a function.
 * Mutations:
   * [Rename](#rename-builder): Rename the key of a property.
@@ -550,6 +553,7 @@ The built-in shape builders help you match the following shapes:
   * [Before](#before-builder): Define a custom validation function called before a value is processed (advanced use).
   * [After](#after-builder): Define a custom validation function called after a value is processed (advanced use).
   * [Key](#key-builder): The key (or path) of the current object is injected as the value.
+  * [Fault](#fault-builder): Set a custom error message for a value.
 
 
 ### Regular Expressions
@@ -1764,11 +1768,17 @@ The built-in shape builders are:
 * [Empty](#empty-builder): 
   Allow string values to be empty.
 
-* [Exact](#exact-builder): 
+* [Exact](#exact-builder):
   The value must one of an exact list of values.
 
-* [Func](#func-builder): 
+* [Fault](#fault-builder):
+  Set a custom error message for a value.
+
+* [Func](#func-builder):
   The value is explicitly a function.
+
+* [Ignore](#ignore-builder):
+  Ignore validation errors for a value (value becomes undefined on error).
 
 * [Key](#key-builder): 
   The key (or path) of the current object is injected as the value.
@@ -1800,14 +1810,20 @@ The built-in shape builders are:
 * [Refer](#refer-builder): 
   Refer to a defined value by name.
 
-* [Rename](#rename-builder): 
+* [Rename](#rename-builder):
   Rename the key of a property.
 
-* [Required](#required-builder): 
+* [Required](#required-builder):
   Make a value required.
 
-* [Some](#some-builder): 
+* [Rest](#rest-builder):
+  Remaining array elements must match this shape.
+
+* [Some](#some-builder):
   Some shapes (at least one) must match value.
+
+* [Type](#type-builder):
+  Enforce a specific type by name or constructor.
 
 
 ---
@@ -2323,6 +2339,34 @@ console.log(shape(false)) // FAIL: undefined is not one of 11, 12, true
 
 
 ---
+#### Fault Builder
+<sub><sup>[builders](#shape-builder-reference) [api](#api) [top](#top)</sup></sub>
+
+```ts
+Fault( message: string, child?: any )
+```
+
+* **Standalone:** `Fault('bad value')`
+* **As Parent:** `Fault('bad value', Number)`
+* **As Child:** `Required(Fault('bad value', Number))`
+* **Chainable:** `Required(Number).Fault('bad value')`
+
+Set a custom error message for a value. When validation fails, the
+specified message is used instead of the default error message. This
+is useful for providing more meaningful error messages to the user.
+
+
+```js
+const { Fault } = Shape
+
+let shape = Shape({ a: Fault('must be a valid count', Number) })
+console.log(shape({ a: 123 })) // PASS: prints { a: 123 }
+console.log(shape({ a: true })) // FAIL: "must be a valid count"
+```
+
+
+
+---
 #### Max Builder
 <sub><sup>[builders](#shape-builder-reference) [api](#api) [top](#top)</sup></sub>
 
@@ -2566,7 +2610,42 @@ shape()      // FAIL: a value is required
 See also: 
 [All](#all-builder), 
 [Some](#some-builder), 
-[Exact](#exact-builder), 
+[Exact](#exact-builder),
+
+
+
+---
+#### Open Builder
+<sub><sup>[builders](#shape-builder-reference) [api](#api) [top](#top)</sup></sub>
+
+```ts
+Open( child?: any )
+```
+
+* **Standalone:** `Open({x: 1})`
+* **As Parent:** `Open({x: 1})`
+* **As Child:** `Required(Open({x: 1}))`
+* **Chainable:** `Required({x: 1}).Open()`
+
+Allow arbitrary additional properties in an object, with no constraint
+on their value. By default, objects only allow properties that are
+explicitly defined in the shape. Using `Open` allows any additional
+properties to pass through without validation.
+
+This is equivalent to setting `Child(Any())` on the object.
+
+
+```js
+const { Open } = Shape
+
+let shape = Shape(Open({ a: Number }))
+console.log(shape({ a: 1 })) // PASS: prints { a: 1 }
+console.log(shape({ a: 1, b: true })) // PASS: prints { a: 1, b: true }
+console.log(shape({ a: 1, b: 'x', c: null })) // PASS: extra props allowed
+
+shape = Shape({ a: Number })
+console.log(shape({ a: 1, b: true })) // FAIL: property b is not allowed
+```
 
 
 
@@ -2674,6 +2753,41 @@ console.log(shape({ a: 10 })) // prints { b: 10 })
 shape = Shape({ a: Rename({ name: 'b', keep: true }, 123) })
 console.log(shape({ a: 10 })) // prints { a: 10, b: 10 })
 console.log(shape({})) // prints { a: 123, b: 123 })
+```
+
+
+
+---
+#### Rest Builder
+<sub><sup>[builders](#shape-builder-reference) [api](#api) [top](#top)</sup></sub>
+
+```ts
+Rest( child?: any, shape?: any )
+```
+
+* **Standalone:** `Rest(Number)`
+* **As Parent:** `Rest(Number, [1, 2])`
+* **As Child:** `Required(Rest(Number))`
+* **Chainable:** `Required([1]).Rest(Number)`
+
+Specify the shape that remaining array elements must match. This is
+useful when you have a fixed set of elements at the beginning of an
+array (defined explicitly), and want to validate any additional
+elements that follow. The value is treated as an array, and any
+elements beyond those explicitly defined must satisfy the given child
+shape.
+
+
+```js
+const { Rest } = Shape
+
+let shape = Shape(Rest(Number))
+console.log(shape([1, 2, 3])) // PASS: prints [1, 2, 3]
+console.log(shape([1, 'a'])) // FAIL: 'a' is not a number
+
+shape = Shape(['first', Rest(Number)])
+console.log(shape(['hello', 1, 2, 3])) // PASS: prints ['hello', 1, 2, 3]
+console.log(shape(['hello', 'bad'])) // FAIL: 'bad' is not a number
 ```
 
 
@@ -2814,7 +2928,45 @@ shape({ z: 3 })  // FAIL: does not match { x: 1 } or { y: 2 }
 See also: 
 [All](#all-builder), 
 [One](#one-builder), 
-[Exact](#exact-builder), 
+[Exact](#exact-builder),
+
+
+
+---
+#### Type Builder
+<sub><sup>[builders](#shape-builder-reference) [api](#api) [top](#top)</sup></sub>
+
+```ts
+Type( type: string | constructor | null | undefined, child?: any )
+```
+
+* **Standalone:** `Type('Number')`
+* **As Parent:** `Type(Number, 0)`
+* **As Child:** `Skip(Type('String'))`
+* **Chainable:** `Skip().Type('Number')`
+
+Enforce a specific type on a value. The type can be specified as a
+string name (`'Number'`, `'String'`, `'Boolean'`, `'Object'`,
+`'Array'`, `'Function'`, `'Symbol'`) or as a constructor (`Number`,
+`String`, `Boolean`, `Object`, `Array`, `Function`, `Symbol`). You
+can also use `null` or `undefined` to match those specific values.
+
+This builder is particularly useful in [Shape
+Expressions](#shape-expressions) and for explicitly setting a type
+without implying a default value.
+
+
+```js
+const { Type } = Shape
+
+let shape = Shape({ a: Type('Number') })
+console.log(shape({ a: 123 })) // PASS: prints { a: 123 }
+console.log(shape({ a: 'x' })) // FAIL: 'x' is not a number
+
+shape = Shape({ a: Type(String) })
+console.log(shape({ a: 'hello' })) // PASS: prints { a: 'hello' }
+console.log(shape({ a: 123 })) // FAIL: 123 is not a string
+```
 
 
 
@@ -2980,6 +3132,37 @@ const { Func } = Shape
 let shape = Shape({ a: Func(Number) })
 console.log(shape({ a: Number })) // prints { a: Number })
 ```
+
+
+---
+#### Ignore Builder
+<sub><sup>[builders](#shape-builder-reference) [api](#api) [top](#top)</sup></sub>
+
+```ts
+Ignore( child?: any )
+```
+
+* **Standalone:** `Ignore(Number)`
+* **As Parent:** `Ignore({x: 1})`
+* **As Child:** `Open(Ignore({x: 1}))`
+* **Chainable:** `Skip({x: 1}).Ignore()`
+
+Ignore validation errors for a value. If the value fails validation,
+the errors are suppressed and the value becomes `undefined`. The value
+is also made optional (no default is injected if missing). This is
+useful when you want to silently discard invalid values rather than
+throwing errors.
+
+
+```js
+const { Ignore } = Shape
+
+let shape = Shape({ a: Ignore(Number) })
+console.log(shape({ a: 123 })) // PASS: prints { a: 123 }
+console.log(shape({ a: true })) // prints { a: undefined } - error ignored
+console.log(shape({})) // prints {} - no default inserted
+```
+
 
 
 ---
