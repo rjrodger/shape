@@ -1,16 +1,17 @@
 {
   "compilerOptions": {
+    "composite": true,
     "esModuleInterop": true,
     "isolatedModules": true,
     "module": "nodenext",
+    "noEmitOnError": true,
     "resolveJsonModule": true,
     "sourceMap": true,
     "strict": true,
-    "target": "es2018"
-  },
-  "references": [
-    { "path": "src" },
-    { "path": "test" }
-  ],
-  "files": []
+    "target": "es2018",
+    "declaration": true,
+    "declarationDir": "../dist",
+    "outDir": "../dist",
+    "rootDir": "."
+  }
 }

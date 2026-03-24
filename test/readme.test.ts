@@ -1,27 +1,31 @@
 /* Copyright (c) 2021-2023 Richard Rodger and other contributors, MIT License */
 
+import { describe, test } from 'node:test'
+import assert from 'node:assert'
+import { deepEqual, throws } from './test-utils'
+
 
 import type {
   Node,
   State,
   Update,
-} from '../gubu'
+} from '../dist/shape'
 
 
-import { Gubu as GubuX } from '../gubu'
+import { Shape as ShapeX } from '../dist/shape'
 
 
-// Handle web (Gubu) versus node ({Gubu}) export.
-let GubuModule = require('../gubu')
+// Handle web (Shape) versus node ({Shape}) export.
+let ShapeModule = require('../dist/shape')
 
-if (GubuModule.Gubu) {
-  GubuModule = GubuModule.Gubu
+if (ShapeModule.Shape) {
+  ShapeModule = ShapeModule.Shape
 }
 
 
-const Gubu: GubuX = GubuModule
-const buildize = Gubu.buildize
-const makeErr = Gubu.makeErr
+const Shape: ShapeX = ShapeModule
+const buildize = Shape.buildize
+const makeErr = Shape.makeErr
 
 
 const {
@@ -52,40 +56,40 @@ const {
   Required,
   Skip,
   Some,
-} = Gubu
+} = Shape
 
 
 
 
 describe('readme', () => {
   test('readme-optional', () => {
-    let shape = Gubu(Optional(String))
-    expect(shape()).toEqual('')
-    expect(shape('a')).toEqual('a')
-    expect(() => shape(1)).toThrow('type')
+    let shape = Shape(Optional(String))
+    deepEqual(shape(), '')
+    deepEqual(shape('a'), 'a')
+    throws(() => shape(1), 'type')
 
-    shape = Gubu(Optional(Some(String, Number)))
-    expect(shape('a')).toEqual('a')
-    expect(shape(1)).toEqual(1)
-    expect(shape()).toEqual(undefined) // Overrides Some
+    shape = Shape(Optional(Some(String, Number)))
+    deepEqual(shape('a'), 'a')
+    deepEqual(shape(1), 1)
+    deepEqual(shape(), undefined) // Overrides Some
 
-    shape = Gubu(Some(String, Number))
-    expect(shape('a')).toEqual('a')
-    expect(shape(1)).toEqual(1)
-    expect(() => shape()).toThrow('satisfy')
+    shape = Shape(Some(String, Number))
+    deepEqual(shape('a'), 'a')
+    deepEqual(shape(1), 1)
+    throws(() => shape(), 'satisfy')
   })
 
 
   test('readme-default', () => {
-    let shape = Gubu(Default('none', String))
-    expect(shape()).toEqual('none')
-    expect(shape('a')).toEqual('a')
-    expect(() => shape(1)).toThrow('type')
+    let shape = Shape(Default('none', String))
+    deepEqual(shape(), 'none')
+    deepEqual(shape('a'), 'a')
+    throws(() => shape(1), 'type')
 
-    shape = Gubu(Default({ a: null }, { a: Number }))
-    expect(shape({ a: 1 })).toEqual({ a: 1 })
-    expect(shape()).toEqual({ a: null })
-    expect(() => shape({ a: 'x' })).toThrow('type')
+    shape = Shape(Default({ a: null }, { a: Number }))
+    deepEqual(shape({ a: 1 }), { a: 1 })
+    deepEqual(shape(), { a: null })
+    throws(() => shape({ a: 'x' }), 'type')
   })
 
 })

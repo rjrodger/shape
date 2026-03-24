@@ -3,14 +3,15 @@
     "esModuleInterop": true,
     "isolatedModules": true,
     "module": "nodenext",
+    "noEmitOnError": true,
     "resolveJsonModule": true,
     "sourceMap": true,
     "strict": true,
-    "target": "es2018"
+    "target": "es2018",
+    "outDir": "../dist-test",
+    "rootDir": "."
   },
   "references": [
-    { "path": "src" },
-    { "path": "test" }
-  ],
-  "files": []
+    { "path": "../src" }
+  ]
 }

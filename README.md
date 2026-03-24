@@ -1,13 +1,13 @@
 <a name="top"></a>
 
-# Gubu: An object shape validation utility.
+# Shape: An object shape validation utility.
 
-[![npm version](https://img.shields.io/npm/v/gubu.svg)](https://npmjs.com/package/gubu)
-[![build](https://github.com/rjrodger/gubu/actions/workflows/build.yml/badge.svg)](https://github.com/rjrodger/gubu/actions/workflows/build.yml)
-[![Coverage Status](https://coveralls.io/repos/github/rjrodger/gubu/badge.svg?branch=main)](https://coveralls.io/github/rjrodger/gubu?branch=main)
-[![Known Vulnerabilities](https://snyk.io/test/github/rjrodger/gubu/badge.svg)](https://snyk.io/test/github/rjrodger/gubu)
+[![npm version](https://img.shields.io/npm/v/shape.svg)](https://npmjs.com/package/shape)
+[![build](https://github.com/rjrodger/shape/actions/workflows/build.yml/badge.svg)](https://github.com/rjrodger/shape/actions/workflows/build.yml)
+[![Coverage Status](https://coveralls.io/repos/github/rjrodger/shape/badge.svg?branch=main)](https://coveralls.io/github/rjrodger/shape?branch=main)
+[![Known Vulnerabilities](https://snyk.io/test/github/rjrodger/shape/badge.svg)](https://snyk.io/test/github/rjrodger/shape)
 [![DeepScan grade](https://deepscan.io/api/teams/5016/projects/19509/branches/508695/badge/grade.svg)](https://deepscan.io/dashboard#view=project&tid=5016&pid=19509&bid=508695)
-[![Maintainability](https://api.codeclimate.com/v1/badges/de19e425771fb65e98e2/maintainability)](https://codeclimate.com/github/rjrodger/gubu/maintainability)
+[![Maintainability](https://api.codeclimate.com/v1/badges/de19e425771fb65e98e2/maintainability)](https://codeclimate.com/github/rjrodger/shape/maintainability)
 
 | ![Voxgig](https://www.voxgig.com/res/img/vgt01r.png) | This open source module is sponsored and supported by [Voxgig](https://www.voxgig.com). |
 |---|---|
@@ -42,7 +42,7 @@ Let's say you want to have the some options for a module you are writing:
 }
 ```
 
-This is a valid Gubu specification. It means:
+This is a valid Shape specification. It means:
 
 
 ```js
@@ -58,14 +58,14 @@ If your user does not specify these options, then you get the defaults:
 {} --> { port: 8080, host: 'localhost' }
 ```
 
-In Gubu, the most common case for options is the easiest: everything
+In Shape, the most common case for options is the easiest: everything
 is optional, and the default value defines the type you will accept.
 This also works for objects, which get "filled out" if not present:
 
 ```js
-const { Gubu } = require('gubu')
+const { Shape } = require('shape')
 
-const shape = Gubu({
+const shape = Shape({
   server: {
     port: 8080,
     host: 'localhost'
@@ -84,23 +84,23 @@ shape(options)
 }
 ```
 
-Another big feature of Gubu is that you can fill out objects to any
+Another big feature of Shape is that you can fill out objects to any
 depth (unlike `Object.assign` or the `...` spread operator).
 
-You may have noticed that Gubu mutates the input to be validated (by
+You may have noticed that Shape mutates the input to be validated (by
 injecting defaults as needed). This is deliberate. Cloning arbitrary
 values in JavaScript is
 [complicated](https://www.digitalocean.com/community/tutorials/copying-objects-in-javascript),
-so Gubu leaves that decision to calling code.
+so Shape leaves that decision to calling code.
 
 
 To make properties required, you use the standard JavaScript wrapper
 objects (*Number*, *String*, *Boolean*, ...):
 
 ```js
-const { Gubu } = import 'gubu' // `import` also works! And in browsers too.
+const { Shape } = import 'shape' // `import` also works! And in browsers too.
 
-const shape = Gubu({
+const shape = Shape({
   timeout: Number,
   message: String,
   debug: Boolean,
@@ -121,7 +121,7 @@ To validate arrays, you provide an example element. All elements of the
 array must match the example element:
 
 ```js
-const shape = Gubu([Number])
+const shape = Shape([Number])
 
 // All good - we want numbers!
 shape([100, 200, 300])
@@ -162,11 +162,11 @@ about, right here, right now**.
 
 ```js
 
-const { Gubu } = require('gubu')
+const { Shape } = require('shape')
 
 // Property a is optional, must be a Number, and defaults to 1.
 // Property b is required, and must be a String.
-const shape = Gubu({ a: 1, b: String })
+const shape = Shape({ a: 1, b: String })
 
 // Object shape is good! Prints `{ a: 99, b: 'foo' }`
 console.log( shape({ a: 99, b: 'foo' }) )
@@ -184,7 +184,7 @@ console.log( shape({ a: 'BAD' }) )
 console.log( shape({ b: 'foo', c: true }) )
 ```
 
-As shown above, you use the exported `Gubu` function to create a
+As shown above, you use the exported `Shape` function to create a
 validation shape checker using an example object. Pass the value you
 want to validate to the shape checker. If the value is valid (matches
 the example object), the shape checker returns the value (with missing
@@ -203,7 +203,7 @@ port, but by default should run on `localhost` on port `8080`. The host should
 be a non-empty string, and the port should be a number.
 
 ```js
-const optionShape = Gubu({
+const optionShape = Shape({
   host: 'localhost',
   port: 8080
 })
@@ -230,7 +230,7 @@ the back end, and you want to handle missing data gracefully, at any
 depth in the structure.
 
 ```js
-const productListShape = Gubu({
+const productListShape = Shape({
   products: [
     {
       name: String, // Product name is a required String
@@ -277,9 +277,9 @@ The [Required](#required-builder) shape builder makes a value
 explicitly required:
 
 ```js
-const { Gubu, Required } = require('gubu')
+const { Shape, Required } = require('shape')
 
-const userShape = Gubu({
+const userShape = Shape({
   person: Required({  // person must be a defined object
     name: String,
     age: Number,
@@ -299,14 +299,14 @@ userShape({
 })
 ```
 
-Shape builders are exported by the Gubu module directly, and are also
-available as properties of the `Gubu` function:
+Shape builders are exported by the Shape module directly, and are also
+available as properties of the `Shape` function:
 
 ```js
-const { Gubu, Required, Closed } = import 'gubu'
+const { Shape, Required, Closed } = import 'shape'
 
-Required === Gubu.Required
-Closed === Gubu.Closed
+Required === Shape.Required
+Closed === Shape.Closed
 ```
 
 For the full list of shape builders, see the [API
@@ -326,37 +326,37 @@ reference](#shape-builders).
 <sub><sup>[top](#top)</sup></sub>
 
 ```sh
-$ npm install gubu
+$ npm install shape
 ```
 
 
 ## Usage
 
 
-The *Gubu* module has no dependencies. A function named `Gubu` is
+The *Shape* module has no dependencies. A function named `Shape` is
 exported as the main entry point.  Shape builders (such as
 [Required](#required-builder)) and utility functions are provided as
-properties of `Gubu` or can be imported separately.
+properties of `Shape` or can be imported separately.
 
 
 ### TypeScript
 
-*Gubu* is written in TypeScript, and can be imported naturally:
+*Shape* is written in TypeScript, and can be imported naturally:
 
 ```js
-import { Gubu } from 'gubu' 
+import { Shape } from 'shape' 
 ```
 
-Types are provided in [gubu.d.ts](gubu.d.ts).
+Types are provided in [shape.d.ts](shape.d.ts).
 
-Gubu tries to play nice with compile-time type validation of your
+Shape tries to play nice with compile-time type validation of your
 shapes, and [mostly succeeds](#typescript-types).
 
 
 ### Browser
 
-A minified version is provided as [gubu.min.js](gubu.min.js), which
-can be directly loaded into a web page and exports a `Gubu` global
+A minified version is provided as [shape.min.js](shape.min.js), which
+can be directly loaded into a web page and exports a `Shape` global
 object.
 
 However you're probably better off importing this module in the usual
@@ -369,21 +369,21 @@ else.
 <sub><sup>[top](#top)</sup></sub>
 
 
-The general principle of Gubu's design is that the schema shape should
+The general principle of Shape's design is that the schema shape should
 match a valid object or value as closely as possible.
 
 For scalar values you can provide a native type object to make the value required:
-* `Gubu(String)` matches strings: `'foo'`
-* `Gubu(Number)` matches numbers: `123`
-* `Gubu(Boolean)` matches booleans: `true`
+* `Shape(String)` matches strings: `'foo'`
+* `Shape(Number)` matches numbers: `123`
+* `Shape(Boolean)` matches booleans: `true`
 
 Or defaults to make the value optional:
-* `Gubu('bar')` matches strings: `'foo'`, and `undefined`
-* `Gubu(0)` matches numbers: `123`, and `undefined`
-* `Gubu(false)` matches booleans: `true`, and `undefined`
+* `Shape('bar')` matches strings: `'foo'`, and `undefined`
+* `Shape(0)` matches numbers: `123`, and `undefined`
+* `Shape(false)` matches booleans: `true`, and `undefined`
 
 If a value is optional and `undefined`, the default value is returned:
-`Gubu('bar')()` returns `'bar'`.
+`Shape('bar')()` returns `'bar'`.
 
 The values `null` and `NaN` must match exactly. They are *not* the
 same as `undefined`. The value `undefined` is special - it literally
@@ -391,14 +391,14 @@ means no value. To allow a property to be absent entirely, use the
 [Skip](#skip-builder) shape builder.
 
 Empty strings are not considered to be valid (this is usually what you
-want). To allow an empty string, use `Gubu(Empty('foo'))` or
-`Gubu(Empty(String))` (where `Empty` is exported by the `Gubu`
+want). To allow an empty string, use `Shape(Empty('foo'))` or
+`Shape(Empty(String))` (where `Empty` is exported by the `Shape`
 module).
 
 For objects, write them as you want them:
 
 ```js
-let shape = Gubu({
+let shape = Shape({
   foo: {
     bar: {
       zed: String,
@@ -425,7 +425,7 @@ If you want to allow arbitrary properties in an object, you can use the
 [Open](#open-builder) shape builder:
 
 ```js
-let openObject = Gubu(Open({ a: 1 }))
+let openObject = Shape(Open({ a: 1 }))
 
 // This now passes (normally property `b` would not be allowed).
 openObject({ a: 11, b: 22 }))
@@ -435,30 +435,30 @@ openObject({ a: 11, b: 22 }))
 For arrays, the first element is treated as the shape that all
 elements in the array must match:
 
-* `Gubu([String])` matches `['a', 'b', 'c']`
-* `Gubu([{x: 1}])` matches `[{x: 11}, {x: 22}, {x: 33}]`
+* `Shape([String])` matches `['a', 'b', 'c']`
+* `Shape([{x: 1}])` matches `[{x: 11}, {x: 22}, {x: 33}]`
 
 
 If you need specific elements to match specific shapes, use the
 [Closed](#closed-builder) shape builder:
 
-* `Gubu(Closed([String, Number]))` matches `['a', 1]`.
+* `Shape(Closed([String, Number]))` matches `['a', 1]`.
 
 You can specify custom validation functions using the
 [Check](#check-builder) shape builder:
 
-* `Gubu({a: Check((v) => 10 < v) })`: matches `{a: 11}` as `10 < 11`
+* `Shape({a: Check((v) => 10 < v) })`: matches `{a: 11}` as `10 < 11`
 
 And you can manipulate the value if you need to:
 
-* `Gubu({a: Check((v, u) => 10 < v ? (u.val = 2 * v, true) : false )})`:
+* `Shape({a: Check((v, u) => 10 < v ? (u.val = 2 * v, true) : false )})`:
   matches `{a: 11}` as `10 < 11` and returns `{a: 22}`.
 
 
 You can also compose validations together:
 
 ```js
-const shape = Gubu({ a: Gubu({ x: Number }) })
+const shape = Shape({ a: Shape({ x: Number }) })
 
 // Matches { a: { x: 1 } } as expected
 shape({ a: { x: 1 } })
@@ -467,18 +467,18 @@ shape({ a: { x: 1 } })
 
 The shape builder functions ([Required](#required-builder),
 [Closed](#closed-builder), etc.) are also available as properties of
-the main `Gubu` function, so you don't have to introduce them into
+the main `Shape` function, so you don't have to introduce them into
 your top level variable namespace.
 
 As a convenience, you can chain most builders. Thus a `Required` and
 `Closed` object can be specified with:
 
 ```js
-const { Gubu } = require('gubu')
+const { Shape } = require('shape')
 
-const shape = Gubu({
-  a: Gubu.Closed({ x: 1 }).Required(),
-  b: Gubu.Required({ x: 1 }).Closed(), // Same as line above
+const shape = Shape({
+  a: Shape.Closed({ x: 1 }).Required(),
+  b: Shape.Required({ x: 1 }).Closed(), // Same as line above
 })
 ```
 
@@ -490,13 +490,13 @@ serializable to JSON.
 // The key string format `name: builder-expression` is converted into 
 // an application of the shape builders on the value.
 
-const shape = Gubu({ 'a: Open': { x: 1 }}, { keyexpr: { active: true } })
+const shape = Shape({ 'a: Open': { x: 1 }}, { keyexpr: { active: true } })
 
 // Matches as a.y is allowed as a is Open
 shape({ a: { x: 1, y: 2 } })
 
 // shape is equivalent to:
-shape = Gubu({ a: Open({ x: 1 }) })
+shape = Shape({ a: Open({ x: 1 }) })
 
 ```
 
@@ -504,12 +504,12 @@ The builder expression syntax is the same as JavaScript function call
 syntax, **but** all values must be in JSON format.
 
 ```js
-const shape = Gubu({ 'a: Exact("red",1,true)': 'red'}, { keyexpr: { active: true } })
+const shape = Shape({ 'a: Exact("red",1,true)': 'red'}, { keyexpr: { active: true } })
 ```
 
 You can write your own builders&mdash;see the next section.
 
-In addition to this README, the [unit tests](lib/gubu.test.ts) are
+In addition to this README, the [unit tests](lib/shape.test.ts) are
 comprehensive and provide many usage examples.
 
 
@@ -522,6 +522,7 @@ The built-in shape builders help you match the following shapes:
   * [Optional](#optional-builder): Make a value optional.
   * [Skip](#skip-builder): Make a value skippable (no default value is injected if missing).
   * [Default](#default-builder) Specify a default builder.
+  * [Ignore](#ignore-builder): Ignore validation errors for a value (value becomes undefined on error).
 * Value constraints:
   * [Empty](#empty-builder): Allow string values to be empty.
   * [Exact](#exact-builder): The value must match one of an exact list of *literal* values.
@@ -530,6 +531,7 @@ The built-in shape builders help you match the following shapes:
   * [One](#one-builder): Exactly one shape (and no more) must match value.
   * [Any](#any-builder): This shape will match any value.
   * [Never](#never-builder): This shape will never match anything.
+  * [Type](#type-builder): Enforce a specific type by name or constructor.
 * Length constraints (operate on values with a length or numeric value):
   * [Below](#below-builder): Match a value (or length of value) less than the given amount.
   * [Max](#max-builder): Match a value (or length of value) less than or equal to the given amount.
@@ -540,6 +542,7 @@ The built-in shape builders help you match the following shapes:
   * [Closed](#closed-builder): Allow only explicitly defined elements in an array.
   * [Open](#open-builder): Allow arbitrary properties in an object (no constraint on their value).
   * [Child](#child-builder): All non-explicit child values of an object must match this shape.
+  * [Rest](#rest-builder): Remaining array elements must match this shape.
   * [Func](#func-builder): The value is explicitly a function.
 * Mutations:
   * [Rename](#rename-builder): Rename the key of a property.
@@ -550,6 +553,7 @@ The built-in shape builders help you match the following shapes:
   * [Before](#before-builder): Define a custom validation function called before a value is processed (advanced use).
   * [After](#after-builder): Define a custom validation function called after a value is processed (advanced use).
   * [Key](#key-builder): The key (or path) of the current object is injected as the value.
+  * [Fault](#fault-builder): Set a custom error message for a value.
 
 
 ### Regular Expressions
@@ -561,7 +565,7 @@ regular expression. The values `null`, `undefined` and `NaN` are not
 converted to strings and will always fail this check.
 
 ```js
-let shape = Gubu({ countryCode: Check(/^[A-Z][A-Z]$/) })
+let shape = Shape({ countryCode: Check(/^[A-Z][A-Z]$/) })
 
 shape({ countryCode: 'IE' })) // PASS.
 shape({ countryCode: 'BAD' })) // FAIL: 'Validation failed for property "countryCode" with value "BAD" because check "/^[A-Z][A-Z]$/" failed.'
@@ -575,7 +579,7 @@ shape builders to validate recursive shapes. Use `Define` first to
 name a given shape. Then use `Refer` to apply the definition of the shape.
 
 ```js
-let tree = Gubu({
+let tree = Shape({
   root: Define('BRANCH', {
     value: String,
     left: Refer('BRANCH'),
@@ -701,7 +705,7 @@ You can define plain objects to any depth. The shape `{ bar: { foo:
 the value of the property `bar`.
 
 As objects and sub-objects are often referenced directly in data
-structures (using dot notation), *Gubu* will construct missing objects
+structures (using dot notation), *Shape* will construct missing objects
 by default, and fill in the missing child values (which may themselves
 be objects). These protect your code from `undefined` value errors
 in default cases.
@@ -721,7 +725,7 @@ where `propNameX` is any string (the quotes may be omitted if the
 property name is a valid JavaScript identifier&mdash;this is just
 normal JavaScript syntax after all).
 
-The `<SHAPE>` can be any valid *Gubu* shape definition.
+The `<SHAPE>` can be any valid *Shape* shape definition.
 
 
 ##### Required Properties (Object)
@@ -731,9 +735,9 @@ value](#required-values) shapes (such as `String`), or use the shape
 builder [Required](#required-builder):
 
 ```js
-const { Required } = Gubu
+const { Required } = Shape
 
-let shape = Gubu({
+let shape = Shape({
   foo: Number,
   bar: Required({
     zed: Boolean
@@ -757,7 +761,7 @@ otherwise! To allow such deep required properties to be missing, use
 an explicit [Skip](#skip-builder) shape builder:
 
 ```js
-let strictShape = Gubu({ a: { b: String } })
+let strictShape = Shape({ a: { b: String } })
 
 // Passes
 strictShape({ a: { b: 'ABC' } })
@@ -766,7 +770,7 @@ strictShape({ a: { b: 'ABC' } })
 strictShape({})
 
 
-let easyShape = Gubu({ a: Skip({ b: String }) })
+let easyShape = Shape({ a: Skip({ b: String }) })
 
 // Now both pass
 easyShape({ a: { b: 'ABC' } })
@@ -785,9 +789,9 @@ allow an object to have an unrestricted set of properties, use the
 [Open](#open-builder) shape builder:
 
 ```js
-const { Open } = Gubu
+const { Open } = Shape
 
-let shape = Gubu(Open({
+let shape = Shape(Open({
   a: 1
 }))
 
@@ -804,7 +808,7 @@ explicitly for each object that can have arbitrary properties.
 
 
 ```js
-let shape = Gubu(Open({
+let shape = Shape(Open({
   a: Open({
     b: 1
   })
@@ -822,7 +826,7 @@ adding the `Open` builder function to your imports. Instead, use the
 optional `keyexpr` feature and specify that an object is open with:
 
 ```js
-let shape = Gubu({
+let shape = Shape({
   'a: Open': {
     b: 1
   }
@@ -838,8 +842,8 @@ to indicate that you do *not* wish an object to be inserted when it is
 missing&mdash;it can be skipped.
 
 ```js
-const { Skip } = Gubu
-let shape = Gubu({
+const { Skip } = Shape
+let shape = Shape({
   a: { x: 1 },
   b: Skip({ y: 2 }),
   c: Skip({ z: Skip({ k: 3 }) }),
@@ -861,9 +865,9 @@ You can define a general shape for all non-explicit object values
 using the [Child](#child-builder) shape builder:
 
 ```js
-const { Value } = Gubu
+const { Value } = Shape
 
-let shape = Gubu(Child(String, {
+let shape = Shape(Child(String, {
   a: 123,
 }))
 
@@ -884,9 +888,9 @@ The general shape can be any valid shape:
 
 
 ```js
-const { Required, Value } = Gubu
+const { Required, Value } = Shape
 
-let shape = Gubu({
+let shape = Shape({
   people: Required({}).Value({ name: String, age: Number })
 })
 
@@ -913,7 +917,7 @@ that each element of the value array must match. If you want an array
 of numbers (`[ 1, 2, 3 ]`, say), then the shape is `[Number]`.
 
 ```js
-let shape = Gubu([Number])
+let shape = Shape([Number])
 shape() // PASS: returns [] (the array itself is optional)
 shape([]) // PASS: returns [] (empty arrays pass)
 shape([1]) // PASS: element matches Number shape
@@ -923,7 +927,7 @@ shape([1, 2, 'bad']) // FAILS; element 2 is not a number
 
 
 // Array elements can be any complex shape.
-shape = Gubu([{x: 1}])
+shape = Shape([{x: 1}])
 shape([{ x: 123 }, { x: 456 }]) // PASS: elements match {x: 1}
 shape([{}]) // PASS:  returns [{x: 1}]
 
@@ -942,7 +946,7 @@ The general form of an array shape is:
 ]
 ```
 
-where `<SHAPE>` is any valid *Gubu* shape definition. All elements
+where `<SHAPE>` is any valid *Shape* shape definition. All elements
 must match `<SHAPE>`, and the empty array is allowed. This is the
 standard case and usually what you want.
 
@@ -951,7 +955,7 @@ specific shapes, you can define these arrays using the
 [Closed](#closed-builder) shape builder.
 
 ```js
-let shape = Gubu(Closed([Number, String, Boolean]))
+let shape = Shape(Closed([Number, String, Boolean]))
 
 // This passes, returning the array as is.
 shape([ 123, 'abc', true ])
@@ -969,7 +973,7 @@ closed array, you *must* use the [Closed](#closed-builder) shape
 builder to close the array. Thus `Closed([Number])` means the array
 can only ever have one element, a number.
 
-As arrays are often referenced directly in data structures, *Gubu*
+As arrays are often referenced directly in data structures, *Shape*
 will construct missing arrays by default, and for closed arrays, fill
 in the missing element values if there are empty or `undefined` array
 entries.
@@ -982,7 +986,7 @@ value](#required-values) shapes (such as `String`), or use the shape
 builder [Required](#required-builder).
 
 ```js
-let shape = Gubu([{ x: 1 }, Required({ y: true })])
+let shape = Shape([{ x: 1 }, Required({ y: true })])
 
 // These pass
 shape([{ x: 2 }, { y: false }])
@@ -1011,8 +1015,8 @@ builders [Min](#min-builder), [Max](#max-builder),
 [Len](#len-builder) to restrict the length of the array.
 
 ```js
-let { Min } = Gubu
-let shape = Gubu(Min(2, [Number]))
+let { Min } = Shape
+let shape = Shape(Min(2, [Number]))
 
 // These pass
 shape([11,22]) // length is 2, >= minimum 2
@@ -1032,16 +1036,16 @@ control magnitude, for objects they control property count, and for
 arrays, they control length:
 
 ```js
-let { Max } = Gubu
+let { Max } = Shape
 
 // Maximum string length
-shape = Gubu(Max(2, String))
+shape = Shape(Max(2, String))
 shape('a') // PASS
 shape('ab') // PASS
 shape('abc') // FAIL: string longer than 2 characters
 
 // Maximum object size
-shape = Gubu(Max(2, {})) // An empty object is open, so can accept any properties
+shape = Shape(Max(2, {})) // An empty object is open, so can accept any properties
 shape({ a: 1 }) // PASS
 shape({ a: 1, b: 2 }) // PASS
 shape({ a: 1, b: 2, c: 3 }) // FAIL: more than 2 properties in object
@@ -1054,10 +1058,10 @@ shape({ a: 1, b: 2, c: 3 }) // FAIL: more than 2 properties in object
 Literal function value operate in the same way as any other literal
 values, defining an optional value shape with a default. This allows
 you to provide default functions for your module options, if you are
-using *Gubu* as an option validator.
+using *Shape* as an option validator.
 
 ```js
-let shape = Gubu({
+let shape = Shape({
   fn: () => true
 })
 
@@ -1074,7 +1078,7 @@ shape({)) === {
 
 
 To require a function, use the shape `Function`,
-(`Gubu(Function)(()=>true)` will pass).
+(`Shape(Function)(()=>true)` will pass).
 
 
 #### Key Expressions
@@ -1088,7 +1092,7 @@ property key string. They must be enabled with an optional flag when
 creating the shape.
 
 ```js
-let shape = Gubu({
+let shape = Shape({
   'a: Skip': 1
 }, { keyexpr: { active: true } })
 ```
@@ -1096,7 +1100,7 @@ let shape = Gubu({
 This syntax is equivalent to:
 
 ```js
-let shape = Gubu({
+let shape = Shape({
   a: Skip(1)
 })
 ```
@@ -1115,7 +1119,7 @@ evaluated left-to-right.
 The following are all equivalent:
 
 ```js
-let shape = Gubu({
+let shape = Shape({
   a: Min(1, Max(4, Number)), // A number x, where 1 <= x <= 4.
   'b: Min(1, Max(4))': Number, // The property value (in this case, Number) is implicit,
   'c: Min(1) Max(4)': Number, // Same effect, since both operate on Number.
@@ -1151,9 +1155,9 @@ function will provide the value to validate. Return `true` if the
 value is valid, and `false` if not.
 
 ```js
-import { Gubu, Check } from 'gubu'
+import { Shape, Check } from 'shape'
 
-let shape = Gubu({ a: Check((v) => 10 < v) })
+let shape = Shape({ a: Check((v) => 10 < v) })
 shape({ a: 11 }) // passes, as 10 < 11 is true
 shape({ a: 9 })  // fails, as 10 < 9 is false
 ```
@@ -1163,7 +1167,7 @@ You can modify the value using the second argument to the custom
 validation function, by assigning a new value to the `val` property:
 
 ```js
-let shape = Gubu({ 
+let shape = Shape({ 
   a: Check((value, update) => {
     update.val = value * 2 
     return true // Remember to return true to indicate value is valid!
@@ -1179,7 +1183,7 @@ As a special case, if you want to explicitly set the value to
 You can also provide a custom error message using the `update` argument:
 
 ```js
-let shape = Gubu({ 
+let shape = Shape({ 
   a: Check((value, update) => {
     update.err = 'BAD VALUE $VALUE AT $PATH'
     return false // always fails
@@ -1195,11 +1199,11 @@ the value, and the property path to the value, respectively.
 the internal state of the validation process. This is provided for
 special cases and workarounds, and the internal set of properties
 should not be considered stable. Review the [source
-code](https://github.com/rjrodger/gubu/blob/main/gubu.ts#L98) to see
+code](https://github.com/rjrodger/shape/blob/main/shape.ts#L98) to see
 what is available.
 
 ```js
-shape = Gubu({
+shape = Shape({
   a: Check((value: any, update: any, state: any) => {
     update.val = value + ` KEY=${state.key}`
     return true
@@ -1219,27 +1223,27 @@ validation. The `Before` and `After` builders are provided for
 advanced usage.
 
 
-### Gubu function
+### Shape function
 
-To construct a shape use the `Gubu` function exported by this module:
+To construct a shape use the `Shape` function exported by this module:
 
 ```js
 // Using require
-const { Gubu } = require('gubu')
+const { Shape } = require('shape')
 
 // Using import
-import { Gubu } from 'gubu'
+import { Shape } from 'shape'
 
-let shape = Gubu({ x: 1 })
+let shape = Shape({ x: 1 })
 ```
 
-In the browser, *Gubu* adds itself directly to the `window` object for
+In the browser, *Shape* adds itself directly to the `window` object for
 immediate use (if you directly load this module using a `script`
-tag). However you'll probably just want to import *Gubu* in the usual
+tag). However you'll probably just want to import *Shape* in the usual
 way into your own source code and let your package builder look after
 things.
 
-The `Gubu` function has two arguments:
+The `Shape` function has two arguments:
 * `shape` (optional): any valid shape definition (`'abc'`, `String`, `{ x: 123 }`, etc.).
 * `options` (optional): an options object.
 
@@ -1252,15 +1256,15 @@ the various shapes.
 The options are:
 * `name`: a string defining a custom name for this shape (useful for debugging).
 
-The `Gubu` function provides all built-in [shape builders](#shape-builders)
+The `Shape` function provides all built-in [shape builders](#shape-builders)
 (`Required`, `Closed`, etc.) as properties. These are also exported directly
 from the module, so the following are equivalent:
 
 ```js
-const { Gubu, Required } = import 'gubu'
+const { Shape, Required } = import 'shape'
 
-const { Gubu } = require('gubu')
-const { Require } = Gubu
+const { Shape } = require('shape')
+const { Require } = Shape
 ```
 
 If you are concerned about namespacing the builders (if the names
@@ -1268,21 +1272,21 @@ clash with your own names), the shape builders are also available with
 a 'G' prefix as an alias:
 
 ```js
-Gubu.GRequired === Gubu.Required
+Shape.GRequired === Shape.Required
 ```
 
 
-### GubuShape function
+### ShapeShape function
 
-When you create a shape using `Gubu`, a `GubuShape` shape validator
+When you create a shape using `Shape`, a `ShapeShape` shape validator
 function is returned:
 
 ```js
 // TypeScript
-import { Gubu, GubuShape } from 'gubu'
+import { Shape, ShapeShape } from 'shape'
 
-// GubuShape is inferred:
-const shape = Gubu(123) // `shape` is a validator function
+// ShapeShape is inferred:
+const shape = Shape(123) // `shape` is a validator function
 ```
 
 The shape validator function has two arguments:
@@ -1309,13 +1313,13 @@ any validation errors will be added to this array, and an Error will
 
 ```js
 let ctx = { err: [] }
-Gubu(Number)('abc', ctx)  // does not throw
+Shape(Number)('abc', ctx)  // does not throw
 console.log(err[0]) // prints error description (number was expected)
 ```
 
 The [error descriptions](#errors) are plain objects, not `Error` objects.
 
-The `GubuShape` function has the following methods:
+The `ShapeShape` function has the following methods:
 * `valid(value: any, context?: any): boolean`
   * returns `true` if the value matches the shape
   * **injects defaults into value**
@@ -1327,20 +1331,20 @@ The `GubuShape` function has the following methods:
   * does not throw Errors, use context = { err: [] } to get any errors
   * can be used as type guard in TypeScript
 * `toString()`
-  * returns a short string describing this `GubuShape` instance
+  * returns a short string describing this `ShapeShape` instance
 * `[Util.inspect.custom]()`
   * same as `toString`
 * `spec()`
   * returns a declarative description of the shape
 
-The shape description provided by `spec` can be passed to `Gubu` to
+The shape description provided by `spec` can be passed to `Shape` to
 generate a new separate shape instance (see the 
 [Shape Nodes](#shape-nodes) section).
 
 Many shapes can be fully serialized to JSON, but those with custom
 validator functions are not serializable in the current version.
 
-A `GubuShape` can be used be used as part of new shape
+A `ShapeShape` can be used be used as part of new shape
 definition. They are intended to be composable.
 
 
@@ -1353,34 +1357,34 @@ definition. They are intended to be composable.
 [Builders](#shape-builder-reference)
 
 
-*Gubu* will attempt a full validation of the input value, collect all
+*Shape* will attempt a full validation of the input value, collect all
 errors, and throw an Error if any validation failed. The error object
-will be an instance of `GubuError`, which extends `TypeError` with the
+will be an instance of `ShapeError`, which extends `TypeError` with the
 following extra properties:
 
-* `gubu`: A marker value, always `true`.
+* `shape`: A marker value, always `true`.
 * `code`: Top level error code, in this version, always `'shape'`
 * `desc()`: Call this function to get a more detailed description of the error.
 
 The error description returned by `desc()` has the properties:
-* `name`: Always `'GubuError'`
+* `name`: Always `'ShapeError'`
 * `code`: Top level error code, in this version, always `'shape'`
 * `err`: An array of `ErrDesc` objects (these are all the errors that occurred).
-* `ctx`: The context object (if any) passed to this `GubuShape` validation call.
+* `ctx`: The context object (if any) passed to this `ShapeShape` validation call.
 
-The message string of GubuError is a human readable generic
+The message string of ShapeError is a human readable generic
 description of the validation failure (with one issue per line) that
 is usable in your own application as-is. You can use the `ErrDesc`
 object instead to create entirely custom messages. Custom messages for
 specific custom errors can also be defined (see below).
 
 ```js
-Gubu(Number)('abc') // throws an Error with message:
+Shape(Number)('abc') // throws an Error with message:
 `
 Validation failed for value "abc" because the value is not of type number.'
 `
 
-let shape = Gubu({ 
+let shape = Shape({ 
   top: { 
     foo: String, 
     bar: Number 
@@ -1405,7 +1409,7 @@ customization. The properties are:
 * `v: any`     : Failing value.
 * `p: string`  : Key path to value.
 * `w: string`  : Error code ("why").
-* `m: number`  : Unique error mark for debugging (search in source code of gubu.ts).
+* `m: number`  : Unique error mark for debugging (search in source code of shape.ts).
 * `t: string`  : Error message text.
 * `u: any`     : User custom info.
 
@@ -1413,17 +1417,17 @@ The property `n` is the [shape node](#shape-nodes) whose validation failed.
 
 ```js
 try {
-    Gubu({x: Number})({x: 'abc'})
+    Shape({x: Number})({x: 'abc'})
 }
-catch(gubuError) {
-  gubuError.desc()) === {
-    name: 'GubuError',
+catch(shapeError) {
+  shapeError.desc()) === {
+    name: 'ShapeError',
     code: 'shape',
     err: [
       {
         k: undefined,
         n: { 
-          '$': { 'gubu$': Symbol(gubu$), 'v$': '<VERSION>' },
+          '$': { 'shape$': Symbol(shape$), 'v$': '<VERSION>' },
           t: 'number',
           v: 0,
           r: true,
@@ -1467,7 +1471,7 @@ truncated to 30 characters.
 
 The *mark* value (property `m`) is a numeric code that uniquely
 identifies the generation point of the error in the source code of
-[gubu.ts](https://github.com/rjrodger/gubu/blob/main/gubu.ts), and
+[shape.ts](https://github.com/rjrodger/shape/blob/main/shape.ts), and
 should be quoted in bug reports (or indeed you can use it yourself to
 inspect the source code).
 
@@ -1479,18 +1483,18 @@ reserved property `err` in the context argument:
 
 ```js
 let ctx = { err: [] }
-Gubu(Number)('abc', ctx)  // does not throw
+Shape(Number)('abc', ctx)  // does not throw
 // ctx.err now contains an array of ErrDesc objects 
 ```
 
-The return value from `Gubu` in this case (and the value passed in!)
+The return value from `Shape` in this case (and the value passed in!)
 should be considered corrupted (defaults may only be partially
 applied). If you want to retain the original value, you must clone it
-yourself before passing it to *Gubu* [^5].
+yourself before passing it to *Shape* [^5].
 
 You can also set the context `err` property to `false`. In this case
 errors are not collected at all, and they are ignored, so that the
-full shape depth is always validated. The `GubuShape.spec` method uses
+full shape depth is always validated. The `ShapeShape.spec` method uses
 this feature to generate a normalized validation `Node` hierarchy
 against the `undefined` value.
 
@@ -1501,7 +1505,7 @@ When using a [custom validator](#custom-validation) you can provide a custom
 error message using the `Update.err` property.
 
 ```js
-let shape = Gubu({ a: (value, update) => {
+let shape = Shape({ a: (value, update) => {
   update.err = 'BAD VALUE $VALUE AT $PATH'
   return false // always fails
 })
@@ -1514,12 +1518,12 @@ value, respectively.
 
 ### TypeScript Types
 
-Gubu makes a best-effort to support TypeScript types. The intersection
+Shape makes a best-effort to support TypeScript types. The intersection
 of the type of the shape and the type of the value is used as the
 return type. This almost always does what you want, especially with
 optional default values (from which types will be inferred).
 
-The [GubuShape](#gubushape-function) function also contains a property
+The [ShapeShape](#shapeshape-function) function also contains a property
 function `valid` with form:
 
 ```js
@@ -1529,7 +1533,7 @@ valid(value: any, context?: any): boolean
 This can be used as a [type guard](https://www.typescriptlang.org/docs/handbook/2/narrowing.html#using-type-predicates):
 
 ```js
-const shape = Gubu({ x: 1, y: 'Y' })
+const shape = Shape({ x: 1, y: 'Y' })
 let data = { x: 2 }
 
 if (shape.valid(data)) {
@@ -1560,7 +1564,7 @@ Where TypeScript cannot infer your types properly, you'll need to
 manually define them:
 
 ```js
-let shape = Gubu(Open({ x: 1}) as unknown as { x: number })
+let shape = Shape(Open({ x: 1}) as unknown as { x: number })
 let data = { z: true }
 
 if (shape.valid(data)) {
@@ -1571,7 +1575,7 @@ if (shape.valid(data)) {
 }
 ```
 
-The holy grail would be for Gubu to use your type definitions directly:
+The holy grail would be for Shape to use your type definitions directly:
 
 ```js
 interface User {
@@ -1581,7 +1585,7 @@ interface User {
 }
 
 // DOES NOT WORK!
-let shape = Gubu(User)
+let shape = Shape(User)
 ```
 
 Sadly TypeScript does not provide runtime type information at
@@ -1599,7 +1603,7 @@ Class Car {
   make: string = ''
   model: string = ''
 }
-const shape = Gubu({ ...new Car() })
+const shape = Shape({ ...new Car() })
 ```
 
 2. Use code generation. Perhaps you are already building types from a
@@ -1621,12 +1625,12 @@ inference can support it, I may look at it again.
 
 ### Shape Nodes
 
-The data structure returned by `GubuShape.spec()` is the internal
+The data structure returned by `ShapeShape.spec()` is the internal
 representation of the validation shape. This is a hierarchical data
 structure where the validation for each key-value pair is defined by a
 shape `Node`, which has the following structure:
 
-* `$`: typeof GUBU         : Special marker to indicate a *Gubu* `Node` object.
+* `$`: typeof SHAPE         : Special marker to indicate a *Shape* `Node` object.
 * `t`: `ValType`           : Value type name (see below).
 * `d`: number              : Depth of the object tree.
 * `v`: any                 : Default value.
@@ -1684,9 +1688,9 @@ value as required. This is most useful for objects and array, which
 are by default optional:
 
 ```js
-const { Gubu, Required } = require('gubu') // shaper builders are exported
-let easier = Gubu({ x: 1 })
-let stricter = Gubu(Required({ x: 1 }))
+const { Shape, Required } = require('shape') // shaper builders are exported
+let easier = Shape({ x: 1 })
+let stricter = Shape(Required({ x: 1 }))
 
 easier() // returns { x: 1 }
 
@@ -1700,17 +1704,17 @@ added to an object. To also make the object required you can use
 either of these expressions:
 
 ```js
-const { Required, Open } = Gubu // shape builders are also properties of Gubu
-Gubu(Open({ a: 1, b: 2 }).Required())
-Gubu(Required({ a: 1, b: 2 }).Open())
+const { Required, Open } = Shape // shape builders are also properties of Shape
+Shape(Open({ a: 1, b: 2 }).Required())
+Shape(Required({ a: 1, b: 2 }).Open())
 ```
 
 Most shape builders can be composed (check their expected arguments!),
 so the following are also equivalent:
 
 ```js
-Gubu(Open(Required({ a: 1, b: 2 })))
-Gubu(Required(Open({ a: 1, b: 2 })))
+Shape(Open(Required({ a: 1, b: 2 })))
+Shape(Required(Open({ a: 1, b: 2 })))
 ```
 
 This flexibility allows you to adjust shapes without too much
@@ -1764,11 +1768,17 @@ The built-in shape builders are:
 * [Empty](#empty-builder): 
   Allow string values to be empty.
 
-* [Exact](#exact-builder): 
+* [Exact](#exact-builder):
   The value must one of an exact list of values.
 
-* [Func](#func-builder): 
+* [Fault](#fault-builder):
+  Set a custom error message for a value.
+
+* [Func](#func-builder):
   The value is explicitly a function.
+
+* [Ignore](#ignore-builder):
+  Ignore validation errors for a value (value becomes undefined on error).
 
 * [Key](#key-builder): 
   The key (or path) of the current object is injected as the value.
@@ -1800,14 +1810,20 @@ The built-in shape builders are:
 * [Refer](#refer-builder): 
   Refer to a defined value by name.
 
-* [Rename](#rename-builder): 
+* [Rename](#rename-builder):
   Rename the key of a property.
 
-* [Required](#required-builder): 
+* [Required](#required-builder):
   Make a value required.
 
-* [Some](#some-builder): 
+* [Rest](#rest-builder):
+  Remaining array elements must match this shape.
+
+* [Some](#some-builder):
   Some shapes (at least one) must match value.
+
+* [Type](#type-builder):
+  Enforce a specific type by name or constructor.
 
 
 ---
@@ -1836,8 +1852,8 @@ a custom validation function.
 
 
 ```js
-const { Above } = Gubu
-let shape = Gubu(Above(2))
+const { Above } = Shape
+let shape = Shape(Above(2))
 
 shape(3) // PASS: 3 > 2; returns 3
 shape(2) // FAIL: throws 'Value "2" for property "" must be above 2 (was 2).'
@@ -1889,15 +1905,15 @@ Return `true` if the value is valid, `false` otherwise. See the
 > usage.
 
 ```js
-const { After } = Gubu
-let shape = Gubu(After(v => 0 === v % 2)) // Pass if value is even
+const { After } = Shape
+let shape = Shape(After(v => 0 === v % 2)) // Pass if value is even
 
 shape(2) // PASS: 2 is even; returns 2
 shape()  // PASS: returns undefined (value was not required)
 shape(1) // FAIL: 1 is not even
 
 
-shape = Gubu(After(v => 0 === v.x % 2, Required({x: Number})))
+shape = Shape(After(v => 0 === v.x % 2, Required({x: Number})))
 
 shape({x: 2))   // PASS: 2 is even; returns 2
 shape({x: 1})   // FAIL: 1 is not even
@@ -1938,16 +1954,16 @@ To match exact values, use the [Exact](#exact-builder) shape builder
 (literal values alone will just create optional defaults).
 
 ```js
-const { All } = Gubu
+const { All } = Shape
 
-let shape = Gubu(All(Number, Check(v => v > 10)))
+let shape = Shape(All(Number, Check(v => v > 10)))
 
 shape(11) // PASS: 11 is a number, and 11 > 10 
 shape(9)  // FAIL: 9 is a number, but 9 < 10 
 shape()   // FAIL: a value is required (implicitly)
 
 // Make the All skippable
-shape = Gubu({ a: Skip(All(Open({ b: String }), Max(2))) })
+shape = Shape({ a: Skip(All(Open({ b: String }), Max(2))) })
 shape({ a: { b: 'X' } }) // PASS: returns same object
 shape({}) // PASS: `a` is optional, returns {}
 ```
@@ -1976,8 +1992,8 @@ Accept any value. If a child value is provided, it will be used as a
 default (when the source value is `undefined`).
 
 ```js
-const { Any } = Gubu
-let shape = Gubu(Any())
+const { Any } = Shape
+let shape = Shape(Any())
 
 console.log(shape(11)) // prints 11
 console.log(shape(10)) // prints 10
@@ -1988,7 +2004,7 @@ console.log(shape({})) // prints {}
 console.log(shape([])) // prints []
 
 // with default
-shape = Gubu(Any({x: 1}))
+shape = Shape(Any({x: 1}))
 console.log(shape(11)) // prints 11
 console.log(shape(10)) // prints 10
 console.log(shape()) // prints {x: 1}
@@ -2029,15 +2045,15 @@ values, are also captured. To prevent further processing, set
 > usage.
 
 ```js
-const { Before } = Gubu
-let shape = Gubu(Before(v => 0 === v % 2)) // Pass if value is even
+const { Before } = Shape
+let shape = Shape(Before(v => 0 === v % 2)) // Pass if value is even
 
 shape(1) // FAIL: 1 is not even
 shape(2) // PASS: 2 is even; returns 2
 shape()  // PASS: returns undefined
 
 
-shape = Gubu(Before(v => 0 === v.x % 2, Required({x: Number})))
+shape = Shape(Before(v => 0 === v.x % 2, Required({x: Number})))
 
 shape({x: 1})   // FAIL: 1 is not even
 shape({x: 2))   // PASS: 2 is even; returns 2
@@ -2080,8 +2096,8 @@ a custom validation function.
 
 
 ```js
-const { Below } = Gubu
-let shape = Gubu(Below(2))
+const { Below } = Shape
+let shape = Shape(Below(2))
 
 shape(1) // PASS: 1 < 2; returns 1
 shape(2) // FAIL: throws 'Value "2" for property "" must be below 2 (was 2).'
@@ -2146,13 +2162,13 @@ expression. The value will be converted to a string (with
 
 
 ```js
-const { Check } = Gubu
+const { Check } = Shape
 
-let shape = Gubu(Check(v => v > 10))
+let shape = Shape(Check(v => v > 10))
 shape(11) // PASS: 11 > 10 is true, returns 11
 shape(10) // FAIL: 10 > 10 is false
 
-shape = Gubu(Check(/a/))
+shape = Shape(Check(/a/))
 shape('bar') // PASS: bar matches /a/
 shape('foo') // FAIL: foo does not match /a/
 ```
@@ -2187,15 +2203,15 @@ is "closed" and can only have the elements defined in the shape.
 > defining the general shape of all elements.
 
 ```js
-const { Closed } = Gubu
+const { Closed } = Shape
 
 // Closed array.
-let shape = Gubu(Closed([Number]))
+let shape = Shape(Closed([Number]))
 shape([1]) // PASS: returns [1]
 shape([1, 2]) // FAIL: element "2" is not allowed
 
 // Open array.
-shape = Gubu([Number])
+shape = Shape([Number])
 shape([1]) // PASS: returns [1]
 shape([1, 2]) // PASS: returns [1, 2], all elements are numbers
 ```
@@ -2228,16 +2244,16 @@ also that `Refer` does not copy the referred value. Instead it uses
 the referred shape, thus `fill` only inserts the default value.
 
 ```js
-const { Define, Refer } = Gubu
+const { Define, Refer } = Shape
 
-let shape = Gubu({ a: Define('foo', 11), b: Refer('foo') })
+let shape = Shape({ a: Define('foo', 11), b: Refer('foo') })
 console.log(shape({ a: 10, b: 12 })) // prints { a: 10, b: 12 })
 console.log(shape({ a: 10 })) // prints { a: 10, b: undefined }) - b is not filled!
 console.log(shape({})) // prints { a: 11, b: undefined }) - b is not filled!
 console.log(shape({ b: 12 })) // prints { a: 11, b: 12 })
 shape({ a: 'A', b: 'B' }) // FAIL: b is not a number
 
-shape = Gubu({ a: Define('foo', 11), b: Refer({ name: 'foo', fill: true }) })
+shape = Shape({ a: Define('foo', 11), b: Refer({ name: 'foo', fill: true }) })
 console.log(shape({ a: 10, b: 12 })) // prints { a: 10, b: 12 })
 console.log(shape({ a: 10 })) // prints { a: 10, b: 11 }) - b is filled with the default, not a copy
 console.log(shape({})) // prints { a: 11, b: 11 }) - b is filled with the default, not a copy
@@ -2263,24 +2279,24 @@ Empty( child?: any )
 Allow the [empty string](#empty-strings) to satisfy a string value.
 
 ```js
-const { Empty } = Gubu
-let shape = Gubu(Empty(String))
+const { Empty } = Shape
+let shape = Shape(Empty(String))
 
 shape('abc') // PASS: returns 'abc'
 shape('') // PASS: returns ''
 shape() // FAIL: a string is still required
 
-shape = Gubu(Empty('abc'))
+shape = Shape(Empty('abc'))
 shape('def') // PASS: returns 'def'
 shape('') // PASS: returns ''
 shape() // PASS: returns 'abc' as default
 
-shape = Gubu(Skip(Empty(String)))
+shape = Shape(Skip(Empty(String)))
 shape('abc') // PASS: returns 'abc'
 shape('') // PASS: returns ''
 shape() // PASS: returns undefined
 
-shape = Gubu(Skip(String).Empty())
+shape = Shape(Skip(String).Empty())
 shape('abc') // PASS: returns 'abc'
 shape('') // PASS: returns ''
 shape() // PASS: returns undefined
@@ -2309,15 +2325,43 @@ the shape. Use this for enumeration-like values.
 
 
 ```js
-const { Exact } = Gubu
+const { Exact } = Shape
 
-let shape = Gubu(Exact(11, 12, true))
+let shape = Shape(Exact(11, 12, true))
 
 console.log(shape(11)) // prints 11
 console.log(shape(12)) // prints 12
 console.log(shape(true)) // prints true
 console.log(shape(10)) // FAIL: 10 is not one of 11, 12, true
 console.log(shape(false)) // FAIL: undefined is not one of 11, 12, true
+```
+
+
+
+---
+#### Fault Builder
+<sub><sup>[builders](#shape-builder-reference) [api](#api) [top](#top)</sup></sub>
+
+```ts
+Fault( message: string, child?: any )
+```
+
+* **Standalone:** `Fault('bad value')`
+* **As Parent:** `Fault('bad value', Number)`
+* **As Child:** `Required(Fault('bad value', Number))`
+* **Chainable:** `Required(Number).Fault('bad value')`
+
+Set a custom error message for a value. When validation fails, the
+specified message is used instead of the default error message. This
+is useful for providing more meaningful error messages to the user.
+
+
+```js
+const { Fault } = Shape
+
+let shape = Shape({ a: Fault('must be a valid count', Number) })
+console.log(shape({ a: 123 })) // PASS: prints { a: 123 }
+console.log(shape({ a: true })) // FAIL: "must be a valid count"
 ```
 
 
@@ -2349,8 +2393,8 @@ a custom validation function.
 
 
 ```js
-const { Max } = Gubu
-let shape = Gubu(Max(2))
+const { Max } = Shape
+let shape = Shape(Max(2))
 
 shape(1) // PASS: 1 <= 1; returns 1
 shape(2) // PASS: 1 <= 2; returns 2
@@ -2403,9 +2447,9 @@ a custom validation function.
 ##### Min Builder Example
 
 ```js
-const { Min } = Gubu
+const { Min } = Shape
 
-let shape = Gubu({
+let shape = Shape({
   size: Min(2, 4)  // Minimum is 2, default is 4, type is Number, optional
 })
 
@@ -2418,7 +2462,7 @@ shape({ size: 1 }) // FAIL
 ##### Min Builder Behaviour
 
 ```js
-let shape = Gubu(Min(2))
+let shape = Shape(Min(2))
 
 shape(3) // PASS: 3 >= 2; returns 3
 shape(2) // PASS: 2 >= 2; returns 2
@@ -2470,8 +2514,8 @@ For more complex validation, use the [Check](#check-builder) shape builder to wr
 a custom validation function.
 
 ```js
-const { Len } = Gubu
-let shape = Gubu(Len(2))
+const { Len } = Shape
+let shape = Shape(Len(2))
 
 shape('abc') // FAIL: 'Value "abc" for property "" must be exactly 2 in length (was 3).'
 shape('ab')  // PASS: 'ab'.length 2 >= 2 ; returns 'ab'
@@ -2513,8 +2557,8 @@ debugging shape changes easier&mdash;these forms also always fail.
 
 
 ```js
-const { Never } = Gubu
-let shape = Gubu(Never())
+const { Never } = Shape
+let shape = Shape(Never())
 
 shape(123) // FAIL: always fails
 shape()    // FAIL: always fails, even on undefined
@@ -2546,15 +2590,15 @@ To match exact values, use the [Exact](#exact-builder) shape builder
 (literal values alone will just create optional defaults).
 
 ```js
-const { One } = Gubu
-let shape = Gubu(One(Number, String))
+const { One } = Shape
+let shape = Shape(One(Number, String))
 
 shape(123)   // PASS: 123 is a number
 shape('abc') // PASS: 'abc' is a string
 shape(true)  // FAIL: `true` is not a number or string
 shape()      // FAIL: a value is required
 
-shape = Gubu(One(Exact(10), Exact(11), Exact(true)))
+shape = Shape(One(Exact(10), Exact(11), Exact(true)))
 shape(10)    // PASS: exact match for `10`
 shape(11)    // PASS: exact match for `11`
 shape(true)) // PASS: exact match for `true`
@@ -2566,7 +2610,42 @@ shape()      // FAIL: a value is required
 See also: 
 [All](#all-builder), 
 [Some](#some-builder), 
-[Exact](#exact-builder), 
+[Exact](#exact-builder),
+
+
+
+---
+#### Open Builder
+<sub><sup>[builders](#shape-builder-reference) [api](#api) [top](#top)</sup></sub>
+
+```ts
+Open( child?: any )
+```
+
+* **Standalone:** `Open({x: 1})`
+* **As Parent:** `Open({x: 1})`
+* **As Child:** `Required(Open({x: 1}))`
+* **Chainable:** `Required({x: 1}).Open()`
+
+Allow arbitrary additional properties in an object, with no constraint
+on their value. By default, objects only allow properties that are
+explicitly defined in the shape. Using `Open` allows any additional
+properties to pass through without validation.
+
+This is equivalent to setting `Child(Any())` on the object.
+
+
+```js
+const { Open } = Shape
+
+let shape = Shape(Open({ a: Number }))
+console.log(shape({ a: 1 })) // PASS: prints { a: 1 }
+console.log(shape({ a: 1, b: true })) // PASS: prints { a: 1, b: true }
+console.log(shape({ a: 1, b: 'x', c: null })) // PASS: extra props allowed
+
+shape = Shape({ a: Number })
+console.log(shape({ a: 1, b: true })) // FAIL: property b is not allowed
+```
 
 
 
@@ -2591,8 +2670,8 @@ will no longer cause validation to fail. If the value is absent, no
 default will be inserted.
 
 ```js
-const { Skip } = Gubu
-let shape = Gubu({a: Skip(123)})
+const { Skip } = Shape
+let shape = Shape({a: Skip(123)})
 console.log(shape({ a: 456 })) // prints { a: 456 }
 console.log(shape({}))  // prints {} - no default inserted
 console.log(shape({ a: undefined })) // prints { a: undefined }
@@ -2628,16 +2707,16 @@ also that `Refer` does not copy the referred value. Instead it uses
 the referred shape, thus `fill` only inserts the default value.
 
 ```js
-const { Define, Refer } = Gubu
+const { Define, Refer } = Shape
 
-let shape = Gubu({ a: Define('foo', 11), b: Refer('foo') })
+let shape = Shape({ a: Define('foo', 11), b: Refer('foo') })
 console.log(shape({ a: 10, b: 12 })) // prints { a: 10, b: 12 })
 console.log(shape({ a: 10 })) // prints { a: 10, b: undefined }) - b is not filled!
 console.log(shape({})) // prints { a: 11, b: undefined }) - b is not filled!
 console.log(shape({ b: 12 })) // prints { a: 11, b: 12 })
 shape({ a: 'A', b: 'B' }) // FAIL: b is not a number
 
-shape = Gubu({ a: Define('foo', 11), b: Refer({ name: 'foo', fill: true }) })
+shape = Shape({ a: Define('foo', 11), b: Refer({ name: 'foo', fill: true }) })
 console.log(shape({ a: 10, b: 12 })) // prints { a: 10, b: 12 })
 console.log(shape({ a: 10 })) // prints { a: 10, b: 11 }) - b is filled with the default, not a copy
 console.log(shape({})) // prints { a: 11, b: 11 }) - b is filled with the default, not a copy
@@ -2666,14 +2745,49 @@ is the new string value of the key, or an options object with properties:
 * `keep`: `boolean`: optional, keep the old property
 
 ```js
-const { Rename } = Gubu
+const { Rename } = Shape
 
-let shape = Gubu({ a: Rename('b', Number) })
+let shape = Shape({ a: Rename('b', Number) })
 console.log(shape({ a: 10 })) // prints { b: 10 })
 
-shape = Gubu({ a: Rename({ name: 'b', keep: true }, 123) })
+shape = Shape({ a: Rename({ name: 'b', keep: true }, 123) })
 console.log(shape({ a: 10 })) // prints { a: 10, b: 10 })
 console.log(shape({})) // prints { a: 123, b: 123 })
+```
+
+
+
+---
+#### Rest Builder
+<sub><sup>[builders](#shape-builder-reference) [api](#api) [top](#top)</sup></sub>
+
+```ts
+Rest( child?: any, shape?: any )
+```
+
+* **Standalone:** `Rest(Number)`
+* **As Parent:** `Rest(Number, [1, 2])`
+* **As Child:** `Required(Rest(Number))`
+* **Chainable:** `Required([1]).Rest(Number)`
+
+Specify the shape that remaining array elements must match. This is
+useful when you have a fixed set of elements at the beginning of an
+array (defined explicitly), and want to validate any additional
+elements that follow. The value is treated as an array, and any
+elements beyond those explicitly defined must satisfy the given child
+shape.
+
+
+```js
+const { Rest } = Shape
+
+let shape = Shape(Rest(Number))
+console.log(shape([1, 2, 3])) // PASS: prints [1, 2, 3]
+console.log(shape([1, 'a'])) // FAIL: 'a' is not a number
+
+shape = Shape(['first', Rest(Number)])
+console.log(shape(['hello', 1, 2, 3])) // PASS: prints ['hello', 1, 2, 3]
+console.log(shape(['hello', 'bad'])) // FAIL: 'bad' is not a number
 ```
 
 
@@ -2696,20 +2810,20 @@ is most useful for objects and arrays, as these are optional by
 default.
 
 ```js
-const { Required } = Gubu
-let shape = Gubu(Required({x: 1}))
+const { Required } = Shape
+let shape = Shape(Required({x: 1}))
 
 console.log(shape({ x: 2 })) // PASS: prints { x: 2 })
 console.log(shape({ x: 2, y: 3 })) // PASS: prints { x: 2, y: 3 }
 console.log(shape()) // FAIL: object is required
 
-shape = Gubu(Open(Required({ x: 1 })))
+shape = Shape(Open(Required({ x: 1 })))
 console.log(shape({ x: 2 })) // PASS: prints { x: 2 })
 console.log(shape({ x: 2, y: 3 })) // PASS: prints { x: 2, y: 3 )
 console.log(shape()) // FAIL: object is required
 
 // Same as above, but chained
-shape = Gubu(Open({ x: 1 }).Required())
+shape = Shape(Open({ x: 1 }).Required())
 console.log(shape({ x: 2 })) // PASS: prints { x: 2 })
 console.log(shape({ x: 2, y: 3 })) // PASS: prints { x: 2, y: 3 }
 console.log(shape()) // FAIL: object is required
@@ -2732,14 +2846,14 @@ Optional( child?: any )
 Make the value explicitly optional. 
 
 ```js
-const { Optional } = Gubu
+const { Optional } = Shape
 
-let shape = Gubu(Optional(String))
+let shape = Shape(Optional(String))
 console.log(shape()) // PASS: prints ""
 console.log(shape('a')) // PASS: prints "a"
 console.log(shape(1)) // FAIL: not a string
 
-shape = Gubu(Optional(Some(String, Number)))
+shape = Shape(Optional(Some(String, Number)))
 expect(shape('a')).toEqual('a') // PASS: 'a' is a String
 expect(shape(1)).toEqual(1) // PASS: 1 is a Number
 expect(shape()).toEqual(undefined) // PASS: Overrides Some
@@ -2762,14 +2876,14 @@ Default( child?: any )
 Specify a default value. This also makes the value optional. 
 
 ```js
-const { Default } = Gubu
+const { Default } = Shape
 
-let shape = Gubu(Default('none', String))
+let shape = Shape(Default('none', String))
 console.log(shape()) // PASS: prints 'none'
 console.log(shape('a')) // PASS: prints 'a'
 console.log(shape(1)) // FAIL: 1 is not a String
 
-shape = Gubu(Default({ a: null }, { a: Number }))
+shape = Shape(Default({ a: null }, { a: Number }))
 console.log(shape({ a: 1 })) // PASS: prints { a: 1 })
 console.log(shape()) // PASS: prints  { a: null })
 console.log(shape({ a: 'x' })) // FAIL: 'x' is not a Number
@@ -2802,8 +2916,8 @@ To match exact values, use the [Exact](#exact-builder) shape builder
 
 
 ```js
-const { Some } = Gubu
-let shape = Gubu(Some({x: 1}, {y: 2}))
+const { Some } = Shape
+let shape = Shape(Some({x: 1}, {y: 2}))
 
 shape({ x: 1 }) // PASS: { x: 1 } matches; returns { x: 1 }
 shape({ y: 2 }) // PASS: { y: 2 } matches; returns { y: 2 }
@@ -2814,7 +2928,45 @@ shape({ z: 3 })  // FAIL: does not match { x: 1 } or { y: 2 }
 See also: 
 [All](#all-builder), 
 [One](#one-builder), 
-[Exact](#exact-builder), 
+[Exact](#exact-builder),
+
+
+
+---
+#### Type Builder
+<sub><sup>[builders](#shape-builder-reference) [api](#api) [top](#top)</sup></sub>
+
+```ts
+Type( type: string | constructor | null | undefined, child?: any )
+```
+
+* **Standalone:** `Type('Number')`
+* **As Parent:** `Type(Number, 0)`
+* **As Child:** `Skip(Type('String'))`
+* **Chainable:** `Skip().Type('Number')`
+
+Enforce a specific type on a value. The type can be specified as a
+string name (`'Number'`, `'String'`, `'Boolean'`, `'Object'`,
+`'Array'`, `'Function'`, `'Symbol'`) or as a constructor (`Number`,
+`String`, `Boolean`, `Object`, `Array`, `Function`, `Symbol`). You
+can also use `null` or `undefined` to match those specific values.
+
+This builder is particularly useful in [Shape
+Expressions](#shape-expressions) and for explicitly setting a type
+without implying a default value.
+
+
+```js
+const { Type } = Shape
+
+let shape = Shape({ a: Type('Number') })
+console.log(shape({ a: 123 })) // PASS: prints { a: 123 }
+console.log(shape({ a: 'x' })) // FAIL: 'x' is not a number
+
+shape = Shape({ a: Type(String) })
+console.log(shape({ a: 'hello' })) // PASS: prints { a: 'hello' }
+console.log(shape({ a: 123 })) // FAIL: 123 is not a string
+```
 
 
 
@@ -2836,15 +2988,15 @@ satisfy. Does not apply to any explicitly defined property values.
 
 
 ```js
-const { Value } = Gubu
-let shape = Gubu(Value())
+const { Value } = Shape
+let shape = Shape(Value())
 
-let shape = Gubu(Value(Number, {}))
+let shape = Shape(Value(Number, {}))
 console.log(shape({ x: 10 })) // PASS: prints { x: 10 }
 console.log(shape({ x: 10, y: 11 })) // PASS: prints { x: 10, y: 11 }
 console.log(shape({ x: true })) // FAIL: true is not a numbner
 
-shape = Gubu({
+shape = Shape({
   page: Value(
     {
       title: String,
@@ -2915,14 +3067,14 @@ Does not apply to any explicitly defined property child values.
 
 
 ```js
-const { Child } = Gubu
+const { Child } = Shape
 
-let shape = Gubu(Child(Number))
+let shape = Shape(Child(Number))
 console.log(shape({ x: 10 })) // PASS: prints { x: 10 }
 console.log(shape({ x: 10, y: 11 })) // PASS: prints { x: 10, y: 11 }
 console.log(shape({ x: true })) // FAIL: true is not a number
 
-shape = Gubu({
+shape = Shape({
   page: Child(
     {
       title: String,
@@ -2975,11 +3127,42 @@ escaping `String`, `Number`, `Boolean`.
 
 
 ```js
-const { Func } = Gubu
+const { Func } = Shape
 
-let shape = Gubu({ a: Func(Number) })
+let shape = Shape({ a: Func(Number) })
 console.log(shape({ a: Number })) // prints { a: Number })
 ```
+
+
+---
+#### Ignore Builder
+<sub><sup>[builders](#shape-builder-reference) [api](#api) [top](#top)</sup></sub>
+
+```ts
+Ignore( child?: any )
+```
+
+* **Standalone:** `Ignore(Number)`
+* **As Parent:** `Ignore({x: 1})`
+* **As Child:** `Open(Ignore({x: 1}))`
+* **Chainable:** `Skip({x: 1}).Ignore()`
+
+Ignore validation errors for a value. If the value fails validation,
+the errors are suppressed and the value becomes `undefined`. The value
+is also made optional (no default is injected if missing). This is
+useful when you want to silently discard invalid values rather than
+throwing errors.
+
+
+```js
+const { Ignore } = Shape
+
+let shape = Shape({ a: Ignore(Number) })
+console.log(shape({ a: 123 })) // PASS: prints { a: 123 }
+console.log(shape({ a: true })) // prints { a: undefined } - error ignored
+console.log(shape({})) // prints {} - no default inserted
+```
+
 
 
 ---
@@ -2999,12 +3182,12 @@ Inject the parent key or path as the value.
 
 
 ```js
-const { Key } = Gubu
+const { Key } = Shape
 
-let shape = Gubu(Child({name:Key()}))
+let shape = Shape(Child({name:Key()}))
 console.log(shape({ a: {}, b: {} })) // prints { a: { name:'a'}, b: { name:'b'} })
 
-shape = Gubu({a:{b:{c:{Child({path:Key(2,'.')}}}}}}))
+shape = Shape({a:{b:{c:{Child({path:Key(2,'.')}}}}}}))
 
 // prints { a: { b: { c: { name:'b.c'} } } })
 console.log(shape({ a: { b: { c: {} } } })) 
@@ -3091,18 +3274,18 @@ const Hyperbole: Builder = function(this: Node, shape0?: any) {
   return node
 }
 
-let shape = Gubu(Hyperbole('foo'))
+let shape = Shape(Hyperbole('foo'))
 shape('a') // PASS: returns 'A!'
 shape(1)   // FAIL: 'foo' defines an optional string shape
 shape()    // PASS: optional string; returns 'foo!' as before is called before standard processing
 
-shape = Gubu(Skip(Hyperbole(One(String, Number))))
+shape = Shape(Skip(Hyperbole(One(String, Number))))
 shape('a') // PASS: returns 'A!'
 shape(1)   // PASS: a number is allowed; ignore by Hyperbole; returns 1
 shape()    // PASS: optional; returns undefined
 ```
 
-For more inspiration, review the [source code](gubu/blob/main/gubu.ts)
+For more inspiration, review the [source code](shape/blob/main/shape.ts)
 to see how the built-in shape builders are implemented.
 
 
@@ -3115,8 +3298,8 @@ type, since it evaluates to `false`. In the case of HTTP input,
 missing parameter values are often provided as empty strings, when
 they are in fact simply not present. 
 
-There are heartfelt arguments on both sides of this issue, but Gubu
-must choose, and Gubu chooses not to accept empty strings as a
+There are heartfelt arguments on both sides of this issue, but Shape
+must choose, and Shape chooses not to accept empty strings as a
 `string` type. This protects you from all sorts of weird bugs.
 
 The engineering compromise is based on the principle of explicit
@@ -3133,19 +3316,19 @@ a default.
 
 ## Implementation
 
-Unlike most validation libraries, *Gubu* does not use recursion,
+Unlike most validation libraries, *Shape* does not use recursion,
 avoiding the overhead of a deep function call stack. Instead a single
 loop builds append-only stack arrays to track position in a depth
 first traversal of the input value to validate. The stack array
 elements are references to values, so do not consume much memory.
 
-*Gubu* traverses over the shape definition, not the input value, which
+*Shape* traverses over the shape definition, not the input value, which
 further protects you from unexpectedly deep inputs.
 
 If you're looking for a depth-first iterative tree-traversal algorithm
 you've got one right here!
 
-*Gubu* compiles the schema shape on a just-in-time basis. Each value
+*Shape* compiles the schema shape on a just-in-time basis. Each value
 node is converted into a [Node](#shape-nodes) that describes the
 expected value. Core validation such as types and required and
 optional values are implemented inline. Shape builders provide further
@@ -3171,15 +3354,15 @@ many years. It also draws from the way [Vue](https://vuejs.com) does
 property validation.
 
 
-## GUBU
+## SHAPE
 
 The name comes from a sort of in-joke in Irish politics. It is
 [grotesque, unbelievable, bizarre and
-unprecedented](https://en.wikipedia.org/wiki/GUBU), that anyone would
+unprecedented](https://en.wikipedia.org/wiki/SHAPE), that anyone would
 write yet another validation library for JavaScript, let alone a third
 one! (See [parambulator](https://github.com/rjrodger/parambulator) and
 [norma](https://github.com/rjrodger/norma) - but don't use those,
-*Gubu* is better!).
+*Shape* is better!).
 
 Also I like short names.
 
