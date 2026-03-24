@@ -40,6 +40,9 @@ const GUBU = { gubu$: GUBU$, v$: VERSION }
 // RegExp: first letter is upper case
 const UPPER_CASE_FIRST_RE = /^[A-Z]/
 
+// RegExp: key expression pattern (hoisted from inner loop for performance)
+const KEY_EXPR_RE = /^\s*("(\\.|[^"\\])*"|[^\s]+):\s*(.*?)\s*$/
+
 
 const { toString } = Object.prototype
 
@@ -740,11 +743,13 @@ function nodizeDeep(root: any, depth: number) {
 
     let vt = typeof n.v
     if (S.object === vt && null != n.v) {
-      Object.entries(n.v).map((m: any[]) => {
-        if (!m[1].$?.gubu$) {
-          nodes.push([n.v, m[0], m[1], n.d + 1])
+      const vkeys = keys(n.v)
+      for (let kI = 0; kI < vkeys.length; kI++) {
+        const k = vkeys[kI]
+        if (!n.v[k]?.$?.gubu$) {
+          nodes.push([n.v, k, n.v[k], n.d + 1])
         }
-      })
+      }
     }
   }
 
@@ -790,8 +795,8 @@ function shapify<S>(intop?: S | Node<S>, inopts?: GubuOptions) {
     match?: boolean // Suppress errors and return boolean result (true if match)
   ): any {
     const skipd = ctx?.skip?.depth
-    const skipa = Array.isArray(ctx?.skip?.depth) ? ctx.skip.depth : null
-    const skipk = Array.isArray(ctx?.skip?.keys) ? ctx.skip.keys : null
+    const skipa = Array.isArray(ctx?.skip?.depth) ? new Set(ctx.skip.depth) : null
+    const skipk = Array.isArray(ctx?.skip?.keys) ? new Set(ctx.skip.keys) : null
 
     const s = new State(root, top, ctx, match)
 
@@ -811,8 +816,8 @@ function shapify<S>(intop?: S | Node<S>, inopts?: GubuOptions) {
 
       // Context skip can override node skip
       let skip = (n.d === skipd ||
-        (skipa && skipa.includes(n.d)) ||
-        (skipk && 1 === n.d && skipk.includes(s.key))) ? true : n.p
+        (skipa && skipa.has(n.d)) ||
+        (skipk && 1 === n.d && skipk.has(s.key))) ? true : n.p
 
       // Call Befores
       if (0 < n.b.length) {
@@ -878,6 +883,7 @@ function shapify<S>(intop?: S | Node<S>, inopts?: GubuOptions) {
 
               let hasKeys = false
               let vkeys = keys(n.v)
+              let knownKeys = new Set(n.k)
               let start = s.nI
 
               if (0 < vkeys.length) {
@@ -917,8 +923,7 @@ function shapify<S>(intop?: S | Node<S>, inopts?: GubuOptions) {
                   let ov: any = n.v[k]
 
                   if (optskeyexpr.active) {
-                    let m = /^\s*("(\\.|[^"\\])*"|[^\s]+):\s*(.*?)\s*$/
-                      .exec(k)
+                    let m = KEY_EXPR_RE.exec(k)
                     if (m) {
                       rk = m[1]
                       let src = m[3]
@@ -949,8 +954,9 @@ function shapify<S>(intop?: S | Node<S>, inopts?: GubuOptions) {
                   let nvs = nodize(ov, 1 + s.dI, meta)
                   n.v[rk] = nvs
 
-                  if (!n.k.includes(rk)) {
+                  if (!knownKeys.has(rk)) {
                     n.k.push(rk)
+                    knownKeys.add(rk)
                   }
 
                   s.nodes[s.nI] = nvs
@@ -961,7 +967,13 @@ function shapify<S>(intop?: S | Node<S>, inopts?: GubuOptions) {
                 }
               }
 
-              let extra = keys(val).filter(k => undefined === n.v[k])
+              let extra: string[] = []
+              let valKeys = keys(val)
+              for (let vkI = 0; vkI < valKeys.length; vkI++) {
+                if (undefined === n.v[valKeys[vkI]]) {
+                  extra.push(valKeys[vkI])
+                }
+              }
 
               if (0 < extra.length) {
                 if (undefined === n.c) {
@@ -1016,7 +1028,13 @@ function shapify<S>(intop?: S | Node<S>, inopts?: GubuOptions) {
             // n.c set by nodize for array with len=1
             let hasChildShape = undefined !== n.c
             let hasValueElements = 0 < s.val.length
-            let elementKeys = keys(n.v).filter(k => !isNaN(+k))
+            let elementKeys: string[] = []
+            let nvKeys = keys(n.v)
+            for (let ekI = 0; ekI < nvKeys.length; ekI++) {
+              if (!isNaN(+nvKeys[ekI])) {
+                elementKeys.push(nvKeys[ekI])
+              }
+            }
             let hasFixedElements = 0 < elementKeys.length
 
             if (hasChildShape) {
@@ -1530,11 +1548,21 @@ function handleValidate(vf: Validate, s: State): Update {
     }
     else if (S.object === typeof (update.err)) {
       // Assumes makeErr already called
-      s.curerr.push(...[update.err].flat().filter(e => null != e).map((e: any) => {
-        e.path = null == e.path ? path : e.path
-        e.mark = null == e.mark ? 2010 : e.mark
-        return e
-      }))
+      const errsrc = update.err
+      if (isarr(errsrc)) {
+        for (let eI = 0; eI < (errsrc as any[]).length; eI++) {
+          const e = (errsrc as any[])[eI]
+          if (null != e) {
+            e.path = null == e.path ? path : e.path
+            e.mark = null == e.mark ? 2010 : e.mark
+            s.curerr.push(e)
+          }
+        }
+      } else if (null != errsrc) {
+        ;(errsrc as any).path = null == (errsrc as any).path ? path : (errsrc as any).path
+        ;(errsrc as any).mark = null == (errsrc as any).mark ? 2010 : (errsrc as any).mark
+        s.curerr.push(errsrc)
+      }
     }
     else {
       let fname = vf.name
@@ -1572,7 +1600,15 @@ function handleValidate(vf: Validate, s: State): Update {
 
 // Create string description of property path, using "dot notation".
 function pathstr(s: State) {
-  return s.path.slice(1, s.dI + 1).filter(p => null != p).join('.')
+  let out = ''
+  for (let i = 1; i <= s.dI; i++) {
+    const p = s.path[i]
+    if (null != p) {
+      if (out.length > 0) out += '.'
+      out += p
+    }
+  }
+  return out
 }
 
 
@@ -2156,12 +2192,14 @@ const Rename = function <V>(this: any, inopts: any, shape?: Node<V> | V): Node<V
             update.node = fromDflt.node
 
             // Old errors on the claimed value are no longer valid.
+            // Use in-place compaction instead of splice to avoid O(n²) shifting.
+            let writeIdx = 0
             for (let eI = 0; eI < s.err.length; eI++) {
-              if (s.err[eI].k === fromDflt.key) {
-                s.err.splice(eI, 1)
-                eI--
+              if (s.err[eI].k !== fromDflt.key) {
+                s.err[writeIdx++] = s.err[eI]
               }
             }
+            s.err.length = writeIdx
 
             if (!keep) {
               delete s.parent[cn]
@@ -2170,11 +2208,18 @@ const Rename = function <V>(this: any, inopts: any, shape?: Node<V> | V): Node<V
               let j = s.cI + 1
 
               // Add the default to the end of the node set to ensure it
-              // is properly validated.
-              s.nodes.splice(j, 0, nodize(fromDflt.dval))
-              s.vals.splice(j, 0, undefined)
-              s.parents.splice(j, 0, s.parent)
-              s.keys.splice(j, 0, cn)
+              // is properly validated. Shift all four arrays simultaneously
+              // instead of four separate splice calls.
+              for (let si = s.nI; si > j; si--) {
+                s.nodes[si] = s.nodes[si - 1]
+                s.vals[si] = s.vals[si - 1]
+                s.parents[si] = s.parents[si - 1]
+                s.keys[si] = s.keys[si - 1]
+              }
+              s.nodes[j] = nodize(fromDflt.dval)
+              s.vals[j] = undefined
+              s.parents[j] = s.parent
+              s.keys[j] = cn
               s.nI++
               s.pI++
             }
@@ -2479,8 +2524,8 @@ function buildize<V>(self?: any, shape?: any): Node<V> {
       ;['f', 'r', 'p', 'c', 'e', 'z'].map((pn: string) =>
         node[pn] = undefined !== selfNode[pn] ? selfNode[pn] : node[pn])
 
-      node.u = Object.assign({ ...selfNode.u }, node.u)
-      node.m = Object.assign({ ...selfNode.m }, node.m)
+      node.u = Object.assign({}, selfNode.u, node.u)
+      node.m = Object.assign({}, selfNode.m, node.m)
       node.a = selfNode.a.concat(node.a)
       node.b = selfNode.b.concat(node.b)
 
@@ -2874,7 +2919,15 @@ function stringify(
 
 
 function clone(x: any) {
-  return null == x ? x : S.object !== typeof (x) ? x : JP(JS(x))
+  if (null == x || S.object !== typeof x) return x
+  if (isarr(x)) return x.slice()
+  if (x instanceof RegExp) return new RegExp(x.source, x.flags)
+  if (x instanceof Date) return new Date(x.getTime())
+  const out: any = {}
+  for (const k in x) {
+    if (x.hasOwnProperty(k)) out[k] = x[k]
+  }
+  return out
 }
 
 

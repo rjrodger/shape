@@ -39,6 +39,8 @@ const GUBU = { gubu$: GUBU$, v$: VERSION };
 // const GUBU$UNDEF = Symbol.for('gubu$undef')
 // RegExp: first letter is upper case
 const UPPER_CASE_FIRST_RE = /^[A-Z]/;
+// RegExp: key expression pattern (hoisted from inner loop for performance)
+const KEY_EXPR_RE = /^\s*("(\\.|[^"\\])*"|[^\s]+):\s*(.*?)\s*$/;
 const { toString } = Object.prototype;
 // TODO: make this work
 // type Shape<S> = (<V>(root?: V, ctx?: Context) => V & ShapeResult<S>)
@@ -420,7 +422,7 @@ function nodize(shape, depth, meta) {
     return node;
 }
 function nodizeDeep(root, depth) {
-    var _a;
+    var _a, _b, _c;
     const nodes = [[{}, 'root', root, depth]];
     for (let i = 0; i < nodes.length; i++) {
         const p = nodes[i];
@@ -432,12 +434,13 @@ function nodizeDeep(root, depth) {
         }
         let vt = typeof n.v;
         if (S.object === vt && null != n.v) {
-            Object.entries(n.v).map((m) => {
-                var _a;
-                if (!((_a = m[1].$) === null || _a === void 0 ? void 0 : _a.gubu$)) {
-                    nodes.push([n.v, m[0], m[1], n.d + 1]);
+            const vkeys = keys(n.v);
+            for (let kI = 0; kI < vkeys.length; kI++) {
+                const k = vkeys[kI];
+                if (!((_c = (_b = n.v[k]) === null || _b === void 0 ? void 0 : _b.$) === null || _c === void 0 ? void 0 : _c.gubu$)) {
+                    nodes.push([n.v, k, n.v[k], n.d + 1]);
                 }
-            });
+            }
         }
     }
     return nodes[0][0].root;
@@ -471,8 +474,8 @@ function shapify(intop, inopts) {
     ) {
         var _a, _b, _c;
         const skipd = (_a = ctx === null || ctx === void 0 ? void 0 : ctx.skip) === null || _a === void 0 ? void 0 : _a.depth;
-        const skipa = Array.isArray((_b = ctx === null || ctx === void 0 ? void 0 : ctx.skip) === null || _b === void 0 ? void 0 : _b.depth) ? ctx.skip.depth : null;
-        const skipk = Array.isArray((_c = ctx === null || ctx === void 0 ? void 0 : ctx.skip) === null || _c === void 0 ? void 0 : _c.keys) ? ctx.skip.keys : null;
+        const skipa = Array.isArray((_b = ctx === null || ctx === void 0 ? void 0 : ctx.skip) === null || _b === void 0 ? void 0 : _b.depth) ? new Set(ctx.skip.depth) : null;
+        const skipk = Array.isArray((_c = ctx === null || ctx === void 0 ? void 0 : ctx.skip) === null || _c === void 0 ? void 0 : _c.keys) ? new Set(ctx.skip.keys) : null;
         const s = new State(root, top, ctx, match);
         // Iterative depth-first traversal of the shape using append-only array stacks.
         // Stack entries are either sub-nodes to validate, or back pointers to
@@ -487,8 +490,8 @@ function shapify(intop, inopts) {
             let fatal = false;
             // Context skip can override node skip
             let skip = (n.d === skipd ||
-                (skipa && skipa.includes(n.d)) ||
-                (skipk && 1 === n.d && skipk.includes(s.key))) ? true : n.p;
+                (skipa && skipa.has(n.d)) ||
+                (skipk && 1 === n.d && skipk.has(s.key))) ? true : n.p;
             // Call Befores
             if (0 < n.b.length) {
                 for (let bI = 0; bI < n.b.length; bI++) {
@@ -540,6 +543,7 @@ function shapify(intop, inopts) {
                             s.ctx.log && s.ctx.log('so', s);
                             let hasKeys = false;
                             let vkeys = keys(n.v);
+                            let knownKeys = new Set(n.k);
                             let start = s.nI;
                             if (0 < vkeys.length) {
                                 hasKeys = true;
@@ -574,8 +578,7 @@ function shapify(intop, inopts) {
                                     let rk = k;
                                     let ov = n.v[k];
                                     if (optskeyexpr.active) {
-                                        let m = /^\s*("(\\.|[^"\\])*"|[^\s]+):\s*(.*?)\s*$/
-                                            .exec(k);
+                                        let m = KEY_EXPR_RE.exec(k);
                                         if (m) {
                                             rk = m[1];
                                             let src = m[3];
@@ -601,8 +604,9 @@ function shapify(intop, inopts) {
                                     }
                                     let nvs = nodize(ov, 1 + s.dI, meta);
                                     n.v[rk] = nvs;
-                                    if (!n.k.includes(rk)) {
+                                    if (!knownKeys.has(rk)) {
                                         n.k.push(rk);
+                                        knownKeys.add(rk);
                                     }
                                     s.nodes[s.nI] = nvs;
                                     s.vals[s.nI] = val[rk];
@@ -611,7 +615,13 @@ function shapify(intop, inopts) {
                                     s.nI++;
                                 }
                             }
-                            let extra = keys(val).filter(k => undefined === n.v[k]);
+                            let extra = [];
+                            let valKeys = keys(val);
+                            for (let vkI = 0; vkI < valKeys.length; vkI++) {
+                                if (undefined === n.v[valKeys[vkI]]) {
+                                    extra.push(valKeys[vkI]);
+                                }
+                            }
                             if (0 < extra.length) {
                                 if (undefined === n.c) {
                                     s.ignoreVal = true;
@@ -661,7 +671,13 @@ function shapify(intop, inopts) {
                         // n.c set by nodize for array with len=1
                         let hasChildShape = undefined !== n.c;
                         let hasValueElements = 0 < s.val.length;
-                        let elementKeys = keys(n.v).filter(k => !isNaN(+k));
+                        let elementKeys = [];
+                        let nvKeys = keys(n.v);
+                        for (let ekI = 0; ekI < nvKeys.length; ekI++) {
+                            if (!isNaN(+nvKeys[ekI])) {
+                                elementKeys.push(nvKeys[ekI]);
+                            }
+                        }
                         let hasFixedElements = 0 < elementKeys.length;
                         if (hasChildShape) {
                             n.c = nodizeDeep(n.c, 1 + s.dI);
@@ -1065,11 +1081,23 @@ function handleValidate(vf, s) {
         }
         else if (S.object === typeof (update.err)) {
             // Assumes makeErr already called
-            s.curerr.push(...[update.err].flat().filter(e => null != e).map((e) => {
-                e.path = null == e.path ? path : e.path;
-                e.mark = null == e.mark ? 2010 : e.mark;
-                return e;
-            }));
+            const errsrc = update.err;
+            if (isarr(errsrc)) {
+                for (let eI = 0; eI < errsrc.length; eI++) {
+                    const e = errsrc[eI];
+                    if (null != e) {
+                        e.path = null == e.path ? path : e.path;
+                        e.mark = null == e.mark ? 2010 : e.mark;
+                        s.curerr.push(e);
+                    }
+                }
+            }
+            else if (null != errsrc) {
+                ;
+                errsrc.path = null == errsrc.path ? path : errsrc.path;
+                errsrc.mark = null == errsrc.mark ? 2010 : errsrc.mark;
+                s.curerr.push(errsrc);
+            }
         }
         else {
             let fname = vf.name;
@@ -1099,7 +1127,16 @@ function handleValidate(vf, s) {
 }
 // Create string description of property path, using "dot notation".
 function pathstr(s) {
-    return s.path.slice(1, s.dI + 1).filter(p => null != p).join('.');
+    let out = '';
+    for (let i = 1; i <= s.dI; i++) {
+        const p = s.path[i];
+        if (null != p) {
+            if (out.length > 0)
+                out += '.';
+            out += p;
+        }
+    }
+    return out;
 }
 function valueLen(val) {
     return S.number === typeof (val) ? val :
@@ -1545,23 +1582,32 @@ const Rename = function (inopts, shape) {
                         }
                         update.node = fromDflt.node;
                         // Old errors on the claimed value are no longer valid.
+                        // Use in-place compaction instead of splice to avoid O(n²) shifting.
+                        let writeIdx = 0;
                         for (let eI = 0; eI < s.err.length; eI++) {
-                            if (s.err[eI].k === fromDflt.key) {
-                                s.err.splice(eI, 1);
-                                eI--;
+                            if (s.err[eI].k !== fromDflt.key) {
+                                s.err[writeIdx++] = s.err[eI];
                             }
                         }
+                        s.err.length = writeIdx;
                         if (!keep) {
                             delete s.parent[cn];
                         }
                         else {
                             let j = s.cI + 1;
                             // Add the default to the end of the node set to ensure it
-                            // is properly validated.
-                            s.nodes.splice(j, 0, nodize(fromDflt.dval));
-                            s.vals.splice(j, 0, undefined);
-                            s.parents.splice(j, 0, s.parent);
-                            s.keys.splice(j, 0, cn);
+                            // is properly validated. Shift all four arrays simultaneously
+                            // instead of four separate splice calls.
+                            for (let si = s.nI; si > j; si--) {
+                                s.nodes[si] = s.nodes[si - 1];
+                                s.vals[si] = s.vals[si - 1];
+                                s.parents[si] = s.parents[si - 1];
+                                s.keys[si] = s.keys[si - 1];
+                            }
+                            s.nodes[j] = nodize(fromDflt.dval);
+                            s.vals[j] = undefined;
+                            s.parents[j] = s.parent;
+                            s.keys[j] = cn;
                             s.nI++;
                             s.pI++;
                         }
@@ -1745,8 +1791,8 @@ function buildize(self, shape) {
             }
             ;
             ['f', 'r', 'p', 'c', 'e', 'z'].map((pn) => node[pn] = undefined !== selfNode[pn] ? selfNode[pn] : node[pn]);
-            node.u = Object.assign({ ...selfNode.u }, node.u);
-            node.m = Object.assign({ ...selfNode.m }, node.m);
+            node.u = Object.assign({}, selfNode.u, node.u);
+            node.m = Object.assign({}, selfNode.m, node.m);
             node.a = selfNode.a.concat(node.a);
             node.b = selfNode.b.concat(node.b);
         }
@@ -2056,7 +2102,20 @@ function stringify(src, dequote, expand, ignore, replacer) {
     return str;
 }
 function clone(x) {
-    return null == x ? x : S.object !== typeof (x) ? x : JP(JS(x));
+    if (null == x || S.object !== typeof x)
+        return x;
+    if (isarr(x))
+        return x.slice();
+    if (x instanceof RegExp)
+        return new RegExp(x.source, x.flags);
+    if (x instanceof Date)
+        return new Date(x.getTime());
+    const out = {};
+    for (const k in x) {
+        if (x.hasOwnProperty(k))
+            out[k] = x[k];
+    }
+    return out;
 }
 const G$ = (node) => nodize({
     ...node,
