@@ -1,6 +1,6 @@
 {
   "name": "shape",
-  "version": "9.0.0",
+  "version": "10.0.0",
   "description": "An object shape validation utility.",
   "main": "dist/shape.js",
   "browser": "dist/shape.min.js",
@@ -22,18 +22,16 @@
     "test-some": "node --enable-source-maps --test --test-name-pattern",
     "watch": "npm run version && tsc --build src test -w",
     "build": "npm run version && tsc --build src test",
-    "build-web": "cp dist/shape.js dist/shape.min.js && browserify -i util -o dist/shape.min.js -e src/shape.web.js -s Shape -im -p tinyify",
-    "test-web": "npm run build && npm run build-web && browserify -i util -o dist-test/web.js -e test/entry.js -im && open test/web.test.html",
     "version": "node -r fs -e \"v=require('./package.json').version;s=fs.readFileSync('./src/shape.ts').toString();if(!s.includes('VERSION = \\''+v+'\\'')){s=s.replace(/VERSION = '.*?'/,'VERSION = \\''+v+'\\'');fs.writeFileSync('./src/shape.ts',s)}\"",
     "clean": "rm -rf node_modules yarn.lock package-lock.json dist dist-test",
     "reset": "npm run clean && npm i && npm run build && npm test",
     "repo-tag": "REPO_VERSION=`node -e \"console.log(require('./package').version)\"` && echo TAG: v$REPO_VERSION && git commit -a -m v$REPO_VERSION && git push && git tag v$REPO_VERSION && git push --tags;",
     "repo-publish": "npm run clean && npm i && npm run repo-publish-quick",
-    "repo-publish-quick": "npm run build && npm run test && npm run build-web && npm run test-web && npm run repo-tag && npm publish --access public --registry https://registry.npmjs.org "
+    "repo-publish-quick": "npm run build && npm run test && npm run test-web && npm run repo-tag && npm publish --access public --registry https://registry.npmjs.org "
   },
   "license": "MIT",
   "engines": {
-    "node": ">=14"
+    "node": ">=24"
   },
   "files": [
     "src",
@@ -42,16 +40,7 @@
     "README.md"
   ],
   "devDependencies": {
-    "@rollup/plugin-commonjs": "^28.0.3",
-    "@types/node": "^22.0.0",
-    "browserify": "^17.0.1",
-    "esbuild": "^0.25.2",
-    "tinyify": "^4.0.0",
-    "typescript": "^5.8.2",
-    "vite": "^6.2.4",
-    "vite-plugin-commonjs": "^0.10.4"
-  },
-  "overrides": {
-    "acorn": "8.12.1"
+    "@types/node": "^25.5.0",
+    "typescript": "^5.8.2"
   }
 }
