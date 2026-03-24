@@ -191,7 +191,6 @@ const S = {
   null: 'null',
   type: 'type',
   closed: 'closed',
-  shape: 'shape',
   check: 'check',
   regexp: 'regexp',
 
