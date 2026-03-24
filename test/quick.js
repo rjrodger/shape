@@ -32,7 +32,7 @@ const {
   Optional,
   expr,
   build,
-} = require('../shape')
+} = require('../src/shape')
 
 function D(x) { console.dir(x,{depth:null}) }
 

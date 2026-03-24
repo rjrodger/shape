@@ -25,5 +25,8 @@ test/coverage.html
 
 coverage
 
+dist
+dist-test
+
 package-lock.json
 yarn.lock

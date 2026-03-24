@@ -4,11 +4,11 @@ const JP = JSON.parse
 
 
 
-import { Shape as ShapeX } from '../shape'
+import { Shape as ShapeX } from '../src/shape'
 
 
 // Handle web (Shape) versus node ({Shape}) export.
-let ShapeModule = require('../shape')
+let ShapeModule = require('../src/shape')
 
 if (ShapeModule.Shape) {
   ShapeModule = ShapeModule.Shape

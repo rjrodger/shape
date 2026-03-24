@@ -5,17 +5,17 @@ import Pkg from '../package.json'
 import type {
   State,
   Update,
-} from '../shape'
+} from '../src/shape'
 
 
-import { Shape as ShapeX } from '../shape'
+import { Shape as ShapeX } from '../src/shape'
 
 const Large = require('./large')
 const Long = require('./long')
 
 
 // Handle web (Shape) versus node ({Shape}) export.
-let ShapeModule = require('../shape')
+let ShapeModule = require('../src/shape')
 
 if (ShapeModule.Shape) {
   ShapeModule = ShapeModule.Shape

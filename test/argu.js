@@ -6,7 +6,7 @@ const {
   Min,
   Ignore,
   Any,
-} = require('../shape')
+} = require('../src/shape')
 
 
 let Argu = MakeArgu('QAZ')

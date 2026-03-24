@@ -1,5 +1,6 @@
 {
   "compilerOptions": {
+    "composite": true,
     "esModuleInterop": true,
     "isolatedModules": true,
     "module": "nodenext",
@@ -7,10 +8,10 @@
     "resolveJsonModule": true,
     "sourceMap": true,
     "strict": true,
-    "target": "es2018"
-  },
-  "exclude": [
-    "dist",
-    "node_modules"
-  ]
+    "target": "es2021",
+    "declaration": true,
+    "declarationDir": "../dist",
+    "outDir": "../dist",
+    "rootDir": "."
+  }
 }

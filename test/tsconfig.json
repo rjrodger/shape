@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "esModuleInterop": true,
+    "isolatedModules": true,
+    "module": "nodenext",
+    "noEmitOnError": true,
+    "resolveJsonModule": true,
+    "sourceMap": true,
+    "strict": true,
+    "target": "es2021",
+    "outDir": "../dist-test",
+    "rootDir": "."
+  },
+  "references": [
+    { "path": "../src" }
+  ]
+}
