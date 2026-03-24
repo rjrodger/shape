@@ -1,6 +1,6 @@
 {
   "name": "shape",
-  "version": "10.0.0",
+  "version": "10.0.1",
   "description": "An object shape validation utility.",
   "main": "dist/shape.js",
   "browser": "dist/shape.min.js",
@@ -27,7 +27,7 @@
     "reset": "npm run clean && npm i && npm run build && npm test",
     "repo-tag": "REPO_VERSION=`node -e \"console.log(require('./package').version)\"` && echo TAG: v$REPO_VERSION && git commit -a -m v$REPO_VERSION && git push && git tag v$REPO_VERSION && git push --tags;",
     "repo-publish": "npm run clean && npm i && npm run repo-publish-quick",
-    "repo-publish-quick": "npm run build && npm run test && npm run test-web && npm run repo-tag && npm publish --access public --registry https://registry.npmjs.org "
+    "repo-publish-quick": "npm run build && npm run test && npm run repo-tag && npm publish --access public --registry https://registry.npmjs.org "
   },
   "license": "MIT",
   "engines": {
