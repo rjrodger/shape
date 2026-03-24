@@ -1,7 +1,7 @@
 
 
 const {
-  Gubu,
+  Shape,
   Args,
   G$,
   nodize,
@@ -32,7 +32,7 @@ const {
   Optional,
   expr,
   build,
-} = require('../gubu')
+} = require('../shape')
 
 function D(x) { console.dir(x,{depth:null}) }
 
@@ -68,9 +68,9 @@ let log = (point,state)=>{
 // // console.log(RegExp.constructor)
 
 
-// let g1 = Gubu({a:Optional(/x/)})
-// // let g1 = Gubu({a:Foo})
-// // let g1 = Gubu({a:RegExp})
+// let g1 = Shape({a:Optional(/x/)})
+// // let g1 = Shape({a:Foo})
+// // let g1 = Shape({a:RegExp})
 
 // console.log(g1.stringify())
 // D(g1.spec())
@@ -80,35 +80,35 @@ let log = (point,state)=>{
 // console.log(g1({a:'y'}))
 
 
-// console.dir(Gubu({a:expr({src:'Min(2,Max(4, String))'})}).spec(),{depth:null})
-// console.log(Gubu({a:expr({src:'Min(2,Max(4, String))'})}).stringify(null,true))
+// console.dir(Shape({a:expr({src:'Min(2,Max(4, String))'})}).spec(),{depth:null})
+// console.log(Shape({a:expr({src:'Min(2,Max(4, String))'})}).stringify(null,true))
 
-// console.log(Gubu({a:expr({src:'Min(2) Max(4) String'})}).stringify(null,true))
-//console.log(Gubu({a:expr({src:'Min(2) Max(4) String()'})}).spec())
+// console.log(Shape({a:expr({src:'Min(2) Max(4) String'})}).stringify(null,true))
+//console.log(Shape({a:expr({src:'Min(2) Max(4) String()'})}).spec())
 
-// console.log(Gubu({a:expr({src:'Min(2).Max(4).String'})}).stringify(null,true))
-// console.log(Gubu({a:expr({src:'Min(2).Max(4).String'})}).spec())
+// console.log(Shape({a:expr({src:'Min(2).Max(4).String'})}).stringify(null,true))
+// console.log(Shape({a:expr({src:'Min(2).Max(4).String'})}).spec())
 
 
 
 // does Min(1, Max(2)) == Min(1).Max(2) ?
 
 
-// console.log(Gubu(Min(1, Max(2, String))).spec())
-// console.log(Gubu(Min(1).Max(2, String)).spec())
-// console.log(Gubu(Min(1)).spec())
+// console.log(Shape(Min(1, Max(2, String))).spec())
+// console.log(Shape(Min(1).Max(2, String)).spec())
+// console.log(Shape(Min(1)).spec())
 
 
-// console.dir(Gubu({a:expr({src:'Child(Number)'})}).spec(),{depth:null})
+// console.dir(Shape({a:expr({src:'Child(Number)'})}).spec(),{depth:null})
 
-// const g2 = Gubu({a: Child(Number,{x:'q'})})
-// const g2 = Gubu({'a: Child(Number)':{x:'q'}})
-// const g2 = Gubu({'a: Number':1})
-// const g2 = Gubu({a:1})
-// const g2 = Gubu({'a:Number':1})
-// const g2 = Gubu({a:Min(1,2)})
-// const g2 = Gubu({'a:Min(1) Max(3)':1})
-// const g2 = Gubu({a:2})
+// const g2 = Shape({a: Child(Number,{x:'q'})})
+// const g2 = Shape({'a: Child(Number)':{x:'q'}})
+// const g2 = Shape({'a: Number':1})
+// const g2 = Shape({a:1})
+// const g2 = Shape({'a:Number':1})
+// const g2 = Shape({a:Min(1,2)})
+// const g2 = Shape({'a:Min(1) Max(3)':1})
+// const g2 = Shape({a:2})
 // console.dir(g2.spec(),{depth:null})
 // console.log('==========')
 // console.log(g2({ a: 3 }))
@@ -118,72 +118,72 @@ let log = (point,state)=>{
 
 // const s0 = build('Min(1)')
 // // console.log(s0)
-// const g0 = Gubu(s0)
+// const g0 = Shape(s0)
 // console.log(g0.stringify())
 
 
 // const s1 = build('Min(1).Max(3)')
 // // console.log(s1)
-// const g1 = Gubu(s1)
+// const g1 = Shape(s1)
 // console.log(g1.stringify())
 
 
 // const s2 = build({a:'Min(1)'})
 // // console.log(s2)
-// const g2 = Gubu(s2)
+// const g2 = Shape(s2)
 // console.log(g2.stringify())
 
 
 // const s3 = build({a:'String().Min(1)'})
 // // console.log(s3)
-// const g3 = Gubu(s3)
+// const g3 = Shape(s3)
 // console.log(g3.stringify())
 
 
 // const s3a = build({a:'String.Min(1)'})
 // // console.log(s3a)
-// const g3a = Gubu(s3a)
+// const g3a = Shape(s3a)
 // console.log(g3a.stringify())
 
 
 // const s3b = build({a:'Min(1).String()'})
 // // console.log(s3b)
-// const g3b = Gubu(s3b)
+// const g3b = Shape(s3b)
 // console.log(g3b.stringify())
 
 
 // const s3c = build({a:'Min(1).String'})
 // // console.log(s3c)
-// const g3c = Gubu(s3c)
+// const g3c = Shape(s3c)
 // console.log(g3c.stringify())
 
 
 // const s3d = build({a:'Min(1,String)'})
 // // console.log(s3d)
-// const g3d = Gubu(s3d)
+// const g3d = Shape(s3d)
 // console.log(g3d.stringify())
 
 
 // const s4 = build(['String().Min(1)'])
 // // console.log(s4)
-// const g4 = Gubu(s4)
+// const g4 = Shape(s4)
 // // console.log(g4.spec())
 // console.log(g4.stringify())
 
 
 // const s5 = build(['String.Min(1)'])
 // // console.log(s5)
-// const g5 = Gubu(s5)
+// const g5 = Shape(s5)
 // console.log(g5.stringify())
 
-// let gr = Gubu(Child(Number))
-// let gx = Gubu.expr('Child(Number)')
+// let gr = Shape(Child(Number))
+// let gx = Shape.expr('Child(Number)')
 // console.log(gx)
-// let gr = Gubu(gx)
+// let gr = Shape(gx)
 // console.log(gr.spec())
 // console.log(gr({x:1}))
 
-// let g1 = Gubu({
+// let g1 = Shape({
 //   // a: Child(Number,{}),
 //   'a: Child(Number)': {}
 //   // 'a: Number':1
@@ -193,11 +193,11 @@ let log = (point,state)=>{
 
 /*
 let g1 =
-    // Gubu(Open({
+    // Shape(Open({
     //   a: 1,
     //   b: 2,
     // }))
-    Gubu({
+    Shape({
       a: 1,
       // $$: 'Open',
       b: 2,
@@ -235,7 +235,7 @@ let m0 =
     // [Number,String]
     // [{x:1}]
     // [{x:1},{y:Number}]
-let g0 = Gubu({a:m0})
+let g0 = Shape({a:m0})
 console.log(g0.node())
 // console.dir(g0.spec(),{depth:null})
 // console.log(g0({a:'AAA'}))
@@ -253,17 +253,17 @@ console.log(j0)
 */
 
 // console.log('======')
-// let b0 = Gubu.build({"x":"11","$$":"Min(1).Max(3)"})
+// let b0 = Shape.build({"x":"11","$$":"Min(1).Max(3)"})
 // console.dir(b0.spec(),{depth:null})
 // console.log(b0.jsonify())
 
-// console.log(Gubu(b0).spec())
+// console.log(Shape(b0).spec())
 
 
 
 
 /*
-let g1 = Gubu({
+let g1 = Shape({
   // 'x:Min(1,Max(4))': 2,
   // 'x:Min(1).Max(4)': 2,
   // x: 'Min(1, Max(4, 2))',
@@ -285,7 +285,7 @@ console.log(g1({a:{x:3}}))
 
 
 /*
-let d5 = Gubu(
+let d5 = Shape(
   //2
   // Default(2)
   // Default(2, Required())
@@ -306,7 +306,7 @@ let d5 = Gubu(
   // Max(2).Min(1,{x:2})
   )
 
-// let d5 = Gubu.build('String')
+// let d5 = Shape.build('String')
 console.log('===========')
 console.log(d5.spec())
 console.log('QQQ',d5.stringify())
@@ -327,31 +327,31 @@ console.log('QQQ',d5.stringify())
 // D( Child({ x: String }).Required({b:1}) )
 
 /*
-let g0 = Gubu({ a: Required({ b: 1 }).Child({ x: String }) })
-// let g0 = Gubu({ a: Required({ b: 1 })})
-// let g0 = Gubu({ a: Child({ x: String },{b:1})})
-// let g0 = Gubu({ a: Child({ x: String },Required({b:1}))})
-// let g0 = Gubu({ a: Required(Child({ x: String },{b:1}))})
-// let g0 = Gubu({ a: Child({ x: String },{b:1}).Required() })
-// let g0 = Gubu({ a: Child({ x: String }).Required({b:1}) })
-// let g0 = Gubu({ a: Required().Child({ x: String },{b:1}) })
+let g0 = Shape({ a: Required({ b: 1 }).Child({ x: String }) })
+// let g0 = Shape({ a: Required({ b: 1 })})
+// let g0 = Shape({ a: Child({ x: String },{b:1})})
+// let g0 = Shape({ a: Child({ x: String },Required({b:1}))})
+// let g0 = Shape({ a: Required(Child({ x: String },{b:1}))})
+// let g0 = Shape({ a: Child({ x: String },{b:1}).Required() })
+// let g0 = Shape({ a: Child({ x: String }).Required({b:1}) })
+// let g0 = Shape({ a: Required().Child({ x: String },{b:1}) })
 */
 
 
-// let g0 = Gubu({ a: One(Number,String) })
-// let g0 = Gubu({ a: All(Number,String) })
-// let g0 = Gubu({ a: Some(Number,String) })
-// let g0 = Gubu({ a: Some({x:1}) })    
-// let g0 = Gubu({ a: Child({ x: String }).Required({ b: 1 }) })    
-// let g0 = Gubu(Child(Number))
-//let g= Gubu({a:Child({x:Number})})
-// let g0 = Gubu.build({"a":{"$$":"Some($$ref0)","$$ref0":{"x":"1"}}})
+// let g0 = Shape({ a: One(Number,String) })
+// let g0 = Shape({ a: All(Number,String) })
+// let g0 = Shape({ a: Some(Number,String) })
+// let g0 = Shape({ a: Some({x:1}) })    
+// let g0 = Shape({ a: Child({ x: String }).Required({ b: 1 }) })    
+// let g0 = Shape(Child(Number))
+//let g= Shape({a:Child({x:Number})})
+// let g0 = Shape.build({"a":{"$$":"Some($$ref0)","$$ref0":{"x":"1"}}})
 //D(g0.node())
 //D(g0.spec())
 //console.log(g0.stringify())
-//let g0 = Gubu(All(Open({ x: 1 }), Open({ y: 'a' })))
-// let g0 = Gubu(Closed(Required({ x: 1 })), { name: 'cr0' })
-// let g0 = Gubu(Required({ x: 1 }), { name: 'cr0' })
+//let g0 = Shape(All(Open({ x: 1 }), Open({ y: 'a' })))
+// let g0 = Shape(Closed(Required({ x: 1 })), { name: 'cr0' })
+// let g0 = Shape(Required({ x: 1 }), { name: 'cr0' })
 //console.log(stringify({a:'A'}))
 // console.log(g0.node())
 // console.log(g0.spec())
@@ -360,36 +360,36 @@ let g0 = Gubu({ a: Required({ b: 1 }).Child({ x: String }) })
 // console.log(g.stringify())
 //let j0 = g.jsonify()
 //console.log(j0)
-// let g1= Gubu.build(j0)
+// let g1= Shape.build(j0)
 // console.log(g1.stringify())
 
 // console.log(JSON.stringify(Skip()))
-// console.log(JSON.stringify(Gubu.Skip()))
+// console.log(JSON.stringify(Shape.Skip()))
 
 
-// let g0 = Gubu(Open({a:1}))
-// let c0 = Gubu(Check((v) => v === 1))
-// let g0 = Gubu(Default('foo', c0))
-// let g0 = Gubu(Check((v) => !!v, Number))
-// let g0 = Gubu({ a: Exact(null) })
-// let g0 = Gubu(Optional(Required('a')))
-//let g0 = Gubu({ a: Child({ x: String }).Required({ b: 1 }) })
-// let g0 = Gubu({ a: Required({ b: 1 }) })
-// let g0 = Gubu({ a: Child({ x: String }) })
+// let g0 = Shape(Open({a:1}))
+// let c0 = Shape(Check((v) => v === 1))
+// let g0 = Shape(Default('foo', c0))
+// let g0 = Shape(Check((v) => !!v, Number))
+// let g0 = Shape({ a: Exact(null) })
+// let g0 = Shape(Optional(Required('a')))
+//let g0 = Shape({ a: Child({ x: String }).Required({ b: 1 }) })
+// let g0 = Shape({ a: Required({ b: 1 }) })
+// let g0 = Shape({ a: Child({ x: String }) })
 
-///let g0 = Gubu({ a: Default({ b: 'B' }, All(Open({ b: String }), Max(2))) })
-// let g0 = Gubu({ a: All(Open({ b: String }), Max(2)) })
+///let g0 = Shape({ a: Default({ b: 'B' }, All(Open({ b: String }), Max(2))) })
+// let g0 = Shape({ a: All(Open({ b: String }), Max(2)) })
 
-// let g0 = Gubu(Exact('red'))
+// let g0 = Shape(Exact('red'))
 
 
 /*
-let g0 = Gubu({
+let g0 = Shape({
   a: Number,
   b: Skip(Boolean),
 })
 
-let g1 = Gubu(Open(g0))
+let g1 = Shape(Open(g0))
 
 
 console.log('=========')
@@ -422,7 +422,7 @@ catch(e) {
 
 
 
-let g0 = Gubu({x:Number})
+let g0 = Shape({x:Number})
 console.log(g0.stringify())
 
 

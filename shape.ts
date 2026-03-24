@@ -1,6 +1,6 @@
 /* Copyright (c) 2021-2024 Richard Rodger and other contributors, MIT License */
 
-// FIX: does not work if Gubu is inside a Proxy - jest fails
+// FIX: does not work if Shape is inside a Proxy - jest fails
 
 // FEATURE: validator on completion of object or array
 // FEATURE: support non-index properties on array shape
@@ -10,12 +10,12 @@
 // FEATURE: Key validation by RegExp
 
 // TODO: Validation of Builder parameters
-// TODO: GubuShape.d is damaged by composition
+// TODO: ShapeShape.d is damaged by composition
 // TODO: Better stringifys for builder shapes
 // TODO: Error messages should state property is missing, not `value ""`
 // TODO: node.s can be a lazy function to avoid unnecessary string building
 // TODO: Finish Default shape-builder
-// FIX: Gubu(Gubu(..)) should work
+// FIX: Shape(Shape(..)) should work
 
 // DOC: Skip also makes value optional - thus Skip() means any value, or nonexistent
 // DOC: Optional
@@ -27,15 +27,15 @@ import { inspect } from 'util'
 // Package version.
 const VERSION = '9.0.0'
 
-// Unique symbol for marking and recognizing Gubu shapes.
-const GUBU$ = Symbol.for('gubu$')
+// Unique symbol for marking and recognizing Shape shapes.
+const SHAPE$ = Symbol.for('shape$')
 
 // A singleton for fast equality checks.
-const GUBU = { gubu$: GUBU$, v$: VERSION }
+const SHAPE = { shape$: SHAPE$, v$: VERSION }
 
-// TODO GUBU$UNDEF for explicit undefined
+// TODO SHAPE$UNDEF for explicit undefined
 // A special marker for property abscence.
-// const GUBU$UNDEF = Symbol.for('gubu$undef')
+// const SHAPE$UNDEF = Symbol.for('shape$undef')
 
 // RegExp: first letter is upper case
 const UPPER_CASE_FIRST_RE = /^[A-Z]/
@@ -47,9 +47,9 @@ const KEY_EXPR_RE = /^\s*("(\\.|[^"\\])*"|[^\s]+):\s*(.*?)\s*$/
 const { toString } = Object.prototype
 
 
-// Options for creating a GubuShape.
-type GubuOptions = {
-  name?: string // Name this Gubu shape.
+// Options for creating a ShapeShape.
+type ShapeOptions = {
+  name?: string // Name this Shape shape.
 
   // Meta properties
   meta?: {
@@ -71,7 +71,7 @@ type GubuOptions = {
 }
 
 
-// User context for a given Gubu validation run.
+// User context for a given Shape validation run.
 // Add your own references here for use in your own custom validations.
 // The reserved properties are: `err`.
 type Context = Record<string, any> & {
@@ -87,8 +87,8 @@ type Context = Record<string, any> & {
 }
 
 
-// The semantic types recognized by Gubu.
-// Not that Gubu considers values to be subtypes.
+// The semantic types recognized by Shape.
+// Not that Shape considers values to be subtypes.
 type ValType =
   'any' |       // Any type.
   'array' |     // An array.
@@ -111,7 +111,7 @@ type ValType =
 
 // A node in the validation tree structure.
 type Node<V> = {
-  $: typeof GUBU         // Special marker to indicate normalized.
+  $: typeof SHAPE         // Special marker to indicate normalized.
   // o: any
   t: ValType             // Value type name.
   d: number              // Depth.
@@ -173,7 +173,7 @@ type ShapeResult<T> =
 
 // Help the minifier
 const S = {
-  gubu: 'gubu',
+  shape: 'shape',
   name: 'name',
   nan: 'nan',
   never: 'never',
@@ -470,8 +470,8 @@ type ErrDesc = {
 
 
 // Custom Error class.
-class GubuError extends TypeError {
-  gubu = true
+class ShapeError extends TypeError {
+  shape = true
   code: string
   gname: string
   props: ({
@@ -493,14 +493,14 @@ class GubuError extends TypeError {
 
     super(gname + prefix + err.map((e: ErrDesc) => e.text).join('\n') + suffix)
 
-    let name = 'GubuError'
+    let name = 'ShapeError'
     let ge = this as unknown as any
     ge.name = name
 
     this.code = code
     this.gname = gname
     this.desc = () => ({ name, code, err, ctx, })
-    this.stack = this.stack?.replace(/.*\/gubu\/gubu\.[tj]s.*\n/g, '')
+    this.stack = this.stack?.replace(/.*\/shape\/shape\.[tj]s.*\n/g, '')
 
     this.props = err.map((e: ErrDesc) => ({
       path: e.path,
@@ -553,24 +553,24 @@ const EMPTY_VAL: { [name: string]: any } = {
 // Normalize a value into a Node<S>.
 function nodize<S>(shape?: any, depth?: number, meta?: NodeMeta): Node<S> {
 
-  // If using builder as property of Gubu, `this` is just Gubu, not a node.
+  // If using builder as property of Shape, `this` is just Shape, not a node.
   if (shapify === shape) {
     shape = undefined
   }
 
   // Is this a (possibly incomplete) Node<S>?
-  else if (null != shape && shape.$?.gubu$) {
+  else if (null != shape && shape.$?.shape$) {
 
-    // Assume complete if gubu$ has special internal reference.
-    if (GUBU$ === shape.$.gubu$) {
+    // Assume complete if shape$ has special internal reference.
+    if (SHAPE$ === shape.$.shape$) {
       shape.d = null == depth ? shape.d : depth
       return shape
     }
 
     // Normalize an incomplete Node<S>, avoiding any recursive calls to norm.
-    else if (true === shape.$.gubu$) {
+    else if (true === shape.$.shape$) {
       let node = { ...shape }
-      node.$ = { v$: VERSION, ...node.$, gubu$: GUBU$ }
+      node.$ = { v$: VERSION, ...node.$, shape$: SHAPE$ }
 
       node.v =
         (null != node.v && S.object === typeof (node.v)) ? { ...node.v } : node.v
@@ -665,7 +665,7 @@ function nodize<S>(shape?: any, depth?: number, meta?: NodeMeta): Node<S> {
         c = Any()
       }
     }
-    else if (v.gubu === GUBU || true === v.$?.gubu) {
+    else if (v.shape === SHAPE || true === v.$?.shape) {
       let gs = v.node ? v.node() : v
       t = gs.t
       v = gs.v
@@ -698,7 +698,7 @@ function nodize<S>(shape?: any, depth?: number, meta?: NodeMeta): Node<S> {
   let vmap = (null != v && (S.object === t || S.array === t)) ? { ...v } : v
 
   let node = ({
-    $: GUBU,
+    $: SHAPE,
     t,
     v: vmap,
     f,
@@ -736,7 +736,7 @@ function nodizeDeep(root: any, depth: number) {
     const n = p[0][p[1]] = nodize(p[2], p[3])
 
     if (undefined !== n.c) {
-      if (!n.c.$?.gubu$) {
+      if (!n.c.$?.shape$) {
         nodes.push([n, 'c', n.c, n.d])
       }
     }
@@ -746,7 +746,7 @@ function nodizeDeep(root: any, depth: number) {
       const vkeys = keys(n.v)
       for (let kI = 0; kI < vkeys.length; kI++) {
         const k = vkeys[kI]
-        if (!n.v[k]?.$?.gubu$) {
+        if (!n.v[k]?.$?.shape$) {
           nodes.push([n.v, k, n.v[k], n.d + 1])
         }
       }
@@ -757,13 +757,13 @@ function nodizeDeep(root: any, depth: number) {
 }
 
 
-// Create a GubuShape from a shape specification.
-function shapify<S>(intop?: S | Node<S>, inopts?: GubuOptions) {
-  const opts: GubuOptions = null == inopts ? {} : inopts
+// Create a ShapeShape from a shape specification.
+function shapify<S>(intop?: S | Node<S>, inopts?: ShapeOptions) {
+  const opts: ShapeOptions = null == inopts ? {} : inopts
 
   // TODO: move to prepopts utility function
 
-  // Ironically, we can't Gubu GubuOptions, so we have to set
+  // Ironically, we can't Shape ShapeOptions, so we have to set
   // option defaults manually.
   opts.name =
     null == opts.name ?
@@ -1207,7 +1207,7 @@ function shapify<S>(intop?: S | Node<S>, inopts?: GubuOptions) {
         s.ctx.err.push(...s.err)
       }
       else if (!s.match && false !== s.ctx.err) {
-        throw new GubuError(S.shape, opts.name, s.err, s.ctx)
+        throw new ShapeError(S.shape, opts.name, s.err, s.ctx)
       }
     }
 
@@ -1237,7 +1237,7 @@ function shapify<S>(intop?: S | Node<S>, inopts?: GubuOptions) {
 
 
   // List the errors from a given root value.
-  shape.error = (root?: any, ctx?: Context): GubuError[] => {
+  shape.error = (root?: any, ctx?: Context): ShapeError[] => {
     let actx: any = ctx || {}
     actx.err = actx.err || []
     exec(root, actx, false)
@@ -1250,7 +1250,7 @@ function shapify<S>(intop?: S | Node<S>, inopts?: GubuOptions) {
     shape(undefined, { err: false })
     const str = stringify(top, false, true, { key: Object.keys(TNAT) },
       (_key: string, val: any) => {
-        if (GUBU$ === val) {
+        if (SHAPE$ === val) {
           return true
         }
         return val
@@ -1280,14 +1280,14 @@ function shapify<S>(intop?: S | Node<S>, inopts?: GubuOptions) {
 
   shape.toString = function(this: any) {
     desc = '' === desc ? this.stringify() : desc
-    return `[Gubu ${opts.name} ${truncate(desc)}]`
+    return `[Shape ${opts.name} ${truncate(desc)}]`
   }
 
   if (inspect && inspect.custom) {
     (shape as any)[inspect.custom] = shape.toString
   }
 
-  shape.gubu = GUBU
+  shape.shape = SHAPE
 
   // Validate shape spec. This will throw if there's an issue with the spec.
   shape.spec()
@@ -1302,7 +1302,7 @@ function shapify<S>(intop?: S | Node<S>, inopts?: GubuOptions) {
 // Dot-concatenated builders are applied in order.
 // Primary value is passed as Builder `this` context.
 // Examples:
-// Gubu({
+// Shape({
 //   'x: Open': {},
 //   'y: Min(1) Max(4)': 2,
 //   'z: Required(Min(1))': 2,
@@ -1333,7 +1333,7 @@ function expr(
 
   spec.keymark = spec.keymark || '$$'
 
-  const currentIsNode = current?.$?.gubu$
+  const currentIsNode = current?.$?.shape$
 
   spec.i = spec.i || 0
 
@@ -1447,7 +1447,7 @@ function expr(
     }
     catch (je: any) {
       throw new SyntaxError(
-        `Gubu: unexpected token ${head} in builder expression ${spec.src}`)
+        `Shape: unexpected token ${head} in builder expression ${spec.src}`)
     }
   }
 
@@ -1483,7 +1483,7 @@ function expr(
 }
 
 
-function build(v: any, opts: GubuOptions = {}, top = true) {
+function build(v: any, opts: ShapeOptions = {}, top = true) {
   let out: any
   const t = Array.isArray(v) ? 'array' : null === v ? 'null' : typeof v
 
@@ -1506,7 +1506,7 @@ function build(v: any, opts: GubuOptions = {}, top = true) {
   if (top) {
     opts.valexpr = opts.valexpr || {}
     opts.valexpr.active = true
-    let g = Gubu(out, opts)
+    let g = Shape(out, opts)
     return g
   }
 
@@ -1522,7 +1522,7 @@ function handleValidate(vf: Validate, s: State): Update {
 
   try {
     // Check does not have to deal with `undefined`
-    valid = undefined === s.val && ((vf as any).gubu$?.Check) ? true :
+    valid = undefined === s.val && ((vf as any).shape$?.Check) ? true :
       (s.check = vf, vf(s.val, update, s))
   }
   catch (ve: any) {
@@ -1654,7 +1654,7 @@ const Required = function <V>(this: any, shape?: Node<V> | V): Node<V> {
 
   // Required(foo) by itself does set default value = foo,
   // which might then be used later. But if chained, the default cannot survive.
-  else if (this?.$?.gubu$) {
+  else if (this?.$?.shape$) {
     node.f = undefined
   }
 
@@ -1845,7 +1845,7 @@ const All = function(this: any, ...inshapes: any[]) {
   node.t = (S.list as ValType)
   node.r = true
 
-  const shapes = inshapes.map(s => Gubu(s))
+  const shapes = inshapes.map(s => Shape(s))
   node.u.list = shapes.map(g => g.node())
 
   const validator = function All(val: any, update: Update, state: State) {
@@ -1889,7 +1889,7 @@ const Some = function(this: any, ...inshapes: any[]) {
   node.t = (S.list as ValType)
   node.r = true
 
-  let shapes = inshapes.map(s => Gubu(s))
+  let shapes = inshapes.map(s => Shape(s))
   node.u.list = shapes.map(g => g.node())
 
 
@@ -1935,7 +1935,7 @@ const One = function(this: any, ...inshapes: any[]) {
   node.t = (S.list as ValType)
   node.r = true
 
-  let shapes = inshapes.map(s => Gubu(s))
+  let shapes = inshapes.map(s => Shape(s))
   // node.u.list = inshapes
   node.u.list = shapes.map(g => g.node())
 
@@ -2053,8 +2053,8 @@ const Check = function <V>(
 
   if (S.function === typeof check) {
     let c$ = check as any
-    c$.gubu$ = c$.gubu$ || {}
-    c$.gubu$.Check = true
+    c$.shape$ = c$.shape$ || {}
+    c$.shape$.Check = true
     c$.s = () => S.Check + '(' + stringify(check, true) + ')'
     node.b.push((check as Validate))
 
@@ -2068,7 +2068,7 @@ const Check = function <V>(
       defprop(refn, S.name, {
         value: String(check)
       })
-      defprop(refn, 'gubu$', { value: { Check: true } })
+      defprop(refn, 'shape$', { value: { Check: true } })
       refn.s = () => S.Check + '(' + stringify(check, true) + ')'
       node.b.push(refn)
 
@@ -2616,7 +2616,7 @@ function makeErrImpl(
     use: user || {},
   }
 
-  // TODO: truncate len, and ignore should be GubuOptions
+  // TODO: truncate len, and ignore should be ShapeOptions
   let jstr = undefined === s.val ? S.undefined :
     stringify(s.val, false, false, { key: [/\$$/] }
     )
@@ -2685,7 +2685,7 @@ function makeErrImpl(
 }
 
 
-// Convert Node to JSON suitable for Gubu.build.
+// Convert Node to JSON suitable for Shape.build.
 function node2json(n: Node<any>): any {
   let t = n.t
 
@@ -2819,7 +2819,7 @@ function stringify(
   let str: string
 
   const use_node2str = !expand &&
-    !!(src && src.$) && (GUBU$ === src.$.gubu$ || true === (src.$ as any).gubu$)
+    !!(src && src.$) && (SHAPE$ === src.$.shape$ || true === (src.$ as any).shape$)
 
   if (use_node2str) {
     src = JSON.stringify(node2json(src))
@@ -2863,7 +2863,7 @@ function stringify(
         }
 
       }
-      else if (!expand && GUBU$ === val?.$?.gubu$) {
+      else if (!expand && SHAPE$ === val?.$?.shape$) {
         if ('number' === val.t || 'string' === val.t || 'boolean' === val.t) {
           val = val.v
         }
@@ -2897,7 +2897,7 @@ function stringify(
         val = 'NaN'
       }
       else if (true !== expand &&
-        (true === val?.$?.gubu$ || GUBU$ === val?.$?.gubu$)) {
+        (true === val?.$?.shape$ || SHAPE$ === val?.$?.shape$)) {
         val = JSON.stringify(node2json(val))
       }
 
@@ -2933,7 +2933,7 @@ function clone(x: any) {
 
 const G$ = (node: any): Node<any> => nodize({
   ...node,
-  $: { gubu$: true }
+  $: { shape$: true }
 })
 
 
@@ -2982,16 +2982,16 @@ if (S.undefined !== typeof (window)) {
 
 
 Object.assign(shapify, {
-  Gubu: shapify,
+  Shape: shapify,
 
-  // Builders by name, allows `const { Open } = Gubu`.
+  // Builders by name, allows `const { Open } = Shape`.
   ...BuilderMap,
 
-  // Builders by alias, allows `const { GOpen } = Gubu`, to avoid naming conflicts.
+  // Builders by alias, allows `const { GOpen } = Shape`, to avoid naming conflicts.
   ...(Object.entries(BuilderMap).reduce((a: any, n) =>
     (a['G' + n[0]] = n[1], a), {})),
 
-  isShape: (v: any) => (v && GUBU === v.gubu),
+  isShape: (v: any) => (v && SHAPE === v.shape),
 
   G$,
   buildize,
@@ -3005,20 +3005,20 @@ Object.assign(shapify, {
 })
 
 
-type GubuShape = ReturnType<typeof shapify> &
+type ShapeShape = ReturnType<typeof shapify> &
 {
   valid: <D, S>(root?: D, ctx?: any) => root is (D & S),
   match: (root?: any, ctx?: any) => boolean,
-  error: (root?: any, ctx?: Context) => GubuError[],
+  error: (root?: any, ctx?: Context) => ShapeError[],
   spec: () => any,
   node: () => Node<any>,
   isShape: (v: any) => boolean,
-  gubu: typeof GUBU
+  shape: typeof SHAPE
 }
 
 
 
-type Gubu = typeof shapify & typeof BuilderMap & {
+type Shape = typeof shapify & typeof BuilderMap & {
   G$: typeof G$,
   buildize: typeof buildize,
   makeErr: typeof makeErr,
@@ -3030,11 +3030,11 @@ type Gubu = typeof shapify & typeof BuilderMap & {
   MakeArgu: typeof MakeArgu,
 }
 
-defprop(shapify, S.name, { value: S.gubu })
+defprop(shapify, S.name, { value: S.shape })
 
 
 // The primary export.
-const Gubu: Gubu = (shapify as Gubu)
+const Shape: Shape = (shapify as Shape)
 
 
 // "G" Namespaced builders for convenient use in case of conflicts.
@@ -3097,7 +3097,7 @@ function MakeArgu(name: string): Argu {
 
     argSpec = argSpec || (whence as Record<string, any>)
     whence = S.string === typeof whence ? ' (' + whence + ')' : ''
-    const shape = Gubu(argSpec, { name: name + whence })
+    const shape = Shape(argSpec, { name: name + whence })
 
     const top = shape.node()
 
@@ -3200,11 +3200,11 @@ function MakeArgu(name: string): Argu {
 /* Type inference test
 let s0 = { x: Number }
 
-let g0 = Gubu(s0)
-let g1 = Gubu(Required(s0))
-let g2 = Gubu(Open(s0))
-let g3 = Gubu(Required(Open(s0)))
-let g4 = Gubu(Required(Open(Min(2, s0))))
+let g0 = Shape(s0)
+let g1 = Shape(Required(s0))
+let g2 = Shape(Open(s0))
+let g3 = Shape(Required(Open(s0)))
+let g4 = Shape(Required(Open(Min(2, s0))))
 
 let v0 = { x: 1 }
 
@@ -3270,11 +3270,11 @@ export type {
   Builder,
   Node,
   State,
-  GubuShape,
+  ShapeShape,
 }
 
 export {
-  Gubu,
+  Shape,
   G$,
   nodize,
   buildize,

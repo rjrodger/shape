@@ -1,8 +1,8 @@
-declare const GUBU: {
-    gubu$: symbol;
+declare const SHAPE: {
+    shape$: symbol;
     v$: string;
 };
-type GubuOptions = {
+type ShapeOptions = {
     name?: string;
     meta?: {
         active?: boolean;
@@ -44,7 +44,7 @@ type ValType = 'any' | // Any type.
 'check' | // A check function.
 'undefined';
 type Node<V> = {
-    $: typeof GUBU;
+    $: typeof SHAPE;
     t: ValType;
     d: number;
     v: any;
@@ -137,8 +137,8 @@ type ErrDesc = {
     text: string;
     use: any;
 };
-declare class GubuError extends TypeError {
-    gubu: boolean;
+declare class ShapeError extends TypeError {
+    shape: boolean;
     code: string;
     gname: string;
     props: ({
@@ -160,18 +160,18 @@ declare class GubuError extends TypeError {
     };
 }
 declare function nodize<S>(shape?: any, depth?: number, meta?: NodeMeta): Node<S>;
-declare function shapify<S>(intop?: S | Node<S>, inopts?: GubuOptions): {
+declare function shapify<S>(intop?: S | Node<S>, inopts?: ShapeOptions): {
     <V>(root?: V, ctx?: Context): V & ShapeResult<S>;
     valid: <V>(root?: V, ctx?: Context) => root is (V & S);
     match(root?: any, ctx?: Context): boolean;
-    error(root?: any, ctx?: Context): GubuError[];
+    error(root?: any, ctx?: Context): ShapeError[];
     spec(): any;
     node(): Node<S>;
     stringify(...rest: any[]): string;
     jsonify(): any;
     toString(this: any): string;
-    gubu: {
-        gubu$: symbol;
+    shape: {
+        shape$: symbol;
         v$: string;
     };
 };
@@ -187,7 +187,7 @@ declare function expr(spec: {
     i?: number;
     refs?: any;
 } | string, current?: any): any;
-declare function build(v: any, opts?: GubuOptions, top?: boolean): any;
+declare function build(v: any, opts?: ShapeOptions, top?: boolean): any;
 declare function truncate(str?: string, len?: number): string;
 declare const Required: <V>(this: any, shape?: Node<V> | V) => Node<V>;
 declare const Open: <V>(this: any, shape?: Node<V> | V) => Node<V>;
@@ -260,16 +260,16 @@ declare const BuilderMap: {
     Rest: <V>(this: any, child?: any, shape?: Node<V> | V) => Node<V>;
     Type: <V extends "Number" | "String" | "Boolean" | "Object" | "Array" | "Function" | "Symbol" | StringConstructor | NumberConstructor | BooleanConstructor | ArrayConstructor | ObjectConstructor | FunctionConstructor | SymbolConstructor | Symbol | Record<any, any> | null | undefined | typeof NaN>(this: any, tref: V, shape?: any) => (V extends "Number" | NumberConstructor ? number : V extends "Boolean" | BooleanConstructor ? boolean : V extends "String" | StringConstructor ? string : V extends "Array" | ArrayConstructor ? any[] : V extends "Object" | ObjectConstructor ? any : V extends "Function" | FunctionConstructor ? Function : V extends "Symbol" | SymbolConstructor ? Symbol : V extends null ? null : V extends undefined ? undefined : V);
 };
-type GubuShape = ReturnType<typeof shapify> & {
+type ShapeShape = ReturnType<typeof shapify> & {
     valid: <D, S>(root?: D, ctx?: any) => root is (D & S);
     match: (root?: any, ctx?: any) => boolean;
-    error: (root?: any, ctx?: Context) => GubuError[];
+    error: (root?: any, ctx?: Context) => ShapeError[];
     spec: () => any;
     node: () => Node<any>;
     isShape: (v: any) => boolean;
-    gubu: typeof GUBU;
+    shape: typeof SHAPE;
 };
-type Gubu = typeof shapify & typeof BuilderMap & {
+type Shape = typeof shapify & typeof BuilderMap & {
     G$: typeof G$;
     buildize: typeof buildize;
     makeErr: typeof makeErr;
@@ -280,7 +280,7 @@ type Gubu = typeof shapify & typeof BuilderMap & {
     build: typeof build;
     MakeArgu: typeof MakeArgu;
 };
-declare const Gubu: Gubu;
+declare const Shape: Shape;
 declare const GAbove: <V>(this: any, above: number | string, shape?: Node<V> | V) => Node<V>;
 declare const GAfter: <V>(this: any, validate: Validate, shape?: Node<V> | V) => Node<V>;
 declare const GAll: (this: any, ...inshapes: any[]) => Node<unknown>;
@@ -315,5 +315,5 @@ declare const GType: <V extends "Number" | "String" | "Boolean" | "Object" | "Ar
 type args = any[] | IArguments;
 type Argu = (args: args | string, whence: string | Record<string, any>, spec?: Record<string, any>) => (typeof args extends string ? ((args: args) => Record<string, any>) : Record<string, any>);
 declare function MakeArgu(name: string): Argu;
-export type { Validate, Update, Context, Builder, Node, State, GubuShape, };
-export { Gubu, G$, nodize, buildize, makeErr, stringify, truncate, expr, MakeArgu, build, Above, After, All, Any, Before, Below, Check, Child, Closed, Default, Define, Empty, Exact, Fault, Func, Ignore, Key, Len, Max, Min, Never, One, Open, Optional, Refer, Rename, Required, Skip, Some, Type, Rest, GAbove, GAfter, GAll, GAny, GBefore, GBelow, GCheck, GChild, GClosed, GDefault, GDefine, GEmpty, GExact, GFault, GFunc, GIgnore, GKey, GLen, GMax, GMin, GNever, GOne, GOpen, GOptional, GRefer, GRename, GRequired, GSkip, GSome, GType, GRest, };
+export type { Validate, Update, Context, Builder, Node, State, ShapeShape, };
+export { Shape, G$, nodize, buildize, makeErr, stringify, truncate, expr, MakeArgu, build, Above, After, All, Any, Before, Below, Check, Child, Closed, Default, Define, Empty, Exact, Fault, Func, Ignore, Key, Len, Max, Min, Never, One, Open, Optional, Refer, Rename, Required, Skip, Some, Type, Rest, GAbove, GAfter, GAll, GAny, GBefore, GBelow, GCheck, GChild, GClosed, GDefault, GDefine, GEmpty, GExact, GFault, GFunc, GIgnore, GKey, GLen, GMax, GMin, GNever, GOne, GOpen, GOptional, GRefer, GRename, GRequired, GSkip, GSome, GType, GRest, };

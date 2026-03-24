@@ -3,21 +3,21 @@
 import type {
   State,
   Update,
-} from '../gubu'
+} from '../shape'
 
 
-import { Gubu as GubuX } from '../gubu'
+import { Shape as ShapeX } from '../shape'
 
 
-// Handle web (Gubu) versus node ({Gubu}) export.
-let GubuModule = require('../gubu')
+// Handle web (Shape) versus node ({Shape}) export.
+let ShapeModule = require('../shape')
 
-if (GubuModule.Gubu) {
-  GubuModule = GubuModule.Gubu
+if (ShapeModule.Shape) {
+  ShapeModule = ShapeModule.Shape
 }
 
 
-const Gubu: GubuX = GubuModule
+const Shape: ShapeX = ShapeModule
 
 const {
   MakeArgu,
@@ -27,7 +27,7 @@ const {
   Empty,
   One,
   Default,
-} = Gubu
+} = Shape
 
 
 

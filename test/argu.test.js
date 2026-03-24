@@ -1,13 +1,13 @@
 "use strict";
 /* Copyright (c) 2021-2023 Richard Rodger and other contributors, MIT License */
 Object.defineProperty(exports, "__esModule", { value: true });
-// Handle web (Gubu) versus node ({Gubu}) export.
-let GubuModule = require('../gubu');
-if (GubuModule.Gubu) {
-    GubuModule = GubuModule.Gubu;
+// Handle web (Shape) versus node ({Shape}) export.
+let ShapeModule = require('../shape');
+if (ShapeModule.Shape) {
+    ShapeModule = ShapeModule.Shape;
 }
-const Gubu = GubuModule;
-const { MakeArgu, Skip, Rest, Any, Empty, One, Default, } = Gubu;
+const Shape = ShapeModule;
+const { MakeArgu, Skip, Rest, Any, Empty, One, Default, } = Shape;
 describe('argu', () => {
     test('basic', () => {
         let Argu = MakeArgu('QAZ');

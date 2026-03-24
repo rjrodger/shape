@@ -96,6 +96,6 @@ window.expect = function(sval) {
 
 
 require('./readme.test.js')
-require('./gubu.test.js')
+require('./shape.test.js')
 require('./builder.test.js')
 require('./argu.test.js')

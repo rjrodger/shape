@@ -1,21 +1,21 @@
 {
-  "name": "gubu",
+  "name": "shape",
   "version": "9.0.0",
   "description": "An object shape validation utility.",
-  "main": "gubu.js",
-  "browser": "gubu.min.js",
+  "main": "shape.js",
+  "browser": "shape.min.js",
   "type": "commonjs",
-  "types": "gubu.d.ts",
-  "homepage": "https://github.com/rjrodger/gubu",
+  "types": "shape.d.ts",
+  "homepage": "https://github.com/rjrodger/shape",
   "keywords": [
-    "gubu",
+    "shape",
     "schema",
     "validation"
   ],
   "author": "Richard Rodger (http://richardrodger.com)",
   "repository": {
     "type": "git",
-    "url": "git://github.com/rjrodger/gubu.git"
+    "url": "git://github.com/rjrodger/shape.git"
   },
   "scripts": {
     "test": "npm run version && jest --coverage",
@@ -26,8 +26,8 @@
     "test-web": "npm run build && npm run build-web && browserify -i util -o test/web.js -e test/entry.js -im && open test/web.test.html",
     "watch": "npm run version && tsc -w -d",
     "build": "npm run version && tsc -d",
-    "build-web": "cp gubu.js gubu.min.js && browserify -i util -o gubu.min.js -e gubu.web.js -s Gubu -im -p tinyify",
-    "version": "node -r fs -e \"v=require('./package.json').version;s=fs.readFileSync('./gubu.ts').toString();if(!s.includes('VERSION = \\''+v+'\\'')){s=s.replace(/VERSION = '.*?'/,'VERSION = \\''+v+'\\'');fs.writeFileSync('./gubu.ts',s)}\"",
+    "build-web": "cp shape.js shape.min.js && browserify -i util -o shape.min.js -e shape.web.js -s Shape -im -p tinyify",
+    "version": "node -r fs -e \"v=require('./package.json').version;s=fs.readFileSync('./shape.ts').toString();if(!s.includes('VERSION = \\''+v+'\\'')){s=s.replace(/VERSION = '.*?'/,'VERSION = \\''+v+'\\'');fs.writeFileSync('./shape.ts',s)}\"",
     "clean": "rm -rf node_modules yarn.lock package-lock.json",
     "reset": "npm run clean && npm i && npm run build && npm test",
     "repo-tag": "REPO_VERSION=`node -e \"console.log(require('./package').version)\"` && echo TAG: v$REPO_VERSION && git commit -a -m v$REPO_VERSION && git push && git tag v$REPO_VERSION && git push --tags;",

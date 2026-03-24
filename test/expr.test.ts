@@ -4,18 +4,18 @@ const JP = JSON.parse
 
 
 
-import { Gubu as GubuX } from '../gubu'
+import { Shape as ShapeX } from '../shape'
 
 
-// Handle web (Gubu) versus node ({Gubu}) export.
-let GubuModule = require('../gubu')
+// Handle web (Shape) versus node ({Shape}) export.
+let ShapeModule = require('../shape')
 
-if (GubuModule.Gubu) {
-  GubuModule = GubuModule.Gubu
+if (ShapeModule.Shape) {
+  ShapeModule = ShapeModule.Shape
 }
 
 
-const Gubu: GubuX = GubuModule
+const Shape: ShapeX = ShapeModule
 
 const {
   Child,
@@ -30,7 +30,7 @@ const {
   All,
   expr,
   build,
-} = Gubu
+} = Shape
 
 
 const D = (x: any) => console.dir(x, { depth: null })
@@ -40,7 +40,7 @@ const D = (x: any) => console.dir(x, { depth: null })
 describe('expr', () => {
 
   test('meta-basic', () => {
-    let g0 = Gubu({
+    let g0 = Shape({
       'x$$': { foo: 99 },
       x: 1
     }, { meta: { active: true } })
@@ -62,12 +62,12 @@ describe('expr', () => {
 
 
   test('expr-active', () => {
-    let g0 = Gubu({
+    let g0 = Shape({
       'x: Min(1)': 1
     })
     expect(() => g0({ x: 0 })).toThrow('minimum')
 
-    let g1 = Gubu({
+    let g1 = Shape({
       'x: Min(1)': 1
     }, { keyexpr: { active: false } })
     expect(g1({})).toEqual({ 'x: Min(1)': 1 })
@@ -75,7 +75,7 @@ describe('expr', () => {
 
 
   test('expr-basic', () => {
-    let g0 = Gubu({
+    let g0 = Shape({
       // 'x: Open': {
       x: {
         y: 1
@@ -86,7 +86,7 @@ describe('expr', () => {
     expect(() => g0({ x: { y: 'q' } })).toThrow("Validation failed for property \"x.y\" with string \"q\" because the string is not of type number.")
 
 
-    let g1 = Gubu({
+    let g1 = Shape({
       'x:Min(1 Max(4))': 2,
       'y:Min(1) Max(4)': 2,
       'z:Min(1).Max(4)': 2,
@@ -118,10 +118,10 @@ describe('expr', () => {
 
   test('expr-syntax', () => {
     let GE = (exp: string, val: any) =>
-      Gubu({ ['x:' + exp]: val })
+      Shape({ ['x:' + exp]: val })
 
     expect(() => GE('BadBuilder', 1))
-      .toThrow('Gubu: unexpected token BadBuilder in builder expression BadBuilder')
+      .toThrow('Shape: unexpected token BadBuilder in builder expression BadBuilder')
 
     expect(GE('1', 2)({ x: 3 })).toEqual({ x: 3 })
     expect(GE('1', 2)({ x: 1 })).toEqual({ x: 1 })
@@ -129,7 +129,7 @@ describe('expr', () => {
 
 
   test('expr-regexp', () => {
-    let g0 = Gubu({
+    let g0 = Shape({
       'x: Check(/a/)': String,
     }, { keyexpr: { active: true } })
 
@@ -139,13 +139,13 @@ describe('expr', () => {
 
 
   test('expr-object-open', () => {
-    let g0 = Gubu({
+    let g0 = Shape({
       'a: Open': { x: 1, y: 'q' }
     })
     expect(g0({ a: { z: true } })).toEqual({ a: { x: 1, y: 'q', z: true } })
     expect(() => g0({ a: { x: 'q' } })).toThrow('not of type number')
 
-    let g1 = Gubu({
+    let g1 = Shape({
       a: { b: { c: { 'd: Open': { x: 1 } } } }
     })
     expect(g1({ a: { b: { c: { d: { y: 2 } } } } }))
@@ -153,7 +153,7 @@ describe('expr', () => {
     expect(() => g1({ a: { b: { c: { d: { x: 'q' } } } } }))
       .toThrow('not of type number')
 
-    let g2 = Gubu({
+    let g2 = Shape({
       'a: Child(Number)': { x: 'q' }
     })
     expect(g2({ a: { z: 1 } })).toEqual({ a: { x: 'q', z: 1 } })
@@ -163,14 +163,14 @@ describe('expr', () => {
 
 
   test('expr-object-basic', () => {
-    let g0 = Gubu({
+    let g0 = Shape({
       a: Child(Number, {})
     })
 
     expect(g0({ a: { x: 1 } })).toEqual({ a: { x: 1 } })
     expect(() => g0({ a: { x: 'q' } })).toThrow('not of type number')
 
-    let g1 = Gubu({
+    let g1 = Shape({
       'a: Child(Number)': {}
     })
 
@@ -181,13 +181,13 @@ describe('expr', () => {
 
 
   test('expr-array', () => {
-    let g0 = Gubu({
+    let g0 = Shape({
       a: Child(Number, [])
     })
     expect(g0({ a: [1, 2] })).toEqual({ a: [1, 2] })
     expect(() => g0({ a: [1, 'x'] })).toThrow('not of type number')
 
-    let g1 = Gubu({
+    let g1 = Shape({
       'a: Child(Number)': []
     })
     expect(g1({ a: [1, 2] })).toEqual({ a: [1, 2] })
@@ -196,27 +196,27 @@ describe('expr', () => {
 
 
   test('expr-child', () => {
-    let g0 = Gubu.build('Child(Number)')
+    let g0 = Shape.build('Child(Number)')
     expect(g0.stringify()).toEqual('Child(Number)')
     expect(g0({ a: 1, b: 2 })).toEqual({ a: 1, b: 2 })
     expect(() => g0({ c: 'C' })).toThrow('not of type number')
 
-    let g0d = Gubu(Child(Number))
+    let g0d = Shape(Child(Number))
     expect(g0d.stringify()).toEqual('Child(Number)')
     expect(g0d({ a: 1, b: 2 })).toEqual({ a: 1, b: 2 })
     expect(() => g0d({ c: 'C' })).toThrow('not of type number')
 
-    let g1 = Gubu.build({ a: 'Child(Number)' })
+    let g1 = Shape.build({ a: 'Child(Number)' })
     expect(g1.stringify()).toEqual('{"a":"Child(Number)"}')
     expect(g1({ a: { b: 2 } })).toEqual({ a: { b: 2 } })
     expect(() => g1({ a: { c: 'C' } })).toThrow('not of type number')
 
-    let g2 = Gubu.build(['Child(Number)'])
+    let g2 = Shape.build(['Child(Number)'])
     expect(g2.stringify()).toEqual('["Child(Number)"]')
     expect(g2([{ b: 2 }])).toEqual([{ b: 2 }])
     expect(() => g2([{ c: 'C' }])).toThrow('not of type number')
 
-    let g3 = Gubu.build({ 'a:Child(Number)': undefined })
+    let g3 = Shape.build({ 'a:Child(Number)': undefined })
     // console.dir(g3.spec(), { depth: null })
     expect(g3.stringify()).toEqual('{"a":"Child(Number)"}')
     expect(g3({ a: { b: 2 } })).toEqual({ a: { b: 2 } })
@@ -226,113 +226,113 @@ describe('expr', () => {
 
 
   test('desc-call-order', () => {
-    let g = Gubu({ a: Min(1) })
+    let g = Shape({ a: Min(1) })
     expect(g({ a: 1 })).toEqual({ a: 1 })
     // let gs = g.stringify(null, true)
     let gs = g.stringify()
     expect(gs).toEqual('{"a":"Min(1)"}')
-    let gr = Gubu.build(JP(gs))
+    let gr = Shape.build(JP(gs))
     expect(gr.jsonify()).toEqual({ a: 'Min(1)' })
 
-    g = Gubu({ a: Max(1) })
+    g = Shape({ a: Max(1) })
     expect(g({ a: 1 })).toEqual({ a: 1 })
     gs = g.stringify()
     expect(gs).toEqual('{"a":"Max(1)"}')
-    gr = Gubu.build(JP(gs))
+    gr = Shape.build(JP(gs))
     expect(gr.jsonify()).toEqual({ a: 'Max(1)' })
 
-    g = Gubu({ a: Min(1, Max(3)) })
+    g = Shape({ a: Min(1, Max(3)) })
     expect(g({ a: 2 })).toEqual({ a: 2 })
     gs = g.stringify()
     expect(gs).toEqual('{"a":"Max(3).Min(1)"}')
-    gr = Gubu.build(JP(gs))
+    gr = Shape.build(JP(gs))
     expect(gr.jsonify()).toEqual({ a: 'Max(3).Min(1)' })
 
-    g = Gubu({ a: Max(3, Min(1)) })
+    g = Shape({ a: Max(3, Min(1)) })
     expect(g({ a: 2 })).toEqual({ a: 2 })
     gs = g.stringify()
     // console.log(gs)
     expect(gs).toEqual('{"a":"Min(1).Max(3)"}')
-    gr = Gubu.build(JP(gs))
+    gr = Shape.build(JP(gs))
     expect(gr.jsonify()).toEqual({ a: 'Min(1).Max(3)' })
 
-    g = Gubu({ a: Required(Max(3, Min(1))) })
+    g = Shape({ a: Required(Max(3, Min(1))) })
     expect(g({ a: 2 })).toEqual({ a: 2 })
     gs = g.stringify()
     // console.log(gs)
     expect(gs).toEqual('{"a":"Required.Min(1).Max(3)"}')
-    gr = Gubu.build(JP(gs))
+    gr = Shape.build(JP(gs))
     expect(gr.jsonify()).toEqual({ a: 'Required.Min(1).Max(3)' })
 
-    g = Gubu({ a: Max(3, Min(1, Required())) })
+    g = Shape({ a: Max(3, Min(1, Required())) })
     expect(g({ a: 2 })).toEqual({ a: 2 })
     gs = g.stringify()
     // console.log(gs)
     expect(gs).toEqual('{"a":"Required.Min(1).Max(3)"}')
-    gr = Gubu.build(JP(gs))
+    gr = Shape.build(JP(gs))
     expect(gr.jsonify()).toEqual({ a: 'Required.Min(1).Max(3)' })
 
-    g = Gubu({ a: Max(3, Min(1, Default(2))) })
+    g = Shape({ a: Max(3, Min(1, Default(2))) })
     expect(g({ a: 2 })).toEqual({ a: 2 })
     expect(g({})).toEqual({ a: 2 })
     gs = g.stringify()
     // console.log(gs)
     expect(gs).toEqual('{"a":"2.Min(1).Max(3)"}')
-    gr = Gubu.build(JP(gs))
+    gr = Shape.build(JP(gs))
     expect(gr.jsonify()).toEqual({ a: '2.Min(1).Max(3)' })
 
-    g = Gubu({ a: Max(3, Min(1, Default(2, Required()))) })
+    g = Shape({ a: Max(3, Min(1, Default(2, Required()))) })
     expect(g({ a: 2 })).toEqual({ a: 2 })
     expect(g({})).toEqual({ a: 2 })
     gs = g.stringify()
     expect(gs).toEqual('{"a":"2.Min(1).Max(3)"}')
-    gr = Gubu.build(JP(gs))
+    gr = Shape.build(JP(gs))
     expect(gr.jsonify()).toEqual({ a: '2.Min(1).Max(3)' })
 
-    g = Gubu({ a: Max(3, Min(1, Required(Default(2)))) })
+    g = Shape({ a: Max(3, Min(1, Required(Default(2)))) })
     expect(g({ a: 2 })).toEqual({ a: 2 })
     gs = g.stringify()
     expect(gs).toEqual('{"a":"Number.Min(1).Max(3)"}')
-    gr = Gubu.build(JP(gs))
+    gr = Shape.build(JP(gs))
     expect(gr.jsonify()).toEqual({ a: 'Number.Min(1).Max(3)' })
   })
 
 
   test('expr-type', () => {
-    let g = Gubu({ a: Number })
+    let g = Shape({ a: Number })
     expect(g({ a: 1 })).toEqual({ a: 1 })
     let gs = g.stringify()
     expect(gs).toEqual('{"a":"Number"}')
-    let gr = Gubu.build(JP(gs))
+    let gr = Shape.build(JP(gs))
     expect(gr.jsonify()).toEqual({ a: 'Number' })
   })
 
 
   test('expr-list', () => {
-    let g = Gubu({ a: One(Number, String) })
+    let g = Shape({ a: One(Number, String) })
     expect(g({ a: 1 })).toEqual({ a: 1 })
     let gs = g.stringify()
     expect(gs).toEqual('{"a":"One(Number,String)"}')
-    let gr = Gubu.build(JP(gs))
+    let gr = Shape.build(JP(gs))
     expect(gr.jsonify()).toEqual({ a: 'One(Number,String)' })
 
-    g = Gubu({ a: All(Number, 1) })
+    g = Shape({ a: All(Number, 1) })
     expect(g({ a: 1 })).toEqual({ a: 1 })
     gs = g.stringify()
     expect(gs).toEqual('{"a":"All(Number,1)"}')
-    gr = Gubu.build(JP(gs))
+    gr = Shape.build(JP(gs))
     expect(gr.jsonify()).toEqual({ a: 'All(Number,1)' })
 
-    g = Gubu({ a: Some(Number, String) })
+    g = Shape({ a: Some(Number, String) })
     expect(g({ a: 1 })).toEqual({ a: 1 })
     gs = g.stringify()
     expect(gs).toEqual('{"a":"Some(Number,String)"}')
-    gr = Gubu.build(JP(gs))
+    gr = Shape.build(JP(gs))
     expect(gr.jsonify()).toEqual({ a: 'Some(Number,String)' })
 
     let listBuilders = [One, All, Some]
     for (let lb of listBuilders) {
-      g = Gubu({ a: lb({ x: Number }, [String]) })
+      g = Shape({ a: lb({ x: Number }, [String]) })
       if (One === lb || Some === lb) {
         expect(g({ a: { x: 1 } })).toEqual({ a: { x: 1 } })
         expect(g({ a: ['A', 'B'] })).toEqual({ a: ['A', 'B'] })
@@ -341,7 +341,7 @@ describe('expr', () => {
       gs = g.stringify()
       expect(gs).toEqual('{"a":{"$$":"' + lb.name + '($$ref0,$$ref1)",' +
         '"$$ref0":{"x":"Number"},"$$ref1":["String"]}}')
-      gr = Gubu.build(JP(gs))
+      gr = Shape.build(JP(gs))
 
       if (One === lb || Some === lb) {
         expect(gr({ a: { x: 1 } })).toEqual({ a: { x: 1 } })
@@ -396,12 +396,12 @@ describe('expr', () => {
 
   test('desc-basic', () => {
     function pass(shape: any, json: any, str: string, pass: any, fail: any) {
-      let g0 = Gubu(shape)
+      let g0 = Shape(shape)
       let j0 = g0.jsonify()
       expect(j0).toEqual(json)
       let s0 = g0.stringify()
       expect(s0).toEqual(str)
-      let b0 = Gubu.build(j0)
+      let b0 = Shape.build(j0)
       expect(b0.stringify()).toEqual(s0)
       expect(b0(pass)).toEqual(pass)
       expect(() => b0(fail)).toThrow()
@@ -434,8 +434,8 @@ describe('expr', () => {
 
   test('desc-child', () => {
     let d0 = { a: { '$$': 'Child($$child)', '$$child': { x: Number } } }
-    let g0 = Gubu(d0, { valexpr: { active: true } })
-    //let g0 = Gubu({ a: Child({ x: Number }) })
+    let g0 = Shape(d0, { valexpr: { active: true } })
+    //let g0 = Shape({ a: Child({ x: Number }) })
     //console.dir(g0.spec(), { depth: null })
 
     let v0 = g0({ a: { b: { x: 1 } } })
@@ -446,7 +446,7 @@ describe('expr', () => {
     expect(j0).toEqual({ a: { '$$': 'Child($$child)', '$$child': { x: 'Number' } } })
 
 
-    let b0 = Gubu.build(j0)
+    let b0 = Shape.build(j0)
     // console.dir(b0.spec(), { depth: null })
 
     let bv0 = b0({ a: { b: { x: 1 } } })
@@ -456,15 +456,15 @@ describe('expr', () => {
 
 
   test('desc-list', () => {
-    expect(Gubu({ a: One(Number, String) }).stringify()).toEqual('{"a":"One(Number,String)"}')
-    expect(Gubu({ a: Some(Number, String) }).stringify()).toEqual('{"a":"Some(Number,String)"}')
-    expect(Gubu({ a: All(Number, String) }).stringify()).toEqual('{"a":"All(Number,String)"}')
+    expect(Shape({ a: One(Number, String) }).stringify()).toEqual('{"a":"One(Number,String)"}')
+    expect(Shape({ a: Some(Number, String) }).stringify()).toEqual('{"a":"Some(Number,String)"}')
+    expect(Shape({ a: All(Number, String) }).stringify()).toEqual('{"a":"All(Number,String)"}')
   })
 
 
   test('build-opts', () => {
-    let g0 = Gubu.build({ a: 1 }, { name: 'foo' })
-    expect('' + g0).toEqual('[Gubu foo {"a":"1"}]')
+    let g0 = Shape.build({ a: 1 }, { name: 'foo' })
+    expect('' + g0).toEqual('[Shape foo {"a":"1"}]')
     expect(() => g0({ a: 'A' }))
       .toThrow('foo: Validation failed for property "a" with string "A" because ' +
         'the string is not of type number.')
@@ -472,21 +472,21 @@ describe('expr', () => {
 
 
   test('desc-number', () => {
-    let g0 = Gubu({ x: Number })
+    let g0 = Shape({ x: Number })
     expect(g0.stringify()).toEqual('{"x":"Number"}')
     expect(g0.jsonify()).toEqual({ x: 'Number' })
 
-    let g1 = Gubu({ x: Number })
+    let g1 = Shape({ x: Number })
     expect(g1.jsonify()).toEqual({ x: 'Number' })
     expect(g1.stringify()).toEqual('{"x":"Number"}')
 
-    let g2 = Gubu({ x: Number }, { name: 'foo' })
-    expect(g2.toString()).toEqual('[Gubu foo {"x":"Number"}]')
+    let g2 = Shape({ x: Number }, { name: 'foo' })
+    expect(g2.toString()).toEqual('[Shape foo {"x":"Number"}]')
     expect(g2.stringify()).toEqual('{"x":"Number"}')
     expect(g2.jsonify()).toEqual({ x: 'Number' })
 
-    let g3 = Gubu({ x: Number }, { name: 'foo' })
-    expect(g3.toString()).toEqual('[Gubu foo {"x":"Number"}]')
+    let g3 = Shape({ x: Number }, { name: 'foo' })
+    expect(g3.toString()).toEqual('[Shape foo {"x":"Number"}]')
     expect(g3.jsonify()).toEqual({ x: 'Number' })
     expect(g3.stringify()).toEqual('{"x":"Number"}')
   })
