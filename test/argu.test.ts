@@ -1,16 +1,20 @@
 /* Copyright (c) 2021-2023 Richard Rodger and other contributors, MIT License */
 
+import { describe, test } from 'node:test'
+import assert from 'node:assert'
+import { deepEqual, throws } from './test-utils'
+
 import type {
   State,
   Update,
-} from '../src/shape'
+} from '../dist/shape'
 
 
-import { Shape as ShapeX } from '../src/shape'
+import { Shape as ShapeX } from '../dist/shape'
 
 
 // Handle web (Shape) versus node ({Shape}) export.
-let ShapeModule = require('../src/shape')
+let ShapeModule = require('../dist/shape')
 
 if (ShapeModule.Shape) {
   ShapeModule = ShapeModule.Shape
@@ -45,8 +49,8 @@ describe('argu', () => {
     }
 
 
-    expect(foo(2, 'X')).toEqual({ a: 2, b: 'X' })
-    expect(() => foo(2, 3)).toThrow('QAZ (foo): Validation failed for property "b" with number "3" because the number is not of type string.')
+    deepEqual(foo(2, 'X'), { a: 2, b: 'X' })
+    throws(() => foo(2, 3), 'QAZ (foo): Validation failed for property "b" with number "3" because the number is not of type string.')
 
   })
 
@@ -63,19 +67,15 @@ describe('argu', () => {
       return argmap.a + argmap.b
     }
 
-    expect(foo(2, 'X')).toEqual('2X')
-    expect(foo('X')).toEqual('undefinedX')
-    expect(() => foo())
-      .toThrow('SKIP (foo): Validation failed for property "b" with value ' +
+    deepEqual(foo(2, 'X'), '2X')
+    deepEqual(foo('X'), 'undefinedX')
+    throws(() => foo(), 'SKIP (foo): Validation failed for property "b" with value ' +
         '"undefined" because the value is required.')
-    expect(() => foo('X', 'Y'))
-      .toThrow('SKIP (foo): ' +
+    throws(() => foo('X', 'Y'), 'SKIP (foo): ' +
         'Too many arguments for type signature (was 2, expected 1)')
-    expect(() => foo(3, 4))
-      .toThrow('SKIP (foo): Validation failed for property "b" ' +
+    throws(() => foo(3, 4), 'SKIP (foo): Validation failed for property "b" ' +
         'with number "4" because the number is not of type string.')
-    expect(() => foo(3))
-      .toThrow('SKIP (foo): Validation failed for property "b" ' +
+    throws(() => foo(3), 'SKIP (foo): Validation failed for property "b" ' +
         'with value "undefined" because the value is required.')
 
 
@@ -89,9 +89,8 @@ describe('argu', () => {
       return argmap
     }
 
-    expect(bar('s')).toEqual({ a: 's' })
-    expect(() => (bar as any)('s', 't'))
-      .toThrow('SKIP (bar): Validation failed for property \"d\" ' +
+    deepEqual(bar('s'), { a: 's' })
+    throws(() => (bar as any)('s', 't'), 'SKIP (bar): Validation failed for property \"d\" ' +
         'with string \"t\" because the string is not of type object.')
   })
 
@@ -112,28 +111,20 @@ describe('argu', () => {
 
 
     const f0 = () => { }
-    expect(bar('a', { x: 1 }, f0)).toEqual({ a: 'a', b: { x: 1 }, c: f0, d: [] })
-    expect(bar({ x: 1 }, f0)).toEqual({ a: undefined, b: { x: 1 }, c: f0, d: [] })
-    expect(bar('b', f0)).toEqual({ a: 'b', b: undefined, c: f0, d: [] })
-    expect(bar(f0)).toEqual({ a: undefined, b: undefined, c: f0, d: [] })
+    deepEqual(bar('a', { x: 1 }, f0), { a: 'a', b: { x: 1 }, c: f0, d: [] })
+    deepEqual(bar({ x: 1 }, f0), { a: undefined, b: { x: 1 }, c: f0, d: [undefined] })
+    deepEqual(bar('b', f0), { a: 'b', b: undefined, c: f0, d: [undefined] })
+    deepEqual(bar(f0), { a: undefined, b: undefined, c: f0, d: [undefined, undefined] })
 
-    expect(bar('a', { x: 1 }, f0, 11))
-      .toEqual({ a: 'a', b: { x: 1 }, c: f0, d: [11] })
-    expect(bar({ x: 1 }, f0, 12))
-      .toEqual({ a: undefined, b: { x: 1 }, c: f0, d: [12] })
-    expect(bar('b', f0, 13))
-      .toEqual({ a: 'b', b: undefined, c: f0, d: [13] })
-    expect(bar(f0, 14))
-      .toEqual({ a: undefined, b: undefined, c: f0, d: [14] })
+    deepEqual(bar('a', { x: 1 }, f0, 11), { a: 'a', b: { x: 1 }, c: f0, d: [11] })
+    deepEqual(bar({ x: 1 }, f0, 12), { a: undefined, b: { x: 1 }, c: f0, d: [12] })
+    deepEqual(bar('b', f0, 13), { a: 'b', b: undefined, c: f0, d: [13] })
+    deepEqual(bar(f0, 14), { a: undefined, b: undefined, c: f0, d: [14, undefined] })
 
-    expect(bar('a', { x: 1 }, f0, 11, 12))
-      .toEqual({ a: 'a', b: { x: 1 }, c: f0, d: [11, 12] })
-    expect(bar({ x: 1 }, f0, 21, 22))
-      .toEqual({ a: undefined, b: { x: 1 }, c: f0, d: [21, 22] })
-    expect(bar('b', f0, 31, 32))
-      .toEqual({ a: 'b', b: undefined, c: f0, d: [31, 32] })
-    expect(bar(f0, 41, 42))
-      .toEqual({ a: undefined, b: undefined, c: f0, d: [41, 42] })
+    deepEqual(bar('a', { x: 1 }, f0, 11, 12), { a: 'a', b: { x: 1 }, c: f0, d: [11, 12] })
+    deepEqual(bar({ x: 1 }, f0, 21, 22), { a: undefined, b: { x: 1 }, c: f0, d: [21, 22] })
+    deepEqual(bar('b', f0, 31, 32), { a: 'b', b: undefined, c: f0, d: [31, 32] })
+    deepEqual(bar(f0, 41, 42), { a: undefined, b: undefined, c: f0, d: [41, 42] })
 
   })
 
@@ -146,37 +137,28 @@ describe('argu', () => {
       callback: Skip(Function),
     })
 
-    expect(argu([{ x: 11 }]))
-      .toEqual({ plugin: { x: 11 }, options: undefined, callback: undefined })
+    deepEqual(argu([{ x: 11 }]), { plugin: { x: 11 }, options: undefined, callback: undefined })
 
-    expect(argu([{ x: 11 }, { y: 2 }]))
-      .toEqual({ plugin: { x: 11 }, options: { y: 2 }, callback: undefined })
+    deepEqual(argu([{ x: 11 }, { y: 2 }]), { plugin: { x: 11 }, options: { y: 2 }, callback: undefined })
 
     const f0 = () => { }
-    expect(argu([{ x: 11 }, { y: 2 }, f0]))
-      .toEqual({ plugin: { x: 11 }, options: { y: 2 }, callback: f0 })
+    deepEqual(argu([{ x: 11 }, { y: 2 }, f0]), { plugin: { x: 11 }, options: { y: 2 }, callback: f0 })
 
-    expect(argu([f0]))
-      .toEqual({ plugin: f0, options: undefined, callback: undefined })
+    deepEqual(argu([f0]), { plugin: f0, options: undefined, callback: undefined })
 
-    expect(argu([f0, { x: 1 }]))
-      .toEqual({ plugin: f0, options: { x: 1 }, callback: undefined })
+    deepEqual(argu([f0, { x: 1 }]), { plugin: f0, options: { x: 1 }, callback: undefined })
 
     const f1 = () => { }
-    expect(argu([f0, { x: 1 }, f1]))
-      .toEqual({ plugin: f0, options: { x: 1 }, callback: f1 })
+    deepEqual(argu([f0, { x: 1 }, f1]), { plugin: f0, options: { x: 1 }, callback: f1 })
 
-    expect(argu([{ x: 1 }, { y: 2 }, f1]))
-      .toEqual({ plugin: { x: 1 }, options: { y: 2 }, callback: f1 })
+    deepEqual(argu([{ x: 1 }, { y: 2 }, f1]), { plugin: { x: 1 }, options: { y: 2 }, callback: f1 })
 
-    expect(() => argu([f0, f1])).toThrow('plugin (args): Value "f1" for property "options"' +
+    throws(() => argu([f0, f1]), 'plugin (args): Value "f1" for property "options"' +
       ' does not satisfy one of: Object, String')
 
-    expect(argu([Object.freeze({ x: 11 })]))
-      .toEqual({ plugin: { x: 11 }, options: undefined, callback: undefined })
+    deepEqual(argu([Object.freeze({ x: 11 })]), { plugin: { x: 11 }, options: undefined, callback: undefined })
 
-    expect(argu([f0, Object.freeze({ x: 11 })]))
-      .toEqual({ plugin: f0, options: { x: 11 }, callback: undefined })
+    deepEqual(argu([f0, Object.freeze({ x: 11 })]), { plugin: f0, options: { x: 11 }, callback: undefined })
 
   })
 

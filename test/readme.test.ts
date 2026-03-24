@@ -1,18 +1,22 @@
 /* Copyright (c) 2021-2023 Richard Rodger and other contributors, MIT License */
 
+import { describe, test } from 'node:test'
+import assert from 'node:assert'
+import { deepEqual, throws } from './test-utils'
+
 
 import type {
   Node,
   State,
   Update,
-} from '../src/shape'
+} from '../dist/shape'
 
 
-import { Shape as ShapeX } from '../src/shape'
+import { Shape as ShapeX } from '../dist/shape'
 
 
 // Handle web (Shape) versus node ({Shape}) export.
-let ShapeModule = require('../src/shape')
+let ShapeModule = require('../dist/shape')
 
 if (ShapeModule.Shape) {
   ShapeModule = ShapeModule.Shape
@@ -60,32 +64,32 @@ const {
 describe('readme', () => {
   test('readme-optional', () => {
     let shape = Shape(Optional(String))
-    expect(shape()).toEqual('')
-    expect(shape('a')).toEqual('a')
-    expect(() => shape(1)).toThrow('type')
+    deepEqual(shape(), '')
+    deepEqual(shape('a'), 'a')
+    throws(() => shape(1), 'type')
 
     shape = Shape(Optional(Some(String, Number)))
-    expect(shape('a')).toEqual('a')
-    expect(shape(1)).toEqual(1)
-    expect(shape()).toEqual(undefined) // Overrides Some
+    deepEqual(shape('a'), 'a')
+    deepEqual(shape(1), 1)
+    deepEqual(shape(), undefined) // Overrides Some
 
     shape = Shape(Some(String, Number))
-    expect(shape('a')).toEqual('a')
-    expect(shape(1)).toEqual(1)
-    expect(() => shape()).toThrow('satisfy')
+    deepEqual(shape('a'), 'a')
+    deepEqual(shape(1), 1)
+    throws(() => shape(), 'satisfy')
   })
 
 
   test('readme-default', () => {
     let shape = Shape(Default('none', String))
-    expect(shape()).toEqual('none')
-    expect(shape('a')).toEqual('a')
-    expect(() => shape(1)).toThrow('type')
+    deepEqual(shape(), 'none')
+    deepEqual(shape('a'), 'a')
+    throws(() => shape(1), 'type')
 
     shape = Shape(Default({ a: null }, { a: Number }))
-    expect(shape({ a: 1 })).toEqual({ a: 1 })
-    expect(shape()).toEqual({ a: null })
-    expect(() => shape({ a: 'x' })).toThrow('type')
+    deepEqual(shape({ a: 1 }), { a: 1 })
+    deepEqual(shape(), { a: null })
+    throws(() => shape({ a: 'x' }), 'type')
   })
 
 })

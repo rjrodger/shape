@@ -9,7 +9,6 @@
     "sourceMap": true,
     "strict": true,
     "target": "es2018",
-    "useDefineForClassFields": false,
     "declaration": true,
     "declarationDir": "../dist",
     "outDir": "../dist",

@@ -1,7 +1,7 @@
 
 const {
   expr
-} = require('../src/shape')
+} = require('../dist/shape')
 
 
 const P = (s)=>(console.log((s={src:''+s}).src,(expr(s),s.tokens)))
