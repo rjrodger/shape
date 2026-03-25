@@ -1,0 +1,13 @@
+name	spec	input	output	error
+default-injection	{"port":8080,"host":"localhost"}	{"port":9090}	{"port":9090,"host":"localhost"}	
+required-token-missing	{"name":{"$type":"String"}}	{}	{}	required
+required-token-present	{"name":{"$type":"String"}}	{"name":"alice"}	{"name":"alice"}	
+closed-object-rejects-unknown	{"a":1}	{"a":2,"b":true}	{"a":2,"b":true}	not allowed
+open-object-allows-unknown	{"$open":{"a":1}}	{"a":2,"b":true}	{"a":2,"b":true}	
+array-child-number-valid	{"items":[{"$type":"Number"}]}	{"items":[1,2,3]}	{"items":[1,2,3]}	
+array-child-number-invalid	{"items":[{"$type":"Number"}]}	{"items":[1,"x",3]}	{"items":[1,"x",3]}	number
+nested-defaults	{"svc":{"port":8080,"host":"localhost"}}	{}	{"svc":{"port":8080,"host":"localhost"}}	
+literal-text-is-just-text	{"description":"64 characters, hexadecimal."}	{}	{"description":"64 characters, hexadecimal."}	
+single-quoted-scalar	'single quoted "text"'	"override"	"override"	
+double-quoted-scalar	"double quoted 'text'"	"override"	"override"	
+unquoted-scalar	unquoted text value	override raw	override raw	
