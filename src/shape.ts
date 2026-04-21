@@ -459,12 +459,57 @@ type ErrDesc = {
   node: Node<any>            // Failing shape node.
   value: any                 // Failing value.
   path: string               // Key path to value.
+  pathArr: (string | number)[] // Key path as array (numeric array indices as numbers).
   why: string                // Error code ("why").
   check: string              // Check function name.
   args: Record<string, any>  // Builder args.
   mark: number               // Error mark for debugging.
   text: string               // Error message text.
   use: any                   // User custom info.
+}
+
+
+// Standard Schema V1 interop types (vendored from https://standardschema.dev/).
+// Kept inline to avoid adding a runtime/type dependency.
+
+type StandardSchemaV1Issue = {
+  readonly message: string
+  readonly path?: ReadonlyArray<PropertyKey | StandardSchemaV1PathSegment>
+}
+
+type StandardSchemaV1PathSegment = {
+  readonly key: PropertyKey
+}
+
+type StandardSchemaV1Result<Output> =
+  | StandardSchemaV1SuccessResult<Output>
+  | StandardSchemaV1FailureResult
+
+type StandardSchemaV1SuccessResult<Output> = {
+  readonly value: Output
+  readonly issues?: undefined
+}
+
+type StandardSchemaV1FailureResult = {
+  readonly issues: ReadonlyArray<StandardSchemaV1Issue>
+}
+
+type StandardSchemaV1Types<Input = unknown, Output = Input> = {
+  readonly input: Input
+  readonly output: Output
+}
+
+type StandardSchemaV1Props<Input = unknown, Output = Input> = {
+  readonly version: 1
+  readonly vendor: string
+  readonly validate: (
+    value: unknown
+  ) => StandardSchemaV1Result<Output> | Promise<StandardSchemaV1Result<Output>>
+  readonly types?: StandardSchemaV1Types<Input, Output>
+}
+
+type StandardSchemaV1<Input = unknown, Output = Input> = {
+  readonly '~standard': StandardSchemaV1Props<Input, Output>
 }
 
 
@@ -1288,6 +1333,26 @@ function shapify<S>(intop?: S | Node<S>, inopts?: ShapeOptions) {
 
   shape.shape = SHAPE
 
+  // Standard Schema V1 interop (https://standardschema.dev/).
+  ;(shape as any)['~standard'] = {
+    version: 1,
+    vendor: 'shape',
+    validate(value: unknown) {
+      const sctx: Context = { err: [] }
+      const out = exec(value, sctx, false)
+      const errs = sctx.err as ErrDesc[]
+      if (0 === errs.length) {
+        return { value: out }
+      }
+      return {
+        issues: errs.map((e: ErrDesc) => ({
+          message: e.text,
+          path: e.pathArr,
+        })),
+      }
+    },
+  }
+
   // Validate shape spec. This will throw if there's an issue with the spec.
   shape.spec()
 
@@ -1541,6 +1606,7 @@ function handleValidate(vf: Validate, s: State): Update {
 
     let w = update.why || S.check
     let path = pathstr(s)
+    let patha = patharr(s)
 
     if (S.string === typeof (update.err)) {
       s.curerr.push(makeErr(s, (update.err as string)))
@@ -1553,12 +1619,14 @@ function handleValidate(vf: Validate, s: State): Update {
           const e = (errsrc as any[])[eI]
           if (null != e) {
             e.path = null == e.path ? path : e.path
+            e.pathArr = null == e.pathArr ? patha : e.pathArr
             e.mark = null == e.mark ? 2010 : e.mark
             s.curerr.push(e)
           }
         }
       } else if (null != errsrc) {
         ;(errsrc as any).path = null == (errsrc as any).path ? path : (errsrc as any).path
+        ;(errsrc as any).pathArr = null == (errsrc as any).pathArr ? patha : (errsrc as any).pathArr
         ;(errsrc as any).mark = null == (errsrc as any).mark ? 2010 : (errsrc as any).mark
         s.curerr.push(errsrc)
       }
@@ -1605,6 +1673,21 @@ function pathstr(s: State) {
     if (null != p) {
       if (out.length > 0) out += '.'
       out += p
+    }
+  }
+  return out
+}
+
+
+// Create an array form of the property path. Numeric entries for array
+// element indices are emitted as numbers; object keys remain strings.
+function patharr(s: State): (string | number)[] {
+  const out: (string | number)[] = []
+  for (let i = 1; i <= s.dI; i++) {
+    const p = s.path[i]
+    if (null != p) {
+      const parentNode = s.ancestors[i - 1]
+      out.push(parentNode && S.array === parentNode.t ? Number(p) : p)
     }
   }
   return out
@@ -2607,6 +2690,7 @@ function makeErrImpl(
     node: s.node,
     value: s.val,
     path: pathstr(s),
+    pathArr: patharr(s),
     why: why,
     check: s.check?.name || 'none',
     args: s.checkargs || {},
@@ -3013,7 +3097,7 @@ type ShapeShape = ReturnType<typeof shapify> &
   node: () => Node<any>,
   isShape: (v: any) => boolean,
   shape: typeof SHAPE
-}
+} & StandardSchemaV1
 
 
 
@@ -3270,6 +3354,12 @@ export type {
   Node,
   State,
   ShapeShape,
+  StandardSchemaV1,
+  StandardSchemaV1Props,
+  StandardSchemaV1Result,
+  StandardSchemaV1Issue,
+  StandardSchemaV1PathSegment,
+  StandardSchemaV1Types,
 }
 
 export {
