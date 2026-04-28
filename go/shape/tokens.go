@@ -4,13 +4,18 @@ package shape
 type Kind string
 
 const (
-	KindAny     Kind = "any"
-	KindString  Kind = "string"
-	KindNumber  Kind = "number"
-	KindBoolean Kind = "boolean"
-	KindObject  Kind = "object"
-	KindArray   Kind = "array"
-	KindNull    Kind = "null"
+	KindAny      Kind = "any"
+	KindString   Kind = "string"
+	KindNumber   Kind = "number"
+	KindBoolean  Kind = "boolean"
+	KindObject   Kind = "object"
+	KindArray    Kind = "array"
+	KindNull     Kind = "null"
+	KindNaN      Kind = "nan"
+	KindFunction Kind = "function"
+	KindNever    Kind = "never"
+	KindCheck    Kind = "check"
+	KindList     Kind = "list"
 )
 
 // TypeToken marks a required type in schema-by-example maps.
@@ -22,10 +27,11 @@ func (t TypeToken) Kind() Kind { return t.kind }
 
 // Sentinel tokens for required fields (TS constructor-literal equivalent).
 var (
-	Any     = TypeToken{kind: KindAny}
-	String  = TypeToken{kind: KindString}
-	Number  = TypeToken{kind: KindNumber}
-	Boolean = TypeToken{kind: KindBoolean}
-	Object  = TypeToken{kind: KindObject}
-	Array   = TypeToken{kind: KindArray}
+	Any      = TypeToken{kind: KindAny}
+	String   = TypeToken{kind: KindString}
+	Number   = TypeToken{kind: KindNumber}
+	Boolean  = TypeToken{kind: KindBoolean}
+	Object   = TypeToken{kind: KindObject}
+	Array    = TypeToken{kind: KindArray}
+	Function = TypeToken{kind: KindFunction}
 )
