@@ -50,7 +50,7 @@ func TestCompatTSV(t *testing.T) {
 func loadCompatRows(t *testing.T) []compatRow {
 	t.Helper()
 
-	path := filepath.Join("..", "..", "test", "compat.tsv")
+	path := filepath.Join("..", "test", "compat.tsv")
 	f, err := os.Open(path)
 	if err != nil {
 		t.Fatalf("open %s: %v", path, err)

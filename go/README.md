@@ -4,7 +4,7 @@ Go port of the [`shape`](https://github.com/rjrodger/shape) schema-by-example
 validator. Your schema looks (almost) exactly like your data.
 
 ```go
-import "github.com/rjrodger/shape/go/shape"
+import "github.com/rjrodger/shape/go"
 
 s := shape.MustShape(map[string]any{
     "port":  8080,         // optional, defaults to 8080, must be a number
