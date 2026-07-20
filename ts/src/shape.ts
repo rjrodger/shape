@@ -2190,18 +2190,20 @@ const Rename = function <V>(this: any, inopts: any, shape?: Node<V> | V): Node<V
             }
             update.node = fromDflt.node
 
-            // Old errors on the claimed value are no longer valid.
-            // Use in-place compaction instead of splice to avoid O(n²) shifting.
-            // Reached only when a prior claimed field already produced an error —
-            // an experimental two-rename interaction not exercised by the suite.
+            // Old errors on the claimed value are no longer valid. Matched by
+            // key: the stale closed/required error for the claimed key is what
+            // must be dropped once the claim supplies a value. Use in-place
+            // compaction instead of splice to avoid O(n²) shifting. The keep
+            // branch is only taken when an unrelated error coexists during a
+            // claim — a rare experimental combination not exercised by the suite.
             let writeIdx = 0
-            /* node:coverage disable */
             for (let eI = 0; eI < s.err.length; eI++) {
+              /* node:coverage disable */
               if (s.err[eI].key !== fromDflt.key) {
                 s.err[writeIdx++] = s.err[eI]
               }
+              /* node:coverage enable */
             }
-            /* node:coverage enable */
             s.err.length = writeIdx
 
             if (!keep) {

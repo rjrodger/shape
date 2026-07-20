@@ -117,6 +117,7 @@ const files = {
     ['null-required', { a: { $expr: 'null' } }, { a: null }],
     ['nested-path', { user: { addr: { zip: N } } }, { user: { addr: { zip: 'x' } } }],
     ['key-parent', { a: { b: { $expr: 'Key' } } }, { a: { b: 'V' } }],
+    ['key-depth-dsl', { a: { b: { $expr: 'Key(1)' } } }, { a: { b: 'V' } }],
   ],
 }
 

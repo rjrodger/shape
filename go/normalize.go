@@ -183,7 +183,12 @@ func normalizeObject(v map[string]any, opts ShapeOptions) (*node, error) {
 		}
 
 		// valexpr keymark: apply the expression to the parent node in place, so
-		// e.g. "Open" opens this object (mirrors TS expr(src, n) + Object.assign).
+		// e.g. "Open" opens this object (mirrors TS expr(src, n)). Narrowing
+		// builders (Open/Closed/Min/Required/...) mutate the carrier and take
+		// effect. Composition builders (All/One/Some/Exact) can't: TS applies them
+		// with the object as `this` (keeping its children), but Go's variadic
+		// composition builders have no carrier slot — so those are not supported
+		// as value expressions (an off-by-default, rarely-used combination).
 		if valExprActive && k == valExprMark {
 			if src, ok := v[k].(string); ok {
 				if _, err := exprApply(src, newNodeWrap(n)); err != nil {

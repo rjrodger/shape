@@ -883,13 +883,16 @@ func Key(args ...any) *Node {
 	var depth *int
 	var sep *string
 	for _, a := range args {
-		switch v := a.(type) {
-		case int:
-			d := v
-			depth = &d
-		case string:
-			s := v
-			sep = &s
+		if s, ok := a.(string); ok {
+			sv := s
+			sep = &sv
+			continue
+		}
+		// Any numeric argument is a depth. The string DSL parses numbers as
+		// float64, so accept every numeric kind (mirrors TS `typeof d === 'number'`).
+		if d, ok := toInt(a); ok {
+			dv := d
+			depth = &dv
 		}
 	}
 	// Key(depth) without a separator yields a path slice, so the node must be an
