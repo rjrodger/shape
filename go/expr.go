@@ -209,11 +209,10 @@ func (p *exprParser) parseTerm(top bool) (*Node, error) {
 		if top {
 			return Default(lit), nil
 		}
-		// non-top literal: wrap in a node
-		n, err := normalize(lit)
-		if err != nil {
-			return nil, err
-		}
+		// non-top literal: wrap in a node. json.Unmarshal only produces nil,
+		// bool, float64, string, []any or map[string]any, and normalize handles
+		// every one of those without error, so no error is possible here.
+		n, _ := normalize(lit)
 		return newNodeWrap(n), nil
 	}
 

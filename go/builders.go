@@ -925,8 +925,12 @@ func Key(args ...any) *Node {
 				if end > len(path) {
 					end = len(path)
 				}
-				if start > end {
-					start = end
+				// Clamp low too: at the root the path is empty, so end would be -1.
+				// JS .slice() clamps to an empty result rather than throwing, and Go
+				// must match (a negative slice bound would panic). With both bounds
+				// in [0,len], start is always <= end.
+				if end < 0 {
+					end = 0
 				}
 				slice := append([]string{}, path[start:end]...)
 				if sep != nil {
