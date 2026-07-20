@@ -181,26 +181,53 @@ func TestZZDefineReferCtx(t *testing.T) {
 	validateNode(Refer("d").n, 5.0, []string{}, "", nil, nil, false, &ValidationError{})
 }
 
+func TestZZExprApply(t *testing.T) {
+	// Dot-chained application to a carrier node (exercises the "." consume path).
+	if _, err := exprApply("Open.Closed", buildize(map[string]any{"a": 1.0})); err != nil {
+		t.Fatalf("exprApply chain: %v", err)
+	}
+	// Empty source -> tokenize error.
+	if _, err := exprApply("", buildize(nil)); err == nil {
+		t.Fatal("exprApply empty should error")
+	}
+	// Unknown token -> parseChained error.
+	if _, err := exprApply("Nope", buildize(nil)); err == nil {
+		t.Fatal("exprApply unknown should error")
+	}
+}
+
 func TestZZKeyForms(t *testing.T) {
-	// Key() at the root: the empty path yields "" via update.Val (906-908). The
-	// resulting empty string is then rejected by the String structural check, so
-	// an error is expected here; we only care that the before-branch executed.
-	if out, _ := MustShape(Key()).Validate("ignored"); out != "" {
-		t.Fatalf("Key() root want empty, got %v", out)
+	// Key() at the root has no parent, so it leaves the value unchanged (TS).
+	if out, _ := MustShape(Key()).Validate("ignored"); out != "ignored" {
+		t.Fatalf("Key() at root should leave the value unchanged, got %v", out)
 	}
 
-	// Key(depth) whose depth exceeds the path length -> start clamped to 0 (918-920),
-	// without an empty path so no panic occurs. The joined key is empty and thus
-	// rejected by the String check; the point is that the depth branch executed.
+	// Key(depth, sep) exercises the depth+join branch; a depth beyond the path
+	// yields an empty joined string (then rejected by the String check).
 	sc := MustShape(map[string]any{"a": Key(3, "-")})
 	_, _ = sc.Validate(map[string]any{"a": "x"})
 
-	// Key(depth) at the root: the empty path clamps to an empty slice rather than
-	// panicking, mirroring JS .slice() (exercises the end<0 low-clamp).
+	// Key(depth) at the root clamps to an empty slice rather than panicking,
+	// mirroring JS .slice().
 	if out, _ := MustShape(Key(2)).Validate(nil); out == nil {
 		t.Fatal("Key(2) at root should yield an empty slice, not nil")
 	} else if arr, ok := out.([]any); !ok || len(arr) != 0 {
 		t.Fatalf("Key(2) at root want empty []any, got %#v", out)
+	}
+
+	// jsSlice: cover the out-of-range clamps (start>n, end>n) that Key itself
+	// never triggers, plus the negative-from-end and normal paths.
+	if got := jsSlice([]any{1, 2, 3}, 5, 9); len(got) != 0 {
+		t.Fatalf("jsSlice start>n want empty, got %v", got)
+	}
+	if got := jsSlice([]any{1, 2, 3}, 1, 9); len(got) != 2 {
+		t.Fatalf("jsSlice end>n want 2, got %v", got)
+	}
+	if got := jsSlice([]any{1, 2, 3}, -2, -9); len(got) != 0 {
+		t.Fatalf("jsSlice negative want empty, got %v", got)
+	}
+	if got := jsSlice([]any{1, 2, 3}, 0, 2); len(got) != 2 {
+		t.Fatalf("jsSlice normal want 2, got %v", got)
 	}
 }
 

@@ -107,8 +107,7 @@ message, `update.done` to stop further checks. See [Shape nodes](nodes.md).
   is identical across languages.
 - Go splits the TS options-object forms into explicit `ReferWith` / `RenameWith`
   helpers alongside the `Refer` / `Rename` shortcuts.
-- `Key()` returns the value's immediate key in Go; in TS it returns the parent
-  key. See [parity notes](../explanation/ts-go-parity.md).
+- `Key()` returns the value's **parent** key in both languages.
 
 For per-builder examples, follow the how-to guides linked from the
 [docs index](../README.md).

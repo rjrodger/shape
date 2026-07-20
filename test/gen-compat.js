@@ -76,6 +76,8 @@ const files = {
     ['array-rest', { $expr: 'Rest(Number)' }, [1, 2, 3]],
   ],
   builders: [
+    ['dsl-type-chain-fail', { a: { $expr: 'Min(2).Array' } }, { a: [1] }],
+    ['dsl-type-chain-ok', { a: { $expr: 'Min(2).Array' } }, { a: [1, 2] }],
     ['min-number-ok', { a: { $expr: 'Min(3,Number)' } }, { a: 5 }],
     ['min-number-fail', { a: { $expr: 'Min(3,Number)' } }, { a: 1 }],
     ['max-number-fail', { a: { $expr: 'Max(3,Number)' } }, { a: 9 }],
@@ -114,6 +116,7 @@ const files = {
   misc: [
     ['null-required', { a: { $expr: 'null' } }, { a: null }],
     ['nested-path', { user: { addr: { zip: N } } }, { user: { addr: { zip: 'x' } } }],
+    ['key-parent', { a: { b: { $expr: 'Key' } } }, { a: { b: 'V' } }],
   ],
 }
 

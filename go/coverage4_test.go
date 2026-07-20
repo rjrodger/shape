@@ -119,7 +119,7 @@ func TestArguRestAndSkip(t *testing.T) {
 func TestExprBuildEdges(t *testing.T) {
 	// Build with nested array + $$ passthrough + non-string leaves.
 	bs, err := Build(map[string]any{
-		"a": []any{"Number", map[string]any{"deep": "Min(1,String)"}},
+		"a":  []any{"Number", map[string]any{"deep": "Min(1,String)"}},
 		"$$": "keep-me",
 		"n":  true,
 	})

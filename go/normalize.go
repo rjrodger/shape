@@ -182,20 +182,13 @@ func normalizeObject(v map[string]any, opts ShapeOptions) (*node, error) {
 			}
 		}
 
-		// valexpr keymark: the entire object is rewritten via expression.
+		// valexpr keymark: apply the expression to the parent node in place, so
+		// e.g. "Open" opens this object (mirrors TS expr(src, n) + Object.assign).
 		if valExprActive && k == valExprMark {
 			if src, ok := v[k].(string); ok {
-				// Apply expression to the existing node `n`.
-				exprNode, err := Expr(src)
-				if err != nil {
+				if _, err := exprApply(src, newNodeWrap(n)); err != nil {
 					return nil, fmt.Errorf("valexpr key %q: %w", k, err)
 				}
-				// Merge: copy whatever the expression set onto our node.
-				n.kind = exprNode.n.kind
-				n.required = exprNode.n.required
-				n.requiredSet = exprNode.n.requiredSet
-				n.befores = append(n.befores, exprNode.n.befores...)
-				n.afters = append(n.afters, exprNode.n.afters...)
 				continue
 			}
 		}

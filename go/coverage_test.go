@@ -177,13 +177,13 @@ func TestIntrospection(t *testing.T) {
 
 	// Rest + Child + Exact + Define/Refer/Rename spec rendering.
 	s2 := MustShape(map[string]any{
-		"ex":  Exact("a", "b"),
-		"ch":  Child(Number, map[string]any{}),
-		"re":  Rest(Number, []any{String}),
-		"df":  Default(9.0, Number),
-		"sk":  Skip(Number),
-		"ig":  Ignore(Number),
-		"em":  Empty(),
+		"ex": Exact("a", "b"),
+		"ch": Child(Number, map[string]any{}),
+		"re": Rest(Number, []any{String}),
+		"df": Default(9.0, Number),
+		"sk": Skip(Number),
+		"ig": Ignore(Number),
+		"em": Empty(),
 	})
 	_ = s2.String()
 	_ = s2.Spec()
@@ -309,12 +309,11 @@ func TestNestedDefaultClone(t *testing.T) {
 // --- Key builder forms -------------------------------------------------
 
 func TestKeyForms(t *testing.T) {
-	// Key() injects the value's immediate key (Go's documented semantics; note
-	// this differs from TS, which injects the parent key).
+	// Key() injects the parent key (matches canonical TS).
 	s := MustShape(map[string]any{"a": map[string]any{"self": Key()}})
 	out := mustOK(t, s, map[string]any{"a": map[string]any{"self": "x"}}).(map[string]any)
-	if out["a"].(map[string]any)["self"] != "self" {
-		t.Fatalf("Key(): %v", out)
+	if out["a"].(map[string]any)["self"] != "a" {
+		t.Fatalf("Key() should inject parent key 'a': %v", out)
 	}
 
 	// Key(depth) → path slice; Key(depth, sep) → joined path.
@@ -444,8 +443,8 @@ func TestOptionsCoverage(t *testing.T) {
 
 func TestReferFillFull(t *testing.T) {
 	s := MustShape(map[string]any{
-		"def":  Define("shared", map[string]any{"v": Number}),
-		"use":  ReferWith("shared", ReferOptions{Fill: true}),
+		"def": Define("shared", map[string]any{"v": Number}),
+		"use": ReferWith("shared", ReferOptions{Fill: true}),
 	})
 	out := mustOK(t, s, map[string]any{"def": map[string]any{"v": 1.0}})
 	if _, ok := out.(map[string]any)["use"]; !ok {

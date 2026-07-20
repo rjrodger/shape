@@ -88,8 +88,8 @@ reusable closure.
 ## Differences to keep in mind
 
 The full list is in [TypeScript ↔ Go parity](../explanation/ts-go-parity.md).
-The headline items: alphabetical key ordering (Go maps are unordered), the RE2
-regexp engine, and a couple of intentionally-divergent builders.
+The headline items are inherent to Go: alphabetical key ordering (Go maps are
+unordered) and the RE2 regexp engine.
 
 ## See also
 

@@ -96,9 +96,10 @@ cd go && go test -cover .
   required); an explicit `nil` is a present null (a type error). Preserve this.
 - **Key ordering:** Go maps are unordered, so object/argument specs sort keys
   alphabetically. Don't rely on insertion order in Go.
-- **gofmt:** some pre-existing library files (`builders.go`, `expr.go`,
-  `node.go`) are not gofmt-clean in the repo; leave them as-is. `gofmt -w` any
-  *new* file you add. CI runs `go vet`, not `gofmt`.
+- **gofmt:** `expr.go` and `node.go` carry some original-port formatting that is
+  not gofmt-clean; leave their unrelated regions as-is (don't reformat the whole
+  file just to touch one function). `gofmt -w` any *new* file you add, and keep
+  edited regions gofmt-clean. CI runs `go vet`, not `gofmt`.
 - **Do not edit** `ts/dist`, `ts/dist-test`, or generated `test/*.tsv` by hand —
   rebuild / regenerate instead.
 - **Version constants:** `ts/package.json` + the `VERSION` const in

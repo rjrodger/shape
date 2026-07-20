@@ -1,4 +1,6 @@
 name	spec	input	output	error
+dsl-type-chain-fail	{"a":{"$expr":"Min(2).Array"}}	{"a":[1]}		Value "[1]" for property "a" must be a minimum length of 2 (was 1).
+dsl-type-chain-ok	{"a":{"$expr":"Min(2).Array"}}	{"a":[1,2]}	{"a":[1,2]}	
 min-number-ok	{"a":{"$expr":"Min(3,Number)"}}	{"a":5}	{"a":5}	
 min-number-fail	{"a":{"$expr":"Min(3,Number)"}}	{"a":1}		Value "1" for property "a" must be a minimum of 3 (was 1).
 max-number-fail	{"a":{"$expr":"Max(3,Number)"}}	{"a":9}		Value "9" for property "a" must be a maximum of 3 (was 9).

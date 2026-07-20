@@ -127,7 +127,7 @@ func TestExprBuildersFull(t *testing.T) {
 		"Above(2,Number)", "Below(9,Number)", "Len(3,String)",
 		`Fault("oops",Number)`, `Define("d",Number)`, `Refer("d")`, `Rename("b",Number)`,
 		"Key", "Type(Number)", "String.Min(2).Max(9)", "Number.Above(1)",
-		"Boolean", "Object", "Array", "Function", "Any",
+		"Min(2).Array", "Min(1).String", "Boolean", "Object", "Array", "Function", "Any",
 	} {
 		if _, err := Expr(src); err != nil {
 			t.Fatalf("Expr(%q): %v", src, err)
@@ -189,12 +189,18 @@ func TestArguEdges(t *testing.T) {
 // --- options: valExprMark custom + valexpr property ---------------------
 
 func TestValExprMark(t *testing.T) {
-	// A valexpr keymark merges the expression's kind/required/validators onto the
-	// parent object node (Go merges these; note it does not copy open/child).
-	s := MustShapeWith(map[string]any{"##": "Required", "a": Number},
+	// The valexpr keymark applies the expression to the parent node in place, so
+	// "$$: Open" opens the object and unknown keys are allowed (parity with TS).
+	s := MustShapeWith(map[string]any{"$$": "Open", "a": 1.0},
+		ShapeOptions{ValExpr: ValExprOptions{Active: true}})
+	if _, err := s.Validate(map[string]any{"a": 2.0, "extra": 9.0}); err != nil {
+		t.Fatalf("valexpr Open should allow unknown keys: %v", err)
+	}
+	// A custom keymark works too.
+	s2 := MustShapeWith(map[string]any{"##": "Open", "a": 1.0},
 		ShapeOptions{ValExpr: ValExprOptions{Active: true, KeyMark: "##"}})
-	if _, err := s.Validate(map[string]any{"a": 1.0}); err != nil {
-		t.Fatalf("valexpr required: %v", err)
+	if _, err := s2.Validate(map[string]any{"a": 2.0, "z": 9.0}); err != nil {
+		t.Fatalf("custom keymark Open: %v", err)
 	}
 }
 

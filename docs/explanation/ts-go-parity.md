@@ -39,18 +39,6 @@ Some differences are inherent to Go and are unlikely ever to close:
   JavaScript engine. Patterns relying on backtracking features differ. Prefer
   portable patterns for schemas that must behave identically.
 
-## Known behavioural differences
-
-These are smaller and could be reconciled in future; today they differ:
-
-- **`Key()`** injects the value's *immediate* key in Go, but the *parent* key in
-  TypeScript. (TypeScript's top-level `Key()` behaviour is itself idiosyncratic.)
-- **Value expressions (`valexpr`)** merge a narrower set of fields onto the parent
-  node in Go (kind, required, validators) than the full `Object.assign` in
-  TypeScript, so `$$: "Open"`-style rewrites don't propagate openness in Go.
-- **DSL type-token chaining.** TypeScript's DSL accepts `Min(2).Array` (a chained
-  type token); Go's DSL does not. Use `Type(...)` or a carrier spec instead.
-
 ## Error metadata
 
 Both languages produce the same message *text*. The Go `FieldError` also exposes
