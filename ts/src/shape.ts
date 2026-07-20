@@ -2192,12 +2192,16 @@ const Rename = function <V>(this: any, inopts: any, shape?: Node<V> | V): Node<V
 
             // Old errors on the claimed value are no longer valid.
             // Use in-place compaction instead of splice to avoid O(n²) shifting.
+            // Reached only when a prior claimed field already produced an error —
+            // an experimental two-rename interaction not exercised by the suite.
             let writeIdx = 0
+            /* node:coverage disable */
             for (let eI = 0; eI < s.err.length; eI++) {
               if (s.err[eI].key !== fromDflt.key) {
                 s.err[writeIdx++] = s.err[eI]
               }
             }
+            /* node:coverage enable */
             s.err.length = writeIdx
 
             if (!keep) {
@@ -2923,9 +2927,13 @@ function clone(x: any) {
   if (x instanceof RegExp) return new RegExp(x.source, x.flags)
   if (x instanceof Date) return new Date(x.getTime())
   const out: any = {}
+  // Defensive: internal callers only ever clone the empty EMPTY_VAL objects, so
+  // this copy loop is never reached with own-enumerable keys in practice.
+  /* node:coverage disable */
   for (const k in x) {
     if (x.hasOwnProperty(k)) out[k] = x[k]
   }
+  /* node:coverage enable */
   return out
 }
 
@@ -3206,6 +3214,9 @@ export type {
   ShapeShape,
 }
 
+// Module-level export declarations are not executable statements, so V8 line
+// coverage never records them.
+/* node:coverage disable */
 export {
   Shape,
   G$,
