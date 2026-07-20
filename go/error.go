@@ -33,16 +33,17 @@ const (
 
 // FieldError captures rich information about a single validation failure.
 type FieldError struct {
-	Path  string         // dot-notation property path (e.g. "users.0.email")
-	Key   string         // the immediate key/index that failed
-	Type  Kind           // node kind that ran the check
-	Value any            // failing input value
-	Why   string         // why-code (type, required, closed, check, ...)
-	Mark  int            // numeric mark (mirrors TS marks 1010, 4000, ...)
-	Text  string         // human-readable message
-	Args  map[string]any // extra context for custom checks
-	Check string         // name of the failing check (TS ErrDesc.check)
-	node  *node
+	Path    string         // dot-notation property path (e.g. "users.0.email")
+	PathArr []any          // path as array: array indices as ints, keys as strings
+	Key     string         // the immediate key/index that failed
+	Type    Kind           // node kind that ran the check
+	Value   any            // failing input value
+	Why     string         // why-code (type, required, closed, check, ...)
+	Mark    int            // numeric mark (mirrors TS marks 1010, 4000, ...)
+	Text    string         // human-readable message
+	Args    map[string]any // extra context for custom checks
+	Check   string         // name of the failing check (TS ErrDesc.check)
+	node    *node
 	// parentArr records whether the failing value sits under an array parent, so
 	// structural error text can say "index" instead of "property" (mirrors TS
 	// isarr(s.parents[s.pI])).
@@ -101,6 +102,7 @@ func makeErr(s *State, why string, mark int, text string) FieldError {
 	}
 	err := FieldError{
 		Path:      path,
+		PathArr:   append([]any{}, s.PathArr...),
 		Key:       s.Key,
 		Type:      t,
 		Value:     s.Value,

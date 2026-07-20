@@ -174,11 +174,11 @@ func TestZZBuildersChildRest(t *testing.T) {
 
 func TestZZDefineReferCtx(t *testing.T) {
 	// Define validator with a nil ctx creates a fresh context (766-768).
-	validateNode(Define("d", Number).n, 5.0, []string{}, "", nil, nil, false, &ValidationError{})
+	validateNode(Define("d", Number).n, 5.0, []string{}, []any{}, "", nil, nil, false, &ValidationError{})
 	// Define validator with a ctx that has nil Refs (769-771).
-	validateNode(Define("d", Number).n, 5.0, []string{}, "", nil, &Context{}, false, &ValidationError{})
+	validateNode(Define("d", Number).n, 5.0, []string{}, []any{}, "", nil, &Context{}, false, &ValidationError{})
 	// Refer validator with nil ctx short-circuits (805-807).
-	validateNode(Refer("d").n, 5.0, []string{}, "", nil, nil, false, &ValidationError{})
+	validateNode(Refer("d").n, 5.0, []string{}, []any{}, "", nil, nil, false, &ValidationError{})
 }
 
 func TestZZExprApply(t *testing.T) {
@@ -473,7 +473,7 @@ func TestZZStringify(t *testing.T) {
 
 func TestZZValidateNilAndKinds(t *testing.T) {
 	// nil node returns input unchanged (77-79).
-	if got := validateNode(nil, "x", []string{}, "", nil, nil, false, &ValidationError{}); got != "x" {
+	if got := validateNode(nil, "x", []string{}, []any{}, "", nil, nil, false, &ValidationError{}); got != "x" {
 		t.Fatal("validateNode(nil)")
 	}
 
@@ -497,7 +497,7 @@ func TestZZValidateNilAndKinds(t *testing.T) {
 
 	// Unknown kind falls through the switch default (219).
 	validateNode(&node{kind: Kind("weird"), requiredSet: true}, "x",
-		[]string{}, "", nil, newContext(nil), false, &ValidationError{})
+		[]string{}, []any{}, "", nil, newContext(nil), false, &ValidationError{})
 }
 
 func TestZZValidateAftersAndLists(t *testing.T) {
@@ -513,14 +513,14 @@ func TestZZValidateAftersAndLists(t *testing.T) {
 
 	// Object node whose objChildren has a key absent from objKeys (405-409).
 	on := &node{kind: KindObject, objChildren: map[string]*node{"extra": Optional(Number).n}}
-	out := validateNode(on, map[string]any{}, []string{}, "", nil, newContext(nil), false, &ValidationError{})
+	out := validateNode(on, map[string]any{}, []string{}, []any{}, "", nil, newContext(nil), false, &ValidationError{})
 	if om, ok := out.(map[string]any); !ok || om["extra"] == nil {
 		t.Fatalf("expected extra key injected, got %v", out)
 	}
 
 	// Open object with a nil objRest keeps unknown keys as-is (421).
 	openN := &node{kind: KindObject, open: true}
-	validateNode(openN, map[string]any{"u": 1.0}, []string{}, "", nil, newContext(nil), false, &ValidationError{})
+	validateNode(openN, map[string]any{"u": 1.0}, []string{}, []any{}, "", nil, newContext(nil), false, &ValidationError{})
 
 	// One in match mode (456-458).
 	if !MustShape(One(Number, String)).Match(5.0) {
@@ -536,7 +536,7 @@ func TestZZValidateAftersAndLists(t *testing.T) {
 
 	// evaluateList with no list mode returns the input (527).
 	if got := evaluateList(&node{kind: KindList, listMode: listNone}, 5.0,
-		[]string{}, "", nil, newContext(nil), false, &ValidationError{}); got != 5.0 {
+		[]string{}, []any{}, "", nil, newContext(nil), false, &ValidationError{}); got != 5.0 {
 		t.Fatal("evaluateList(none)")
 	}
 }

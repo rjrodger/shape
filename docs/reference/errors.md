@@ -32,6 +32,7 @@ TS calls it `ErrDesc`; Go calls it `FieldError`. The fields line up:
 | ------------ | --------------- | ------- |
 | `key`   | `Key`   | the immediate key/index that failed |
 | `path`  | `Path`  | dot-notation path from the root (e.g. `users.0.email`) |
+| `pathArr` | `PathArr` | path as an array (array indices as numbers, keys as strings) — unambiguous for keys containing dots |
 | `type`  | `Type`  | the node's type/kind |
 | `value` | `Value` | the failing value |
 | `why`   | `Why`   | why-code — see below |

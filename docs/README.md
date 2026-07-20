@@ -38,6 +38,7 @@ Goal-oriented recipes for a task you already have.
 - [Rename, Define and Refer](how-to/rename-define-refer.md)
 - [Use key and value expressions](how-to/use-key-and-value-expressions.md)
 - [Use the string DSL (`expr` / `build`)](how-to/use-the-string-dsl.md)
+- [Use Shape as a Standard Schema](how-to/use-as-standard-schema.md)
 - [Use Shape in Go](how-to/use-shape-in-go.md)
 - [Use Shape in the browser](how-to/use-shape-in-the-browser.md)
 
