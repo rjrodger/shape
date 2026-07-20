@@ -131,17 +131,17 @@ func TestFunc(t *testing.T) {
 // --- Key --------------------------------------------------------------
 
 func TestKey(t *testing.T) {
-	// Inject the immediate parent key as the value.
+	// Key() injects the *parent* key (matches canonical TS).
 	s := MustShape(map[string]any{
-		"name": Key(),
+		"a": map[string]any{"b": Key()},
 	})
-	out, err := s.Validate(map[string]any{"name": ""})
+	out, err := s.Validate(map[string]any{"a": map[string]any{"b": "V"}})
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	m := out.(map[string]any)
-	if m["name"] != "name" {
-		t.Fatalf("expected name=name, got %v", m["name"])
+	m := out.(map[string]any)["a"].(map[string]any)
+	if m["b"] != "a" {
+		t.Fatalf("expected b=a (parent key), got %v", m["b"])
 	}
 }
 

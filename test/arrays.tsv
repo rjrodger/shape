@@ -1,0 +1,9 @@
+name	spec	input	output	error
+array-of-number	[{"$type":"Number"}]	[1,2,3]	[1,2,3]	
+array-of-number-bad	[{"$type":"Number"}]	[1,"x"]		Validation failed for index "1" with string "x" because the string is not of type number.
+array-empty-default	[{"$type":"Number"}]	[]	[]	
+tuple-fixed	[{"$type":"Number"},{"$type":"String"}]	[1,"a"]	[1,"a"]	
+tuple-fixed-too-long	[{"$type":"Number"},{"$type":"String"}]	[1,"a",2]		Validation failed for array "[1,a,2]" because the index "2" is not allowed.
+tuple-fixed-too-long-2	[{"$type":"Number"},{"$type":"String"}]	[1,"a",2,3]		Validation failed for array "[1,a,2,3]" because the index "2" is not allowed.
+tuple-fixed-bad	[{"$type":"Number"},{"$type":"String"}]	[1,2]		Validation failed for index "1" with number "2" because the number is not of type string.
+array-rest	{"$expr":"Rest(Number)"}	[1,2,3]	[1,2,3]	

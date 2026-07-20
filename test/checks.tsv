@@ -1,0 +1,3 @@
+name	spec	input	output	error
+regexp-ok	{"a":{"$expr":"Check(/^a.+/)"}}	{"a":"abc"}	{"a":"abc"}	
+regexp-fail	{"a":{"$expr":"Check(/^a.+/)"}}	{"a":"zzz"}		Validation failed for property "a" with string "zzz" because check "/^a.+/" failed.

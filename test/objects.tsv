@@ -1,0 +1,7 @@
+name	spec	input	output	error
+closed-object-rejects-unknown	{"a":1}	{"a":2,"b":true}		Validation failed for object "{a:2,b:true}" because the property "b" is not allowed.
+open-object-allows-unknown	{"$open":{"a":1}}	{"a":2,"b":9}	{"a":2,"b":9}	
+empty-object-is-open	{}	{"a":1,"b":2}	{"a":1,"b":2}	
+child-number	{"$expr":"Child(Number)"}	{"a":1,"b":2}	{"a":1,"b":2}	
+child-number-bad	{"$expr":"Child(Number)"}	{"a":1,"b":"x"}		Validation failed for property "b" with string "x" because the string is not of type number.
+nested-closed-rejects	{"a":{"b":1}}	{"a":{"b":2,"c":3}}		Validation failed for property "a" with object "{b:2,c:3}" because the property "c" is not allowed.

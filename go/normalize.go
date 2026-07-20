@@ -27,18 +27,9 @@ func normalizeWith(spec any, opts ShapeOptions) (*node, error) {
 	case *node:
 		return v, nil
 	case TypeToken:
-		n := &node{kind: v.kind, required: true, requiredSet: true}
-		if v.kind == KindObject {
-			n.open = true
-			n.openSet = true
-			n.objRest = &node{kind: KindAny}
-		}
-		if v.kind == KindArray {
-			n.arrChild = &node{kind: KindAny}
-		}
-		return n, nil
+		return typeTokenNode(v.kind), nil
 	case Kind:
-		return &node{kind: v, required: true, requiredSet: true}, nil
+		return typeTokenNode(v), nil
 	case string:
 		return &node{kind: KindString, defaultValue: v, hasDefault: true, hasLiteral: true, literal: v}, nil
 	case bool:
@@ -63,6 +54,47 @@ func normalizeWith(spec any, opts ShapeOptions) (*node, error) {
 	}
 
 	return nil, fmt.Errorf("unsupported schema value type %T", spec)
+}
+
+// typeTokenNode builds a required node for a type token, carrying the kind's
+// empty default value. The default is only injected when the node is later made
+// Optional (mirrors TS, where wrapper constructors set both r=true and an
+// EMPTY_VAL default; requiredness gates whether the default is used).
+func typeTokenNode(k Kind) *node {
+	n := &node{
+		kind:         k,
+		required:     true,
+		requiredSet:  true,
+		hasDefault:   true,
+		defaultValue: zeroForKind(k),
+	}
+	switch k {
+	case KindObject:
+		n.open = true
+		n.openSet = true
+		n.objRest = &node{kind: KindAny}
+	case KindArray:
+		n.arrChild = &node{kind: KindAny}
+	}
+	return n
+}
+
+// zeroForKind returns the empty value for a kind (TS EMPTY_VAL).
+func zeroForKind(k Kind) any {
+	switch k {
+	case KindString:
+		return ""
+	case KindNumber:
+		return float64(0)
+	case KindBoolean:
+		return false
+	case KindObject:
+		return map[string]any{}
+	case KindArray:
+		return []any{}
+	default:
+		return nil
+	}
 }
 
 func normalizeArray(v []any, opts ShapeOptions) (*node, error) {
@@ -150,20 +182,18 @@ func normalizeObject(v map[string]any, opts ShapeOptions) (*node, error) {
 			}
 		}
 
-		// valexpr keymark: the entire object is rewritten via expression.
+		// valexpr keymark: apply the expression to the parent node in place, so
+		// e.g. "Open" opens this object (mirrors TS expr(src, n)). Narrowing
+		// builders (Open/Closed/Min/Required/...) mutate the carrier and take
+		// effect. Composition builders (All/One/Some/Exact) can't: TS applies them
+		// with the object as `this` (keeping its children), but Go's variadic
+		// composition builders have no carrier slot — so those are not supported
+		// as value expressions (an off-by-default, rarely-used combination).
 		if valExprActive && k == valExprMark {
 			if src, ok := v[k].(string); ok {
-				// Apply expression to the existing node `n`.
-				exprNode, err := Expr(src)
-				if err != nil {
+				if _, err := exprApply(src, newNodeWrap(n)); err != nil {
 					return nil, fmt.Errorf("valexpr key %q: %w", k, err)
 				}
-				// Merge: copy whatever the expression set onto our node.
-				n.kind = exprNode.n.kind
-				n.required = exprNode.n.required
-				n.requiredSet = exprNode.n.requiredSet
-				n.befores = append(n.befores, exprNode.n.befores...)
-				n.afters = append(n.afters, exprNode.n.afters...)
 				continue
 			}
 		}

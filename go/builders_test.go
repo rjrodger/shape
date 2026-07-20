@@ -195,7 +195,8 @@ func TestCheckRegex(t *testing.T) {
 	re := regexp.MustCompile(`^[a-z]+$`)
 	s := MustShape(Check(re))
 	mustValid(t, s, "abc")
-	mustInvalid(t, s, "ABC", "did not match")
+	// TS renders Check(RegExp) failures as: check "/pattern/" failed.
+	mustInvalid(t, s, "ABC", `check "/^[a-z]+$/" failed`)
 }
 
 // --- Tuple arrays ------------------------------------------------------

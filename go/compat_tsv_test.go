@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -40,8 +41,11 @@ func TestCompatTSV(t *testing.T) {
 				t.Fatalf("unexpected err: %v", err)
 			}
 
-			if !reflect.DeepEqual(out, row.Output) {
-				t.Fatalf("output mismatch\nexpected: %#v\nactual:   %#v", row.Output, out)
+			// Compare JSON-normalized: the corpus travels through JSON, so
+			// undefined properties and numeric widths are erased on both sides
+			// (parity with the TS harness).
+			if !reflect.DeepEqual(jsonNorm(out), row.Output) {
+				t.Fatalf("output mismatch\nexpected: %#v\nactual:   %#v", row.Output, jsonNorm(out))
 			}
 		})
 	}
@@ -50,7 +54,29 @@ func TestCompatTSV(t *testing.T) {
 func loadCompatRows(t *testing.T) []compatRow {
 	t.Helper()
 
-	path := filepath.Join("..", "ts", "test", "compat.tsv")
+	// Shared, language-neutral conformance corpus lives in the top-level test/
+	// dir and is consumed by both the TS and Go harnesses.
+	dir := filepath.Join("..", "test")
+	files, err := filepath.Glob(filepath.Join(dir, "*.tsv"))
+	if err != nil {
+		t.Fatalf("glob %s: %v", dir, err)
+	}
+	if len(files) == 0 {
+		t.Fatalf("no .tsv spec files found in %s", dir)
+	}
+	sort.Strings(files)
+
+	var out []compatRow
+	for _, path := range files {
+		base := strings.TrimSuffix(filepath.Base(path), ".tsv")
+		out = append(out, loadCompatFile(t, path, base)...)
+	}
+	return out
+}
+
+func loadCompatFile(t *testing.T, path, base string) []compatRow {
+	t.Helper()
+
 	f, err := os.Open(path)
 	if err != nil {
 		t.Fatalf("open %s: %v", path, err)
@@ -59,7 +85,7 @@ func loadCompatRows(t *testing.T) []compatRow {
 
 	sc := bufio.NewScanner(f)
 	if !sc.Scan() {
-		t.Fatal("compat.tsv is empty")
+		t.Fatalf("%s is empty", path)
 	}
 
 	headers := strings.Split(sc.Text(), "\t")
@@ -77,7 +103,7 @@ func loadCompatRows(t *testing.T) []compatRow {
 		cols := strings.Split(line, "\t")
 
 		row := compatRow{
-			Name:   col(cols, idx, "name"),
+			Name:   base + "/" + col(cols, idx, "name"),
 			Spec:   parseValueCell(t, col(cols, idx, "spec")),
 			Input:  parseValueCell(t, col(cols, idx, "input")),
 			Output: parseValueCell(t, col(cols, idx, "output")),
@@ -87,9 +113,23 @@ func loadCompatRows(t *testing.T) []compatRow {
 	}
 
 	if err := sc.Err(); err != nil {
-		t.Fatalf("scan compat.tsv: %v", err)
+		t.Fatalf("scan %s: %v", path, err)
 	}
 
+	return out
+}
+
+// jsonNorm round-trips a value through JSON so nil-valued map entries collapse
+// and all numbers become float64 — matching the JSON-authored expected column.
+func jsonNorm(v any) any {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return v
+	}
+	var out any
+	if err := json.Unmarshal(b, &out); err != nil {
+		return v
+	}
 	return out
 }
 
@@ -166,6 +206,11 @@ func decodeSpec(v any) any {
 		}
 		if ov, ok := obj["$optional"]; ok {
 			return Optional(decodeSpec(ov))
+		}
+		if ev, ok := obj["$expr"]; ok {
+			if es, ok := ev.(string); ok {
+				return MustExpr(es)
+			}
 		}
 	}
 

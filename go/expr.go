@@ -209,11 +209,10 @@ func (p *exprParser) parseTerm(top bool) (*Node, error) {
 		if top {
 			return Default(lit), nil
 		}
-		// non-top literal: wrap in a node
-		n, err := normalize(lit)
-		if err != nil {
-			return nil, err
-		}
+		// non-top literal: wrap in a node. json.Unmarshal only produces nil,
+		// bool, float64, string, []any or map[string]any, and normalize handles
+		// every one of those without error, so no error is possible here.
+		n, _ := normalize(lit)
 		return newNodeWrap(n), nil
 	}
 
@@ -225,17 +224,46 @@ func (p *exprParser) parseChained(carrier *Node) (*Node, error) {
 	if head == "" {
 		return carrier, nil
 	}
-	fn, ok := getExprBuilders()[head]
-	if !ok {
-		return nil, fmt.Errorf("Shape: unexpected token %s in builder expression %s", head, p.src)
+	if fn, ok := getExprBuilders()[head]; ok {
+		args, err := p.parseArgs()
+		if err != nil {
+			return nil, err
+		}
+		// Chain: append carrier as final arg unless explicitly provided as the last.
+		args = append(args, carrier)
+		return fn(args)
 	}
-	args, err := p.parseArgs()
+	// A type token in chain position sets the type on the carrier, mirroring TS
+	// (".Array" is Type('Array') applied to the current node).
+	if tok, ok := exprTypeTokens[head]; ok {
+		_, _ = p.parseArgs()
+		return Type(tok, carrier), nil
+	}
+	return nil, fmt.Errorf("Shape: unexpected token %s in builder expression %s", head, p.src)
+}
+
+// exprApply applies an expression to an existing carrier node, mirroring TS
+// expr(src, current) — the builders mutate the carrier in place. Used by
+// value expressions (the "$$" keymark) so that e.g. "Open" opens the parent
+// object rather than replacing it.
+func exprApply(src string, carrier *Node) (*Node, error) {
+	tokens, err := tokenize(src)
 	if err != nil {
 		return nil, err
 	}
-	// Chain: append carrier as final arg unless explicitly provided as the last.
-	args = append(args, carrier)
-	return fn(args)
+	p := &exprParser{tokens: tokens, src: src}
+	val := carrier
+	for p.peek() != "" {
+		if p.peek() == "." {
+			p.take()
+		}
+		next, err := p.parseChained(val)
+		if err != nil {
+			return nil, err
+		}
+		val = next
+	}
+	return val, nil
 }
 
 // parseArgs reads "( arg, arg, ... )" if next token is "(".
