@@ -297,7 +297,7 @@ func Exact(vals ...any) *Node {
 			update.Why = WhyExact
 			update.Mark = 4010
 			update.Err = makeErr(state, WhyExact, 4010,
-				fmt.Sprintf("Value $VALUE for property $PATH must be exactly one of: %s", formatList(vals)))
+				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" must be exactly one of: %s", formatList(vals)))
 			update.Done = true
 			return false
 		},
@@ -334,7 +334,7 @@ func Min(min any, spec ...any) *Node {
 			vsize, ok := valueLen(val)
 			if !ok {
 				update.Err = makeErr(state, WhyMin, 4011,
-					fmt.Sprintf("Value $VALUE for property $PATH must be a minimum of %v.", min))
+					fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" must be a minimum of %v.", min))
 				return false
 			}
 			if limit <= vsize {
@@ -347,7 +347,7 @@ func Min(min any, spec ...any) *Node {
 			update.Why = WhyMin
 			update.Mark = 4011
 			update.Err = makeErr(state, WhyMin, 4011,
-				fmt.Sprintf("Value $VALUE for property $PATH must be a minimum %sof %v (was %v).",
+				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" must be a minimum %sof %v (was %v).",
 					lenpart, min, fmtFloat(vsize)))
 			return false
 		},
@@ -380,7 +380,7 @@ func Max(max any, spec ...any) *Node {
 			vsize, ok := valueLen(val)
 			if !ok {
 				update.Err = makeErr(state, WhyMax, 4012,
-					fmt.Sprintf("Value $VALUE for property $PATH must be a maximum of %v.", max))
+					fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" must be a maximum of %v.", max))
 				return false
 			}
 			if vsize <= limit {
@@ -393,7 +393,7 @@ func Max(max any, spec ...any) *Node {
 			update.Why = WhyMax
 			update.Mark = 4012
 			update.Err = makeErr(state, WhyMax, 4012,
-				fmt.Sprintf("Value $VALUE for property $PATH must be a maximum %sof %v (was %v).",
+				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" must be a maximum %sof %v (was %v).",
 					lenpart, max, fmtFloat(vsize)))
 			return false
 		},
@@ -437,7 +437,7 @@ func Above(above any, spec ...any) *Node {
 			update.Why = WhyAbove
 			update.Mark = 4013
 			update.Err = makeErr(state, WhyAbove, 4013,
-				fmt.Sprintf("Value $VALUE for property $PATH must %s above %v (was %v).",
+				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" must %s above %v (was %v).",
 					verb, above, fmtFloat(vsize)))
 			return false
 		},
@@ -481,7 +481,7 @@ func Below(below any, spec ...any) *Node {
 			update.Why = WhyBelow
 			update.Mark = 4014
 			update.Err = makeErr(state, WhyBelow, 4014,
-				fmt.Sprintf("Value $VALUE for property $PATH must %s below %v (was %v).",
+				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" must %s below %v (was %v).",
 					verb, below, fmtFloat(vsize)))
 			return false
 		},
@@ -525,7 +525,7 @@ func Len(length int, spec ...any) *Node {
 			update.Why = WhyLen
 			update.Mark = 4015
 			update.Err = makeErr(state, WhyLen, 4015,
-				fmt.Sprintf("Value $VALUE for property $PATH must be exactly %d%s (was %v).",
+				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" must be exactly %d%s (was %v).",
 					length, suffix, fmtFloat(vsize)))
 			return false
 		},
@@ -563,23 +563,20 @@ func Check(check any, spec ...any) *Node {
 		nb.n.kind = KindCheck
 		nb.n.required = true
 		nb.n.requiredSet = true
+		// The check name is the /pattern/ form so failures read
+		// `check "/re/" failed`, mirroring TS Check(RegExp).
+		reName := "/" + re.String() + "/"
 		v := validator{
-			name: "Check",
+			name: reName,
 			fn: func(val any, update *Update, state *State) bool {
-				if val == nil {
-					return false
+				if s, ok := val.(string); ok && re.MatchString(s) {
+					return true
 				}
-				s, ok := val.(string)
-				if !ok {
-					return false
-				}
-				if !re.MatchString(s) {
-					update.Why = WhyCheck
-					update.Err = makeErr(state, WhyCheck, 4020,
-						fmt.Sprintf("Value $VALUE for property $PATH did not match %s.", re.String()))
-					return false
-				}
-				return true
+				// No custom text: fall through to the default "check ... failed"
+				// message with the /pattern/ name.
+				update.Why = WhyCheck
+				update.Mark = markCheckType
+				return false
 			},
 			stringify: func() string { return fmt.Sprintf("Check(/%s/)", re.String()) },
 		}
@@ -1072,9 +1069,10 @@ func formatList(vals []any) string {
 		if i > 0 {
 			out += ", "
 		}
+		// TS renders Exact values dequoted (stringify(v, true)), e.g. admin, user.
 		switch x := v.(type) {
 		case string:
-			out += fmt.Sprintf("%q", x)
+			out += x
 		default:
 			out += fmt.Sprintf("%v", x)
 		}

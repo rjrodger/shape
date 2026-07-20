@@ -1,0 +1,22 @@
+name	spec	input	output	error
+min-number-ok	{"a":{"$expr":"Min(3,Number)"}}	{"a":5}	{"a":5}	
+min-number-fail	{"a":{"$expr":"Min(3,Number)"}}	{"a":1}		Value "1" for property "a" must be a minimum of 3 (was 1).
+max-number-fail	{"a":{"$expr":"Max(3,Number)"}}	{"a":9}		Value "9" for property "a" must be a maximum of 3 (was 9).
+above-number-fail	{"a":{"$expr":"Above(3,Number)"}}	{"a":3}		Value "3" for property "a" must be above 3 (was 3).
+below-number-fail	{"a":{"$expr":"Below(3,Number)"}}	{"a":3}		Value "3" for property "a" must be below 3 (was 3).
+len-number-fail	{"a":{"$expr":"Len(3,Number)"}}	{"a":4}		Value "4" for property "a" must be exactly 3 (was 4).
+min-string-fail	{"a":{"$expr":"Min(3,String)"}}	{"a":"hi"}		Value "hi" for property "a" must be a minimum length of 3 (was 2).
+max-string-fail	{"a":{"$expr":"Max(2,String)"}}	{"a":"hey"}		Value "hey" for property "a" must be a maximum length of 2 (was 3).
+len-string-ok	{"a":{"$expr":"Len(3,String)"}}	{"a":"abc"}	{"a":"abc"}	
+len-string-fail	{"a":{"$expr":"Len(3,String)"}}	{"a":"ab"}		Value "ab" for property "a" must be exactly 3 in length (was 2).
+min-array-fail	{"a":{"$expr":"Min(2)"}}	{"a":[1]}		Value "[1]" for property "a" must be a minimum length of 2 (was 1).
+exact-ok	{"role":{"$expr":"Exact(\"admin\",\"user\")"}}	{"role":"user"}	{"role":"user"}	
+exact-fail	{"role":{"$expr":"Exact(\"admin\",\"user\")"}}	{"role":"root"}		Value "root" for property "role" must be exactly one of: admin, user
+skip-absent	{"a":{"$expr":"Skip(Number)"}}	{}	{}	
+ignore-bad-dropped	{"a":{"$expr":"Ignore(Number)"}}	{"a":"x"}	{}	
+ignore-good-kept	{"a":{"$expr":"Ignore(Number)"}}	{"a":5}	{"a":5}	
+default-explicit	{"a":{"$expr":"Default(7,Number)"}}	{}	{"a":7}	
+empty-string-allowed	{"a":{"$expr":"Empty"}}	{"a":""}	{"a":""}	
+empty-string-rejected	{"a":{"$type":"String"}}	{"a":""}		Validation failed for property "a" with string "" because an empty string is not allowed.
+never-fails	{"a":{"$expr":"Never"}}	{"a":1}		Validation failed for property "a" with number "1" because no value is allowed.
+type-number-ok	{"a":{"$expr":"Type(Number)"}}	{"a":3}	{"a":3}	

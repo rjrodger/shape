@@ -24,6 +24,27 @@ const (
 	markCustomCheckText = 4000
 )
 
+// undefinedT is an internal sentinel for a missing value (JS undefined). It is
+// only ever placed in the `in` slot for absent object keys / array positions;
+// validateNode translates it back to nil before any user validator sees it.
+type undefinedT struct{}
+
+var undefinedVal any = undefinedT{}
+
+func isUndef(v any) bool {
+	_, ok := v.(undefinedT)
+	return ok
+}
+
+// rootInput maps a nil top-level input to the absent sentinel: Validate(nil)
+// means "no value supplied" (JS undefined), so defaults fill as in TS Shape(x)().
+func rootInput(in any) any {
+	if in == nil {
+		return undefinedVal
+	}
+	return in
+}
+
 // requiredMarkFor returns the TS-aligned required mark for a node kind.
 func requiredMarkFor(k Kind) int {
 	switch k {
@@ -57,6 +78,13 @@ func validateNode(n *node, in any, path []string, key string, parent any, ctx *C
 		return in
 	}
 
+	// Translate the absent sentinel back to nil, remembering that the value was
+	// missing (JS undefined) rather than an explicit null.
+	absent := isUndef(in)
+	if absent {
+		in = nil
+	}
+
 	state := &State{
 		Path:   path,
 		Key:    key,
@@ -65,11 +93,13 @@ func validateNode(n *node, in any, path []string, key string, parent any, ctx *C
 		Parent: parent,
 		Match:  match,
 		Ctx:    ctx,
+		absent: absent,
 	}
 
 	// Run before-validators. They may replace value, replace node, or short-circuit.
 	for _, b := range n.befores {
 		update := &Update{}
+		state.checkName = b.name
 		ok := b.fn(state.Value, update, state)
 		applyUpdate(state, update)
 		in = state.Value
@@ -93,7 +123,11 @@ func validateNode(n *node, in any, path []string, key string, parent any, ctx *C
 		return state.Value
 	}
 
-	if state.Value == nil {
+	// Missing value (JS undefined): required error, skip, or inject the default.
+	// An explicit null (present, not absent) falls through to structural checks
+	// below — where, e.g., null against a String is a type error, not a required
+	// error (mirrors TS undefined-vs-null semantics).
+	if state.Value == nil && absent {
 		if n.required {
 			err := makeErr(state, WhyRequired, requiredMarkFor(n.kind), "")
 			if n.faultMsg != "" {
@@ -133,7 +167,7 @@ func validateNode(n *node, in any, path []string, key string, parent any, ctx *C
 			emitTypeErr(state, verr, n)
 			return state.Value
 		}
-		if s == "" && !n.empty && (n.required || n.hasLiteral) {
+		if s == "" && !n.empty {
 			err := makeErr(state, WhyRequired, markScalarRequired, "")
 			if n.faultMsg != "" {
 				err.Text = expandErrText(n.faultMsg, err.Path, state.Value)
@@ -205,6 +239,7 @@ func runAfters(state *State, verr *ValidationError) {
 	n := state.Node
 	for _, a := range n.afters {
 		update := &Update{}
+		state.checkName = a.name
 		ok := a.fn(state.Value, update, state)
 		applyUpdate(state, update)
 		if !ok {
@@ -231,27 +266,34 @@ func validateArray(n *node, in any, path []string, ctx *Context, match bool, ver
 	case len(n.arrChildren) > 0:
 		// Tuple validation.
 		tupleLen := len(n.arrChildren)
+
+		// Closed tuple with extra elements: TS emits a single "index N is not
+		// allowed" error (N = tuple length) and does not validate any element.
+		if len(arr) > tupleLen && n.arrRest == nil {
+			state := &State{Path: path, Key: strconv.Itoa(tupleLen), Value: arr, Node: n, Match: match, Ctx: ctx}
+			err := makeErr(state, WhyClosed, markArrayClosed, "")
+			if !n.silent {
+				verr.add(err)
+			}
+			out := make([]any, len(arr))
+			copy(out, arr)
+			return out
+		}
+
 		out := make([]any, len(arr))
 		for i, v := range arr {
 			if i < tupleLen {
 				cn := n.arrChildren[i]
 				out[i] = validateNode(cn, v, append(path, strconv.Itoa(i)), strconv.Itoa(i), out, ctx, match, verr)
-			} else if n.arrRest != nil {
-				out[i] = validateNode(n.arrRest, v, append(path, strconv.Itoa(i)), strconv.Itoa(i), out, ctx, match, verr)
 			} else {
-				// Closed tuple beyond declared length.
-				state := &State{Path: path, Key: strconv.Itoa(i), Value: arr, Node: n, Match: match, Ctx: ctx}
-				err := makeErr(state, WhyClosed, markArrayClosed, "")
-				if !n.silent {
-					verr.add(err)
-				}
-				out[i] = v
+				// len(arr) > tupleLen only reaches here when arrRest is set.
+				out[i] = validateNode(n.arrRest, v, append(path, strconv.Itoa(i)), strconv.Itoa(i), out, ctx, match, verr)
 			}
 		}
 		// Missing tuple positions get their default.
 		for i := len(arr); i < tupleLen; i++ {
 			cn := n.arrChildren[i]
-			out = append(out, validateNode(cn, nil, append(path, strconv.Itoa(i)), strconv.Itoa(i), out, ctx, match, verr))
+			out = append(out, validateNode(cn, undefinedVal, append(path, strconv.Itoa(i)), strconv.Itoa(i), out, ctx, match, verr))
 		}
 		return out
 	case n.arrChild != nil:
@@ -315,26 +357,34 @@ func validateObject(n *node, in any, path []string, ctx *Context, match bool, ve
 		}
 
 		if !has {
-			produced = validateNode(cn, nil, kpath, k, out, ctx, match, verr)
+			produced = validateNode(cn, undefinedVal, kpath, k, out, ctx, match, verr)
 			if cn.skippable && (produced == nil || cn.silent) {
 				delete(out, k)
 				continue
 			}
-			if produced == nil && !cn.hasDefault && cn.kind != KindObject && cn.kind != KindArray && cn.kind != KindNull {
+			// A nil produced value means nothing was injected (required error, or
+			// an optional field with no default) — omit the key, matching TS.
+			if produced == nil {
 				delete(out, k)
 				continue
 			}
 		} else {
-			beforeLen := len(verr.Issues)
-			produced = validateNode(cn, v, kpath, k, out, ctx, match, verr)
-			// Ignore: drop key from output and discard any errors raised.
+			// Ignore: keep the value only when it validates cleanly, otherwise drop
+			// it (and any errors it would raise). Probe with silent disabled so the
+			// failure is observable (mirrors TS Ignore inspecting curerr).
 			if cn.silent && cn.skippable {
-				if len(verr.Issues) > beforeLen {
-					verr.Issues = verr.Issues[:beforeLen]
+				probe := *cn
+				probe.silent = false
+				sub := &ValidationError{}
+				probed := validateNode(&probe, v, kpath, k, out, ctx, match, sub)
+				if sub.hasAny() {
+					delete(out, k)
+					continue
 				}
-				delete(out, k)
+				out[k] = probed
 				continue
 			}
+			produced = validateNode(cn, v, kpath, k, out, ctx, match, verr)
 		}
 
 		out[k] = produced
@@ -353,7 +403,7 @@ func validateObject(n *node, in any, path []string, ctx *Context, match bool, ve
 			continue
 		}
 		if !contains(n.objKeys, k) {
-			produced := validateNode(cn, nil, append(path, k), k, out, ctx, match, verr)
+			produced := validateNode(cn, undefinedVal, append(path, k), k, out, ctx, match, verr)
 			if produced != nil {
 				out[k] = produced
 			}
@@ -413,7 +463,7 @@ func evaluateList(n *node, in any, path []string, key string, parent any, ctx *C
 		if passN != 1 {
 			state := &State{Path: path, Key: key, Value: in, Node: n, Match: match, Ctx: ctx}
 			err := makeErr(state, WhyOne, 4030,
-				fmt.Sprintf("Value $VALUE for property $PATH does not satisfy one of: %s", listShapeNames(n)))
+				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" does not satisfy one of: %s", listShapeNames(n)))
 			if n.faultMsg != "" {
 				err.Text = expandErrText(n.faultMsg, err.Path, in)
 			}
@@ -438,7 +488,7 @@ func evaluateList(n *node, in any, path []string, key string, parent any, ctx *C
 		if !matched {
 			state := &State{Path: path, Key: key, Value: in, Node: n, Match: match, Ctx: ctx}
 			err := makeErr(state, WhySome, 4031,
-				fmt.Sprintf("Value $VALUE for property $PATH does not satisfy any of: %s", listShapeNames(n)))
+				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" does not satisfy any of: %s", listShapeNames(n)))
 			if n.faultMsg != "" {
 				err.Text = expandErrText(n.faultMsg, err.Path, in)
 			}
@@ -466,7 +516,7 @@ func evaluateList(n *node, in any, path []string, key string, parent any, ctx *C
 		if !passAll {
 			state := &State{Path: path, Key: key, Value: in, Node: n, Match: match, Ctx: ctx}
 			err := makeErr(state, WhyAll, 4032,
-				fmt.Sprintf("Value $VALUE for property $PATH does not satisfy all of: %s", listShapeNames(n)))
+				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" does not satisfy all of: %s", listShapeNames(n)))
 			if !n.silent {
 				verr.add(err)
 			}

@@ -55,7 +55,7 @@ func (s *Schema) ValidateCtx(input any, ctx *Context) (any, error) {
 	c.Match = false
 	collectDefines(s.root, c)
 	verr := &ValidationError{}
-	out := validateNode(s.root, input, []string{}, "", nil, c, false, verr)
+	out := validateNode(s.root, rootInput(input), []string{}, "", nil, c, false, verr)
 	if ctx != nil {
 		ctx.Err = append(ctx.Err, verr.Issues...)
 	}
@@ -75,7 +75,7 @@ func (s *Schema) Match(input any) bool {
 	c.Match = true
 	collectDefines(s.root, c)
 	verr := &ValidationError{}
-	validateNode(s.root, input, []string{}, "", nil, c, true, verr)
+	validateNode(s.root, rootInput(input), []string{}, "", nil, c, true, verr)
 	return !verr.hasAny()
 }
 
@@ -93,7 +93,7 @@ func (s *Schema) Error(input any) []FieldError {
 	c := newContext(nil)
 	collectDefines(s.root, c)
 	verr := &ValidationError{}
-	validateNode(s.root, input, []string{}, "", nil, c, false, verr)
+	validateNode(s.root, rootInput(input), []string{}, "", nil, c, false, verr)
 	return verr.Issues
 }
 

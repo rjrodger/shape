@@ -1,0 +1,3 @@
+name	spec	input	output	error
+keyexpr-min	{"name: Min(1)":{"$type":"String"}}	{"name":"x"}	{"name":"x"}	
+keyexpr-min-fail	{"name: Min(2)":{"$type":"String"}}	{"name":"x"}		Value "x" for property "name" must be a minimum length of 2 (was 1).

@@ -67,7 +67,7 @@ func TestExprRegexp(t *testing.T) {
 		t.Fatal(err)
 	}
 	mustValid(t, s, "abc")
-	mustInvalid(t, s, "xyz", "did not match")
+	mustInvalid(t, s, "xyz", `check "/^a/" failed`)
 }
 
 func TestExprLiteralDefault(t *testing.T) {

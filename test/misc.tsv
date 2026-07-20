@@ -1,0 +1,3 @@
+name	spec	input	output	error
+null-required	{"a":{"$expr":"null"}}	{"a":null}	{"a":null}	
+nested-path	{"user":{"addr":{"zip":{"$type":"Number"}}}}	{"user":{"addr":{"zip":"x"}}}		Validation failed for property "user.addr.zip" with string "x" because the string is not of type number.

@@ -48,6 +48,13 @@ type State struct {
 	Match  bool     // true when invoked via .Match (no mutation, no error report)
 	Ctx    *Context // user/custom context
 	curErr []FieldError
+	// absent is true when the value is missing (JS undefined) rather than an
+	// explicit null. It distinguishes a missing key (required error, rendered as
+	// "undefined") from a present null (a type error), mirroring TS.
+	absent bool
+	// checkName is the name of the validator currently running (TS s.check.name),
+	// used to render `check "<name>" failed` for checks with no custom text.
+	checkName string
 }
 
 // Update is the bag a custom validator fills in to influence validation.

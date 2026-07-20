@@ -81,12 +81,8 @@ func stringifyNode(n *node, inline bool) string {
 
 func suffix(base string, n *node) string {
 	out := base
-	if n.required && !isStructuralKind(n.kind) {
-		// Required is implicit on a TypeToken; only annotate when default-bearing.
-		if n.hasDefault || n.hasLiteral {
-			out += ".Required()"
-		}
-	}
+	// TS node2json renders a required scalar as just its type name ("Number"),
+	// never ".Required()", so no required annotation is emitted here.
 	if n.skippable {
 		out += ".Skip()"
 	}
