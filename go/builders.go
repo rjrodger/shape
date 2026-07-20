@@ -892,6 +892,11 @@ func Key(args ...any) *Node {
 			sep = &s
 		}
 	}
+	// Key(depth) without a separator yields a path slice, so the node must be an
+	// array to accept it (mirrors TS nodize([])).
+	if depth != nil && sep == nil {
+		nb.n.kind = KindArray
+	}
 	v := validator{
 		name: "Key",
 		fn: func(val any, update *Update, state *State) bool {

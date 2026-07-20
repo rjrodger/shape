@@ -105,14 +105,6 @@ func suffix(base string, n *node) string {
 	return out
 }
 
-func isStructuralKind(k Kind) bool {
-	switch k {
-	case KindObject, KindArray, KindList:
-		return true
-	}
-	return false
-}
-
 func quoteOrType(n *node, fallback string) string {
 	if n.hasLiteral {
 		if s, ok := n.literal.(string); ok {
