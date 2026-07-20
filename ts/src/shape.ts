@@ -2540,7 +2540,7 @@ function buildize<V>(self?: any, shape?: any): Node<V> {
 
   // Only add chainable Builders.
   // NOTE: One, Some, All not chainable.
-  return node.Above ? node : // No need if already made chainable
+  return (node as any).Above ? node : // No need if already made chainable
     Object.assign(node, {
       Above,
       After,
