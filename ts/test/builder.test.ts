@@ -1263,6 +1263,16 @@ Value "5" for property "d.1" must be below 4 (was 5).`)
       d: [Len(4, Number)],
       e: [Len(2, {})],
     })
+
+    // Len must stringify and report its own name (regression: was mislabelled "Below").
+    deepEqual(Shape({ a: Len(3, String) }).spec().v.a.b, ['Len(3)'])
+    try {
+      Shape({ a: Len(3, String) })({ a: 'hi' })
+      assert.fail('expected Len to throw')
+    } catch (e: any) {
+      assert.equal(e.desc().err[0].check, 'Len')
+    }
+
     matchObject(g0({ a: 'a' }), { a: 'a' })
     matchObject(g0({ a: 1 }), { a: 1 })
     throws(() => g0({ a: 'bb' }), `Value "bb" for property "a" must be exactly 1 in length (was 2).`)
