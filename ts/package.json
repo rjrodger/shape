@@ -1,6 +1,6 @@
 {
   "name": "shape",
-  "version": "10.1.2",
+  "version": "10.1.3",
   "description": "An object shape validation utility.",
   "main": "dist/shape.js",
   "browser": "dist/shape.min.js",
