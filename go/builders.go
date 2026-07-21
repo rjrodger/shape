@@ -297,7 +297,7 @@ func Exact(vals ...any) *Node {
 			update.Why = WhyExact
 			update.Mark = 4010
 			update.Err = makeErr(state, WhyExact, 4010,
-				fmt.Sprintf("Value $VALUE for property $PATH must be exactly one of: %s", formatList(vals)))
+				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" must be exactly one of: %s", formatList(vals)))
 			update.Done = true
 			return false
 		},
@@ -334,7 +334,7 @@ func Min(min any, spec ...any) *Node {
 			vsize, ok := valueLen(val)
 			if !ok {
 				update.Err = makeErr(state, WhyMin, 4011,
-					fmt.Sprintf("Value $VALUE for property $PATH must be a minimum of %v.", min))
+					fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" must be a minimum of %v.", min))
 				return false
 			}
 			if limit <= vsize {
@@ -347,7 +347,7 @@ func Min(min any, spec ...any) *Node {
 			update.Why = WhyMin
 			update.Mark = 4011
 			update.Err = makeErr(state, WhyMin, 4011,
-				fmt.Sprintf("Value $VALUE for property $PATH must be a minimum %sof %v (was %v).",
+				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" must be a minimum %sof %v (was %v).",
 					lenpart, min, fmtFloat(vsize)))
 			return false
 		},
@@ -380,7 +380,7 @@ func Max(max any, spec ...any) *Node {
 			vsize, ok := valueLen(val)
 			if !ok {
 				update.Err = makeErr(state, WhyMax, 4012,
-					fmt.Sprintf("Value $VALUE for property $PATH must be a maximum of %v.", max))
+					fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" must be a maximum of %v.", max))
 				return false
 			}
 			if vsize <= limit {
@@ -393,7 +393,7 @@ func Max(max any, spec ...any) *Node {
 			update.Why = WhyMax
 			update.Mark = 4012
 			update.Err = makeErr(state, WhyMax, 4012,
-				fmt.Sprintf("Value $VALUE for property $PATH must be a maximum %sof %v (was %v).",
+				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" must be a maximum %sof %v (was %v).",
 					lenpart, max, fmtFloat(vsize)))
 			return false
 		},
@@ -437,7 +437,7 @@ func Above(above any, spec ...any) *Node {
 			update.Why = WhyAbove
 			update.Mark = 4013
 			update.Err = makeErr(state, WhyAbove, 4013,
-				fmt.Sprintf("Value $VALUE for property $PATH must %s above %v (was %v).",
+				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" must %s above %v (was %v).",
 					verb, above, fmtFloat(vsize)))
 			return false
 		},
@@ -481,7 +481,7 @@ func Below(below any, spec ...any) *Node {
 			update.Why = WhyBelow
 			update.Mark = 4014
 			update.Err = makeErr(state, WhyBelow, 4014,
-				fmt.Sprintf("Value $VALUE for property $PATH must %s below %v (was %v).",
+				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" must %s below %v (was %v).",
 					verb, below, fmtFloat(vsize)))
 			return false
 		},
@@ -525,7 +525,7 @@ func Len(length int, spec ...any) *Node {
 			update.Why = WhyLen
 			update.Mark = 4015
 			update.Err = makeErr(state, WhyLen, 4015,
-				fmt.Sprintf("Value $VALUE for property $PATH must be exactly %d%s (was %v).",
+				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" must be exactly %d%s (was %v).",
 					length, suffix, fmtFloat(vsize)))
 			return false
 		},
@@ -563,23 +563,20 @@ func Check(check any, spec ...any) *Node {
 		nb.n.kind = KindCheck
 		nb.n.required = true
 		nb.n.requiredSet = true
+		// The check name is the /pattern/ form so failures read
+		// `check "/re/" failed`, mirroring TS Check(RegExp).
+		reName := "/" + re.String() + "/"
 		v := validator{
-			name: "Check",
+			name: reName,
 			fn: func(val any, update *Update, state *State) bool {
-				if val == nil {
-					return false
+				if s, ok := val.(string); ok && re.MatchString(s) {
+					return true
 				}
-				s, ok := val.(string)
-				if !ok {
-					return false
-				}
-				if !re.MatchString(s) {
-					update.Why = WhyCheck
-					update.Err = makeErr(state, WhyCheck, 4020,
-						fmt.Sprintf("Value $VALUE for property $PATH did not match %s.", re.String()))
-					return false
-				}
-				return true
+				// No custom text: fall through to the default "check ... failed"
+				// message with the /pattern/ name.
+				update.Why = WhyCheck
+				update.Mark = markCheckType
+				return false
 			},
 			stringify: func() string { return fmt.Sprintf("Check(/%s/)", re.String()) },
 		}
@@ -886,55 +883,64 @@ func Key(args ...any) *Node {
 	var depth *int
 	var sep *string
 	for _, a := range args {
-		switch v := a.(type) {
-		case int:
-			d := v
-			depth = &d
-		case string:
-			s := v
-			sep = &s
+		if s, ok := a.(string); ok {
+			sv := s
+			sep = &sv
+			continue
 		}
+		// Any numeric argument is a depth. The string DSL parses numbers as
+		// float64, so accept every numeric kind (mirrors TS `typeof d === 'number'`).
+		if d, ok := toInt(a); ok {
+			dv := d
+			depth = &dv
+		}
+	}
+	// Key(depth) without a separator yields a path slice, so the node must be an
+	// array to accept it (mirrors TS nodize([])).
+	if depth != nil && sep == nil {
+		nb.n.kind = KindArray
 	}
 	v := validator{
 		name: "Key",
 		fn: func(val any, update *Update, state *State) bool {
+			// TS state.path is [nil, k1, ..., kn]; replicate the leading nil root so
+			// the index/slice math matches exactly.
 			path := state.Path
+			tsPath := make([]any, len(path)+1)
+			for i, k := range path {
+				tsPath[i+1] = k
+			}
+			L := len(tsPath)
 			switch {
 			case depth == nil && sep == nil:
-				if len(path) == 0 {
-					update.Val = ""
-				} else {
-					update.Val = path[len(path)-1]
+				// Parent key: tsPath[L-2]. When there is no parent (root or a
+				// top-level property) the slot is the nil root, so leave the value
+				// unchanged (TS assigns undefined/null, which is not applied).
+				if len(path) >= 2 {
+					update.Val = path[len(path)-2]
+					update.HasVal = true
 				}
-				update.HasVal = true
 			case depth != nil:
 				d := *depth
-				start := len(path) - 1 - d
+				lo := L - 1
+				if d >= 0 {
+					lo = L - 1 - d
+				}
+				hi := L - 1
 				if d < 0 {
-					start = len(path) - 1
+					hi = L
 				}
-				if start < 0 {
-					start = 0
-				}
-				end := len(path) - 1
-				if d < 0 {
-					end = len(path) + (-d)
-				}
-				if end > len(path) {
-					end = len(path)
-				}
-				if start > end {
-					start = end
-				}
-				slice := append([]string{}, path[start:end]...)
+				sl := jsSlice(tsPath, lo, hi)
 				if sep != nil {
-					update.Val = joinWith(slice, *sep)
-				} else {
-					anys := make([]any, len(slice))
-					for i, s := range slice {
-						anys[i] = s
+					parts := make([]string, len(sl))
+					for i, e := range sl {
+						if str, ok := e.(string); ok {
+							parts[i] = str
+						}
 					}
-					update.Val = anys
+					update.Val = joinWith(parts, *sep)
+				} else {
+					update.Val = append([]any{}, sl...)
 				}
 				update.HasVal = true
 			}
@@ -944,6 +950,35 @@ func Key(args ...any) *Node {
 	}
 	nb.n.befores = append(nb.n.befores, v)
 	return nb
+}
+
+// jsSlice implements JavaScript Array.prototype.slice index semantics: a
+// negative bound counts from the end, out-of-range bounds clamp, and an empty
+// range yields an empty slice (never a panic). Used by Key(depth).
+func jsSlice(arr []any, start, end int) []any {
+	n := len(arr)
+	if start < 0 {
+		start = n + start
+		if start < 0 {
+			start = 0
+		}
+	} else if start > n {
+		start = n
+	}
+	if end < 0 {
+		end = n + end
+		if end < 0 {
+			end = 0
+		}
+	} else if end > n {
+		end = n
+	}
+	if start >= end {
+		return []any{}
+	}
+	out := make([]any, end-start)
+	copy(out, arr[start:end])
+	return out
 }
 
 func joinWith(parts []string, sep string) string {
@@ -970,40 +1005,40 @@ var (
 )
 
 // Builder aliases (functions, not vars, so they can be method-valued).
-func GRequired(spec ...any) *Node                         { return Required(spec...) }
-func GOptional(spec ...any) *Node                         { return Optional(spec...) }
-func GOpen(spec ...any) *Node                             { return Open(spec...) }
-func GClosed(spec ...any) *Node                           { return Closed(spec...) }
-func GSkip(spec ...any) *Node                             { return Skip(spec...) }
-func GIgnore(spec ...any) *Node                           { return Ignore(spec...) }
-func GEmpty(spec ...any) *Node                            { return Empty(spec...) }
-func GDefault(d any, spec ...any) *Node                   { return Default(d, spec...) }
-func GFault(msg string, spec ...any) *Node                { return Fault(msg, spec...) }
-func GNever(spec ...any) *Node                            { return Never(spec...) }
-func GType(kind any, spec ...any) *Node                   { return Type(kind, spec...) }
-func GExact(vals ...any) *Node                            { return Exact(vals...) }
-func GMin(min any, spec ...any) *Node                     { return Min(min, spec...) }
-func GMax(max any, spec ...any) *Node                     { return Max(max, spec...) }
-func GAbove(above any, spec ...any) *Node                 { return Above(above, spec...) }
-func GBelow(below any, spec ...any) *Node                 { return Below(below, spec...) }
-func GLen(length int, spec ...any) *Node                  { return Len(length, spec...) }
-func GCheck(check any, spec ...any) *Node                 { return Check(check, spec...) }
+func GRequired(spec ...any) *Node          { return Required(spec...) }
+func GOptional(spec ...any) *Node          { return Optional(spec...) }
+func GOpen(spec ...any) *Node              { return Open(spec...) }
+func GClosed(spec ...any) *Node            { return Closed(spec...) }
+func GSkip(spec ...any) *Node              { return Skip(spec...) }
+func GIgnore(spec ...any) *Node            { return Ignore(spec...) }
+func GEmpty(spec ...any) *Node             { return Empty(spec...) }
+func GDefault(d any, spec ...any) *Node    { return Default(d, spec...) }
+func GFault(msg string, spec ...any) *Node { return Fault(msg, spec...) }
+func GNever(spec ...any) *Node             { return Never(spec...) }
+func GType(kind any, spec ...any) *Node    { return Type(kind, spec...) }
+func GExact(vals ...any) *Node             { return Exact(vals...) }
+func GMin(min any, spec ...any) *Node      { return Min(min, spec...) }
+func GMax(max any, spec ...any) *Node      { return Max(max, spec...) }
+func GAbove(above any, spec ...any) *Node  { return Above(above, spec...) }
+func GBelow(below any, spec ...any) *Node  { return Below(below, spec...) }
+func GLen(length int, spec ...any) *Node   { return Len(length, spec...) }
+func GCheck(check any, spec ...any) *Node  { return Check(check, spec...) }
 func GBefore(fn func(any, *Update, *State) bool, spec ...any) *Node {
 	return Before(fn, spec...)
 }
 func GAfter(fn func(any, *Update, *State) bool, spec ...any) *Node {
 	return After(fn, spec...)
 }
-func GOne(shapes ...any) *Node                            { return One(shapes...) }
-func GSome(shapes ...any) *Node                           { return Some(shapes...) }
-func GAll(shapes ...any) *Node                            { return All(shapes...) }
-func GChild(child any, spec ...any) *Node                 { return Child(child, spec...) }
-func GRest(child any, spec ...any) *Node                  { return Rest(child, spec...) }
-func GDefine(name string, spec ...any) *Node              { return Define(name, spec...) }
-func GRefer(name string, spec ...any) *Node               { return Refer(name, spec...) }
-func GRename(name string, spec ...any) *Node              { return Rename(name, spec...) }
-func GFunc(spec ...any) *Node                             { return Func(spec...) }
-func GKey(args ...any) *Node                              { return Key(args...) }
+func GOne(shapes ...any) *Node               { return One(shapes...) }
+func GSome(shapes ...any) *Node              { return Some(shapes...) }
+func GAll(shapes ...any) *Node               { return All(shapes...) }
+func GChild(child any, spec ...any) *Node    { return Child(child, spec...) }
+func GRest(child any, spec ...any) *Node     { return Rest(child, spec...) }
+func GDefine(name string, spec ...any) *Node { return Define(name, spec...) }
+func GRefer(name string, spec ...any) *Node  { return Refer(name, spec...) }
+func GRename(name string, spec ...any) *Node { return Rename(name, spec...) }
+func GFunc(spec ...any) *Node                { return Func(spec...) }
+func GKey(args ...any) *Node                 { return Key(args...) }
 
 // Helpers
 
@@ -1072,9 +1107,10 @@ func formatList(vals []any) string {
 		if i > 0 {
 			out += ", "
 		}
+		// TS renders Exact values dequoted (stringify(v, true)), e.g. admin, user.
 		switch x := v.(type) {
 		case string:
-			out += fmt.Sprintf("%q", x)
+			out += x
 		default:
 			out += fmt.Sprintf("%v", x)
 		}

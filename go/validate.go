@@ -24,6 +24,27 @@ const (
 	markCustomCheckText = 4000
 )
 
+// undefinedT is an internal sentinel for a missing value (JS undefined). It is
+// only ever placed in the `in` slot for absent object keys / array positions;
+// validateNode translates it back to nil before any user validator sees it.
+type undefinedT struct{}
+
+var undefinedVal any = undefinedT{}
+
+func isUndef(v any) bool {
+	_, ok := v.(undefinedT)
+	return ok
+}
+
+// rootInput maps a nil top-level input to the absent sentinel: Validate(nil)
+// means "no value supplied" (JS undefined), so defaults fill as in TS Shape(x)().
+func rootInput(in any) any {
+	if in == nil {
+		return undefinedVal
+	}
+	return in
+}
+
 // requiredMarkFor returns the TS-aligned required mark for a node kind.
 func requiredMarkFor(k Kind) int {
 	switch k {
@@ -52,24 +73,34 @@ func typeMarkFor(k Kind) int {
 
 // validateNode is the recursive validation engine. It returns the produced
 // value (defaults injected, child shapes validated) and writes errors via verr.
-func validateNode(n *node, in any, path []string, key string, parent any, ctx *Context, match bool, verr *ValidationError) any {
+func validateNode(n *node, in any, path []string, pathArr []any, key string, parent any, ctx *Context, match bool, verr *ValidationError) any {
 	if n == nil {
 		return in
 	}
 
+	// Translate the absent sentinel back to nil, remembering that the value was
+	// missing (JS undefined) rather than an explicit null.
+	absent := isUndef(in)
+	if absent {
+		in = nil
+	}
+
 	state := &State{
-		Path:   path,
-		Key:    key,
-		Value:  in,
-		Node:   n,
-		Parent: parent,
-		Match:  match,
-		Ctx:    ctx,
+		Path:    path,
+		PathArr: pathArr,
+		Key:     key,
+		Value:   in,
+		Node:    n,
+		Parent:  parent,
+		Match:   match,
+		Ctx:     ctx,
+		absent:  absent,
 	}
 
 	// Run before-validators. They may replace value, replace node, or short-circuit.
 	for _, b := range n.befores {
 		update := &Update{}
+		state.checkName = b.name
 		ok := b.fn(state.Value, update, state)
 		applyUpdate(state, update)
 		in = state.Value
@@ -87,13 +118,17 @@ func validateNode(n *node, in any, path []string, key string, parent any, ctx *C
 
 	// Composition shortcuts.
 	if n.kind == KindList {
-		out := evaluateList(n, state.Value, path, key, parent, ctx, match, verr)
+		out := evaluateList(n, state.Value, path, pathArr, key, parent, ctx, match, verr)
 		state.Value = out
 		runAfters(state, verr)
 		return state.Value
 	}
 
-	if state.Value == nil {
+	// Missing value (JS undefined): required error, skip, or inject the default.
+	// An explicit null (present, not absent) falls through to structural checks
+	// below — where, e.g., null against a String is a type error, not a required
+	// error (mirrors TS undefined-vs-null semantics).
+	if state.Value == nil && absent {
 		if n.required {
 			err := makeErr(state, WhyRequired, requiredMarkFor(n.kind), "")
 			if n.faultMsg != "" {
@@ -133,7 +168,7 @@ func validateNode(n *node, in any, path []string, key string, parent any, ctx *C
 			emitTypeErr(state, verr, n)
 			return state.Value
 		}
-		if s == "" && !n.empty && (n.required || n.hasLiteral) {
+		if s == "" && !n.empty {
 			err := makeErr(state, WhyRequired, markScalarRequired, "")
 			if n.faultMsg != "" {
 				err.Text = expandErrText(n.faultMsg, err.Path, state.Value)
@@ -168,12 +203,12 @@ func validateNode(n *node, in any, path []string, key string, parent any, ctx *C
 			return state.Value
 		}
 	case KindArray:
-		out = validateArray(n, state.Value, path, ctx, match, verr)
+		out = validateArray(n, state.Value, path, pathArr, ctx, match, verr)
 		if out == nil {
 			return state.Value
 		}
 	case KindObject:
-		out = validateObject(n, state.Value, path, ctx, match, verr)
+		out = validateObject(n, state.Value, path, pathArr, ctx, match, verr)
 		if out == nil {
 			return state.Value
 		}
@@ -205,6 +240,7 @@ func runAfters(state *State, verr *ValidationError) {
 	n := state.Node
 	for _, a := range n.afters {
 		update := &Update{}
+		state.checkName = a.name
 		ok := a.fn(state.Value, update, state)
 		applyUpdate(state, update)
 		if !ok {
@@ -219,10 +255,10 @@ func runAfters(state *State, verr *ValidationError) {
 	}
 }
 
-func validateArray(n *node, in any, path []string, ctx *Context, match bool, verr *ValidationError) any {
+func validateArray(n *node, in any, path []string, pathArr []any, ctx *Context, match bool, verr *ValidationError) any {
 	arr, ok := toAnySlice(in)
 	if !ok {
-		state := &State{Path: path, Value: in, Node: n, Match: match, Ctx: ctx}
+		state := &State{Path: path, PathArr: pathArr, Value: in, Node: n, Match: match, Ctx: ctx}
 		emitTypeErr(state, verr, n)
 		return nil
 	}
@@ -231,33 +267,40 @@ func validateArray(n *node, in any, path []string, ctx *Context, match bool, ver
 	case len(n.arrChildren) > 0:
 		// Tuple validation.
 		tupleLen := len(n.arrChildren)
+
+		// Closed tuple with extra elements: TS emits a single "index N is not
+		// allowed" error (N = tuple length) and does not validate any element.
+		if len(arr) > tupleLen && n.arrRest == nil {
+			state := &State{Path: path, PathArr: pathArr, Key: strconv.Itoa(tupleLen), Value: arr, Node: n, Match: match, Ctx: ctx}
+			err := makeErr(state, WhyClosed, markArrayClosed, "")
+			if !n.silent {
+				verr.add(err)
+			}
+			out := make([]any, len(arr))
+			copy(out, arr)
+			return out
+		}
+
 		out := make([]any, len(arr))
 		for i, v := range arr {
 			if i < tupleLen {
 				cn := n.arrChildren[i]
-				out[i] = validateNode(cn, v, append(path, strconv.Itoa(i)), strconv.Itoa(i), out, ctx, match, verr)
-			} else if n.arrRest != nil {
-				out[i] = validateNode(n.arrRest, v, append(path, strconv.Itoa(i)), strconv.Itoa(i), out, ctx, match, verr)
+				out[i] = validateNode(cn, v, append(path, strconv.Itoa(i)), append(pathArr, i), strconv.Itoa(i), out, ctx, match, verr)
 			} else {
-				// Closed tuple beyond declared length.
-				state := &State{Path: path, Key: strconv.Itoa(i), Value: arr, Node: n, Match: match, Ctx: ctx}
-				err := makeErr(state, WhyClosed, markArrayClosed, "")
-				if !n.silent {
-					verr.add(err)
-				}
-				out[i] = v
+				// len(arr) > tupleLen only reaches here when arrRest is set.
+				out[i] = validateNode(n.arrRest, v, append(path, strconv.Itoa(i)), append(pathArr, i), strconv.Itoa(i), out, ctx, match, verr)
 			}
 		}
 		// Missing tuple positions get their default.
 		for i := len(arr); i < tupleLen; i++ {
 			cn := n.arrChildren[i]
-			out = append(out, validateNode(cn, nil, append(path, strconv.Itoa(i)), strconv.Itoa(i), out, ctx, match, verr))
+			out = append(out, validateNode(cn, undefinedVal, append(path, strconv.Itoa(i)), append(pathArr, i), strconv.Itoa(i), out, ctx, match, verr))
 		}
 		return out
 	case n.arrChild != nil:
 		out := make([]any, len(arr))
 		for i, v := range arr {
-			out[i] = validateNode(n.arrChild, v, append(path, strconv.Itoa(i)), strconv.Itoa(i), out, ctx, match, verr)
+			out[i] = validateNode(n.arrChild, v, append(path, strconv.Itoa(i)), append(pathArr, i), strconv.Itoa(i), out, ctx, match, verr)
 		}
 		return out
 	default:
@@ -267,10 +310,10 @@ func validateArray(n *node, in any, path []string, ctx *Context, match bool, ver
 	}
 }
 
-func validateObject(n *node, in any, path []string, ctx *Context, match bool, verr *ValidationError) any {
+func validateObject(n *node, in any, path []string, pathArr []any, ctx *Context, match bool, verr *ValidationError) any {
 	obj, ok := in.(map[string]any)
 	if !ok {
-		state := &State{Path: path, Value: in, Node: n, Match: match, Ctx: ctx}
+		state := &State{Path: path, PathArr: pathArr, Value: in, Node: n, Match: match, Ctx: ctx}
 		emitTypeErr(state, verr, n)
 		return nil
 	}
@@ -299,6 +342,7 @@ func validateObject(n *node, in any, path []string, ctx *Context, match bool, ve
 		v, has := obj[k]
 		var produced any
 		kpath := append(path, k)
+		kpathArr := append(pathArr, k)
 
 		// Rename.claim: if the value is missing and claim source has it, pick up.
 		if !has && cn.renameTo != "" && len(cn.renameClaim) > 0 {
@@ -315,26 +359,34 @@ func validateObject(n *node, in any, path []string, ctx *Context, match bool, ve
 		}
 
 		if !has {
-			produced = validateNode(cn, nil, kpath, k, out, ctx, match, verr)
+			produced = validateNode(cn, undefinedVal, kpath, kpathArr, k, out, ctx, match, verr)
 			if cn.skippable && (produced == nil || cn.silent) {
 				delete(out, k)
 				continue
 			}
-			if produced == nil && !cn.hasDefault && cn.kind != KindObject && cn.kind != KindArray && cn.kind != KindNull {
+			// A nil produced value means nothing was injected (required error, or
+			// an optional field with no default) — omit the key, matching TS.
+			if produced == nil {
 				delete(out, k)
 				continue
 			}
 		} else {
-			beforeLen := len(verr.Issues)
-			produced = validateNode(cn, v, kpath, k, out, ctx, match, verr)
-			// Ignore: drop key from output and discard any errors raised.
+			// Ignore: keep the value only when it validates cleanly, otherwise drop
+			// it (and any errors it would raise). Probe with silent disabled so the
+			// failure is observable (mirrors TS Ignore inspecting curerr).
 			if cn.silent && cn.skippable {
-				if len(verr.Issues) > beforeLen {
-					verr.Issues = verr.Issues[:beforeLen]
+				probe := *cn
+				probe.silent = false
+				sub := &ValidationError{}
+				probed := validateNode(&probe, v, kpath, kpathArr, k, out, ctx, match, sub)
+				if sub.hasAny() {
+					delete(out, k)
+					continue
 				}
-				delete(out, k)
+				out[k] = probed
 				continue
 			}
+			produced = validateNode(cn, v, kpath, kpathArr, k, out, ctx, match, verr)
 		}
 
 		out[k] = produced
@@ -353,7 +405,7 @@ func validateObject(n *node, in any, path []string, ctx *Context, match bool, ve
 			continue
 		}
 		if !contains(n.objKeys, k) {
-			produced := validateNode(cn, nil, append(path, k), k, out, ctx, match, verr)
+			produced := validateNode(cn, undefinedVal, append(path, k), append(pathArr, k), k, out, ctx, match, verr)
 			if produced != nil {
 				out[k] = produced
 			}
@@ -366,7 +418,7 @@ func validateObject(n *node, in any, path []string, ctx *Context, match bool, ve
 			if _, declared := n.objChildren[k]; declared {
 				continue
 			}
-			out[k] = validateNode(n.objRest, v, append(path, k), k, out, ctx, match, verr)
+			out[k] = validateNode(n.objRest, v, append(path, k), append(pathArr, k), k, out, ctx, match, verr)
 		}
 	case n.open:
 		// keep unknown as-is
@@ -378,7 +430,7 @@ func validateObject(n *node, in any, path []string, ctx *Context, match bool, ve
 			// Closed: path is the parent's path; the offending key is
 			// reported separately. TS makeErrImpl renders this as:
 			//   Validation failed for property "<parent>" because the property "<k>" is not allowed.
-			state := &State{Path: path, Key: k, Value: obj, Node: n, Match: match, Ctx: ctx}
+			state := &State{Path: path, PathArr: pathArr, Key: k, Value: obj, Node: n, Match: match, Ctx: ctx}
 			err := makeErr(state, WhyClosed, markObjectClosed, "")
 			if !n.silent {
 				verr.add(err)
@@ -389,19 +441,19 @@ func validateObject(n *node, in any, path []string, ctx *Context, match bool, ve
 	return out
 }
 
-func evaluateList(n *node, in any, path []string, key string, parent any, ctx *Context, match bool, verr *ValidationError) any {
+func evaluateList(n *node, in any, path []string, pathArr []any, key string, parent any, ctx *Context, match bool, verr *ValidationError) any {
 	switch n.listMode {
 	case listOne:
 		passN := 0
 		var winner any = in
 		for _, sn := range n.list {
 			sub := &ValidationError{}
-			out := validateNode(sn, in, path, key, parent, ctx, true, sub)
+			out := validateNode(sn, in, path, pathArr, key, parent, ctx, true, sub)
 			if !sub.hasAny() {
 				passN++
 				if passN == 1 {
 					if !match {
-						out2 := validateNode(sn, in, path, key, parent, ctx, false, &ValidationError{})
+						out2 := validateNode(sn, in, path, pathArr, key, parent, ctx, false, &ValidationError{})
 						winner = out2
 					} else {
 						winner = out
@@ -411,9 +463,9 @@ func evaluateList(n *node, in any, path []string, key string, parent any, ctx *C
 			}
 		}
 		if passN != 1 {
-			state := &State{Path: path, Key: key, Value: in, Node: n, Match: match, Ctx: ctx}
+			state := &State{Path: path, PathArr: pathArr, Key: key, Value: in, Node: n, Match: match, Ctx: ctx}
 			err := makeErr(state, WhyOne, 4030,
-				fmt.Sprintf("Value $VALUE for property $PATH does not satisfy one of: %s", listShapeNames(n)))
+				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" does not satisfy one of: %s", listShapeNames(n)))
 			if n.faultMsg != "" {
 				err.Text = expandErrText(n.faultMsg, err.Path, in)
 			}
@@ -428,17 +480,17 @@ func evaluateList(n *node, in any, path []string, key string, parent any, ctx *C
 		var winner any = in
 		for _, sn := range n.list {
 			sub := &ValidationError{}
-			out := validateNode(sn, in, path, key, parent, ctx, true, sub)
+			out := validateNode(sn, in, path, pathArr, key, parent, ctx, true, sub)
 			if !sub.hasAny() {
 				matched = true
-				winner = validateNode(sn, in, path, key, parent, ctx, match, &ValidationError{})
+				winner = validateNode(sn, in, path, pathArr, key, parent, ctx, match, &ValidationError{})
 				_ = out
 			}
 		}
 		if !matched {
-			state := &State{Path: path, Key: key, Value: in, Node: n, Match: match, Ctx: ctx}
+			state := &State{Path: path, PathArr: pathArr, Key: key, Value: in, Node: n, Match: match, Ctx: ctx}
 			err := makeErr(state, WhySome, 4031,
-				fmt.Sprintf("Value $VALUE for property $PATH does not satisfy any of: %s", listShapeNames(n)))
+				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" does not satisfy any of: %s", listShapeNames(n)))
 			if n.faultMsg != "" {
 				err.Text = expandErrText(n.faultMsg, err.Path, in)
 			}
@@ -453,7 +505,7 @@ func evaluateList(n *node, in any, path []string, key string, parent any, ctx *C
 		out := in
 		for _, sn := range n.list {
 			sub := &ValidationError{}
-			res := validateNode(sn, out, path, key, parent, ctx, match, sub)
+			res := validateNode(sn, out, path, pathArr, key, parent, ctx, match, sub)
 			if sub.hasAny() {
 				passAll = false
 				if !match {
@@ -464,9 +516,9 @@ func evaluateList(n *node, in any, path []string, key string, parent any, ctx *C
 			}
 		}
 		if !passAll {
-			state := &State{Path: path, Key: key, Value: in, Node: n, Match: match, Ctx: ctx}
+			state := &State{Path: path, PathArr: pathArr, Key: key, Value: in, Node: n, Match: match, Ctx: ctx}
 			err := makeErr(state, WhyAll, 4032,
-				fmt.Sprintf("Value $VALUE for property $PATH does not satisfy all of: %s", listShapeNames(n)))
+				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" does not satisfy all of: %s", listShapeNames(n)))
 			if !n.silent {
 				verr.add(err)
 			}

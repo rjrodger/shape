@@ -1,0 +1,4 @@
+name	spec	input	output	error
+one-of-ok	{"a":{"$expr":"One(Number,String)"}}	{"a":"x"}	{"a":"x"}	
+one-of-fail	{"a":{"$expr":"One(Number,String)"}}	{"a":true}		Value "true" for property "a" does not satisfy one of: Number, String
+some-of-ok	{"a":{"$expr":"Some(Number,String)"}}	{"a":5}	{"a":5}	

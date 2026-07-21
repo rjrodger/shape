@@ -11,7 +11,16 @@ type Row = {
   error: string
 }
 
-const TSV_PATH = path.join(process.cwd(), 'test', 'compat.tsv')
+// Shared, language-neutral conformance corpus lives in the top-level test/ dir
+// and is consumed by both the TS and Go harnesses.
+const TSV_DIR = path.join(process.cwd(), '..', 'test')
+
+function tsvFiles(dir: string): string[] {
+  return fs.readdirSync(dir)
+    .filter(f => f.endsWith('.tsv'))
+    .sort()
+    .map(f => path.join(dir, f))
+}
 
 
 function parseValueCell(src: string): any {
@@ -94,6 +103,10 @@ function decodeSpec(v: any, Shape: any): any {
       return Shape.Optional(decodeSpec(v.$optional, Shape))
     }
 
+    if (1 === keys.length && '$expr' === keys[0]) {
+      return Shape.expr(v.$expr)
+    }
+
     const out: Record<string, any> = {}
     for (const k of keys) {
       out[k] = decodeSpec(v[k], Shape)
@@ -114,19 +127,34 @@ describe('compat-tsv', () => {
 
   const Shape = ShapeModule
 
-  const rows = parseTSV(TSV_PATH)
+  const rows = tsvFiles(TSV_DIR).flatMap(f => {
+    const base = path.basename(f, '.tsv')
+    return parseTSV(f).map(r => ({ ...r, name: `${base}/${r.name}` }))
+  })
 
   for (const row of rows) {
     test(row.name, () => {
       const schema = Shape(decodeSpec(row.spec, Shape))
 
       if (row.error) {
-        assert.throws(() => schema(structuredClone(row.input)), new RegExp(row.error, 'i'))
+        try {
+          schema(structuredClone(row.input))
+          assert.fail(`expected error containing "${row.error}"`)
+        }
+        catch (e: any) {
+          if ('ERR_ASSERTION' === e.code) throw e
+          assert.ok(
+            e.message.toLowerCase().includes(row.error.toLowerCase()),
+            `expected error containing "${row.error}", got "${e.message}"`)
+        }
         return
       }
 
       const out = schema(structuredClone(row.input))
-      assert.deepEqual(out, row.output)
+      // Compare JSON-normalized: the corpus travels through JSON, so undefined
+      // properties and numeric widths are erased on both sides (parity with Go).
+      const norm = JSON.parse(JSON.stringify(undefined === out ? null : out))
+      assert.deepEqual(norm, row.output)
     })
   }
 })

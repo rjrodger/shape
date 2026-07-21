@@ -1,0 +1,7 @@
+name	spec	input	output	error
+default-injection	{"port":8080,"host":"localhost"}	{"port":9090}	{"port":9090,"host":"localhost"}	
+default-deep	{"server":{"port":8080,"host":"localhost"}}	{}	{"server":{"port":8080,"host":"localhost"}}	
+required-token-missing	{"name":{"$type":"String"}}	{}		Validation failed for property "name" with value "undefined" because the value is required.
+required-token-present	{"name":{"$type":"String"}}	{"name":"alice"}	{"name":"alice"}	
+optional-absent	{"name":{"$optional":{"$type":"String"}}}	{}	{"name":""}	
+required-number-wrong-type	{"age":{"$type":"Number"}}	{"age":"x"}		Validation failed for property "age" with string "x" because the string is not of type number.
