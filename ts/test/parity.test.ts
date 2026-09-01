@@ -529,6 +529,10 @@ describe('isolation: Catch, Transform, Describe, Ignore', () => {
     const r1 = s({ a: 'x' }), r2 = s({ a: 'x' })
     r1.a.n = 9
     assert.equal(r2.a.n, 1)
+    const deep = Shape({ a: Catch({ n: { m: [1] } }, { n: Number }) })
+    const d1 = deep({ a: 'x' }), d2 = deep({ a: 'x' })
+    d1.a.n.m.push(2)
+    assert.deepEqual(d2.a.n.m, [1])
 
     assert.deepEqual(Shape({ a: Catch(null, Number) })({ a: 'x' }), { a: null })
     assert.equal(Shape(Shape.expr('Catch(0,Number)'))('x'), 0)
@@ -645,5 +649,85 @@ describe('discriminated union', () => {
     Shape({ p: D })({ p: { kind: 'cat' } }, ctx)
     assert.equal(ctx.err[0].why, 'Discriminated')
     assert.equal(ctx.err[0].check, 'Discriminated')
+  })
+})
+
+
+describe('object algebra: Pick, Omit, Partial, Extend', () => {
+  const { Pick, Omit, Partial, Extend, Closed, Open, Optional, Required } = Shape as any
+  const json = (v: any) => JSON.parse(JSON.stringify(v))
+  const BASE = () => ({ a: Number, b: String, c: Optional(Boolean) })
+
+  test('Pick keeps only the named properties', () => {
+    assert.deepEqual(Shape(Pick(['a'], BASE()))({ a: 1 }), { a: 1 })
+    assert.deepEqual(Shape(Pick(['a', 'c'], BASE()))({ a: 1 }), { a: 1, c: false })
+    // What was dropped is no longer declared, so a closed object rejects it.
+    assert.match(failure(Pick(['a'], BASE()), { a: 1, b: 'x' }),
+      /the property "b" is not allowed/)
+    // A name that is not a property is simply not picked.
+    assert.deepEqual(Shape(Pick(['a', 'zz'], BASE()))({ a: 1 }), { a: 1 })
+  })
+
+  test('Omit drops the named properties, and what is kept stays as it was', () => {
+    assert.deepEqual(Shape(Omit(['b'], BASE()))({ a: 1 }), { a: 1, c: false })
+    assert.match(failure(Omit(['b'], BASE()), {}), /property "a" .* is required/)
+    assert.match(failure(Omit(['b'], BASE()), { a: 1, b: 'x' }),
+      /the property "b" is not allowed/)
+  })
+
+  test('Partial makes every property optional, one level deep', () => {
+    assert.deepEqual(Shape(Partial(BASE()))({}), { a: 0, b: '', c: false })
+    // Optional, not untyped: a present value of the wrong type still fails.
+    assert.match(failure(Partial(BASE()), { a: 'x' }), /is not of type number/)
+    // One level only: a required grandchild stays required.
+    assert.match(
+      failure({ o: Partial({ a: Number, b: { c: String } }) }, { o: { b: {} } }),
+      /property "o\.b\.c" .* is required/)
+  })
+
+  test('Extend adds properties, and a name in both takes the new shape', () => {
+    assert.deepEqual(Shape(Extend({ d: Number }, BASE()))({ a: 1, b: 'x', d: 2 }),
+      { a: 1, b: 'x', d: 2, c: false })
+    assert.deepEqual(Shape(Extend({ a: String }, BASE()))({ a: 'x', b: 'y' }),
+      { a: 'x', b: 'y', c: false })
+    assert.match(failure(Extend({ d: Number }, BASE()), { a: 1, b: 'x' }),
+      /property "d" .* is required/)
+    // Whether unknown properties are allowed is not changed by extending.
+    assert.deepEqual(Shape(Extend({ d: Number }, Open(BASE())))({ a: 1, b: 'x', d: 2, z: 9 }),
+      { a: 1, b: 'x', d: 2, z: 9, c: false })
+  })
+
+  test('the shape given is left as it was', () => {
+    const base = BASE()
+    Pick(['a'], base)
+    Omit(['a'], base)
+    Partial(base)
+    Extend({ d: Number }, base)
+    assert.match(failure(base, {}), /property "a" .* is required/)
+    assert.deepEqual(Shape(base)({ a: 1, b: 'x' }), { a: 1, b: 'x', c: false })
+  })
+
+  test('key expressions resolve before a name is matched', () => {
+    const spec = { 'a: Integer': 0, b: String }
+    assert.deepEqual(Shape(Pick(['a'], spec))({ a: 1 }), { a: 1 })
+    assert.match(failure(Pick(['a'], spec), { a: 1.5 }), /is not of type integer/)
+    assert.deepEqual(Shape(Omit(['b'], spec))({ a: 1 }), { a: 1 })
+  })
+
+  test('openness, chaining, the string DSL, and a non-object shape', () => {
+    assert.deepEqual(Shape(Open(BASE()).Omit(['c']))({ a: 1, b: 'x', z: 9 }),
+      { a: 1, b: 'x', z: 9 })
+    assert.deepEqual(Shape(Closed(BASE()).Pick(['b']))({ b: 'x' }), { b: 'x' })
+    assert.deepEqual(Shape(Closed({ a: Number }).Partial())({}), { a: 0 })
+
+    assert.equal(Shape.stringify(Pick(['a'], BASE()), true), '{a:Number}')
+    assert.deepEqual(json(Shape(Shape.expr('Partial(Closed({}))'))({})), {})
+    assert.deepEqual(json(Shape(Shape.expr('Pick(["a"],Closed({}))'))({})), {})
+
+    assert.throws(() => Pick(['a'], Number), /Pick needs an object shape/)
+    assert.throws(() => Omit(['a'], Number), /Omit needs an object shape/)
+    assert.throws(() => Partial(Number), /Partial needs an object shape/)
+    assert.throws(() => Extend({ d: Number }, Number), /Extend needs an object shape/)
+    assert.throws(() => Extend(Number, BASE()), /Extend needs an object shape/)
   })
 })

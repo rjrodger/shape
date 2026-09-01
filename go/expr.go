@@ -407,6 +407,7 @@ func buildExprBuilders() map[string]exprBuilderFn {
 	"Func":     variadicNode(Func),
 	"Nullable": variadicNode(Nullable),
 	"Coerce":   variadicNode(Coerce),
+	"Partial":  variadicNode(Partial),
 	"Email":    variadicNode(Email),
 	"Url":      variadicNode(Url),
 	"Uuid":     variadicNode(Uuid),
@@ -422,6 +423,26 @@ func buildExprBuilders() map[string]exprBuilderFn {
 		dval := args[0]
 		spec := args[1:]
 		return Default(dval, exprShapes(spec)...), nil
+	},
+	"Pick": func(args []builderArg) (*Node, error) {
+		names, err := exprNames("Pick", args)
+		if err != nil {
+			return nil, err
+		}
+		return Pick(names, exprShapes(args[1:])...), nil
+	},
+	"Omit": func(args []builderArg) (*Node, error) {
+		names, err := exprNames("Omit", args)
+		if err != nil {
+			return nil, err
+		}
+		return Omit(names, exprShapes(args[1:])...), nil
+	},
+	"Extend": func(args []builderArg) (*Node, error) {
+		if len(args) < 1 {
+			return nil, fmt.Errorf("Extend: missing shape to add")
+		}
+		return Extend(exprShapes(args[:1])[0], exprShapes(args[1:])...), nil
 	},
 	"Catch": func(args []builderArg) (*Node, error) {
 		if len(args) < 1 {
@@ -562,6 +583,28 @@ func variadicNode(fn func(spec ...any) *Node) exprBuilderFn {
 	return func(args []builderArg) (*Node, error) {
 		return fn(exprShapes(args)...), nil
 	}
+}
+
+// exprNames reads a builder's leading list-of-property-names argument. The
+// tokenizer takes a single-element array literal only, in both languages
+// alike, so ["a","b"] is a parse error before it ever reaches here.
+func exprNames(builder string, args []builderArg) ([]string, error) {
+	if len(args) < 1 {
+		return nil, fmt.Errorf("%s: missing property names", builder)
+	}
+	arr, ok := args[0].([]any)
+	if !ok {
+		return nil, fmt.Errorf("%s: property names must be an array", builder)
+	}
+	out := make([]string, 0, len(arr))
+	for _, v := range arr {
+		s, ok := v.(string)
+		if !ok {
+			return nil, fmt.Errorf("%s: property names must be strings", builder)
+		}
+		out = append(out, s)
+	}
+	return out, nil
 }
 
 // exprShapes converts arguments that sit in a shape position. A bare `null`

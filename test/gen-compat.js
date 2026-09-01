@@ -32,6 +32,8 @@ const T = { $type: 'String' }, N = { $type: 'Number' }, B = { $type: 'Boolean' }
 const I = { $type: 'Integer' }, D = { $type: 'Date' }
 // A discriminated union over the "kind" property; each branch gets the tag added.
 const DISC = { $discriminated: ['kind', { dog: { bark: B }, fish: { fins: N } }] }
+// A closed object for the object algebra: a and b required, c optional.
+const BASE = { a: N, b: T, c: { $optional: B } }
 
 // Cases grouped by file. Each case: [name, spec, input].
 const files = {
@@ -196,6 +198,16 @@ const files = {
     ['disc-required-absent', { p: DISC }, {}],
     ['disc-optional-absent', { p: { $optional: DISC } }, {}],
     ['one-optional-absent', { a: { $expr: 'Optional(One(String,Number))' } }, {}],
+    ['pick-keeps-named', { $call: ['Pick', ['a'], BASE] }, { a: 1 }],
+    ['pick-dropped-is-unknown', { $call: ['Pick', ['a'], BASE] }, { a: 1, b: 'x' }],
+    ['omit-removes-named', { $call: ['Omit', ['b'], BASE] }, { a: 1 }],
+    ['omit-kept-still-required', { $call: ['Omit', ['b'], BASE] }, {}],
+    ['partial-all-optional', { $call: ['Partial', BASE] }, {}],
+    ['partial-still-typed', { $call: ['Partial', BASE] }, { a: 'x' }],
+    ['extend-adds', { $call: ['Extend', { d: N }, BASE] }, { a: 1, b: 'x', d: 2 }],
+    ['extend-overrides', { $call: ['Extend', { a: T }, BASE] }, { a: 'x', b: 'y' }],
+    ['extend-new-required', { $call: ['Extend', { d: N }, BASE] }, { a: 1, b: 'x' }],
+    ['pick-key-expression', { $call: ['Pick', ['a'], { 'a: Integer': 0, b: T }] }, { a: 1.5 }],
   ],
   composition: [
     ['one-of-ok', { a: { $expr: 'One(Number,String)' } }, { a: 'x' }],

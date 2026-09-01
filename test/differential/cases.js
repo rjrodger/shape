@@ -58,6 +58,9 @@ const DISC_IN = [
   null, 1, 'dog', [], [{ kind: 'dog' }],
 ]
 
+// A closed object for the object algebra: a and b required, c optional.
+const BASE = { a: N, b: T, c: { $optional: B } }
+
 function build() {
   const cases = []
   let n = 0
@@ -148,6 +151,16 @@ function build() {
   add('one-optional', { a: E('Optional(One(String,Number))') }, OBJS)
   add('some-optional', { a: E('Optional(Some(String,Number))') }, OBJS)
   add('all-optional', { a: E('Optional(All(String,Min(2)))') }, OBJS)
+
+  // Object algebra: new object nodes, the given shape left as it was.
+  add('pick', { $call: ['Pick', ['a', 'c'], BASE] }, OBJS)
+  add('omit', { $call: ['Omit', ['b'], BASE] }, OBJS)
+  add('partial', { $call: ['Partial', BASE] }, OBJS)
+  add('extend', { $call: ['Extend', { d: { $optional: N } }, BASE] }, OBJS)
+  add('extend-override', { $call: ['Extend', { a: T }, BASE] }, OBJS)
+  add('pick-keyexpr', { $call: ['Pick', ['a'], { 'a: Integer': 0, b: T }] }, OBJS)
+  add('partial-prop', { p: { $call: ['Partial', BASE] } }, [{}, { p: {} }, { p: { a: 1 } }, { p: { a: 'x' } }, { p: 1 }])
+  add('partial-open', { $call: ['Partial', { $open: BASE }] }, OBJS)
 
   // A type token with arguments applies the type to them.
   add('dsl-token-args-str', E('String(Min(2))'), SCALARS)

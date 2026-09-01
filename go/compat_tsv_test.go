@@ -267,6 +267,27 @@ func decodeSpec(v any) any {
 				return MustExpr(es)
 			}
 		}
+		if cv, ok := obj["$call"]; ok {
+			arr := cv.([]any)
+			names := func(v any) []string {
+				var out []string
+				for _, s := range v.([]any) {
+					out = append(out, s.(string))
+				}
+				return out
+			}
+			switch arr[0].(string) {
+			case "Pick":
+				return Pick(names(arr[1]), decodeSpec(arr[2]))
+			case "Omit":
+				return Omit(names(arr[1]), decodeSpec(arr[2]))
+			case "Partial":
+				return Partial(decodeSpec(arr[1]))
+			case "Extend":
+				return Extend(decodeSpec(arr[1]), decodeSpec(arr[2]))
+			}
+			panic("unknown $call " + arr[0].(string))
+		}
 		if dv, ok := obj["$discriminated"]; ok {
 			arr := dv.([]any)
 			branches := map[string]any{}

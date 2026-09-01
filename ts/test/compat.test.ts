@@ -117,6 +117,11 @@ function decodeSpec(v: any, Shape: any): any {
       return Shape.expr(v.$expr)
     }
 
+    if (1 === keys.length && '$call' === keys[0]) {
+      const [name, ...args] = v.$call
+      return Shape[name](...args.map((a: any) => decodeSpec(a, Shape)))
+    }
+
     if (1 === keys.length && '$discriminated' === keys[0]) {
       const [tag, branches] = v.$discriminated
       const out: Record<string, any> = {}

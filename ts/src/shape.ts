@@ -222,6 +222,7 @@ const S = {
   Default: 'Default',
   Empty: 'Empty',
   Exact: 'Exact',
+  Extend: 'Extend',
   Func: 'Func',
   Key: 'Key',
   Max: 'Max',
@@ -241,8 +242,11 @@ const S = {
   Uuid: 'Uuid',
   Len: 'Len',
   One: 'One',
+  Omit: 'Omit',
   Open: 'Open',
   Optional: 'Optional',
+  Partial: 'Partial',
+  Pick: 'Pick',
   Refer: 'Refer',
   Rename: 'Rename',
   Required: 'Required',
@@ -2313,6 +2317,106 @@ const Discriminated = function(this: any, tag: string, branches: Record<string, 
 }
 
 
+// Object Algebra: Pick, Omit, Partial, Extend
+// ===========================================
+// Each returns a new object node; the shape given is left as it was, and the
+// children kept are shared with it. Key expressions are resolved first, so a
+// key is matched by the property it names.
+
+function objectNode(self: any, shape: any, name: string): Node<any> {
+  const node = buildize(self, shape)
+  if (S.object !== node.t) {
+    throw new Error('Shape: ' + name + ' needs an object shape')
+  }
+  return node
+}
+
+
+// The children of an object node by the property each names.
+function resolvedChildren(node: Node<any>): Record<string, Node<any>> {
+  const out: Record<string, Node<any>> = {}
+  for (const k of keys(node.v)) {
+    const m = KEY_EXPR_RE.exec(k)
+    const rk = m ? m[1] : k
+    out[rk] = nodize(m ? keyExprNode(m[3], node.v[k], node.d + 1) : node.v[k])
+  }
+  return out
+}
+
+
+// A copy of a node — its own flags, checks and children map — so that one can
+// change without the other. Grandchildren are shared.
+function copyNode(node: any, over: any): Node<any> {
+  const copy: any = {
+    $: node.$, t: node.t, d: node.d, v: node.v, f: node.f, r: node.r, p: node.p, n: node.n,
+    c: node.c, k: [], e: node.e, z: node.z,
+    u: { ...node.u }, b: node.b.slice(), a: node.a.slice(), m: { ...node.m },
+    ...over,
+  }
+  return buildize(undefined, copy)
+}
+
+
+function withChildren(node: Node<any>, v: Record<string, any>): Node<any> {
+  return copyNode(node, { v, n: keys(v).length })
+}
+
+
+// Keep only the named properties.
+const Pick = function(this: any, names: string[], shape?: any): Node<any> {
+  const node = objectNode(this, shape, S.Pick)
+  const want = new Set(names)
+  const all = resolvedChildren(node)
+  const v: Record<string, any> = {}
+  for (const k of keys(all)) {
+    if (want.has(k)) {
+      v[k] = all[k]
+    }
+  }
+  return withChildren(node, v)
+}
+
+
+// Drop the named properties.
+const Omit = function(this: any, names: string[], shape?: any): Node<any> {
+  const node = objectNode(this, shape, S.Omit)
+  const drop = new Set(names)
+  const all = resolvedChildren(node)
+  const v: Record<string, any> = {}
+  for (const k of keys(all)) {
+    if (!drop.has(k)) {
+      v[k] = all[k]
+    }
+  }
+  return withChildren(node, v)
+}
+
+
+// Every property optional (one level deep).
+const Partial = function(this: any, shape?: any): Node<any> {
+  const node = objectNode(this, shape, S.Partial)
+  const all = resolvedChildren(node)
+  const v: Record<string, any> = {}
+  for (const k of keys(all)) {
+    v[k] = Optional(copyNode(all[k], {}))
+  }
+  return withChildren(node, v)
+}
+
+
+// Add the properties of another object shape; a property named by both takes
+// the new shape. Whether unknown properties are allowed stays as it was.
+const Extend = function(this: any, more: any, shape?: any): Node<any> {
+  const node = objectNode(this, shape, S.Extend)
+  const v = resolvedChildren(node)
+  const extra = resolvedChildren(objectNode(undefined, more, S.Extend))
+  for (const k of keys(extra)) {
+    v[k] = extra[k]
+  }
+  return withChildren(node, v)
+}
+
+
 // Value may also be null. Absent is still governed by required/optional.
 const Nullable = function <V>(this: any, shape?: Node<V> | V): Node<V> {
   let node = buildize(this, shape)
@@ -3270,6 +3374,7 @@ function buildize<V>(self?: any, shape?: any): Node<V> {
       Empty,
       Email,
       Exact,
+      Extend,
       Fault,
       Func,
       Ignore,
@@ -3282,8 +3387,11 @@ function buildize<V>(self?: any, shape?: any): Node<V> {
       Min,
       Never,
       Nullable,
+      Omit,
       Open,
       Optional,
+      Partial,
+      Pick,
       Refer,
       Rename,
       Required,
@@ -3663,19 +3771,17 @@ function stringify(
 }
 
 
-function clone(x: any) {
+// A deep copy of plain data: a default or a Catch fallback is handed out
+// fresh each time, so that no two results share it.
+function clone(x: any): any {
   if (null == x || S.object !== typeof x) return x
-  if (isarr(x)) return x.slice()
+  if (isarr(x)) return x.map(clone)
   if (x instanceof RegExp) return new RegExp(x.source, x.flags)
   if (x instanceof Date) return new Date(x.getTime())
   const out: any = {}
-  // Defensive: internal callers only ever clone the empty EMPTY_VAL objects, so
-  // this copy loop is never reached with own-enumerable keys in practice.
-  /* node:coverage disable */
   for (const k in x) {
-    if (x.hasOwnProperty(k)) out[k] = x[k]
+    if (x.hasOwnProperty(k)) out[k] = clone(x[k])
   }
-  /* node:coverage enable */
   return out
 }
 
@@ -3706,6 +3812,7 @@ const BuilderMap = {
   Email,
   Empty,
   Exact,
+  Extend,
   Fault,
   Func,
   Ignore,
@@ -3719,9 +3826,12 @@ const BuilderMap = {
   Min,
   Never,
   Nullable,
+  Omit,
   One,
   Open,
   Optional,
+  Partial,
+  Pick,
   Refer,
   Rename,
   Required,
@@ -3820,6 +3930,10 @@ const GInteger = Integer
 const GCoerce = Coerce
 const GCatch = Catch
 const GDescribe = Describe
+const GExtend = Extend
+const GOmit = Omit
+const GPartial = Partial
+const GPick = Pick
 const GDiscriminated = Discriminated
 const GTransform = Transform
 const GDateTime = DateTime
@@ -4035,6 +4149,7 @@ export {
   Email,
   Empty,
   Exact,
+  Extend,
   Fault,
   Func,
   Ignore,
@@ -4048,9 +4163,12 @@ export {
   Min,
   Never,
   Nullable,
+  Omit,
   One,
   Open,
   Optional,
+  Partial,
+  Pick,
   Refer,
   Rename,
   Required,
@@ -4074,6 +4192,10 @@ export {
   GCoerce,
   GCatch,
   GDescribe,
+  GExtend,
+  GOmit,
+  GPartial,
+  GPick,
   GDiscriminated,
   GTransform,
   GDateTime,
