@@ -442,13 +442,39 @@ func TestOptionsCoverage(t *testing.T) {
 // --- Refer with fill + define across paths -----------------------------
 
 func TestReferFillFull(t *testing.T) {
+	// Fill injects the referenced shape, and the injected value is validated
+	// like any other: a defaulted child is filled in...
 	s := MustShape(map[string]any{
+		"def": Define("shared", map[string]any{"v": 1.0}),
+		"use": ReferWith("shared", ReferOptions{Fill: true}),
+	})
+	out := mustOK(t, s, map[string]any{"def": map[string]any{"v": 9.0}})
+	use, ok := out.(map[string]any)["use"].(map[string]any)
+	if !ok || use["v"] != 1.0 {
+		t.Fatalf("refer fill did not inject: %#v", out)
+	}
+
+	// ...and a supplied value wins over the default.
+	out = mustOK(t, s, map[string]any{
+		"def": map[string]any{"v": 9.0},
+		"use": map[string]any{"v": 3.0},
+	})
+	if out.(map[string]any)["use"].(map[string]any)["v"] != 3.0 {
+		t.Fatalf("refer fill overrode supplied value: %#v", out)
+	}
+
+	// A required child of the referenced shape is still required, so filling
+	// an absent key reports it rather than injecting a hollow object.
+	sr := MustShape(map[string]any{
 		"def": Define("shared", map[string]any{"v": Number}),
 		"use": ReferWith("shared", ReferOptions{Fill: true}),
 	})
-	out := mustOK(t, s, map[string]any{"def": map[string]any{"v": 1.0}})
-	if _, ok := out.(map[string]any)["use"]; !ok {
-		t.Fatalf("refer fill did not inject: %#v", out)
+	_, err := sr.Validate(map[string]any{"def": map[string]any{"v": 1.0}})
+	if err == nil {
+		t.Fatalf("expected required error for use.v")
+	}
+	if !strings.Contains(err.Error(), `property "use.v"`) {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

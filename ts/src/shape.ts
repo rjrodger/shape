@@ -25,7 +25,7 @@ import { inspect } from 'util'
 
 
 // Package version.
-const VERSION = '10.1.3'
+const VERSION = '11.0.0'
 
 // Unique symbol for marking and recognizing Shape shapes.
 const SHAPE$ = Symbol.for('shape$')
@@ -94,7 +94,9 @@ type ValType =
   'array' |     // An array.
   'bigint' |    // A BigInt value.
   'boolean' |   // The values `true` or `false`.
+  'date' |      // A Date instance.
   'function' |  // A function.
+  'integer' |   // A number with no fractional part.
   'instance' |  // An instance of a constructed object.
   'list' |      // A list of types under a given logical rule.
   'nan' |       // The `NaN` value.
@@ -193,6 +195,8 @@ const S = {
   closed: 'closed',
   check: 'check',
   regexp: 'regexp',
+  integer: 'integer',
+  date: 'date',
 
   String: 'String',
   Number: 'Number',
@@ -201,6 +205,8 @@ const S = {
   Array: 'Array',
   Symbol: 'Symbol',
   Function: 'Function',
+  Integer: 'Integer',
+  Date: 'Date',
   Value: 'Value',
 
   Above: 'Above',
@@ -221,6 +227,18 @@ const S = {
   Max: 'Max',
   Min: 'Min',
   Never: 'Never',
+  Nullable: 'Nullable',
+  Catch: 'Catch',
+  Coerce: 'Coerce',
+  Describe: 'Describe',
+  Discriminated: 'Discriminated',
+  DateTime: 'DateTime',
+  Email: 'Email',
+  Ip: 'Ip',
+  Ipv4: 'Ipv4',
+  Ipv6: 'Ipv6',
+  Url: 'Url',
+  Uuid: 'Uuid',
   Len: 'Len',
   One: 'One',
   Open: 'Open',
@@ -229,6 +247,7 @@ const S = {
   Rename: 'Rename',
   Required: 'Required',
   Skip: 'Skip',
+  Transform: 'Transform',
   Ignore: 'Ignore',
   Some: 'Some',
   Fault: 'Fault',
@@ -248,6 +267,7 @@ const TNAT = {
   [S.Array]: Array,
   [S.Symbol]: Symbol,
   [S.Function]: Function,
+  [S.Date]: Date,
 }
 
 
@@ -572,6 +592,7 @@ const IS_TYPE: { [name: string]: boolean } = {
   Array: true,
   BigInt: true,
   Boolean: true,
+  Date: true,
   Function: true,
   Number: true,
   Object: true,
@@ -584,6 +605,7 @@ const IS_TYPE: { [name: string]: boolean } = {
 const EMPTY_VAL: { [name: string]: any } = {
   string: '',
   number: 0,
+  integer: 0,
   boolean: false,
   object: {},
   array: [],
@@ -602,8 +624,15 @@ function nodize<S>(shape?: any, depth?: number, meta?: NodeMeta): Node<S> {
     shape = undefined
   }
 
+  // A bare builder reference (`{ a: Any }`) means that builder applied to
+  // nothing. Without this it falls through to the class-instance branch below
+  // and becomes an `instanceof` check that can never pass.
+  if (S.function === typeof shape && true === (shape as any).nullary$) {
+    shape = shape()
+  }
+
   // Is this a (possibly incomplete) Node<S>?
-  else if (null != shape && shape.$?.shape$) {
+  if (null != shape && shape.$?.shape$) {
 
     // Assume complete if shape$ has special internal reference.
     if (SHAPE$ === shape.$.shape$) {
@@ -678,6 +707,9 @@ function nodize<S>(shape?: any, depth?: number, meta?: NodeMeta): Node<S> {
       if ('[object RegExp]' === strdesc) {
         t = (S.regexp as ValType)
         r = true
+      }
+      else if ('[object Date]' === strdesc) {
+        t = (S.date as ValType)
       }
       else {
         t = (S.instance as ValType)
@@ -879,7 +911,12 @@ function shapify<S>(intop?: S | Node<S>, inopts?: ShapeOptions) {
         let descend = true
         let valundef = undefined === s.val
 
-        if (S.never === s.type) {
+        // Nullable: an explicit null is accepted as the value.
+        if (null === s.val && n.u.nullable) {
+          s.ctx.log && s.ctx.log('kv', s)
+        }
+
+        else if (S.never === s.type) {
           s.curerr.push(makeErrImpl(S.never, s, 1070))
         }
 
@@ -904,6 +941,11 @@ function shapify<S>(intop?: S | Node<S>, inopts?: ShapeOptions) {
           ) {
             s.curerr.push(makeErrImpl(S.type, s, 1020))
             val = isarr(s.val) ? s.val : {}
+
+            // The container is the wrong type, so its declared keys are
+            // meaningless. Descending would add a spurious "is required" error
+            // for every one of them on top of the real type error.
+            descend = false
           }
 
           // Not skippable, use default or create object
@@ -972,7 +1014,7 @@ function shapify<S>(intop?: S | Node<S>, inopts?: ShapeOptions) {
                       rk = m[1]
                       let src = m[3]
 
-                      ov = expr({ src, d: 1 + s.dI, meta }, ov)
+                      ov = keyExprNode(src, ov, 1 + s.dI, meta)
                       delete n.v[k]
                     }
                   }
@@ -1169,7 +1211,9 @@ function shapify<S>(intop?: S | Node<S>, inopts?: ShapeOptions) {
           undefined === s.val ||
           s.type === s.valType ||
           (S.instance === s.type && n.u.i && s.val instanceof n.u.i) ||
-          (S.null === s.type && null === s.val)
+          (S.null === s.type && null === s.val) ||
+          (S.integer === s.type && S.number === s.valType && Number.isInteger(s.val)) ||
+          (S.date === s.type && s.val instanceof Date && !isNaN(s.val.getTime()))
         )) {
           s.curerr.push(makeErrImpl(S.type, s, 1050))
         }
@@ -1547,6 +1591,57 @@ function expr(
 }
 
 
+// Build the node for a key expression such as `{ 'a: Optional(Number)': 5 }`.
+//
+// expr() splices the example value in as the innermost builder call's last
+// argument. Where that lands in a shape slot the builder reads, it does the
+// right thing: `Min(2)` becomes `Min(2, 5)` and takes the example's kind and
+// default, `Child(Number)` becomes `Child(Number, [])` and becomes an array.
+// But a builder whose arity is already satisfied drops it silently —
+// `Optional(Number, 5)` ignores the 5 and injects the Number token's 0 — and
+// the example is the author's stated default, so it should survive.
+//
+// Building both ways tells the two apart: if the example made no difference to
+// the node, the builder ignored it, and it is applied as the value/default
+// instead. The kind is left alone, since only the builder knows whether it
+// declared one or merely defaulted to it.
+function keyExprNode(src: string, example: any, depth: number, meta?: NodeMeta) {
+  const node: any = expr({ src, d: depth, meta }, example)
+
+  if (undefined === example || null == node || !node.$?.shape$) {
+    return node
+  }
+
+  const bare: any = expr({ src, d: depth, meta })
+
+  if (null == bare || !bare.$?.shape$ || !sameShapeNode(node, bare)) {
+    return node
+  }
+
+  const ex: any = nodize(example, depth, meta)
+
+  node.v = ex.v
+  node.f = ex.f
+  node.n = null != ex.v && S.object === typeof (ex.v) ? keys(ex.v).length : 0
+
+  return node
+}
+
+
+// Structural comparison of the parts of a node a key expression's example
+// could have influenced.
+function sameShapeNode(x: any, y: any): boolean {
+  return x.t === y.t &&
+    x.r === y.r &&
+    x.p === y.p &&
+    x.b.length === y.b.length &&
+    x.a.length === y.a.length &&
+    JSON.stringify(x.v) === JSON.stringify(y.v) &&
+    JSON.stringify(x.f) === JSON.stringify(y.f) &&
+    JSON.stringify(x.c) === JSON.stringify(y.c)
+}
+
+
 function build(v: any, opts: ShapeOptions = {}, top = true) {
   let out: any
   const t = Array.isArray(v) ? 'array' : null === v ? 'null' : typeof v
@@ -1667,7 +1762,7 @@ function handleValidate(vf: Validate, s: State): Update {
 
 // Create string description of property path, using "dot notation".
 function pathstr(s: State) {
-  let out = ''
+  let out = null == s.ctx.path$ ? '' : s.ctx.path$.join('.')
   for (let i = 1; i <= s.dI; i++) {
     const p = s.path[i]
     if (null != p) {
@@ -1682,7 +1777,7 @@ function pathstr(s: State) {
 // Create an array form of the property path. Numeric entries for array
 // element indices are emitted as numbers; object keys remain strings.
 function patharr(s: State): (string | number)[] {
-  const out: (string | number)[] = []
+  const out: (string | number)[] = null == s.ctx.path$ ? [] : s.ctx.path$.slice()
   for (let i = 1; i <= s.dI; i++) {
     const p = s.path[i]
     if (null != p) {
@@ -1694,11 +1789,17 @@ function patharr(s: State): (string | number)[] {
 }
 
 
+// A bound on a number or a date compares the value itself; anything else is
+// measured by its length or key count.
+const isNumeric = (val: any) => S.number === typeof (val) || val instanceof Date
+
+
 function valueLen(val: any) {
   return S.number === typeof (val) ? val :
     S.number === typeof (val?.length) ? val.length :
-      null != val && S.object === typeof (val) ? keys(val).length :
-        NaN
+      val instanceof Date ? val.getTime() :
+        null != val && S.object === typeof (val) ? keys(val).length :
+          NaN
 }
 
 
@@ -1767,10 +1868,482 @@ const Optional = function <V>(this: any, shape?: Node<V> | V): Node<V> {
 }
 
 
+// Strict ISO 8601 / RFC 3339 date-time: the one form both implementations parse
+// identically. Calendar ranges are checked so that 2024-02-30 is rejected
+// rather than rolled over into March.
+const ISO_DATETIME_RE =
+  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?(Z|[+-]\d{2}:\d{2})$/
+
+function isoDateTime(s: string): boolean {
+  const m = ISO_DATETIME_RE.exec(s)
+  if (null == m) {
+    return false
+  }
+
+  const y = +m[1], mo = +m[2], d = +m[3], h = +m[4], mi = +m[5], sec = +m[6]
+  if (mo < 1 || 12 < mo || 23 < h || 59 < mi || 59 < sec) {
+    return false
+  }
+
+  const leap = (0 === y % 4 && 0 !== y % 100) || 0 === y % 400
+  const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][mo - 1]
+  if (d < 1 || days < d) {
+    return false
+  }
+
+  if ('Z' !== m[8] && (23 < +m[8].substring(1, 3) || 59 < +m[8].substring(4, 6))) {
+    return false
+  }
+
+  return true
+}
+
+
+// Decimal numeric strings only: no hex, no Infinity, nothing JS's Number()
+// would accept that a Go strconv would not.
+const NUMERIC_RE = /^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/
+
+
+// The value a Coerce node converts to for kind t, or undefined to leave it as
+// it is (and let the type check report it).
+function coerceTo(t: string, val: any): any {
+  const vt = typeof val
+
+  if (S.number === t || S.integer === t) {
+    if (S.string === vt) {
+      const str = val.trim()
+      return NUMERIC_RE.test(str) && isFinite(Number(str)) ? Number(str) : undefined
+    }
+    if (S.boolean === vt) {
+      return val ? 1 : 0
+    }
+  }
+  else if (S.string === t) {
+    if (S.number === vt) {
+      return isFinite(val) ? String(val) : undefined
+    }
+    if (S.boolean === vt) {
+      return val ? 'true' : 'false'
+    }
+  }
+  else if (S.boolean === t) {
+    if (S.string === vt) {
+      const str = val.trim().toLowerCase()
+      return 'true' === str || '1' === str ? true :
+        'false' === str || '0' === str ? false : undefined
+    }
+    if (S.number === vt) {
+      return 1 === val ? true : 0 === val ? false : undefined
+    }
+  }
+  else if (S.date === t) {
+    if (S.string === vt) {
+      const str = val.trim()
+      return isoDateTime(str) ? new Date(str) : undefined
+    }
+    if (S.number === vt) {
+      return isFinite(val) ? new Date(val) : undefined
+    }
+  }
+
+  return undefined
+}
+
+
+// Convert the value to the node's kind where the conversion is unambiguous,
+// before the type check: a decimal string to a number, "true"/"false"/"1"/"0"
+// to a boolean, a number or boolean to a string, an ISO 8601 string or a time
+// value to a Date. Anything else is left alone, so the usual type error speaks.
+const Coerce = function <V>(this: any, shape?: Node<V> | V): Node<V> {
+  let node = buildize(this, shape)
+
+  const coercer: any = function Coerce(val: any, update: Update, state: State) {
+    const c = coerceTo(state.node.t, val)
+    if (undefined !== c) {
+      update.val = c
+    }
+    return true
+  }
+  coercer.n = S.Coerce
+
+  // Ahead of any bound, so a bound sees the converted value.
+  node.b.unshift(coercer)
+
+  return node
+}
+
+
+// String Formats: Email, Url, Uuid, DateTime, Ip, Ipv4, Ipv6
+// ==========================================================
+// Every pattern here is written so that the JavaScript engine and RE2 agree on
+// it: ASCII classes only, no lookaround, explicit whitespace.
+
+// A pragmatic RFC 5322 addr-spec: a dot-atom local part of at most 64
+// characters, then a dotted domain ending in an alphabetic top-level label,
+// 254 characters in all. No quoted local parts, no address literals.
+const EMAIL_RE =
+  /^[A-Za-z0-9!#$%&'*+\/=?^_`{|}~-]+(?:\.[A-Za-z0-9!#$%&'*+\/=?^_`{|}~-]+)*@(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63}$/
+
+function isEmail(s: string): boolean {
+  return s.length <= 254 && s.indexOf('@') <= 64 && EMAIL_RE.test(s)
+}
+
+
+// scheme://[user@]host[:port][/path][?query][#fragment]: an absolute URL with
+// a non-empty host and no whitespace. Nothing is decoded or resolved.
+const URL_RE =
+  /^[A-Za-z][A-Za-z0-9+.-]*:\/\/(?:[^ \t\r\n\/?#@]+@)?(?:\[[0-9A-Fa-f:.]+\]|[^ \t\r\n\/?#@:\[\]]+)(?::\d{1,5})?(?:[\/?#][^ \t\r\n]*)?$/
+
+
+// 8-4-4-4-12 hex digits; any version, including the nil UUID.
+const UUID_RE =
+  /^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$/
+
+
+// A dotted quad of decimal octets 0-255 without leading zeros.
+const IPV4_RE =
+  /^(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/
+
+const HEX4_RE = /^[0-9A-Fa-f]{1,4}$/
+
+
+// RFC 4291 text form: eight 16-bit hex groups, one optional "::" standing for
+// a run of zero groups, and optionally a trailing dotted quad in place of the
+// last two groups. No zone index and no prefix length.
+function isIpv6(s: string): boolean {
+  const parts = s.split('::')
+  if (2 < parts.length) {
+    return false
+  }
+
+  const head = '' === parts[0] ? [] : parts[0].split(':')
+  const tail = 2 === parts.length && '' !== parts[1] ? parts[1].split(':') : []
+  const groups = head.concat(tail)
+
+  let count = 0
+  for (let gI = 0; gI < groups.length; gI++) {
+    if (HEX4_RE.test(groups[gI])) {
+      count++
+    }
+
+    // A dotted quad may only end the address, so not ahead of a "::".
+    else if (gI === groups.length - 1 && (1 === parts.length || head.length <= gI) &&
+      IPV4_RE.test(groups[gI])) {
+      count += 2
+    }
+    else {
+      return false
+    }
+  }
+
+  return 2 === parts.length ? count <= 7 : 8 === count
+}
+
+
+// A format is a before on a string-shaped node. It speaks only once the value
+// is known to be present and of the node's kind; otherwise the structural
+// check reports the real problem.
+function makeFormatBuilder(
+  self: any,
+  shape: any,
+  name: string,
+  what: string,
+  valid: (str: string) => boolean
+) {
+  let node = buildize(self, shape)
+
+  // A format is a shape of string, so an untyped node becomes one.
+  if (S.any === node.t) {
+    Type.call(node, String)
+  }
+
+  let validator: any = function(val: any, update: Update, state: State) {
+    if (undefined === val || typeWillFail(state)) {
+      return true
+    }
+    if (S.string === typeof val && valid(val)) {
+      return true
+    }
+    update.err = makeErr(state,
+      S.Value + ' ' + S.$VALUE + S.forprop + S.$PATH + ' is not a valid ' + what + '.',
+      name)
+    return false
+  }
+
+  Object.defineProperty(validator, S.name, { value: name })
+
+  validator.n = name
+  validator.s = () => name
+
+  validator[Symbol.for('nodejs.util.inspect.custom')] = name
+  validator.toJSON = () => name
+
+  node.b.push(validator)
+
+  return node
+}
+
+
+const Email = function <V>(this: any, shape?: Node<V> | V): Node<V> {
+  return makeFormatBuilder(this, shape, S.Email, 'email address', isEmail)
+}
+
+const Url = function <V>(this: any, shape?: Node<V> | V): Node<V> {
+  return makeFormatBuilder(this, shape, S.Url, 'URL', (s) => URL_RE.test(s))
+}
+
+const Uuid = function <V>(this: any, shape?: Node<V> | V): Node<V> {
+  return makeFormatBuilder(this, shape, S.Uuid, 'UUID', (s) => UUID_RE.test(s))
+}
+
+// The string form of a date-time; the value stays a string. Coerce(Date) is
+// the one that produces a Date.
+const DateTime = function <V>(this: any, shape?: Node<V> | V): Node<V> {
+  return makeFormatBuilder(this, shape, S.DateTime, 'ISO 8601 date-time', isoDateTime)
+}
+
+const Ip = function <V>(this: any, shape?: Node<V> | V): Node<V> {
+  return makeFormatBuilder(this, shape, S.Ip, 'IP address',
+    (s) => IPV4_RE.test(s) || isIpv6(s))
+}
+
+const Ipv4 = function <V>(this: any, shape?: Node<V> | V): Node<V> {
+  return makeFormatBuilder(this, shape, S.Ipv4, 'IPv4 address', (s) => IPV4_RE.test(s))
+}
+
+const Ipv6 = function <V>(this: any, shape?: Node<V> | V): Node<V> {
+  return makeFormatBuilder(this, shape, S.Ipv6, 'IPv6 address', isIpv6)
+}
+
+
+// Isolated Validation: Catch, Transform, Ignore
+// =============================================
+// These builders take the checks a node carries — its befores, its afters —
+// inside, and validate the node as a whole (those checks, the structural
+// check, every descendant) in a sub-run before the node itself proceeds. Only
+// then is the outcome of the entire subtree known: a node's afters run before
+// its children are visited, so an after alone cannot see a descendant fail.
+
+type Inner = { b: Validate[], a: Validate[] }
+
+function takeInner(node: Node<any>): Inner {
+  const inner = { b: node.b, a: node.a }
+  node.b = []
+  node.a = []
+  return inner
+}
+
+
+// Render the taken checks ahead of the taking builder, so that the shape
+// still reads Number.Min(2).Catch(0).
+function innerDesc(inner: Inner, n: Node<any>): string {
+  return inner.b.concat(inner.a).map((v: any) => v.s ? v.s(n) + '.' : '').join('')
+}
+
+
+const probeShapes = new WeakMap<Inner, { top: any, exec: any }>()
+
+// Validate the node as it stands, with the taken checks, in isolation. Errors
+// are collected, with their full paths, rather than thrown; Define names are
+// shared with the run that is probing.
+function probeNode(state: State, inner: Inner, val: any): { out: any, errs: ErrDesc[] } {
+  // Errors must be observable, so the probe is never silent (Ignore's e).
+  let ps = probeShapes.get(inner)
+  if (undefined === ps) {
+    const top: any = { ...state.node, b: inner.b, a: inner.a, e: true }
+    ps = { top, exec: shapify(top) }
+    probeShapes.set(inner, ps)
+  }
+  else {
+    // The node may have been wrapped further since (Optional, Default, ...).
+    Object.assign(ps.top, state.node, { b: inner.b, a: inner.a, e: true })
+  }
+
+  const errs: ErrDesc[] = []
+  const ref = state.ctx.ref = state.ctx.ref || {}
+  const out = ps.exec(val, { err: errs, ref, log: state.ctx.log, path$: patharr(state) })
+  return { out, errs }
+}
+
+
+// The taken checks and the structural check ran in the probe; the value still
+// goes back to the parent, which a lone done would prevent.
+const release: Validate = function release(_val: any, update: Update) {
+  update.done = false
+  return true
+}
+
+
+function jsonText(val: any): string {
+  return '' + JSON.stringify(val)
+}
+
+
+// Whatever fails inside is replaced by the fallback, and raises nothing.
+const Catch = function <V>(this: any, fallback: any, shape?: Node<V> | V): Node<V> {
+  let node = buildize(this, shape)
+  const inner = takeInner(node)
+
+  const catcher: any = function Catch(val: any, update: Update, state: State) {
+    const { out, errs } = probeNode(state, inner, val)
+    update.uval = 0 < errs.length ? clone(fallback) : out
+    update.done = true
+    return true
+  }
+  catcher.n = S.Catch
+  catcher.a = [fallback]
+  catcher.s = (n: Node<any>) => innerDesc(inner, n) + S.Catch + '(' + jsonText(fallback) + ')'
+  catcher.inner = inner
+  node.b.push(catcher)
+  node.a.push(release)
+
+  return node
+}
+
+
+// Replace a valid value with a function of it. An invalid one fails as it
+// would have, with the same errors.
+const Transform = function <V>(
+  this: any,
+  transform: (val: any, state: State) => any,
+  shape?: Node<V> | V
+): Node<V> {
+  let node = buildize(this, shape)
+  const inner = takeInner(node)
+
+  const transformer: any = function Transform(val: any, update: Update, state: State) {
+    const { out, errs } = probeNode(state, inner, val)
+    if (0 < errs.length) {
+      update.err = errs
+      return false
+    }
+    update.uval = transform(out, state)
+    update.done = true
+    return true
+  }
+  transformer.n = S.Transform
+  transformer.s = (n: Node<any>) => innerDesc(inner, n) + S.Transform
+  transformer.inner = inner
+  node.b.push(transformer)
+  node.a.push(release)
+
+  return node
+}
+
+
+// Attach a description to the node, read back as node.m.description.
+const Describe = function <V>(this: any, description: string, shape?: Node<V> | V): Node<V> {
+  let node = buildize(this, shape)
+  node.m = node.m || {}
+  node.m.description = '' + description
+  return node
+}
+
+
+// Discriminated Union
+// ===================
+
+// Choose the branch by the value of a tag property, then validate against that
+// branch alone, so the errors are its own rather than a list of every
+// alternative. An object-shaped branch without the tag property has it added,
+// as the literal it is keyed by.
+const Discriminated = function(this: any, tag: string, branches: Record<string, any>) {
+  if (S.string !== typeof tag || '' === tag || null == branches ||
+    S.object !== typeof branches || isarr(branches) || 0 === keys(branches).length) {
+    throw new Error('Shape: Discriminated needs a tag property name and at least one branch')
+  }
+
+  let node = buildize(this)
+  node.t = (S.list as ValType)
+  node.r = true
+
+  const tags = keys(branches).sort()
+  const shapes = new Map<string, any>()
+  for (const t of tags) {
+    const bn = nodize(branches[t])
+    if (S.object === bn.t && null != bn.v && undefined === bn.v[tag]) {
+      bn.v[tag] = nodize(t)
+    }
+    shapes.set(t, shapify(bn))
+  }
+  node.u.list = tags.map((t) => shapes.get(t).node())
+  node.u.discriminated = { tag, tags }
+
+  const validator: any = function Discriminated(val: any, update: Update, state: State) {
+    // Required or optional is for the structural check to say.
+    if (undefined === val) {
+      return true
+    }
+
+    const tv = null != val && S.object === typeof val && !isarr(val) ? val[tag] : undefined
+    if (undefined === tv) {
+      update.err = makeErr(state,
+        S.Value + ' ' + S.$VALUE + S.forprop + S.$PATH +
+        ' is not an object with a "' + tag + '" property.',
+        S.Discriminated)
+      return false
+    }
+
+    const shape = S.string === typeof tv ? shapes.get(tv) : undefined
+    if (undefined === shape) {
+      update.err = makeErr(state,
+        S.Value + ' ' + S.$VALUE + S.forprop + S.$PATH +
+        ' has unknown "' + tag + '" ' + JSON.stringify(tv) +
+        ', expected one of: ' + tags.join(', ') + '.',
+        S.Discriminated)
+      return false
+    }
+
+    const errs: ErrDesc[] = []
+    const ref = state.ctx.ref = state.ctx.ref || {}
+    const out = shape(val, { err: errs, ref, log: state.ctx.log, path$: patharr(state) })
+    if (0 < errs.length) {
+      update.err = errs
+      return false
+    }
+    update.val = out
+    return true
+  }
+
+  validator.n = S.Discriminated
+  validator.a = [tag, branches]
+  node.b.push(validator)
+
+  return node
+}
+
+
+// Value may also be null. Absent is still governed by required/optional.
+const Nullable = function <V>(this: any, shape?: Node<V> | V): Node<V> {
+  let node = buildize(this, shape)
+  node.u.nullable = true
+  return node
+}
+
+
+// A number with no fractional part. Behaves as a type token: required, with
+// the default 0, so Optional(Integer) injects 0 and Integer alone demands one.
+const Integer = function <V>(this: any, shape?: Node<V> | V): Node<V> {
+  let node = buildize(this, shape)
+  node.t = (S.integer as ValType)
+  node.r = true
+  node.p = false
+  node.v = 0
+  node.f = 0
+  return node
+}
+
+
 // Value can be anything.
 const Any = function <V>(this: any, shape?: Node<V> | V): Node<V> {
   let node = buildize(this, shape)
   node.t = (S.any as ValType)
+
+  // Any is a kind the spec asked for, not an absent one: a key expression's
+  // example value supplies the default but must not narrow it. (Type marks its
+  // own nodes; Any is a builder, so it never passes through Type.)
+  node.u.tset = true
+
   if (undefined !== shape) {
     node.v = shape
     node.f = shape
@@ -1799,7 +2372,8 @@ const Skip = function <V>(this: any, shape?: Node<V> | V): Node<V> {
 }
 
 
-// Errors for this value are ignored, and the value is undefined.
+// Errors for this value are ignored, and the value is undefined. The whole
+// subtree is probed, so a failing descendant is swallowed too.
 const Ignore = function <V>(this: any, shape?: Node<V> | V): Node<V> {
   let node = buildize(this, shape)
   node.r = false
@@ -1809,13 +2383,19 @@ const Ignore = function <V>(this: any, shape?: Node<V> | V): Node<V> {
 
   node.e = false
 
-  node.a.push(function Ignore(_val: any, update: Update, state: State) {
-    if (0 < state.curerr.length) {
-      update.uval = undefined
-      update.done = false
-    }
+  const inner = takeInner(node)
+
+  const ignorer: any = function Ignore(val: any, update: Update, state: State) {
+    const { out, errs } = probeNode(state, inner, val)
+    update.uval = 0 < errs.length ? undefined : out
+    update.done = true
     return true
-  })
+  }
+  ignorer.n = S.Ignore
+  ignorer.s = (n: Node<any>) => innerDesc(inner, n).replace(/\.$/, '')
+  ignorer.inner = inner
+  node.b.push(ignorer)
+  node.a.push(release)
 
   return node
 }
@@ -2145,8 +2725,10 @@ const Check = function <V>(
   else if (S.object === typeof check) {
     let dstr = Object.prototype.toString.call(check)
     if (dstr.includes('RegExp')) {
+      // Only a string can match. Coercing first (String(1).match(/^[0-9]+$/))
+      // let Check(/re/) accept values that a bare /re/ rejects outright.
       let refn: any = (v: any) =>
-        (null == v || Number.isNaN(v)) ? false : !!String(v).match(check as string)
+        (S.string === typeof v) && !!v.match(check as string)
       defprop(refn, S.name, {
         value: String(check)
       })
@@ -2405,6 +2987,9 @@ const Type = function <V extends
   'Array' |
   'Function' |
   'Symbol' |
+  'Integer' |
+  'Date' |
+  DateConstructor |
   StringConstructor |
   NumberConstructor |
   BooleanConstructor |
@@ -2429,7 +3014,7 @@ const Type = function <V extends
     V extends null ? null :
     V extends undefined ? undefined :
     V) {
-  let tnat = nodize(TNAT[tref as string] || tref)
+  let tnat = nodize(TNAT[tref as string] || (S.Integer === tref ? Integer : tref))
 
   let node = buildize(this, shape)
   if (node !== tnat) {
@@ -2437,7 +3022,16 @@ const Type = function <V extends
     node.r = tnat.r
     node.p = tnat.p
     node.v = tnat.v
+
+    // Carry the fallback too. Omitting it made the string DSL disagree with
+    // the builder API: expr('Optional(String)') dropped the '' default that
+    // Optional(String) injects for an absent key.
+    node.f = tnat.f
   }
+
+  // Record that the kind came from the spec rather than being left open, so a
+  // key expression's example value does not overwrite it.
+  node.u.tset = true
 
   return (node as any)
 }
@@ -2445,6 +3039,31 @@ const Type = function <V extends
 
 // Size Builders: Min, Max, Above, Below, Len
 // ==========================================
+
+// True when the node declares a concrete type that this value does not have.
+// The structural check is about to report a type error, and a size bound on a
+// value of the wrong type is meaningless — `Min(2,String)` against 1 would
+// otherwise complain about the number 1 being below a minimum of 2, masking
+// the real problem. Mirrors the type tests in the validate loop.
+function typeWillFail(state: State): boolean {
+  const n: any = state.node
+  const t: string = n.t
+  const val = state.val
+
+  if (undefined === val) return false
+  if (S.any === t || S.list === t || S.check === t || S.never === t) return false
+
+  if (S.object === t) return null === val || S.object !== state.valType || isarr(val)
+  if (S.array === t) return !isarr(val)
+  if (S.null === t) return null !== val
+  if (S.instance === t) return !(n.u.i && val instanceof n.u.i)
+  if (S.regexp === t) return S.string !== state.valType
+  if (S.integer === t) return !Number.isInteger(val)
+  if (S.date === t) return !(val instanceof Date)
+
+  return t !== state.valType
+}
+
 
 function makeSizeBuilder(
   self: any,
@@ -2457,6 +3076,9 @@ function makeSizeBuilder(
   size = +size
 
   let validator: any = function(val: any, update: Update, state: State) {
+    if (typeWillFail(state)) {
+      return true
+    }
     return valid(valueLen(val), size, val, update, state)
   }
 
@@ -2488,7 +3110,7 @@ const Min = function <V>(
       }
 
       state.checkargs = { min: 1 }
-      let errmsgpart = S.number === typeof (val) ? '' : 'length '
+      let errmsgpart = isNumeric(val) ? '' : 'length '
       update.err =
         makeErr(state,
           S.Value + ' ' + S.$VALUE + S.forprop + S.$PATH +
@@ -2510,7 +3132,7 @@ const Max = function <V>(
         return true
       }
 
-      let errmsgpart = S.number === typeof (val) ? '' : 'length '
+      let errmsgpart = isNumeric(val) ? '' : 'length '
       update.err =
         makeErr(state,
           S.Value + ' ' + S.$VALUE + S.forprop + S.$PATH +
@@ -2532,7 +3154,7 @@ const Above = function <V>(
         return true
       }
 
-      let errmsgpart = S.number === typeof (val) ? 'be' : 'have length'
+      let errmsgpart = isNumeric(val) ? 'be' : 'have length'
       update.err =
         makeErr(state,
           S.Value + ' ' + S.$VALUE + S.forprop + S.$PATH +
@@ -2554,7 +3176,7 @@ const Below = function <V>(
         return true
       }
 
-      let errmsgpart = S.number === typeof (val) ? 'be' : 'have length'
+      let errmsgpart = isNumeric(val) ? 'be' : 'have length'
       update.err =
         makeErr(state,
           S.Value + ' ' + S.$VALUE + S.forprop + S.$PATH +
@@ -2576,7 +3198,7 @@ const Len = function <V>(
         return true
       }
 
-      let errmsgpart = S.number === typeof (val) ? '' : ' in length'
+      let errmsgpart = isNumeric(val) ? '' : ' in length'
       update.err =
         makeErr(state,
           S.Value + ' ' + S.$VALUE + S.forprop + S.$PATH +
@@ -2636,19 +3258,30 @@ function buildize<V>(self?: any, shape?: any): Node<V> {
       Any,
       Before,
       Below,
+      Catch,
       Check,
       Child,
       Closed,
+      Coerce,
+      DateTime,
       Default,
       Define,
+      Describe,
       Empty,
+      Email,
       Exact,
       Fault,
+      Func,
       Ignore,
+      Integer,
+      Ip,
+      Ipv4,
+      Ipv6,
       Len,
       Max,
       Min,
       Never,
+      Nullable,
       Open,
       Optional,
       Refer,
@@ -2656,7 +3289,10 @@ function buildize<V>(self?: any, shape?: any): Node<V> {
       Required,
       Rest,
       Skip,
+      Transform,
       Type,
+      Url,
+      Uuid,
 
       String: () => Type.call(node, String),
       Number: () => Type.call(node, Number),
@@ -2665,6 +3301,7 @@ function buildize<V>(self?: any, shape?: any): Node<V> {
       Array: () => Type.call(node, Array),
       Function: () => Type.call(node, Function),
       Symbol: () => Type.call(node, Symbol),
+      Date: () => Type.call(node, Date),
     })
 }
 
@@ -2775,6 +3412,16 @@ function makeErrImpl(
 
 
 // Convert Node to JSON suitable for Shape.build.
+// The builder suffixes of a node's checks, skipping any that render as nothing.
+function bdesc(n: Node<any>): string {
+  return n.b
+    .map((v: any) => v.s ? v.s(n) : '')
+    .filter((d: string) => '' !== d)
+    .map((d: string) => '.' + d)
+    .join('')
+}
+
+
 function node2json(n: Node<any>): any {
   let t = n.t
 
@@ -2782,6 +3429,7 @@ function node2json(n: Node<any>): any {
     number: S.Number,
     string: S.String,
     boolean: S.Boolean,
+    integer: S.Integer,
   }
 
 
@@ -2796,7 +3444,7 @@ function node2json(n: Node<any>): any {
       s = JSON.stringify(n.v)
     }
 
-    s += n.b.map((v: any) => v.s ? ('.' + v.s(n)) : '').join('')
+    s += bdesc(n)
 
     return s
   }
@@ -2811,7 +3459,7 @@ function node2json(n: Node<any>): any {
       s += ('' === s ? '' : '.') + S.Open
     }
 
-    s += n.b.map((v: any) => v.s ? ('.' + v.s(n)) : '').join('')
+    s += bdesc(n)
 
     if (s.startsWith('.')) {
       s = s.slice(1)
@@ -2828,7 +3476,7 @@ function node2json(n: Node<any>): any {
 
     // Required is implicit with Check
 
-    s += n.b.map((v: any) => v.s ? ('.' + v.s(n)) : '').join('')
+    s += bdesc(n)
 
     if (s.startsWith('.')) {
       s = s.slice(1)
@@ -2859,7 +3507,7 @@ function node2json(n: Node<any>): any {
       if (undefined === o.$$) {
         o.$$ = ''
       }
-      o.$$ += n.b.map((v: any) => v.s ? ('.' + v.s(n)) : '').join('')
+      o.$$ += bdesc(n)
       if (o.$$.startsWith('.')) {
         o.$$ = o.$$.slice(1)
       }
@@ -2870,6 +3518,9 @@ function node2json(n: Node<any>): any {
       return o.$$
     }
     return o
+  }
+  else if (S.list === t && n.u.discriminated) {
+    return S.Discriminated + '(' + n.u.discriminated.tag + ',' + n.u.discriminated.tags.join(',') + ')'
   }
   else if (S.list === t) {
     let refs: any = {}
@@ -2894,6 +3545,11 @@ function node2json(n: Node<any>): any {
   }
   else if (S.regexp === t) {
     return n.v.toString()
+  }
+  else if (S.date === t) {
+    let s = n.r ? S.Date : JSON.stringify(n.v)
+    s += bdesc(n)
+    return s
   }
 }
 
@@ -3037,21 +3693,32 @@ const BuilderMap = {
   Any,
   Before,
   Below,
+  Catch,
   Check,
   Child,
   Closed,
+  Coerce,
+  DateTime,
   Default,
   Define,
+  Describe,
+  Discriminated,
+  Email,
   Empty,
   Exact,
   Fault,
   Func,
   Ignore,
+  Integer,
+  Ip,
+  Ipv4,
+  Ipv6,
   Key,
   Len,
   Max,
   Min,
   Never,
+  Nullable,
   One,
   Open,
   Optional,
@@ -3060,8 +3727,22 @@ const BuilderMap = {
   Required,
   Skip,
   Some,
+  Transform,
   Rest,
   Type,
+  Url,
+  Uuid,
+}
+
+
+// Builders that mean something applied to nothing, so a bare reference to one
+// in a spec (`{ a: Any }`) is read as a call. See nodize.
+const NULLARY_BUILDERS =
+  [Any, Closed, Coerce, DateTime, Email, Empty, Func, Ignore, Integer, Ip, Ipv4, Ipv6,
+    Key, Never, Nullable, Open, Optional, Required, Skip, Url, Uuid]
+
+for (let builder of NULLARY_BUILDERS) {
+  defprop(builder, 'nullary$', { value: true })
 }
 
 
@@ -3135,6 +3816,20 @@ const GAbove = Above
 const GAfter = After
 const GAll = All
 const GAny = Any
+const GInteger = Integer
+const GCoerce = Coerce
+const GCatch = Catch
+const GDescribe = Describe
+const GDiscriminated = Discriminated
+const GTransform = Transform
+const GDateTime = DateTime
+const GEmail = Email
+const GIp = Ip
+const GIpv4 = Ipv4
+const GIpv6 = Ipv6
+const GUrl = Url
+const GUuid = Uuid
+const GNullable = Nullable
 const GBefore = Before
 const GBelow = Below
 const GCheck = Check
@@ -3327,21 +4022,32 @@ export {
   Any,
   Before,
   Below,
+  Catch,
   Check,
   Child,
   Closed,
+  Coerce,
+  DateTime,
   Default,
   Define,
+  Describe,
+  Discriminated,
+  Email,
   Empty,
   Exact,
   Fault,
   Func,
   Ignore,
+  Integer,
+  Ip,
+  Ipv4,
+  Ipv6,
   Key,
   Len,
   Max,
   Min,
   Never,
+  Nullable,
   One,
   Open,
   Optional,
@@ -3350,8 +4056,11 @@ export {
   Required,
   Skip,
   Some,
+  Transform,
   Type,
   Rest,
+  Url,
+  Uuid,
 
   GAbove,
   GAfter,
@@ -3362,6 +4071,18 @@ export {
   GCheck,
   GChild,
   GClosed,
+  GCoerce,
+  GCatch,
+  GDescribe,
+  GDiscriminated,
+  GTransform,
+  GDateTime,
+  GEmail,
+  GIp,
+  GIpv4,
+  GIpv6,
+  GUrl,
+  GUuid,
   GDefault,
   GDefine,
   GEmpty,
@@ -3369,11 +4090,13 @@ export {
   GFault,
   GFunc,
   GIgnore,
+  GInteger,
   GKey,
   GLen,
   GMax,
   GMin,
   GNever,
+  GNullable,
   GOne,
   GOpen,
   GOptional,

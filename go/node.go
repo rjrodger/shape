@@ -1,5 +1,7 @@
 package shape
 
+import "regexp"
+
 // listMode controls how a composition node (One/Some/All) evaluates its branches.
 type listMode int
 
@@ -22,6 +24,7 @@ type node struct {
 	skippable   bool // p in TS: optional and no default-injection
 	silent      bool // e=false in TS: drop errors raised on or below this node
 	empty       bool // empty string allowed
+	nullable    bool // an explicit null is accepted as the value
 	hasDefault  bool
 
 	defaultValue any   // injected on missing optional property
@@ -42,12 +45,16 @@ type node struct {
 	befores []validator
 	afters  []validator
 
+	// Compiled pattern for a KindRegexp node (a bare /re/ in the string DSL).
+	regexpVal *regexp.Regexp
+
 	// Custom Fault message overrides default error text.
 	faultMsg string
 
 	// Composition: if listMode != listNone, branches define alternate shapes.
 	listMode listMode
 	list     []*node
+	disc     *discriminated // a Discriminated union chooses among list by tag
 
 	// Exact value match.
 	exactVals []any

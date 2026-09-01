@@ -536,7 +536,7 @@ func TestZZValidateAftersAndLists(t *testing.T) {
 
 	// evaluateList with no list mode returns the input (527).
 	if got := evaluateList(&node{kind: KindList, listMode: listNone}, 5.0,
-		[]string{}, []any{}, "", nil, newContext(nil), false, &ValidationError{}); got != 5.0 {
+		[]string{}, []any{}, "", nil, newContext(nil), false, &ValidationError{}, false); got != 5.0 {
 		t.Fatal("evaluateList(none)")
 	}
 }
@@ -546,9 +546,6 @@ func TestZZValidateSmallHelpers(t *testing.T) {
 	if _, err := MustShape(Ignore(Before(zzFail, Number))).Validate(5.0); err != nil {
 		t.Fatalf("silent before should suppress error, got %v", err)
 	}
-
-	// replaceLastErrText with no issues is a no-op (597-599).
-	replaceLastErrText(&ValidationError{}, "msg", nil, "")
 
 	// collectDefines with nil args returns immediately (695-697).
 	collectDefines(nil, nil)

@@ -94,7 +94,8 @@ func TestErrorFallbacks(t *testing.T) {
 	}
 	// Multi-issue join.
 	multi := &ValidationError{Issues: []FieldError{{Text: "one"}, {Text: "two"}}}
-	if !strings.Contains(multi.Error(), "one; two") {
+	// Newline-joined, as TS joins aggregated messages.
+	if !strings.Contains(multi.Error(), "one\ntwo") {
 		t.Fatalf("multi join: %q", multi.Error())
 	}
 }

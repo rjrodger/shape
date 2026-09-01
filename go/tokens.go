@@ -15,6 +15,9 @@ const (
 	KindFunction Kind = "function"
 	KindNever    Kind = "never"
 	KindCheck    Kind = "check"
+	KindRegexp   Kind = "regexp"
+	KindInteger  Kind = "integer"
+	KindDate     Kind = "date"
 	KindList     Kind = "list"
 )
 
@@ -34,4 +37,6 @@ var (
 	Object   = TypeToken{kind: KindObject}
 	Array    = TypeToken{kind: KindArray}
 	Function = TypeToken{kind: KindFunction}
+	Integer  = TypeToken{kind: KindInteger} // a number with no fractional part
+	Date     = TypeToken{kind: KindDate}    // a time.Time value
 )

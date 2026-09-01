@@ -5,6 +5,9 @@ import (
 	"math"
 	"reflect"
 	"regexp"
+	"strconv"
+	"strings"
+	"time"
 )
 
 // buildize prepares a *Node for further builder mutation. Pass nil to start a
@@ -177,7 +180,9 @@ func (n *Node) Ignore() *Node {
 func Empty(spec ...any) *Node {
 	var nb *Node
 	if len(spec) == 0 {
-		nb = buildize(String)
+		// Untyped, as in TS: Empty() allows the empty string without also
+		// demanding that the value be a string.
+		nb = buildize(nil)
 	} else {
 		nb = buildize(spec[0])
 	}
@@ -235,6 +240,25 @@ func (n *Node) Fault(msg string) *Node {
 	return n
 }
 
+// Nullable accepts an explicit null as the value. Whether the value may be
+// absent is still governed by Required/Optional.
+func Nullable(spec ...any) *Node {
+	var nb *Node
+	if len(spec) == 0 {
+		nb = buildize(nil)
+	} else {
+		nb = buildize(spec[0])
+	}
+	nb.n.nullable = true
+	return nb
+}
+
+// Nullable (chained).
+func (n *Node) Nullable() *Node {
+	n.n.nullable = true
+	return n
+}
+
 // Never always fails to match.
 func Never(spec ...any) *Node {
 	var nb *Node
@@ -261,15 +285,45 @@ func Type(kind any, spec ...any) *Node {
 	} else {
 		nb = buildize(spec[0])
 	}
+	// Adopt the reference type's kind AND its required/skippable/default state,
+	// mirroring TS Type(). Setting only the kind made Type() a silent no-op for
+	// a *Node argument — which is exactly what the string DSL hands it, since a
+	// bare type token there parses to Required(tok). Structural children are
+	// deliberately not copied: TS leaves them behind too, so Type(Object) is a
+	// closed object and Type(Array) accepts any elements.
+	tn := typeRefNode(kind)
+	if tn == nil || tn == nb.n {
+		return nb
+	}
+
+	nb.n.kind = tn.kind
+	nb.n.required = tn.required
+	nb.n.requiredSet = tn.requiredSet
+	nb.n.skippable = tn.skippable
+	nb.n.hasDefault = tn.hasDefault
+	nb.n.defaultValue = cloneAny(tn.defaultValue)
+	nb.n.hasLiteral = tn.hasLiteral
+	nb.n.literal = tn.literal
+
+	return nb
+}
+
+// typeRefNode resolves Type()'s first argument — a Kind, a TypeToken, a kind
+// name, or an already-built node — to the node that type stands for.
+func typeRefNode(kind any) *node {
 	switch v := kind.(type) {
 	case Kind:
-		nb.n.kind = v
+		return typeTokenNode(v)
 	case TypeToken:
-		nb.n.kind = v.kind
+		return typeTokenNode(v.kind)
 	case string:
-		nb.n.kind = Kind(v)
+		return typeTokenNode(Kind(v))
+	case *Node:
+		return v.n
+	case *node:
+		return v
 	}
-	return nb
+	return nil
 }
 
 // Exact requires the value equal one of the provided literals.
@@ -331,36 +385,35 @@ func Min(min any, spec ...any) *Node {
 		name: "Min",
 		args: []any{min},
 		fn: func(val any, update *Update, state *State) bool {
-			vsize, ok := valueLen(val)
-			if !ok {
-				update.Err = makeErr(state, WhyMin, 4011,
-					fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" must be a minimum of %v.", min))
-				return false
+			if boundDefers(state) {
+				return true
 			}
-			if limit <= vsize {
+			vsize, ok := valueLen(val)
+			if ok && limit <= vsize {
 				return true
 			}
 			lenpart := ""
-			if !isNumber(val) {
+			if !isNumeric(val) {
 				lenpart = "length "
 			}
 			update.Why = WhyMin
+			update.Done = true
 			update.Mark = 4011
 			update.Err = makeErr(state, WhyMin, 4011,
-				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" must be a minimum %sof %v (was %v).",
-					lenpart, min, fmtFloat(vsize)))
+				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" must be a minimum %sof %s (was %s).",
+					lenpart, numText(min), sizeText(vsize, ok)))
 			return false
 		},
-		stringify: func() string { return fmt.Sprintf("Min(%v)", min) },
+		stringify: func() string { return "Min(" + numText(min) + ")" },
 	}
-	nb.n.afters = append(nb.n.afters, v)
+	nb.n.befores = append(nb.n.befores, v)
 	return nb
 }
 
 // Min (chained).
 func (n *Node) Min(min any) *Node {
 	other := Min(min)
-	n.n.afters = append(n.n.afters, other.n.afters...)
+	n.n.befores = append(n.n.befores, other.n.befores...)
 	return n
 }
 
@@ -377,36 +430,35 @@ func Max(max any, spec ...any) *Node {
 		name: "Max",
 		args: []any{max},
 		fn: func(val any, update *Update, state *State) bool {
-			vsize, ok := valueLen(val)
-			if !ok {
-				update.Err = makeErr(state, WhyMax, 4012,
-					fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" must be a maximum of %v.", max))
-				return false
+			if boundDefers(state) {
+				return true
 			}
-			if vsize <= limit {
+			vsize, ok := valueLen(val)
+			if ok && vsize <= limit {
 				return true
 			}
 			lenpart := ""
-			if !isNumber(val) {
+			if !isNumeric(val) {
 				lenpart = "length "
 			}
 			update.Why = WhyMax
+			update.Done = true
 			update.Mark = 4012
 			update.Err = makeErr(state, WhyMax, 4012,
-				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" must be a maximum %sof %v (was %v).",
-					lenpart, max, fmtFloat(vsize)))
+				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" must be a maximum %sof %s (was %s).",
+					lenpart, numText(max), sizeText(vsize, ok)))
 			return false
 		},
-		stringify: func() string { return fmt.Sprintf("Max(%v)", max) },
+		stringify: func() string { return "Max(" + numText(max) + ")" },
 	}
-	nb.n.afters = append(nb.n.afters, v)
+	nb.n.befores = append(nb.n.befores, v)
 	return nb
 }
 
 // Max (chained).
 func (n *Node) Max(max any) *Node {
 	other := Max(max)
-	n.n.afters = append(n.n.afters, other.n.afters...)
+	n.n.befores = append(n.n.befores, other.n.befores...)
 	return n
 }
 
@@ -423,34 +475,35 @@ func Above(above any, spec ...any) *Node {
 		name: "Above",
 		args: []any{above},
 		fn: func(val any, update *Update, state *State) bool {
-			vsize, ok := valueLen(val)
-			if !ok {
-				return false
+			if boundDefers(state) {
+				return true
 			}
-			if limit < vsize {
+			vsize, ok := valueLen(val)
+			if ok && limit < vsize {
 				return true
 			}
 			verb := "be"
-			if !isNumber(val) {
+			if !isNumeric(val) {
 				verb = "have length"
 			}
 			update.Why = WhyAbove
+			update.Done = true
 			update.Mark = 4013
 			update.Err = makeErr(state, WhyAbove, 4013,
-				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" must %s above %v (was %v).",
-					verb, above, fmtFloat(vsize)))
+				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" must %s above %s (was %s).",
+					verb, numText(above), sizeText(vsize, ok)))
 			return false
 		},
-		stringify: func() string { return fmt.Sprintf("Above(%v)", above) },
+		stringify: func() string { return "Above(" + numText(above) + ")" },
 	}
-	nb.n.afters = append(nb.n.afters, v)
+	nb.n.befores = append(nb.n.befores, v)
 	return nb
 }
 
 // Above (chained).
 func (n *Node) Above(above any) *Node {
 	other := Above(above)
-	n.n.afters = append(n.n.afters, other.n.afters...)
+	n.n.befores = append(n.n.befores, other.n.befores...)
 	return n
 }
 
@@ -467,34 +520,35 @@ func Below(below any, spec ...any) *Node {
 		name: "Below",
 		args: []any{below},
 		fn: func(val any, update *Update, state *State) bool {
-			vsize, ok := valueLen(val)
-			if !ok {
-				return false
+			if boundDefers(state) {
+				return true
 			}
-			if vsize < limit {
+			vsize, ok := valueLen(val)
+			if ok && vsize < limit {
 				return true
 			}
 			verb := "be"
-			if !isNumber(val) {
+			if !isNumeric(val) {
 				verb = "have length"
 			}
 			update.Why = WhyBelow
+			update.Done = true
 			update.Mark = 4014
 			update.Err = makeErr(state, WhyBelow, 4014,
-				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" must %s below %v (was %v).",
-					verb, below, fmtFloat(vsize)))
+				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" must %s below %s (was %s).",
+					verb, numText(below), sizeText(vsize, ok)))
 			return false
 		},
-		stringify: func() string { return fmt.Sprintf("Below(%v)", below) },
+		stringify: func() string { return "Below(" + numText(below) + ")" },
 	}
-	nb.n.afters = append(nb.n.afters, v)
+	nb.n.befores = append(nb.n.befores, v)
 	return nb
 }
 
 // Below (chained).
 func (n *Node) Below(below any) *Node {
 	other := Below(below)
-	n.n.afters = append(n.n.afters, other.n.afters...)
+	n.n.befores = append(n.n.befores, other.n.befores...)
 	return n
 }
 
@@ -511,34 +565,35 @@ func Len(length int, spec ...any) *Node {
 		name: "Len",
 		args: []any{length},
 		fn: func(val any, update *Update, state *State) bool {
-			vsize, ok := valueLen(val)
-			if !ok {
-				return false
+			if boundDefers(state) {
+				return true
 			}
-			if vsize == limit {
+			vsize, ok := valueLen(val)
+			if ok && vsize == limit {
 				return true
 			}
 			suffix := ""
-			if !isNumber(val) {
+			if !isNumeric(val) {
 				suffix = " in length"
 			}
 			update.Why = WhyLen
+			update.Done = true
 			update.Mark = 4015
 			update.Err = makeErr(state, WhyLen, 4015,
-				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" must be exactly %d%s (was %v).",
-					length, suffix, fmtFloat(vsize)))
+				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" must be exactly %d%s (was %s).",
+					length, suffix, sizeText(vsize, ok)))
 			return false
 		},
 		stringify: func() string { return fmt.Sprintf("Len(%d)", length) },
 	}
-	nb.n.afters = append(nb.n.afters, v)
+	nb.n.befores = append(nb.n.befores, v)
 	return nb
 }
 
 // Len (chained).
 func (n *Node) Len(length int) *Node {
 	other := Len(length)
-	n.n.afters = append(n.n.afters, other.n.afters...)
+	n.n.befores = append(n.n.befores, other.n.befores...)
 	return n
 }
 
@@ -737,6 +792,58 @@ func Rest(child any, spec ...any) *Node {
 	return nb
 }
 
+// Any (chained): the value may be anything.
+func (n *Node) Any() *Node {
+	n.n.kind = KindAny
+	return n
+}
+
+// Type (chained): assert a kind, given a Kind, TypeToken, kind name or node.
+func (n *Node) Type(kind any) *Node {
+	return Type(kind, n)
+}
+
+// Define (chained): name this node so a later Refer can clone it.
+func (n *Node) Define(name string) *Node {
+	return Define(name, n)
+}
+
+// Refer (chained): substitute the named node at validation time.
+func (n *Node) Refer(name string) *Node {
+	return Refer(name, n)
+}
+
+// Rename (chained): rename this property after validation.
+func (n *Node) Rename(name string) *Node {
+	return Rename(name, n)
+}
+
+// Type-token shortcuts, mirroring the TS chain (.Number(), .Boolean(), ...).
+// There is deliberately no String() shortcut: a method of that name on an
+// exported type reads as fmt.Stringer and go vet rejects the signature. Use
+// Type(String) for a string, which is what these shortcuts call anyway.
+
+// Number (chained).
+func (n *Node) Number() *Node { return Type(Number, n) }
+
+// Boolean (chained).
+func (n *Node) Boolean() *Node { return Type(Boolean, n) }
+
+// Object (chained).
+func (n *Node) Object() *Node { return Type(Object, n) }
+
+// Array (chained).
+func (n *Node) Array() *Node { return Type(Array, n) }
+
+// Function (chained).
+func (n *Node) Function() *Node { return Type(Function, n) }
+
+// Integer (chained).
+func (n *Node) Integer() *Node { return Type(Integer, n) }
+
+// Date (chained).
+func (n *Node) Date() *Node { return Type(Date, n) }
+
 // Rest (chained).
 func (n *Node) Rest(child any) *Node {
 	cn, err := normalize(child)
@@ -867,8 +974,13 @@ func Func(spec ...any) *Node {
 // Func (chained).
 func (n *Node) Func() *Node {
 	n.n.kind = KindFunction
-	n.n.required = true
-	n.n.requiredSet = true
+	// Only assert requiredness if the chain has not already stated it: TS
+	// merges the receiver's flags over the builder's, so Optional().Func()
+	// stays optional.
+	if !n.n.requiredSet {
+		n.n.required = true
+		n.n.requiredSet = true
+	}
 	return n
 }
 
@@ -1076,7 +1188,87 @@ func toFloat(v any) float64 {
 
 // valueLen mirrors TS valueLen: number → number, otherwise length-of-string/array
 // or count of object keys. ok=false if not measurable.
+// boundDefers reports whether a size bound should stand aside and let the rest
+// of validation speak. Two cases: the value is of the wrong type, so the
+// structural check is about to report that and a bound message would mask it;
+// or the value is absent on a node that does not require it, which TS drops.
+// Mirrors TS typeWillFail plus the undefined guard in handleValidate.
+func boundDefers(state *State) bool {
+	n := state.Node
+	if state.absent && (n.skippable || !n.required) {
+		return true
+	}
+	return typeWillFail(n, state.Value)
+}
+
+// typeWillFail reports whether the node declares a concrete type that this
+// value does not have.
+func typeWillFail(n *node, val any) bool {
+	switch n.kind {
+	case KindString:
+		_, ok := val.(string)
+		return !ok
+	case KindNumber:
+		return !isNumber(val) || isNaN(val)
+	case KindBoolean:
+		_, ok := val.(bool)
+		return !ok
+	case KindObject:
+		_, ok := val.(map[string]any)
+		return !ok
+	case KindArray:
+		return !isAnyArray(val)
+	case KindFunction:
+		return !isFunction(val)
+	case KindRegexp:
+		// A regexp node is string-shaped, so a non-string is a type error.
+		_, ok := val.(string)
+		return !ok
+	case KindNull:
+		return val != nil
+	case KindNaN:
+		return !isNumber(val) || !isNaN(val)
+	case KindInteger:
+		return !isInteger(val)
+	case KindDate:
+		_, ok := val.(time.Time)
+		return !ok
+	}
+	return false
+}
+
+// numText renders a bound argument as JS renders a number: an integral value
+// in full, never in exponent form.
+func numText(v any) string {
+	if isNumber(v) {
+		return fmtFloat(toFloat(v))
+	}
+	return fmt.Sprintf("%v", v)
+}
+
+// isNumeric reports whether a bound compares the value itself (a number or a
+// date, measured by its time value) rather than a length or key count.
+func isNumeric(v any) bool {
+	if _, ok := v.(time.Time); ok {
+		return true
+	}
+	return isNumber(v)
+}
+
+// sizeText renders a measured size, or NaN when the value has none — a boolean
+// or null has no length, and TS reports "(was NaN)" rather than omitting it.
+func sizeText(vsize float64, ok bool) string {
+	if !ok {
+		return "NaN"
+	}
+	return fmtFloat(vsize)
+}
+
 func valueLen(v any) (float64, bool) {
+	// A date's size is its time value, so bounds compare instants.
+	if t, ok := v.(time.Time); ok {
+		return float64(t.UnixMilli()), true
+	}
 	if v == nil {
 		return 0, false
 	}
@@ -1094,11 +1286,30 @@ func valueLen(v any) (float64, bool) {
 	return 0, false
 }
 
+// fmtFloat renders a float64 as JS Number#toString does, so a number in a
+// message or a coerced string reads identically in both languages: plain digits
+// for 1e-6 <= |f| < 1e21, exponent form with a signed, unpadded exponent
+// outside that range, and NaN / Infinity by name.
 func fmtFloat(f float64) string {
-	if f == math.Trunc(f) && !math.IsInf(f, 0) {
-		return fmt.Sprintf("%d", int64(f))
+	switch {
+	case math.IsNaN(f):
+		return "NaN"
+	case math.IsInf(f, 1):
+		return "Infinity"
+	case math.IsInf(f, -1):
+		return "-Infinity"
+	case f == 0:
+		return "0"
 	}
-	return fmt.Sprintf("%v", f)
+
+	if a := math.Abs(f); a >= 1e-6 && a < 1e21 {
+		return strconv.FormatFloat(f, 'f', -1, 64)
+	}
+
+	// strconv writes "1.5e-07"; JS writes "1.5e-7". The exponent is never
+	// zero here: this branch only sees magnitudes below 1e-6 or at least 1e21.
+	mant, exp, _ := strings.Cut(strconv.FormatFloat(f, 'e', -1, 64), "e")
+	return mant + "e" + exp[:1] + strings.TrimLeft(exp[1:], "0")
 }
 
 func formatList(vals []any) string {
@@ -1109,6 +1320,8 @@ func formatList(vals []any) string {
 		}
 		// TS renders Exact values dequoted (stringify(v, true)), e.g. admin, user.
 		switch x := v.(type) {
+		case nil:
+			out += "null"
 		case string:
 			out += x
 		default:

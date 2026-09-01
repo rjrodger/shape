@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"time"
 )
 
 // errValueLimit mirrors TS truncate(jstr, 111) — value renderings in error
@@ -14,21 +15,30 @@ const errValueLimit = 111
 
 // Why codes mirror the TS implementation's why values.
 const (
-	WhyType     = "type"
-	WhyRequired = "required"
-	WhyClosed   = "closed"
-	WhyCheck    = "check"
-	WhyOne      = "One"
-	WhySome     = "Some"
-	WhyAll      = "All"
-	WhyExact    = "Exact"
-	WhyMin      = "Min"
-	WhyMax      = "Max"
-	WhyAbove    = "Above"
-	WhyBelow    = "Below"
-	WhyLen      = "Len"
-	WhyNever    = "never"
-	WhyEmpty    = "empty"
+	WhyType          = "type"
+	WhyRequired      = "required"
+	WhyClosed        = "closed"
+	WhyCheck         = "check"
+	WhyOne           = "One"
+	WhySome          = "Some"
+	WhyAll           = "All"
+	WhyExact         = "Exact"
+	WhyMin           = "Min"
+	WhyMax           = "Max"
+	WhyAbove         = "Above"
+	WhyBelow         = "Below"
+	WhyLen           = "Len"
+	WhyNever         = "never"
+	WhyRegexp        = "regexp"
+	WhyEmpty         = "empty"
+	WhyEmail         = "Email"
+	WhyUrl           = "Url"
+	WhyUuid          = "Uuid"
+	WhyDateTime      = "DateTime"
+	WhyIp            = "Ip"
+	WhyIpv4          = "Ipv4"
+	WhyIpv6          = "Ipv6"
+	WhyDiscriminated = "Discriminated"
 )
 
 // FieldError captures rich information about a single validation failure.
@@ -51,6 +61,11 @@ type FieldError struct {
 	// absent records that the value was missing (JS undefined) rather than an
 	// explicit null, so error text renders it as "undefined" (mirrors TS).
 	absent bool
+	// regexpSrc is the /pattern/ rendering for a failed KindRegexp match.
+	regexpSrc string
+	// plural records that Key names more than one disallowed property, so the
+	// message reads "the properties ... are not allowed".
+	plural bool
 }
 
 func (e FieldError) Error() string {
@@ -76,7 +91,8 @@ func (e *ValidationError) Error() string {
 	for i, issue := range e.Issues {
 		parts[i] = issue.Error()
 	}
-	return strings.Join(parts, "; ")
+	// Newline, as TS joins aggregated messages (shape.ts ValidationError).
+	return strings.Join(parts, "\n")
 }
 
 func (e *ValidationError) add(err FieldError) {
@@ -115,13 +131,26 @@ func makeErr(s *State, why string, mark int, text string) FieldError {
 	}
 	if s != nil {
 		err.node = s.Node
+		if s.Node != nil && s.Node.regexpVal != nil {
+			err.regexpSrc = "/" + s.Node.regexpVal.String() + "/"
+		}
 	}
 	if text != "" {
-		err.Text = expandErrText(text, err.Path, s.Value)
+		err.Text = expandErrTextFor(text, err.Path, s.Value, err.absent)
 	} else {
 		err.Text = defaultErrText(err)
 	}
 	return err
+}
+
+// expandErrTextFor expands a message template, rendering a missing value as
+// "undefined" rather than "null" — TS distinguishes the two.
+func expandErrTextFor(text, path string, val any, absent bool) string {
+	if absent {
+		out := strings.ReplaceAll(text, "$PATH", path)
+		return strings.ReplaceAll(out, "$VALUE", "undefined")
+	}
+	return expandErrText(text, path, val)
 }
 
 func expandErrText(text, path string, val any) string {
@@ -169,16 +198,26 @@ func defaultErrText(e FieldError) string {
 			pathPart, valkind, valstr, valkind)
 	case WhyClosed:
 		// TS pattern: parent is mentioned only if path != "". The offending key is
-		// an "index" under an array parent, else a "property".
-		if e.Path == "" {
-			return fmt.Sprintf("Validation failed for %s %q because the %s %q is not allowed.",
-				valkind, valstr, propkind, e.Key)
+		// an "index" under an array parent, else a "property"; more than one is
+		// listed in a single pluralized message.
+		// TS uses the literal "properties" for more than one key, whether the
+		// singular would have been "property" or "index".
+		noun, verb := propkind, "is"
+		if e.plural {
+			noun, verb = "properties", "are"
 		}
-		return fmt.Sprintf("Validation failed for %s%s %q because the %s %q is not allowed.",
-			pathPart, valkind, valstr, propkind, e.Key)
+		if e.Path == "" {
+			return fmt.Sprintf("Validation failed for %s %q because the %s %q %s not allowed.",
+				valkind, valstr, noun, e.Key, verb)
+		}
+		return fmt.Sprintf("Validation failed for %s%s %q because the %s %q %s not allowed.",
+			pathPart, valkind, valstr, noun, e.Key, verb)
 	case WhyNever:
 		return fmt.Sprintf("Validation failed for %s%s %q because no value is allowed.",
 			pathPart, valkind, valstr)
+	case WhyRegexp:
+		return fmt.Sprintf("Validation failed for %s%s %q because the %s did not match %s.",
+			pathPart, valkind, valstr, valkind, e.regexpSrc)
 	default:
 		// TS: check "<fname or why>" failed — prefer the check name.
 		name := e.Check
@@ -202,6 +241,8 @@ func valueToString(v any) string {
 			return "true"
 		}
 		return "false"
+	case time.Time:
+		return jsDateString(x)
 	}
 	// JSON render maps/arrays/numbers; mirrors TS by stripping inner quotes so
 	// the result reads naturally inside the surrounding `... "..."` template.
@@ -287,9 +328,18 @@ func valueKind(v any) string {
 		return "array"
 	case map[string]any:
 		return "object"
+	case time.Time:
+		// typeof a Date is "object" in JS.
+		return "object"
 	}
 	if isNumber(v) {
 		return "number"
 	}
 	return "value"
+}
+
+// jsDateString renders a time the way JSON.stringify renders a Date: UTC, with
+// millisecond precision.
+func jsDateString(t time.Time) string {
+	return t.UTC().Format("2006-01-02T15:04:05.000Z")
 }

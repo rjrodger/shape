@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 )
 
 // keyExprRE matches "name: expr" — mirrors TS KEY_EXPR_RE.
@@ -28,10 +29,22 @@ func normalizeWith(spec any, opts ShapeOptions) (*node, error) {
 		return v, nil
 	case TypeToken:
 		return typeTokenNode(v.kind), nil
+	case *regexp.Regexp:
+		// A regexp anywhere in a spec is a string-shaped node, as in TS. Without
+		// this, One(/re/, Number) and a raw regexp spec both failed to build.
+		return regexpNode(v), nil
+	case time.Time:
+		// A date value in a spec is a date default, as a number literal is a
+		// number default.
+		return &node{kind: KindDate, defaultValue: v, hasDefault: true, hasLiteral: true, literal: v}, nil
 	case Kind:
 		return typeTokenNode(v), nil
 	case string:
-		return &node{kind: KindString, defaultValue: v, hasDefault: true, hasLiteral: true, literal: v}, nil
+		// An empty-string literal spec allows the empty string, mirroring TS
+		// nodize (u.empty = true). Without this Shape("") rejected its own
+		// default value.
+		return &node{kind: KindString, defaultValue: v, hasDefault: true, hasLiteral: true,
+			literal: v, empty: v == ""}, nil
 	case bool:
 		return &node{kind: KindBoolean, defaultValue: v, hasDefault: true, hasLiteral: true, literal: v}, nil
 	case float64:
@@ -60,10 +73,23 @@ func normalizeWith(spec any, opts ShapeOptions) (*node, error) {
 // empty default value. The default is only injected when the node is later made
 // Optional (mirrors TS, where wrapper constructors set both r=true and an
 // EMPTY_VAL default; requiredness gates whether the default is used).
+// regexpNode builds the node a regexp stands for: a required string that must
+// match the pattern.
+func regexpNode(re *regexp.Regexp) *node {
+	return &node{
+		kind:        KindRegexp,
+		regexpVal:   re,
+		required:    true,
+		requiredSet: true,
+	}
+}
+
 func typeTokenNode(k Kind) *node {
 	n := &node{
-		kind:         k,
-		required:     true,
+		kind: k,
+		// Any is the one token that does not require a value: TS Any() builds
+		// an unrequired node, so { a: Any } accepts an object without "a".
+		required:     k != KindAny,
 		requiredSet:  true,
 		hasDefault:   true,
 		defaultValue: zeroForKind(k),
@@ -84,7 +110,7 @@ func zeroForKind(k Kind) any {
 	switch k {
 	case KindString:
 		return ""
-	case KindNumber:
+	case KindNumber, KindInteger:
 		return float64(0)
 	case KindBoolean:
 		return false
@@ -248,19 +274,41 @@ func normalizeObject(v map[string]any, opts ShapeOptions) (*node, error) {
 // applies it to a literal default value. The resulting node validates the
 // literal-default by default but enforces the chained constraints.
 func buildExprWithDefault(src string, dflt any) (*Node, error) {
-	exprNode, err := Expr(src)
+	bare, err := Expr(src)
 	if err != nil {
 		return nil, err
 	}
-	// If the default is supplied, attach as default value while preserving the
-	// expression's kind and validators.
-	if dflt != nil {
-		exprNode.n.hasDefault = true
-		exprNode.n.defaultValue = dflt
-		exprNode.n.hasLiteral = true
-		exprNode.n.literal = dflt
-		exprNode.n.required = false
-		exprNode.n.requiredSet = true
+
+	if dflt == nil {
+		return bare, nil
 	}
-	return exprNode, nil
+
+	ex, err := normalize(dflt)
+	if err != nil {
+		return nil, err
+	}
+
+	// The example value is appended as the innermost builder call's final
+	// argument, so a builder that takes a shape consumes it: "Child(Number)"
+	// with [] becomes an array of numbers, "Min(2)" with 0 a bounded number.
+	// A builder whose arity is already satisfied drops it — Optional(Number, 5)
+	// ignores the 5 — and the example is the author's stated default, so where
+	// it made no difference to the node it is applied as the value instead.
+	// (ts/src/shape.ts keyExprNode does the same, both ways round.)
+	node, applyErr := exprApply(src, newNodeWrap(ex))
+	if applyErr != nil {
+		// Not a builder chain at all — a bare literal such as "a: 5" — so there
+		// is nothing to hand the example to and the expression's own value
+		// stands, as it does in TS.
+		return bare, nil
+	}
+
+	if stringifyNode(node.n, false) == stringifyNode(bare.n, false) {
+		node.n.hasDefault = true
+		node.n.defaultValue = dflt
+		node.n.hasLiteral = true
+		node.n.literal = dflt
+	}
+
+	return node, nil
 }

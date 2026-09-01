@@ -1,4 +1,4 @@
-.PHONY: all build test clean build-ts build-go test-ts test-go clean-ts clean-go publish publish-npm publish-go publish-dry publish-npm-dry publish-go-dry tags-npm tags-go reset
+.PHONY: all build test clean build-ts build-go test-ts test-go clean-ts clean-go diff diff-full publish publish-npm publish-go publish-dry publish-npm-dry publish-go-dry tags-npm tags-go reset
 
 # Never run recipes concurrently: publish-npm and publish-go both mutate the
 # worktree and index (bump, commit, tag, push), so `make -j publish` must serialize.
@@ -31,6 +31,31 @@ test-go:
 
 clean-go:
 	cd go && go clean
+
+# Differential parity harness: run a large generated case matrix through BOTH
+# implementations and diff verdict, produced value and EXACT error text. The
+# shared corpus (test/*.tsv) is the committed gate; this is the wide net that
+# finds what the corpus has no row for. `make diff-full` lists every mismatch
+# instead of a sample.
+DIFF_OUT_DIR := test/differential/.out
+
+diff: build-ts
+	@mkdir -p $(DIFF_OUT_DIR)
+	@node test/differential/gen.js $(DIFF_OUT_DIR)/cases.json
+	@node test/differential/run-ts.js $(DIFF_OUT_DIR)/cases.json $(DIFF_OUT_DIR)/ts.jsonl
+	@cd go && DIFF_IN=../$(DIFF_OUT_DIR)/cases.json DIFF_OUT=../$(DIFF_OUT_DIR)/go.jsonl \
+		go test -run TestDifferential -count=1 . >/dev/null
+	@node test/differential/compare.js \
+		$(DIFF_OUT_DIR)/cases.json $(DIFF_OUT_DIR)/ts.jsonl $(DIFF_OUT_DIR)/go.jsonl
+
+diff-full: build-ts
+	@mkdir -p $(DIFF_OUT_DIR)
+	@node test/differential/gen.js $(DIFF_OUT_DIR)/cases.json
+	@node test/differential/run-ts.js $(DIFF_OUT_DIR)/cases.json $(DIFF_OUT_DIR)/ts.jsonl
+	@cd go && DIFF_IN=../$(DIFF_OUT_DIR)/cases.json DIFF_OUT=../$(DIFF_OUT_DIR)/go.jsonl \
+		go test -run TestDifferential -count=1 . >/dev/null
+	@node test/differential/compare.js \
+		$(DIFF_OUT_DIR)/cases.json $(DIFF_OUT_DIR)/ts.jsonl $(DIFF_OUT_DIR)/go.jsonl --full
 
 tags-npm:
 	git tag -l 'ts/v*' --sort=-version:refname

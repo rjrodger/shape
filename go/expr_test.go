@@ -31,8 +31,10 @@ func TestExprDirect(t *testing.T) {
 	if n2.Kind() != KindString {
 		t.Fatalf("expected string carrier, got %v", n2.Kind())
 	}
-	if len(n2.n.afters) != 1 {
-		t.Fatalf("expected one Max validator, got %d", len(n2.n.afters))
+	// Size bounds run as befores, so a failing bound short-circuits the
+	// structural checks exactly as it does in TS.
+	if len(n2.n.befores) != 1 {
+		t.Fatalf("expected one Max validator, got %d", len(n2.n.befores))
 	}
 
 	// Chained
@@ -43,8 +45,8 @@ func TestExprDirect(t *testing.T) {
 	if n3.Kind() != KindString {
 		t.Fatalf("expected string carrier, got %v", n3.Kind())
 	}
-	if len(n3.n.afters) != 2 {
-		t.Fatalf("expected min+max, got %d afters", len(n3.n.afters))
+	if len(n3.n.befores) != 2 {
+		t.Fatalf("expected min+max, got %d befores", len(n3.n.befores))
 	}
 }
 

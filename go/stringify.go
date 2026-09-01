@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 )
 
 // stringifyNode renders a node as a compact debug string.
@@ -13,11 +14,24 @@ func stringifyNode(n *node, inline bool) string {
 	}
 	switch n.kind {
 	case KindString:
-		return suffix(quoteOrType(n, "String"), n)
+		return suffix(typeOrValue(n, "String", inline), n)
 	case KindNumber:
-		return suffix(literalOrType(n, "Number"), n)
+		return suffix(typeOrValue(n, "Number", inline), n)
 	case KindBoolean:
-		return suffix(literalOrType(n, "Boolean"), n)
+		return suffix(typeOrValue(n, "Boolean", inline), n)
+	case KindInteger:
+		return suffix(typeOrValue(n, "Integer", inline), n)
+	case KindDate:
+		base := "Date"
+		if !n.required && n.hasDefault {
+			if t, ok := n.defaultValue.(time.Time); ok {
+				base = jsDateString(t)
+				if !inline {
+					base = fmt.Sprintf("%q", base)
+				}
+			}
+		}
+		return suffix(base, n)
 	case KindNull:
 		return "null"
 	case KindNaN:
@@ -27,14 +41,28 @@ func stringifyNode(n *node, inline bool) string {
 		if n.hasDefault {
 			base = fmt.Sprintf("Any(%v)", n.defaultValue)
 		}
-		return suffix(base, n)
+		out := suffix(base, n)
+		// A node with no asserted type exists only to carry its builders, and
+		// renders as that chain alone — TS shows "Min(2)", not "Any.Min(2)".
+		if !n.hasDefault && strings.HasPrefix(out, "Any.") {
+			return out[len("Any."):]
+		}
+		return out
 	case KindNever:
 		return suffix("Never", n)
+	case KindRegexp:
+		if n.regexpVal != nil {
+			return suffix("/"+n.regexpVal.String()+"/", n)
+		}
+		return suffix("Regexp", n)
 	case KindCheck:
 		return suffix("Check", n)
 	case KindFunction:
 		return suffix("Function", n)
 	case KindList:
+		if n.disc != nil {
+			return suffix("Discriminated("+n.disc.tag+","+strings.Join(n.disc.tags, ",")+")", n)
+		}
 		mode := "One"
 		switch n.listMode {
 		case listSome:
@@ -46,7 +74,7 @@ func stringifyNode(n *node, inline bool) string {
 		for i, sn := range n.list {
 			parts[i] = stringifyNode(sn, true)
 		}
-		return suffix(fmt.Sprintf("%s(%s)", mode, strings.Join(parts, ", ")), n)
+		return suffix(fmt.Sprintf("%s(%s)", mode, strings.Join(parts, ",")), n)
 	case KindArray:
 		var parts []string
 		switch {
@@ -83,15 +111,8 @@ func suffix(base string, n *node) string {
 	out := base
 	// TS node2json renders a required scalar as just its type name ("Number"),
 	// never ".Required()", so no required annotation is emitted here.
-	if n.skippable {
-		out += ".Skip()"
-	}
-	if n.silent {
-		out += ".Ignore()"
-	}
-	if n.empty {
-		out += ".Empty()"
-	}
+	// Skip / Ignore / Empty are not annotated: they change whether a value is
+	// demanded, not what shape it has, and TS leaves them out of the rendering.
 	for _, b := range n.befores {
 		if b.stringify != nil {
 			out += "." + b.stringify()
@@ -105,20 +126,22 @@ func suffix(base string, n *node) string {
 	return out
 }
 
-func quoteOrType(n *node, fallback string) string {
-	if n.hasLiteral {
-		if s, ok := n.literal.(string); ok {
-			return fmt.Sprintf("%q", s)
-		}
+// typeOrValue renders a typed node the way TS does: a required node shows its
+// type name ("Number"), an unrequired one shows the value it would produce
+// ("0"), because that value is what the schema actually stands for there.
+//
+// inline mirrors TS stringify's dequote flag. Inside a composite message a
+// string value is written bare, so One("a",Number) reads "a, Number"; on its
+// own it keeps its quotes, so a string value stays distinguishable from a type
+// name and the empty string stays visible.
+func typeOrValue(n *node, typeName string, inline bool) string {
+	if n.required || !n.hasDefault {
+		return typeName
 	}
-	return fallback
-}
-
-func literalOrType(n *node, fallback string) string {
-	if n.hasLiteral {
-		return fmt.Sprintf("%v", n.literal)
+	if sv, ok := n.defaultValue.(string); ok && !inline {
+		return fmt.Sprintf("%q", sv)
 	}
-	return fallback
+	return fmt.Sprintf("%v", n.defaultValue)
 }
 
 // nodeSpec produces a JSON-friendly description of the node tree.
@@ -178,6 +201,14 @@ func nodeSpec(n *node) any {
 		branches := make([]any, len(n.list))
 		for i, sn := range n.list {
 			branches[i] = nodeSpec(sn)
+		}
+		out["branches"] = branches
+	}
+	if n.disc != nil {
+		out["discriminated"] = n.disc.tag
+		branches := map[string]any{}
+		for t, bn := range n.disc.branches {
+			branches[t] = nodeSpec(bn)
 		}
 		out["branches"] = branches
 	}

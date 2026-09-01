@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 )
 
 type compatRow struct {
@@ -25,14 +26,25 @@ func TestCompatTSV(t *testing.T) {
 	for _, row := range rows {
 		t.Run(row.Name, func(t *testing.T) {
 			s := MustShape(decodeSpec(row.Spec))
-			out, err := s.Validate(row.Input)
+
+			// A JSON null in the corpus is a value that is present and null.
+			// Go reads a plain nil as "no value supplied", so hand over the
+			// sentinel instead.
+			in := row.Input
+			if in == nil {
+				in = Null
+			}
+
+			out, err := s.Validate(in)
 
 			if row.Err != "" {
 				if err == nil {
-					t.Fatalf("expected error containing %q", row.Err)
+					t.Fatalf("expected error %q, got success", row.Err)
 				}
-				if !strings.Contains(strings.ToLower(err.Error()), strings.ToLower(row.Err)) {
-					t.Fatalf("expected error containing %q, got %q", row.Err, err.Error())
+				// Exact, whole-message comparison: a substring check cannot see
+				// a wrong separator, a wrong error order or an extra error.
+				if err.Error() != row.Err {
+					t.Fatalf("error mismatch\nexpected: %q\nactual:   %q", row.Err, err.Error())
 				}
 				return
 			}
@@ -107,7 +119,7 @@ func loadCompatFile(t *testing.T, path, base string) []compatRow {
 			Spec:   parseValueCell(t, col(cols, idx, "spec")),
 			Input:  parseValueCell(t, col(cols, idx, "input")),
 			Output: parseValueCell(t, col(cols, idx, "output")),
-			Err:    col(cols, idx, "error"),
+			Err:    parseErrorCell(t, col(cols, idx, "error")),
 		}
 		out = append(out, row)
 	}
@@ -122,7 +134,7 @@ func loadCompatFile(t *testing.T, path, base string) []compatRow {
 // jsonNorm round-trips a value through JSON so nil-valued map entries collapse
 // and all numbers become float64 — matching the JSON-authored expected column.
 func jsonNorm(v any) any {
-	b, err := json.Marshal(v)
+	b, err := json.Marshal(jsDates(v))
 	if err != nil {
 		return v
 	}
@@ -133,12 +145,51 @@ func jsonNorm(v any) any {
 	return out
 }
 
+// jsDates rewrites every time.Time in v to the string JSON.stringify gives a
+// Date, so the two languages' produced values compare across the JSON boundary.
+func jsDates(v any) any {
+	switch x := v.(type) {
+	case time.Time:
+		return jsDateString(x)
+	case map[string]any:
+		out := make(map[string]any, len(x))
+		for k, vv := range x {
+			out[k] = jsDates(vv)
+		}
+		return out
+	case []any:
+		out := make([]any, len(x))
+		for i, vv := range x {
+			out[i] = jsDates(vv)
+		}
+		return out
+	}
+	return v
+}
+
 func col(cols []string, idx map[string]int, key string) string {
 	i, ok := idx[key]
 	if !ok || i >= len(cols) {
 		return ""
 	}
 	return cols[i]
+}
+
+// parseErrorCell decodes the `error` column, which holds the COMPLETE expected
+// message as a JSON string (so embedded newlines survive the TSV). An empty
+// cell means "must not fail".
+func parseErrorCell(t *testing.T, src string) string {
+	t.Helper()
+	src = strings.TrimSpace(src)
+	if src == "" {
+		return ""
+	}
+
+	var msg string
+	if err := json.Unmarshal([]byte(src), &msg); err != nil {
+		t.Fatalf("bad error cell %q: %v", src, err)
+	}
+	return msg
 }
 
 func parseValueCell(t *testing.T, src string) any {
@@ -191,6 +242,10 @@ func decodeSpec(v any) any {
 					return Object
 				case "Array":
 					return Array
+				case "Integer":
+					return Integer
+				case "Date":
+					return Date
 				}
 			}
 		}
@@ -211,6 +266,14 @@ func decodeSpec(v any) any {
 			if es, ok := ev.(string); ok {
 				return MustExpr(es)
 			}
+		}
+		if dv, ok := obj["$discriminated"]; ok {
+			arr := dv.([]any)
+			branches := map[string]any{}
+			for t, b := range arr[1].(map[string]any) {
+				branches[t] = decodeSpec(b)
+			}
+			return Discriminated(arr[0].(string), branches)
 		}
 	}
 

@@ -21,7 +21,7 @@
 
 ```go
 type ValidationError struct { Issues []FieldError }
-func (e *ValidationError) Error() string   // issues joined by "; "
+func (e *ValidationError) Error() string   // issues joined by newline
 ```
 
 ## A single issue

@@ -4,7 +4,10 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"sort"
 	"strconv"
+	"strings"
+	"time"
 )
 
 // TS-aligned marks. See src/shape.ts makeErrImpl call sites.
@@ -17,6 +20,7 @@ const (
 	markScalarType      = 1050
 	markScalarRequired  = 1060
 	markNever           = 1070
+	markRegexp          = 1045
 	markUndefRequired   = 1080
 	markArrayClosed     = 1090
 	markObjectClosed    = 1100
@@ -33,6 +37,22 @@ var undefinedVal any = undefinedT{}
 
 func isUndef(v any) bool {
 	_, ok := v.(undefinedT)
+	return ok
+}
+
+// nullT marks a value that is present and null, as distinct from absent.
+type nullT struct{}
+
+// Null is an explicit present null. Go cannot tell a missing argument from a
+// nil one, so Validate(nil) means "no value supplied" (JS undefined) and
+// defaults fill, mirroring TS Shape(x)(). Validate(Null) means the value is
+// present and null (JS null), which is a type error against a typed shape.
+// Inside a map or slice a plain nil already reads as present-null, because the
+// key or index exists; Null is accepted there too and means the same thing.
+var Null any = nullT{}
+
+func isNull(v any) bool {
+	_, ok := v.(nullT)
 	return ok
 }
 
@@ -78,6 +98,12 @@ func validateNode(n *node, in any, path []string, pathArr []any, key string, par
 		return in
 	}
 
+	// Unwrap an explicit Null anywhere it appears, so it reads as a present nil
+	// rather than an opaque value of unknown type.
+	if isNull(in) {
+		in = nil
+	}
+
 	// Translate the absent sentinel back to nil, remembering that the value was
 	// missing (JS undefined) rather than an explicit null.
 	absent := isUndef(in)
@@ -97,7 +123,10 @@ func validateNode(n *node, in any, path []string, pathArr []any, key string, par
 		absent:  absent,
 	}
 
-	// Run before-validators. They may replace value, replace node, or short-circuit.
+	// Run before-validators. They may replace the value or the node, and a
+	// failing one ends the structural checks (TS handleValidate sets
+	// update.done) — but every before still runs, and so do the afters.
+	done := false
 	for _, b := range n.befores {
 		update := &Update{}
 		state.checkName = b.name
@@ -105,30 +134,78 @@ func validateNode(n *node, in any, path []string, pathArr []any, key string, par
 		applyUpdate(state, update)
 		in = state.Value
 		n = state.Node
+		if !ok && absentSkips(state, update) {
+			continue
+		}
 		if !ok {
 			emitUpdateErrors(state, update, verr)
-			if update.Done {
-				if n.faultMsg != "" {
-					replaceLastErrText(verr, n.faultMsg, state.Value, joinPath(path))
-				}
-				return state.Value
-			}
+		}
+		if !ok || update.Done {
+			done = true
 		}
 	}
-
-	// Composition shortcuts.
-	if n.kind == KindList {
-		out := evaluateList(n, state.Value, path, pathArr, key, parent, ctx, match, verr)
-		state.Value = out
+	if done {
 		runAfters(state, verr)
 		return state.Value
+	}
+
+	state.Value = validateStructure(n, state, absent, path, pathArr, key, parent, ctx, match, verr)
+	runAfters(state, verr)
+	return state.Value
+}
+
+// absentSkips reports whether a failed check is to raise nothing: TS drops the
+// errors of a check run against an absent value on a node that does not
+// require one ("Skip allows undefined"), unless the check insisted with Done.
+func absentSkips(state *State, update *Update) bool {
+	n := state.Node
+	return state.absent && state.Value == nil && (n.skippable || !n.required) && !update.Done
+}
+
+// validateStructure runs the structural checks — composition, nullable, Never,
+// the missing-value rules and the kind check — and returns the produced value.
+// The afters run afterwards whatever it reported, as they do in TS.
+func validateStructure(n *node, state *State, absent bool, path []string, pathArr []any, key string, parent any, ctx *Context, match bool, verr *ValidationError) any {
+
+	// Composition shortcuts. An absent value on a node that does not require
+	// one is not put to the branches: TS drops the errors such a check would
+	// raise, so Optional(One(...)) given nothing is simply absent.
+	if n.kind == KindList && n.listMode != listNone && !(absent && !n.required) {
+		return evaluateList(n, state.Value, path, pathArr, key, parent, ctx, match, verr, absent)
+	}
+
+	// Nullable: an explicit null is accepted as the value. Absent is still
+	// governed by required/optional below, since a nil that is absent is not
+	// yet in play here — the absent sentinel was translated above.
+	if state.Value == nil && !absent && n.nullable {
+		return state.Value
+	}
+
+	// Never rejects any value, present or absent. This precedes the missing-value
+	// handling below: an absent value against Never is "no value is allowed",
+	// not "the value is required".
+	if n.kind == KindNever {
+		err := makeErr(state, WhyNever, markNever, "")
+		if n.faultMsg != "" {
+			err.Text = expandErrText(n.faultMsg, err.Path, state.Value)
+		}
+		if !n.silent {
+			verr.add(err)
+		}
+		return state.Value
+	}
+
+	// A regexp node never reports "required": TS treats an absent value as a
+	// non-string and reports the type error, or ignores it when not required.
+	if n.kind == KindRegexp && state.Value == nil && absent && !n.required {
+		return nil
 	}
 
 	// Missing value (JS undefined): required error, skip, or inject the default.
 	// An explicit null (present, not absent) falls through to structural checks
 	// below — where, e.g., null against a String is a type error, not a required
 	// error (mirrors TS undefined-vs-null semantics).
-	if state.Value == nil && absent {
+	if state.Value == nil && absent && n.kind != KindRegexp {
 		if n.required {
 			err := makeErr(state, WhyRequired, requiredMarkFor(n.kind), "")
 			if n.faultMsg != "" {
@@ -142,19 +219,18 @@ func validateNode(n *node, in any, path []string, pathArr []any, key string, par
 		if n.skippable {
 			return nil
 		}
-		return cloneDefault(n)
-	}
 
-	// Structural type checks.
-	if n.kind == KindNever {
-		err := makeErr(state, WhyNever, markNever, "")
-		if n.faultMsg != "" {
-			err.Text = expandErrText(n.faultMsg, err.Path, state.Value)
+		// A container spec with no explicit default is not simply filled in:
+		// TS constructs the empty container and descends, so a required
+		// descendant still raises and nested defaults are still built. Handing
+		// back cloneDefault(n) here skipped that entirely — cloneDefault omits
+		// required children, so { a: { b: Number } } accepted {} and the
+		// requirement on a.b was never checked.
+		if !n.hasDefault && (n.kind == KindObject || n.kind == KindArray) {
+			state.Value = emptyContainer(n.kind)
+		} else {
+			return cloneDefault(n)
 		}
-		if !n.silent {
-			verr.add(err)
-		}
-		return state.Value
 	}
 
 	out := state.Value
@@ -162,6 +238,33 @@ func validateNode(n *node, in any, path []string, pathArr []any, key string, par
 	switch n.kind {
 	case KindAny, KindCheck:
 		// nothing structural to enforce
+	case KindRegexp:
+		// A bare /re/ is a string-shaped node in TS, so a non-string is a plain
+		// "not of type string" error rather than a failed check, and the empty
+		// string is matched rather than rejected as empty.
+		sv, ok := state.Value.(string)
+		if !ok {
+			err := makeErr(state, WhyType, markScalarType, "")
+			err.Type = KindString
+			err.Text = defaultErrText(err)
+			if n.faultMsg != "" {
+				err.Text = expandErrText(n.faultMsg, err.Path, state.Value)
+			}
+			if !n.silent {
+				verr.add(err)
+			}
+			return state.Value
+		}
+		if n.regexpVal != nil && !n.regexpVal.MatchString(sv) {
+			err := makeErr(state, WhyRegexp, markRegexp, "")
+			if n.faultMsg != "" {
+				err.Text = expandErrText(n.faultMsg, err.Path, state.Value)
+			}
+			if !n.silent {
+				verr.add(err)
+			}
+			return state.Value
+		}
 	case KindString:
 		s, ok := state.Value.(string)
 		if !ok {
@@ -192,6 +295,16 @@ func validateNode(n *node, in any, path []string, pathArr []any, key string, par
 			emitTypeErr(state, verr, n)
 			return state.Value
 		}
+	case KindInteger:
+		if !isInteger(state.Value) {
+			emitTypeErr(state, verr, n)
+			return state.Value
+		}
+	case KindDate:
+		if _, ok := state.Value.(time.Time); !ok {
+			emitTypeErr(state, verr, n)
+			return state.Value
+		}
 	case KindNaN:
 		if !isNumber(state.Value) || !isNaN(state.Value) {
 			emitTypeErr(state, verr, n)
@@ -203,12 +316,12 @@ func validateNode(n *node, in any, path []string, pathArr []any, key string, par
 			return state.Value
 		}
 	case KindArray:
-		out = validateArray(n, state.Value, path, pathArr, ctx, match, verr)
+		out = validateArray(n, state.Value, path, pathArr, parent, ctx, match, verr)
 		if out == nil {
 			return state.Value
 		}
 	case KindObject:
-		out = validateObject(n, state.Value, path, pathArr, ctx, match, verr)
+		out = validateObject(n, state.Value, path, pathArr, parent, ctx, match, verr)
 		if out == nil {
 			return state.Value
 		}
@@ -221,9 +334,7 @@ func validateNode(n *node, in any, path []string, pathArr []any, key string, par
 		// Unknown kind: allow.
 	}
 
-	state.Value = out
-	runAfters(state, verr)
-	return state.Value
+	return out
 }
 
 func emitTypeErr(state *State, verr *ValidationError, n *node) {
@@ -237,28 +348,23 @@ func emitTypeErr(state *State, verr *ValidationError, n *node) {
 }
 
 func runAfters(state *State, verr *ValidationError) {
+	// Every after runs, whatever the ones before it reported (TS).
 	n := state.Node
 	for _, a := range n.afters {
 		update := &Update{}
 		state.checkName = a.name
 		ok := a.fn(state.Value, update, state)
 		applyUpdate(state, update)
-		if !ok {
+		if !ok && !absentSkips(state, update) {
 			emitUpdateErrors(state, update, verr)
-			if update.Done {
-				if n.faultMsg != "" {
-					replaceLastErrText(verr, n.faultMsg, state.Value, joinPath(state.Path))
-				}
-				return
-			}
 		}
 	}
 }
 
-func validateArray(n *node, in any, path []string, pathArr []any, ctx *Context, match bool, verr *ValidationError) any {
+func validateArray(n *node, in any, path []string, pathArr []any, parent any, ctx *Context, match bool, verr *ValidationError) any {
 	arr, ok := toAnySlice(in)
 	if !ok {
-		state := &State{Path: path, PathArr: pathArr, Value: in, Node: n, Match: match, Ctx: ctx}
+		state := &State{Path: path, PathArr: pathArr, Value: in, Node: n, Parent: parent, Match: match, Ctx: ctx}
 		emitTypeErr(state, verr, n)
 		return nil
 	}
@@ -284,11 +390,10 @@ func validateArray(n *node, in any, path []string, pathArr []any, ctx *Context, 
 		out := make([]any, len(arr))
 		for i, v := range arr {
 			if i < tupleLen {
-				cn := n.arrChildren[i]
-				out[i] = validateNode(cn, v, append(path, strconv.Itoa(i)), append(pathArr, i), strconv.Itoa(i), out, ctx, match, verr)
+				out[i] = validateElem(n.arrChildren[i], v, path, pathArr, i, out, ctx, match, verr)
 			} else {
 				// len(arr) > tupleLen only reaches here when arrRest is set.
-				out[i] = validateNode(n.arrRest, v, append(path, strconv.Itoa(i)), append(pathArr, i), strconv.Itoa(i), out, ctx, match, verr)
+				out[i] = validateElem(n.arrRest, v, path, pathArr, i, out, ctx, match, verr)
 			}
 		}
 		// Missing tuple positions get their default.
@@ -300,7 +405,16 @@ func validateArray(n *node, in any, path []string, pathArr []any, ctx *Context, 
 	case n.arrChild != nil:
 		out := make([]any, len(arr))
 		for i, v := range arr {
-			out[i] = validateNode(n.arrChild, v, append(path, strconv.Itoa(i)), append(pathArr, i), strconv.Itoa(i), out, ctx, match, verr)
+			out[i] = validateElem(n.arrChild, v, path, pathArr, i, out, ctx, match, verr)
+		}
+		return out
+	case n.arrRest != nil:
+		// Rest with no tuple positions in front of it: every element is a rest
+		// element. Without this case the node fell through to the default and
+		// nothing was validated at all.
+		out := make([]any, len(arr))
+		for i, v := range arr {
+			out[i] = validateElem(n.arrRest, v, path, pathArr, i, out, ctx, match, verr)
 		}
 		return out
 	default:
@@ -310,10 +424,10 @@ func validateArray(n *node, in any, path []string, pathArr []any, ctx *Context, 
 	}
 }
 
-func validateObject(n *node, in any, path []string, pathArr []any, ctx *Context, match bool, verr *ValidationError) any {
+func validateObject(n *node, in any, path []string, pathArr []any, parent any, ctx *Context, match bool, verr *ValidationError) any {
 	obj, ok := in.(map[string]any)
 	if !ok {
-		state := &State{Path: path, PathArr: pathArr, Value: in, Node: n, Match: match, Ctx: ctx}
+		state := &State{Path: path, PathArr: pathArr, Value: in, Node: n, Parent: parent, Match: match, Ctx: ctx}
 		emitTypeErr(state, verr, n)
 		return nil
 	}
@@ -334,6 +448,33 @@ func validateObject(n *node, in any, path []string, pathArr []any, ctx *Context,
 		}
 		for _, src := range cn.renameClaim {
 			consumed[src] = true
+		}
+	}
+
+	// Unknown keys are reported before descending into the declared ones, which
+	// is the order TS emits them in. The keys are sorted because Go map
+	// iteration is random and the message order is compared exactly.
+	if !n.open {
+		unknown := make([]string, 0, len(obj))
+		for k := range obj {
+			if !consumed[k] {
+				unknown = append(unknown, k)
+			}
+		}
+		sort.Strings(unknown)
+
+		// One error listing every unknown key, not one error per key. The path
+		// is the parent's; the offending keys are reported separately. TS
+		// renders this as:
+		//   Validation failed for property "<parent>" because the property "<k>" is not allowed.
+		//   ... because the properties "<k>, <k>" are not allowed.
+		if len(unknown) > 0 && !n.silent {
+			state := &State{Path: path, PathArr: pathArr, Key: strings.Join(unknown, ", "),
+				Value: obj, Node: n, Match: match, Ctx: ctx}
+			err := makeErr(state, WhyClosed, markObjectClosed, "")
+			err.plural = len(unknown) > 1
+			err.Text = defaultErrText(err)
+			verr.add(err)
 		}
 	}
 
@@ -371,15 +512,11 @@ func validateObject(n *node, in any, path []string, pathArr []any, ctx *Context,
 				continue
 			}
 		} else {
-			// Ignore: keep the value only when it validates cleanly, otherwise drop
-			// it (and any errors it would raise). Probe with silent disabled so the
-			// failure is observable (mirrors TS Ignore inspecting curerr).
-			if cn.silent && cn.skippable {
-				probe := *cn
-				probe.silent = false
-				sub := &ValidationError{}
-				probed := validateNode(&probe, v, kpath, kpathArr, k, out, ctx, match, sub)
-				if sub.hasAny() {
+			// Ignore: keep the value only when it validates cleanly, otherwise
+			// drop it (and any errors it would raise).
+			if isIgnore(cn) {
+				probed, kept := validateIgnored(cn, v, kpath, kpathArr, k, out, ctx, match)
+				if !kept {
 					delete(out, k)
 					continue
 				}
@@ -412,48 +549,59 @@ func validateObject(n *node, in any, path []string, pathArr []any, ctx *Context,
 		}
 	}
 
-	switch {
-	case n.open && n.objRest != nil:
-		for k, v := range obj {
-			if _, declared := n.objChildren[k]; declared {
-				continue
-			}
-			out[k] = validateNode(n.objRest, v, append(path, k), append(pathArr, k), k, out, ctx, match, verr)
-		}
-	case n.open:
-		// keep unknown as-is
-	default:
+	if n.open && n.objRest != nil {
+		// Sorted: Go map iteration is random and the message order is compared
+		// exactly, so an unsorted walk makes the error order flaky.
+		rest := make([]string, 0, len(obj))
 		for k := range obj {
-			if consumed[k] {
+			if _, declared := n.objChildren[k]; !declared {
+				rest = append(rest, k)
+			}
+		}
+		sort.Strings(rest)
+
+		for _, k := range rest {
+			// Honour Ignore here too: an open object whose rest shape is an
+			// Ignore drops the keys that do not validate.
+			if isIgnore(n.objRest) {
+				produced, kept := validateIgnored(n.objRest, obj[k],
+					append(path, k), append(pathArr, k), k, out, ctx, match)
+				if !kept {
+					delete(out, k)
+					continue
+				}
+				out[k] = produced
 				continue
 			}
-			// Closed: path is the parent's path; the offending key is
-			// reported separately. TS makeErrImpl renders this as:
-			//   Validation failed for property "<parent>" because the property "<k>" is not allowed.
-			state := &State{Path: path, PathArr: pathArr, Key: k, Value: obj, Node: n, Match: match, Ctx: ctx}
-			err := makeErr(state, WhyClosed, markObjectClosed, "")
-			if !n.silent {
-				verr.add(err)
-			}
+			out[k] = validateNode(n.objRest, obj[k], append(path, k), append(pathArr, k), k, out, ctx, match, verr)
 		}
 	}
 
 	return out
 }
 
-func evaluateList(n *node, in any, path []string, pathArr []any, key string, parent any, ctx *Context, match bool, verr *ValidationError) any {
+func evaluateList(n *node, in any, path []string, pathArr []any, key string, parent any, ctx *Context, match bool, verr *ValidationError, absent bool) any {
+	// Branches must see the value as the parent saw it: an absent value stays
+	// absent, so a branch that does not require one can still match and supply
+	// its default. Passing a bare nil instead made every branch see a present
+	// null, which a typed branch rejects.
+	branchIn := in
+	if absent {
+		branchIn = undefinedVal
+	}
+
 	switch n.listMode {
 	case listOne:
 		passN := 0
 		var winner any = in
 		for _, sn := range n.list {
 			sub := &ValidationError{}
-			out := validateNode(sn, in, path, pathArr, key, parent, ctx, true, sub)
+			out := validateNode(sn, branchIn, path, pathArr, key, parent, ctx, true, sub)
 			if !sub.hasAny() {
 				passN++
 				if passN == 1 {
 					if !match {
-						out2 := validateNode(sn, in, path, pathArr, key, parent, ctx, false, &ValidationError{})
+						out2 := validateNode(sn, branchIn, path, pathArr, key, parent, ctx, false, &ValidationError{})
 						winner = out2
 					} else {
 						winner = out
@@ -463,7 +611,7 @@ func evaluateList(n *node, in any, path []string, pathArr []any, key string, par
 			}
 		}
 		if passN != 1 {
-			state := &State{Path: path, PathArr: pathArr, Key: key, Value: in, Node: n, Match: match, Ctx: ctx}
+			state := &State{Path: path, PathArr: pathArr, Key: key, Value: in, Node: n, Match: match, Ctx: ctx, absent: absent}
 			err := makeErr(state, WhyOne, 4030,
 				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" does not satisfy one of: %s", listShapeNames(n)))
 			if n.faultMsg != "" {
@@ -480,15 +628,15 @@ func evaluateList(n *node, in any, path []string, pathArr []any, key string, par
 		var winner any = in
 		for _, sn := range n.list {
 			sub := &ValidationError{}
-			out := validateNode(sn, in, path, pathArr, key, parent, ctx, true, sub)
+			out := validateNode(sn, branchIn, path, pathArr, key, parent, ctx, true, sub)
 			if !sub.hasAny() {
 				matched = true
-				winner = validateNode(sn, in, path, pathArr, key, parent, ctx, match, &ValidationError{})
+				winner = validateNode(sn, branchIn, path, pathArr, key, parent, ctx, match, &ValidationError{})
 				_ = out
 			}
 		}
 		if !matched {
-			state := &State{Path: path, PathArr: pathArr, Key: key, Value: in, Node: n, Match: match, Ctx: ctx}
+			state := &State{Path: path, PathArr: pathArr, Key: key, Value: in, Node: n, Match: match, Ctx: ctx, absent: absent}
 			err := makeErr(state, WhySome, 4031,
 				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" does not satisfy any of: %s", listShapeNames(n)))
 			if n.faultMsg != "" {
@@ -503,20 +651,23 @@ func evaluateList(n *node, in any, path []string, pathArr []any, key string, par
 	case listAll:
 		passAll := true
 		out := in
+		// All threads the value through its branches, so once a branch has
+		// produced one it is no longer absent.
+		branchOut := branchIn
 		for _, sn := range n.list {
 			sub := &ValidationError{}
-			res := validateNode(sn, out, path, pathArr, key, parent, ctx, match, sub)
+			res := validateNode(sn, branchOut, path, pathArr, key, parent, ctx, match, sub)
 			if sub.hasAny() {
+				// The branch errors are diagnostic only: TS collects them into a
+				// throwaway context and reports just the composite failure.
 				passAll = false
-				if !match {
-					verr.Issues = append(verr.Issues, sub.Issues...)
-				}
 			} else {
 				out = res
+				branchOut = res
 			}
 		}
 		if !passAll {
-			state := &State{Path: path, PathArr: pathArr, Key: key, Value: in, Node: n, Match: match, Ctx: ctx}
+			state := &State{Path: path, PathArr: pathArr, Key: key, Value: in, Node: n, Match: match, Ctx: ctx, absent: absent}
 			err := makeErr(state, WhyAll, 4032,
 				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" does not satisfy all of: %s", listShapeNames(n)))
 			if !n.silent {
@@ -554,7 +705,13 @@ func emitUpdateErrors(state *State, update *Update, verr *ValidationError) {
 		if mark == 0 {
 			mark = markCustomCheckErr
 		}
-		verr.add(makeErr(state, why, mark, ""))
+		// A check that supplies no text of its own takes the Fault text, as a
+		// structural error does; one that does keeps its own (TS: text || z).
+		err := makeErr(state, why, mark, "")
+		if state.Node.faultMsg != "" {
+			err.Text = expandErrText(state.Node.faultMsg, err.Path, state.Value)
+		}
+		verr.add(err)
 	case string:
 		why := update.Why
 		mark := update.Mark
@@ -595,39 +752,68 @@ func applyUpdate(state *State, update *Update) {
 	}
 }
 
-func replaceLastErrText(verr *ValidationError, msg string, val any, path string) {
-	if len(verr.Issues) == 0 {
-		return
+// validateElem validates one array element, honouring Ignore the same way an
+// object property and the root do: a value that does not validate is dropped
+// along with the errors it would raise.
+func validateElem(cn *node, v any, path []string, pathArr []any, i int, parent any, ctx *Context, match bool, verr *ValidationError) any {
+	key := strconv.Itoa(i)
+	epath := append(path, key)
+	epathArr := append(pathArr, i)
+
+	if isIgnore(cn) {
+		produced, kept := validateIgnored(cn, v, epath, epathArr, key, parent, ctx, match)
+		if !kept {
+			return nil
+		}
+		return produced
 	}
-	idx := len(verr.Issues) - 1
-	verr.Issues[idx].Text = expandErrText(msg, path, val)
+
+	return validateNode(cn, v, epath, epathArr, key, parent, ctx, match, verr)
 }
 
-func cloneDefault(n *node) any {
-	switch n.kind {
-	case KindObject:
-		out := map[string]any{}
-		for _, k := range n.objKeys {
-			cn := n.objChildren[k]
-			if cn.required || cn.skippable {
-				continue
-			}
-			if cn.hasDefault || cn.kind == KindObject || cn.kind == KindArray || cn.kind == KindNull {
-				out[k] = cloneDefault(cn)
-			}
-		}
-		return out
-	case KindArray:
-		if n.hasDefault {
-			return cloneAny(n.defaultValue)
-		}
-		return []any{}
-	default:
-		if n.hasDefault {
-			return cloneAny(n.defaultValue)
-		}
-		return n.defaultValue
+// isIgnore reports whether a node was built by Ignore: optional, no default
+// injection, and errors below it suppressed.
+func isIgnore(n *node) bool {
+	return n != nil && n.silent && n.skippable
+}
+
+// validateIgnored runs an Ignore node, reporting whether the value survived.
+// The probe disables silence so the failure is observable, mirroring TS Ignore
+// inspecting curerr; the caller drops the value when kept is false.
+func validateIgnored(n *node, in any, path []string, pathArr []any, key string, parent any, ctx *Context, match bool) (any, bool) {
+	probe := *n
+	probe.silent = false
+	sub := &ValidationError{}
+	produced := validateNode(&probe, in, path, pathArr, key, parent, ctx, match, sub)
+	if sub.hasAny() {
+		return nil, false
 	}
+	return produced, true
+}
+
+// emptyContainer is the value a container node descends into when its own
+// value is absent: the empty object or array TS constructs before validating
+// children.
+func emptyContainer(k Kind) any {
+	if k == KindArray {
+		return []any{}
+	}
+	return map[string]any{}
+}
+
+// cloneDefault produces the value injected for an absent, unrequired node.
+//
+// It is only reached for a scalar, or for a container that carries an explicit
+// default — a container without one descends into an empty container instead,
+// so that required descendants still raise. That is why there is no longer any
+// child walk here: building a container out of its children's defaults would
+// also ignore the explicit default the node was given, and TS returns that
+// default as-is.
+func cloneDefault(n *node) any {
+	if n.hasDefault {
+		return cloneAny(n.defaultValue)
+	}
+	return n.defaultValue
 }
 
 func cloneAny(v any) any {
@@ -657,6 +843,20 @@ func isNumber(v any) bool {
 		return true
 	}
 	return false
+}
+
+// isInteger reports whether v is a number with no fractional part. Every
+// integer Go type qualifies; a float qualifies when it is finite and whole,
+// mirroring Number.isInteger.
+func isInteger(v any) bool {
+	switch x := v.(type) {
+	case float64:
+		return !math.IsNaN(x) && !math.IsInf(x, 0) && x == math.Trunc(x)
+	case float32:
+		f := float64(x)
+		return !math.IsNaN(f) && !math.IsInf(f, 0) && f == math.Trunc(f)
+	}
+	return isNumber(v)
 }
 
 func isNaN(v any) bool {

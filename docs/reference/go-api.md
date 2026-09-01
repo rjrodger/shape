@@ -34,6 +34,9 @@ var Any, String, Number, Boolean, Object, Array, Function TypeToken
 func (t TypeToken) Kind() Kind
 ```
 
+`Any` is the one token that does not require a value, so `{ "a": Any }` accepts
+an object without `a`. To narrow it, use `Type(Any, spec)`.
+
 `Kind` is the normalized kind identifier (`KindString`, `KindNumber`,
 `KindBoolean`, `KindObject`, `KindArray`, `KindAny`, `KindNull`, `KindNaN`,
 `KindFunction`, `KindNever`, `KindCheck`, `KindList`).
@@ -56,6 +59,42 @@ func RenameWith(name string, opts RenameOptions, spec ...any) *Node
 
 `G`-prefixed aliases exist for every builder and token (`GString`, `GMin`,
 `GRequired`, …) for use with a dot-import.
+
+### Chainable methods
+
+Every builder that takes only a shape is also a `*Node` method, so specs read as
+a chain: `Optional().Number().Min(2)`.
+
+```go
+Above  After  Any     Before   Below   Check  Child  Closed  Default
+Define Empty  Exact   Fault    Func    Ignore Len    Max     Min
+Never  Open   Optional Refer   Rename  Required Rest Skip    Type
+```
+
+plus the type shortcuts `.Number()`, `.Boolean()`, `.Object()`, `.Array()` and
+`.Function()`. There is no `.String()`: a method of that name on an exported
+type reads as `fmt.Stringer` and `go vet` rejects the signature — use
+`.Type(String)`, which is what the shortcuts call anyway.
+
+## Absent versus null
+
+```go
+var Null any
+```
+
+Go cannot tell a missing argument from a nil one, so `Validate(nil)` means "no
+value supplied" (JS `undefined`) and defaults fill, mirroring TS `Shape(x)()`.
+Pass `Null` to mean a value that is present and null (JS `null`), which is a
+type error against a typed shape:
+
+```go
+s := shape.MustShape(1.0)
+s.Validate(nil)         // 1.0, nil       — absent, so the default fills
+s.Validate(shape.Null)  // "the value is not of type number"
+```
+
+Inside a map or slice a plain `nil` already reads as present-null, because the
+key or index exists; `Null` is accepted there too and means the same thing.
 
 ## Options
 

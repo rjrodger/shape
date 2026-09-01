@@ -10,7 +10,10 @@ The full guide is **[AGENTS.md](AGENTS.md)** — read it. The essentials:
    mirrored in Go — never the other way around.
 2. **Keep the two languages at parity.** The shared corpus in `test/*.tsv` is the
    gate. After a declarative change: `make build-ts && node test/gen-compat.js`
-   to regenerate it, then `make test` — both languages must pass.
+   to regenerate it, then `make test` — both languages must pass. Then
+   `make diff`, the differential harness, which runs thousands of generated
+   cases through both and compares exact error text; promote anything it finds
+   into a corpus row.
 3. **Rebuild before testing TS.** Edits to `ts/src` require `npm run build`
    (output in the git-ignored `ts/dist` / `ts/dist-test`).
 4. **Coverage bar is 100% lines** in both languages. Go has no line-ignore
@@ -24,6 +27,7 @@ The full guide is **[AGENTS.md](AGENTS.md)** — read it. The essentials:
 ```sh
 make build          # build ts + go
 make test           # test ts + go (includes the shared corpus)
+make diff           # differential parity harness (make diff-full for detail)
 cd go && go vet ./... && go test -cover .
 cd ts && node --test --experimental-test-coverage dist-test/**/*.test.js
 ```

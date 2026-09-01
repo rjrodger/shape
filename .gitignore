@@ -30,3 +30,6 @@ dist-test
 
 package-lock.json
 yarn.lock
+
+# differential harness scratch output
+test/differential/.out/

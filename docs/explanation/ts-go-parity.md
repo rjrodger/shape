@@ -1,43 +1,91 @@
 # TypeScript ↔ Go parity
 
 Shape has two implementations. **TypeScript is canonical** — it defines the
-behaviour. The Go port aims to match it exactly for validation outcomes and error
-message text.
+behaviour. The Go port matches it exactly for validation outcomes, produced
+values and error message text.
 
 ## How parity is enforced
 
-A language-neutral conformance corpus lives in [`test/`](../../test/README.md) as
-a set of `.tsv` files. Each row is a `(spec, input) → output | error` case whose
-expected column is computed from the canonical TypeScript build. **Both**
+Two gates, and they do different jobs.
+
+### The shared corpus
+
+A language-neutral conformance corpus lives in [`test/`](../../test/README.md)
+as a set of `.tsv` files. Each row is a `(spec, input) → output | error` case
+whose expected column is computed from the canonical TypeScript build. **Both**
 implementations run every row:
 
 - TypeScript — `ts/test/compat.test.ts`
 - Go — `go/compat_tsv_test.go`
 
 A row's `output` is compared JSON-normalized (so numeric widths and absent
-properties don't cause spurious mismatches), and its `error` must appear in the
-produced message. When the two languages agree on every row, they are at parity
-for the declarative surface. Imperative builders (custom `Check` functions,
-`Before`/`After`, `Key`, `Rename`) are covered by each language's own tests.
+properties don't cause spurious mismatches). Its `error` column holds the
+**complete** expected message and is compared **exactly** — a substring check
+cannot see a wrong separator, a wrong error order or an extra error, and those
+are precisely the ways two implementations drift apart.
+
+### The differential harness
+
+The corpus only covers rows someone thought to write, and for a long time it
+had no negative case for `Type()` or `Rest()` — so a `Type()` that asserted
+nothing and a `Rest()` that validated nothing passed it.
+
+[`test/differential/`](../../test/differential/README.md) is the wider net. It
+generates thousands of `(spec, input)` pairs, runs every one through both
+implementations, and diffs verdict, produced value and exact error text:
+
+```sh
+make diff        # sampled report
+make diff-full   # every mismatch
+```
+
+Run it after any behaviour change, and promote anything it finds into a corpus
+row so the committed gate keeps it closed.
 
 ## What is guaranteed to match
 
 - Validation outcomes: pass/fail, injected defaults, produced values.
-- Error **message text** for structural and built-in-builder failures, including
-  the `undefined`-vs-`null` rendering and the `index`-vs-`property` wording.
-- The builder set and the string DSL grammar.
+- Error **message text**, including the aggregation separator (a newline), the
+  order errors are reported in, the `undefined`-vs-`null` rendering, the
+  `index`-vs-`property` wording, and how a node renders inside a composite
+  `One`/`Some`/`All` message.
+- The builder set, the chainable-method set, and the string DSL grammar.
 
 ## Intentional divergences
 
-Some differences are inherent to Go and are unlikely ever to close:
+Some differences are inherent to Go and are unlikely ever to close.
 
 - **Object key ordering.** Go maps are unordered, so object specs and argument
   specs are processed in **alphabetical** key order; TypeScript preserves
-  insertion order. This can affect the *order* of multiple errors and the
-  meta-key adjacency rule. Name argument keys `a`, `b`, `c`, … to fix positions.
-- **Regular expressions.** Go uses the RE2 engine (`regexp`); TypeScript uses the
-  JavaScript engine. Patterns relying on backtracking features differ. Prefer
-  portable patterns for schemas that must behave identically.
+  insertion order. This affects three things: the *order* of multiple errors,
+  the meta-key adjacency rule, and how an object *value* is rendered inside a
+  message — validating a closed `{a: 1}` against `{b: 1, a: 2}` names the value
+  `{b:1,a:2}` in TypeScript and `{a:2,b:1}` in Go. Name argument keys `a`, `b`,
+  `c`, … to fix positions. The produced value itself is unaffected: it is the
+  same object either way, and the differential harness compares it canonically.
+
+- **Regular expressions.** Go uses the RE2 engine (`regexp`); TypeScript uses
+  the JavaScript engine. Patterns relying on backtracking features differ.
+  Prefer portable patterns for schemas that must behave identically.
+
+- **An explicit null at the root.** Go cannot tell a missing argument from a nil
+  one, so `Validate(nil)` means "no value supplied" (JS `undefined`) and
+  defaults fill, mirroring TS `Shape(x)()`. To mean a value that is present and
+  null — a type error against a typed shape — pass the exported `Null`
+  sentinel. Inside a map or slice a plain `nil` already reads as present-null,
+  because the key or index exists.
+
+- **No Symbol.** TypeScript has a `Symbol` type token and a `.Symbol()` chain
+  shortcut. Go has no equivalent concept.
+
+- **No `.String()` chain shortcut.** Go has `.Number()`, `.Boolean()`,
+  `.Object()`, `.Array()` and `.Function()`, but a method named `String` on an
+  exported type reads as `fmt.Stringer` and `go vet` rejects the signature. Use
+  `.Type(String)`, which is what the shortcuts call anyway.
+
+- **`Any` is a token, not a builder.** In TypeScript `Any` is a builder
+  function, usable bare (`{ a: Any }`) or called (`Any()`). In Go it is a
+  `TypeToken`; to narrow, use `Type(Any, spec)` or the `.Any()` chain method.
 
 ## Error metadata
 
@@ -53,6 +101,11 @@ Because TypeScript is canonical, a behaviour change starts there:
 1. Change `ts/src/shape.ts` and add/adjust a case in `test/gen-compat.js`.
 2. Regenerate the corpus: `node test/gen-compat.js`.
 3. Run `make test` — both languages must pass the regenerated corpus.
-4. If Go diverges, fix Go to match the corpus.
+4. Run `make diff` — both languages must agree on every generated case.
+5. If Go diverges, fix Go to match.
+
+A divergence caused by a TypeScript bug is fixed in TypeScript first: never
+"fix" it by changing Go to match, and never change TypeScript to match Go
+without deciding that the TypeScript behaviour is wrong.
 
 See the [agent and contributor guide](../../AGENTS.md).
