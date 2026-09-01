@@ -3,8 +3,10 @@ package shape
 import (
 	"fmt"
 	"math"
+	"reflect"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -240,9 +242,13 @@ func normalizeObject(v map[string]any, opts ShapeOptions) (*node, error) {
 			if m := keyExprRE.FindStringSubmatch(k); m != nil && strings.Contains(k, ":") {
 				bare := m[1]
 				exprSrc := m[2]
-				// strip optional surrounding quotes from name
+				// A quoted name decodes its escapes: "a\"b" declares a"b.
 				if len(bare) >= 2 && bare[0] == '"' && bare[len(bare)-1] == '"' {
-					bare = bare[1 : len(bare)-1]
+					if unq, err := strconv.Unquote(bare); err == nil {
+						bare = unq
+					} else {
+						bare = bare[1 : len(bare)-1]
+					}
 				}
 				if exprSrc != "" {
 					realKey = bare
@@ -299,8 +305,10 @@ func buildExprWithDefault(src string, dflt any) (*Node, error) {
 	// A builder whose arity is already satisfied drops it — Optional(Number, 5)
 	// ignores the 5 — and the example is the author's stated default, so where
 	// it made no difference to the node it is applied as the value instead.
-	// (ts/src/shape.ts keyExprNode does the same, both ways round.)
-	node, applyErr := exprApply(src, newNodeWrap(ex))
+	// (ts/src/shape.ts keyExprNode does the same, both ways round.) The raw
+	// example is what is appended, as TS splices the raw value: a builder that
+	// takes a value ("Default()", "Min()") then reads it as one.
+	node, applyErr := exprApply(src, dflt)
 	if applyErr != nil {
 		// Not a builder chain at all — a bare literal such as "a: 5" — so there
 		// is nothing to hand the example to and the expression's own value
@@ -309,12 +317,22 @@ func buildExprWithDefault(src string, dflt any) (*Node, error) {
 	}
 
 	if bareErr != nil {
-		// The expression cannot be built without the example — Pick(["a"]) has
-		// nothing to pick from — so the example plainly made a difference.
+		// The expression cannot be built without the example. Where the
+		// example became the shape — Pick(["a"]) has nothing to pick from
+		// without it — it plainly made a difference; where a value-taking
+		// builder read it as its argument, TS's bare build succeeds with an
+		// empty argument and looks the same, so the example is the default
+		// too ("a: Min()" with 3 is a bound of 3 defaulting to 3).
+		if ex.kind != node.n.kind {
+			node.n.hasDefault = true
+			node.n.defaultValue = dflt
+			node.n.hasLiteral = true
+			node.n.literal = dflt
+		}
 		return node, nil
 	}
 
-	if stringifyNode(node.n, false) == stringifyNode(bare.n, false) {
+	if sameShapeNode(node.n, bare.n) {
 		node.n.hasDefault = true
 		node.n.defaultValue = dflt
 		node.n.hasLiteral = true
@@ -322,4 +340,25 @@ func buildExprWithDefault(src string, dflt any) (*Node, error) {
 	}
 
 	return node, nil
+}
+
+// sameShapeNode is the structural comparison of the parts of a node a key
+// expression's example could have influenced (TS sameShapeNode): the kind,
+// the required and skippable flags, how many checks it carries, its value
+// and default, and its child shapes. A builder's own arguments are not
+// compared, so Exact() with an example reads as Exact(example), just as
+// Exact() does.
+func sameShapeNode(x, y *node) bool {
+	return x.kind == y.kind &&
+		x.required == y.required &&
+		x.skippable == y.skippable &&
+		len(x.befores) == len(y.befores) &&
+		len(x.afters) == len(y.afters) &&
+		x.hasDefault == y.hasDefault &&
+		reflect.DeepEqual(x.defaultValue, y.defaultValue) &&
+		len(x.objChildren) == len(y.objChildren) &&
+		len(x.arrChildren) == len(y.arrChildren) &&
+		(x.objRest == nil) == (y.objRest == nil) &&
+		(x.arrChild == nil) == (y.arrChild == nil) &&
+		(x.arrRest == nil) == (y.arrRest == nil)
 }

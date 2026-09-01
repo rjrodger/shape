@@ -1599,10 +1599,18 @@ function expr(
 
 
 // The property name of a key expression. A name may be quoted to hold a
-// space or a colon: `{ '"a b": Min(1)': 0 }` declares the property "a b".
+// space, a colon or an escaped quote: `{ '"a b": Min(1)': 0 }` declares the
+// property "a b", and `{ '"a\\"b": Min(1)': 0 }` the property a"b.
 function keyExprName(name: string): string {
-  return 2 <= name.length && '"' === name[0] && '"' === name[name.length - 1] ?
-    name.substring(1, name.length - 1) : name
+  if (2 <= name.length && '"' === name[0] && '"' === name[name.length - 1]) {
+    try {
+      return JP(name)
+    }
+    catch (_e: any) {
+      return name.substring(1, name.length - 1)
+    }
+  }
+  return name
 }
 
 
@@ -2377,6 +2385,11 @@ function copyNode(n: Node<any>, over?: Record<string, any>): Node<any> {
 }
 
 
+function ownprop(o: any, k: string, value: any) {
+  defprop(o, k, { value, enumerable: true, writable: true, configurable: true })
+}
+
+
 function objectBase(self: any, shape: any, name: string): Node<any> {
   const base = buildize(self, shape)
   if (S.object !== base.t) {
@@ -2389,9 +2402,11 @@ function objectBase(self: any, shape: any, name: string): Node<any> {
 // The base's settings with just these properties. An object default is
 // narrowed to them too.
 function objectNode(base: Node<any>, entries: Entry[]): Node<any> {
+  // Own properties, so that a "__proto__" key is a property and not the
+  // prototype.
   const v: any = {}
   for (const e of entries) {
-    v[e.key] = e.child
+    ownprop(v, e.key, e.child)
   }
 
   let f = base.f
@@ -2399,7 +2414,7 @@ function objectNode(base: Node<any>, entries: Entry[]): Node<any> {
     f = {}
     for (const e of entries) {
       if (undefined !== base.f[e.key]) {
-        f[e.key] = base.f[e.key]
+        ownprop(f, e.key, base.f[e.key])
       }
     }
   }
@@ -3850,10 +3865,11 @@ function clone(x: any): any {
   if (isarr(x)) return x.map(clone)
   if (x instanceof RegExp) return new RegExp(x.source, x.flags)
   if (x instanceof Date) return new Date(x.getTime())
-  if (Object !== x.constructor && null != x.constructor) return x
+  const proto = Object.getPrototypeOf(x)
+  if (Object.prototype !== proto && null !== proto) return x
   const out: any = {}
   for (const k of keys(x)) {
-    out[k] = clone(x[k])
+    defprop(out, k, { value: clone(x[k]), enumerable: true, writable: true, configurable: true })
   }
   return out
 }
@@ -3983,7 +3999,7 @@ function objectSchema(n: Node<any>, s: any, defs: any) {
   const required: string[] = []
   for (const e of entries) {
     const cn = nodize(e.child)
-    props[e.key] = nodeSchema(cn, defs)
+    ownprop(props, e.key, nodeSchema(cn, defs))
     if (cn.r) {
       required.push(e.key)
     }

@@ -163,8 +163,20 @@ describe('algebra', () => {
     deepEqual(Shape({ '"a b": Min(1)': 0 })({ 'a b': 2 }), { 'a b': 2 })
     throws(() => Shape({ '"a b": Min(1)': 0 })({ 'a b': 0 }), 'Value "0" for property "a b" must be a minimum of 1 (was 0).')
     deepEqual(Shape({ 'a:': 1 })({ 'a:': 2 }), { 'a:': 2 })
+    deepEqual(Shape({ '"a\\"b": Min(1)': 0 })({ 'a"b': 2 }), { 'a"b': 2 })
+    deepEqual(Shape({ '"a\\q": Min(1)': 0 })({ 'a\\q': 2 }), { 'a\\q': 2 })
     throws(() => Shape({ 'a:': 1 })({ a: 2 }), 'the property "a" is not allowed')
     deepEqual(Shape(Pick('a b', { '"a b": Min(1)': 0, c: 1 }))({}), { 'a b': 0 })
+  })
+
+
+  test('own-properties', () => {
+    // A "__proto__" key stays a property, in the algebra and its schema.
+    const raw = JSON.parse('{"__proto__": 1, "b": 2}')
+    deepEqual(Object.keys(Pick(['__proto__'], raw).v), ['__proto__'])
+    deepEqual(Object.keys(Omit(['b'], raw).v), ['__proto__'])
+    deepEqual(Object.keys(Shape(raw).jsonSchema().properties), ['__proto__', 'b'])
+    throws(() => Shape(Omit('b', raw))(JSON.parse('{"__proto__": "x"}')), 'is not of type number')
   })
 
 
@@ -174,6 +186,13 @@ describe('algebra', () => {
     const r2 = s('b')
     r1.x.y[0] = 9
     deepEqual(r2, { x: { y: [1] } })
+
+    // Plain data with a "constructor" key is still data, and cloned.
+    const c = Shape(Catch({ constructor: 'r', n: { x: 1 } }, Number))
+    const c1: any = c('a')
+    c1.n.x = 9
+    deepEqual(c('b'), { constructor: 'r', n: { x: 1 } })
+    deepEqual(Shape(Catch(Object.create(null), Number))('a'), {})
 
     // Anything that is not a plain object or array is kept as-is.
     class Foo { z = 1 }

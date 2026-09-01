@@ -175,3 +175,30 @@ func TestAlgebraExpr(t *testing.T) {
 		t.Fatal("expected an expression error")
 	}
 }
+
+func TestAliasesAndKeyNames(t *testing.T) {
+	// Every builder added since v10 has a G alias.
+	for name, n := range map[string]*Node{
+		"GNullable": GNullable(Number), "GCoerce": GCoerce(Number), "GEmail": GEmail(), "GUrl": GUrl(),
+		"GUuid": GUuid(), "GDateTime": GDateTime(), "GIp": GIp(), "GIpv4": GIpv4(), "GIpv6": GIpv6(),
+		"GCatch": GCatch(0, Number), "GDescribe": GDescribe("d", Number),
+		"GDiscriminated": GDiscriminated("k", map[string]any{"a": Object}),
+		"GTransform":     GTransform(func(v any, s *State) any { return v }, Number),
+	} {
+		if n == nil {
+			t.Fatalf("%s: nil", name)
+		}
+	}
+	if GInteger != Integer || GDate != Date {
+		t.Fatal("token aliases")
+	}
+
+	// A quoted key-expression name decodes its escapes; one that does not
+	// unquote keeps its inside.
+	algWant(t, "escaped", mustOK(t, MustShape(map[string]any{`"a\"b": Min(1)`: 0.0}), algObj(`a"b`, 2.0)), algObj(`a"b`, 2.0))
+	algWant(t, "bad escape", mustOK(t, MustShape(map[string]any{`"a\q": Min(1)`: 0.0}), algObj(`a\q`, 2.0)), algObj(`a\q`, 2.0))
+
+	// A value-taking builder reads the key expression's example as its value.
+	algWant(t, "default", mustOK(t, MustShape(map[string]any{"a: Default()": 5.0}), algObj()), algObj("a", 5.0))
+	mustErr(t, MustShape(map[string]any{"a: Min()": 3.0}), algObj("a", 1.0), "must be a minimum of 3 (was 1)")
+}

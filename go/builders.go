@@ -341,7 +341,9 @@ func Exact(vals ...any) *Node {
 					return true
 				}
 			}
-			if val == nil && state.Node.hasDefault {
+			// The default stands in for an absent value only; a present null
+			// is a value in its own right (TS: undefined === val).
+			if state.absent && state.Node.hasDefault {
 				for _, want := range vals {
 					if reflect.DeepEqual(state.Node.defaultValue, want) {
 						return true
@@ -1111,6 +1113,8 @@ var (
 	GObject   = Object
 	GArray    = Array
 	GFunction = Function
+	GInteger  = Integer
+	GDate     = Date
 )
 
 // Builder aliases (functions, not vars, so they can be method-valued).
@@ -1326,4 +1330,23 @@ func formatList(vals []any) string {
 		}
 	}
 	return out
+}
+
+// G-prefixed aliases for the builders added since v10, for a dot-import.
+func GNullable(spec ...any) *Node                     { return Nullable(spec...) }
+func GCoerce(spec ...any) *Node                       { return Coerce(spec...) }
+func GEmail(spec ...any) *Node                        { return Email(spec...) }
+func GUrl(spec ...any) *Node                          { return Url(spec...) }
+func GUuid(spec ...any) *Node                         { return Uuid(spec...) }
+func GDateTime(spec ...any) *Node                     { return DateTime(spec...) }
+func GIp(spec ...any) *Node                           { return Ip(spec...) }
+func GIpv4(spec ...any) *Node                         { return Ipv4(spec...) }
+func GIpv6(spec ...any) *Node                         { return Ipv6(spec...) }
+func GCatch(fallback any, spec ...any) *Node          { return Catch(fallback, spec...) }
+func GDescribe(description string, spec ...any) *Node { return Describe(description, spec...) }
+func GDiscriminated(tag string, branches map[string]any) *Node {
+	return Discriminated(tag, branches)
+}
+func GTransform(fn func(val any, state *State) any, spec ...any) *Node {
+	return Transform(fn, spec...)
 }

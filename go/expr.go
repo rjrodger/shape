@@ -157,7 +157,7 @@ func (p *exprParser) parseFull() (*Node, error) {
 		}
 		val = next
 	}
-	return val, nil
+	return buildize(val), nil
 }
 
 // parseTerm parses a single primary: a builder call, type token, literal, or regex.
@@ -227,10 +227,10 @@ func (p *exprParser) parseTerm(top bool) (*Node, error) {
 	return nil, fmt.Errorf("Shape: unexpected token %s in builder expression %s", head, p.src)
 }
 
-func (p *exprParser) parseChained(carrier *Node) (*Node, error) {
+func (p *exprParser) parseChained(carrier any) (*Node, error) {
 	head := p.take()
 	if head == "" {
-		return carrier, nil
+		return buildize(carrier), nil
 	}
 	if fn, ok := getExprBuilders()[head]; ok {
 		args, err := p.parseArgs()
@@ -254,13 +254,13 @@ func (p *exprParser) parseChained(carrier *Node) (*Node, error) {
 // expr(src, current) — the builders mutate the carrier in place. Used by
 // value expressions (the "$$" keymark) so that e.g. "Open" opens the parent
 // object rather than replacing it.
-func exprApply(src string, carrier *Node) (*Node, error) {
+func exprApply(src string, carrier any) (*Node, error) {
 	tokens, err := tokenize(src)
 	if err != nil {
 		return nil, err
 	}
 	p := &exprParser{tokens: tokens, src: src}
-	val := carrier
+	var val any = carrier
 	for p.peek() != "" {
 		if p.peek() == "." {
 			p.take()
@@ -271,7 +271,7 @@ func exprApply(src string, carrier *Node) (*Node, error) {
 		}
 		val = next
 	}
-	return val, nil
+	return buildize(val), nil
 }
 
 // parseArgs reads "( arg, arg, ... )" if next token is "(".

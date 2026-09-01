@@ -297,6 +297,9 @@ function build() {
   add('nested-closed-multi', { a: { b: 1 } },
     [{ a: { b: 2, c: 3, d: 4 } }, { a: { c: 3, d: 4 } }, { a: { b: 2, c: 3 } }, { a: [1, 2] }])
   add('nested-closed-arr-multi', { a: [N, T] }, [{ a: [1, 'a', 2, 3] }, { a: [1, 'a', 2] }, { a: [1] }])
+  // Keys and values holding a backslash or a quote render raw inside the message.
+  add('closed-odd-keys', { a: 1 }, [{ 'x\\y': 2 }, { 'x"y': 2 }, { 'x\\"y': 2 }, { a: 'p\\q', z: 1 }, { a: 'p"q', z: 1 }, { 'a<b': '&' }])
+  add('type-odd-values', { a: N }, [{ a: 'p\\q' }, { a: 'p"q' }, { a: { 'k\\': 'v"' } }])
 
   // Type() — both the builder-style DSL call and a chained type token.
   for (const t of ['String', 'Number', 'Boolean', 'Object', 'Array', 'Any']) {
@@ -346,6 +349,12 @@ function build() {
   add('ke-quoted-name', { '"a b": Min(1)': 0 }, [{ 'a b': 2 }, { 'a b': 0 }, { 'a b': 'x' }, {}, { a: 1 }])
   add('ke-quoted-string', { '"a b": String': '' }, [{ 'a b': 'x' }, { 'a b': 1 }, {}])
   add('ke-empty-expr', { 'a:': 1 }, [{ 'a:': 2 }, { 'a:': 'x' }, { a: 1 }, {}])
+  add('ke-escaped-name', { '"a\\"b": Min(1)': 0 }, [{ 'a"b': 2 }, { 'a"b': 0 }, { 'a\\"b': 2 }, {}])
+  // A value-taking builder reads the example as its value.
+  add('ke-default-empty', { 'a: Default()': 5 }, OBJS)
+  add('ke-min-empty', { 'a: Min()': 3 }, OBJS)
+  add('ke-catch-empty', { 'a: Catch()': 7 }, OBJS)
+  add('ke-exact-empty', { 'a: Exact()': 7 }, OBJS)
 
   // Func / Key. Func is a builder, so it is optional; the Function token is
   // required. A NaN literal is an optional NaN default.
