@@ -602,8 +602,15 @@ function nodize<S>(shape?: any, depth?: number, meta?: NodeMeta): Node<S> {
     shape = undefined
   }
 
+  // A bare builder reference (`{ a: Any }`) means that builder applied to
+  // nothing. Without this it falls through to the class-instance branch below
+  // and becomes an `instanceof` check that can never pass.
+  if (S.function === typeof shape && true === (shape as any).nullary$) {
+    shape = shape()
+  }
+
   // Is this a (possibly incomplete) Node<S>?
-  else if (null != shape && shape.$?.shape$) {
+  if (null != shape && shape.$?.shape$) {
 
     // Assume complete if shape$ has special internal reference.
     if (SHAPE$ === shape.$.shape$) {
@@ -904,6 +911,11 @@ function shapify<S>(intop?: S | Node<S>, inopts?: ShapeOptions) {
           ) {
             s.curerr.push(makeErrImpl(S.type, s, 1020))
             val = isarr(s.val) ? s.val : {}
+
+            // The container is the wrong type, so its declared keys are
+            // meaningless. Descending would add a spurious "is required" error
+            // for every one of them on top of the real type error.
+            descend = false
           }
 
           // Not skippable, use default or create object
@@ -2145,8 +2157,10 @@ const Check = function <V>(
   else if (S.object === typeof check) {
     let dstr = Object.prototype.toString.call(check)
     if (dstr.includes('RegExp')) {
+      // Only a string can match. Coercing first (String(1).match(/^[0-9]+$/))
+      // let Check(/re/) accept values that a bare /re/ rejects outright.
       let refn: any = (v: any) =>
-        (null == v || Number.isNaN(v)) ? false : !!String(v).match(check as string)
+        (S.string === typeof v) && !!v.match(check as string)
       defprop(refn, S.name, {
         value: String(check)
       })
@@ -2437,6 +2451,11 @@ const Type = function <V extends
     node.r = tnat.r
     node.p = tnat.p
     node.v = tnat.v
+
+    // Carry the fallback too. Omitting it made the string DSL disagree with
+    // the builder API: expr('Optional(String)') dropped the '' default that
+    // Optional(String) injects for an absent key.
+    node.f = tnat.f
   }
 
   return (node as any)
@@ -2445,6 +2464,29 @@ const Type = function <V extends
 
 // Size Builders: Min, Max, Above, Below, Len
 // ==========================================
+
+// True when the node declares a concrete type that this value does not have.
+// The structural check is about to report a type error, and a size bound on a
+// value of the wrong type is meaningless — `Min(2,String)` against 1 would
+// otherwise complain about the number 1 being below a minimum of 2, masking
+// the real problem. Mirrors the type tests in the validate loop.
+function typeWillFail(state: State): boolean {
+  const n: any = state.node
+  const t: string = n.t
+  const val = state.val
+
+  if (undefined === val) return false
+  if (S.any === t || S.list === t || S.check === t || S.never === t) return false
+
+  if (S.object === t) return null === val || S.object !== state.valType || isarr(val)
+  if (S.array === t) return !isarr(val)
+  if (S.null === t) return null !== val
+  if (S.instance === t) return !(n.u.i && val instanceof n.u.i)
+  if (S.regexp === t) return S.string !== state.valType
+
+  return t !== state.valType
+}
+
 
 function makeSizeBuilder(
   self: any,
@@ -2457,6 +2499,9 @@ function makeSizeBuilder(
   size = +size
 
   let validator: any = function(val: any, update: Update, state: State) {
+    if (typeWillFail(state)) {
+      return true
+    }
     return valid(valueLen(val), size, val, update, state)
   }
 
@@ -2644,6 +2689,7 @@ function buildize<V>(self?: any, shape?: any): Node<V> {
       Empty,
       Exact,
       Fault,
+      Func,
       Ignore,
       Len,
       Max,
@@ -3062,6 +3108,16 @@ const BuilderMap = {
   Some,
   Rest,
   Type,
+}
+
+
+// Builders that mean something applied to nothing, so a bare reference to one
+// in a spec (`{ a: Any }`) is read as a call. See nodize.
+const NULLARY_BUILDERS =
+  [Any, Closed, Empty, Func, Ignore, Never, Open, Optional, Required, Skip]
+
+for (let builder of NULLARY_BUILDERS) {
+  defprop(builder, 'nullary$', { value: true })
 }
 
 

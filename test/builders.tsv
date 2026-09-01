@@ -27,12 +27,12 @@ type-string-fail	{"a":{"$expr":"Type(String)"}}	{"a":3}		"Validation failed for 
 type-chain-object-fail	{"$expr":"Type(Object)"}	1		"Validation failed for number \"1\" because the number is not of type object."
 ignore-root-bad-dropped	{"$expr":"Ignore(Number)"}	"x"	null	
 ignore-root-good-kept	{"$expr":"Ignore(Number)"}	5	5	
-any-token-accepts-number	{"a":{"$type":"Any"}}	{"a":1}		"Validation failed for property \"a\" with number \"1\" because the number is not an instance of Any."
-any-token-accepts-null	{"a":{"$type":"Any"}}	{"a":null}		"Validation failed for property \"a\" with value \"null\" because the value is not an instance of Any."
-any-token-accepts-object	{"a":{"$type":"Any"}}	{"a":{"b":1}}		"Validation failed for property \"a\" with object \"{b:1}\" because the object is not an instance of Any."
+any-token-accepts-number	{"a":{"$type":"Any"}}	{"a":1}	{"a":1}	
+any-token-accepts-null	{"a":{"$type":"Any"}}	{"a":null}	{"a":null}	
+any-token-accepts-object	{"a":{"$type":"Any"}}	{"a":{"b":1}}	{"a":{"b":1}}	
 never-absent-key	{"a":{"$expr":"Never(String)"}}	{}		"Validation failed for property \"a\" with value \"undefined\" because no value is allowed."
 empty-string-literal-spec	""	""	""	
-optional-expr-absent	{"a":{"$expr":"Optional(String)"}}	{}	{}	
-min-string-type-mismatch	{"a":{"$expr":"Min(2,String)"}}	{"a":1}		"Value \"1\" for property \"a\" must be a minimum of 2 (was 1)."
+optional-expr-absent	{"a":{"$expr":"Optional(String)"}}	{}	{"a":""}	
+min-string-type-mismatch	{"a":{"$expr":"Min(2,String)"}}	{"a":1}		"Validation failed for property \"a\" with number \"1\" because the number is not of type string."
 min-string-type-mismatch-array	{"a":{"$expr":"Min(2,String)"}}	{"a":[1,2,3]}		"Validation failed for index \"a\" with array \"[1,2,3]\" because the array is not of type string."
 len-array-chain-fail	{"a":{"$expr":"Len(2).Array"}}	{"a":[1]}		"Value \"[1]\" for property \"a\" must be exactly 2 in length (was 1)."
