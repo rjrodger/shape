@@ -57,3 +57,25 @@ jobs:
       - run: go build ./...
       - run: go vet ./...
       - run: go test ./...
+
+  # The differential parity harness: thousands of generated cases through both
+  # implementations, comparing the JSON Schema export, verdict, produced value
+  # and exact error text. Needs both toolchains in one job.
+  parity:
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.x
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22.x'
+          cache: false
+
+      - run: cd ts && npm install
+      - run: make diff

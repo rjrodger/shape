@@ -42,8 +42,11 @@ const { Shape, Min, Optional } = require('shape')   // CommonJS
 import { Shape, Min, Optional } from 'shape'         // ESM / TypeScript
 ```
 
-Node 22+ (24 in CI). Type declarations ship with the package. For the browser
-see [the how-to](../docs/how-to/use-shape-in-the-browser.md).
+Node 22+ (24 in CI). Type declarations ship with the package. Bundlers pick up
+the CommonJS build, with Node's `util` swapped for a stub by the `browser`
+field; a minified standalone bundle, `dist/shape.min.js`, exposes a global
+`Shape` for a plain script tag. See
+[the browser how-to](../docs/how-to/use-shape-in-the-browser.md).
 
 ## Using a shape
 
@@ -143,7 +146,8 @@ object recursively. The exported types are `Node`, `Context`, `Update`,
 
 ```sh
 npm install
-npm run build      # tsc: src → dist, test → dist-test (both git-ignored)
+npm run build      # tsc: src → dist, test → dist-test (both git-ignored), then the browser bundle
+npm run build-web  # esbuild: src/shape.web.js → dist/shape.min.js (a global Shape)
 npm test           # node --test over dist-test
 node --test --experimental-test-coverage dist-test/**/*.test.js
 ```
