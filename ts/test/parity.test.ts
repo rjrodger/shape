@@ -534,6 +534,18 @@ describe('isolation: Catch, Transform, Describe, Ignore', () => {
     d1.a.n.m.push(2)
     assert.deepEqual(d2.a.n.m, [1])
 
+    // A cycle in the fallback is reproduced, not followed; an object reached
+    // twice is copied once.
+    const cyc: any = { n: 1, list: [] }
+    cyc.self = cyc
+    cyc.list.push(cyc, cyc.list)
+    const c1 = Shape({ a: Catch(cyc, Number) })({ a: 'x' }).a
+    assert.notEqual(c1, cyc)
+    assert.equal(c1.self, c1)
+    assert.equal(c1.list[0], c1)
+    assert.equal(c1.list[1], c1.list)
+    assert.equal(Shape(Catch([null, undefined], Number))('x')[0], null)
+
     assert.deepEqual(Shape({ a: Catch(null, Number) })({ a: 'x' }), { a: null })
     assert.equal(Shape(Shape.expr('Catch(0,Number)'))('x'), 0)
     assert.deepEqual(Shape({ a: Shape.expr('Catch("none",Min(2,String))') })({ a: 'x' }), { a: 'none' })

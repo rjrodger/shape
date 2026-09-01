@@ -942,6 +942,28 @@ func TestIsolation(t *testing.T) {
 	d2 := mustOK(t, deep, obj("a", "x")).(map[string]any)
 	d1["a"].(map[string]any)["n"].(map[string]any)["m"].([]any)[0] = 2.0
 	want("catch fresh fallback deep", d2["a"].(map[string]any)["n"].(map[string]any)["m"], []any{1.0})
+	// A cycle in the fallback is reproduced, not followed; a container
+	// reached twice is copied once.
+	cyc := map[string]any{"n": 1.0}
+	cyc["self"] = cyc
+	list := []any{cyc, nil}
+	list[1] = list
+	cyc["list"] = list
+	c1 := mustOK(t, MustShape(obj("a", Catch(cyc, Number))), obj("a", "x")).(map[string]any)["a"].(map[string]any)
+	if reflect.ValueOf(c1).Pointer() == reflect.ValueOf(cyc).Pointer() {
+		t.Fatal("fallback shared")
+	}
+	if reflect.ValueOf(c1["self"]).Pointer() != reflect.ValueOf(c1).Pointer() {
+		t.Fatal("cycle not reproduced")
+	}
+	cl := c1["list"].([]any)
+	if reflect.ValueOf(cl[0]).Pointer() != reflect.ValueOf(c1).Pointer() || reflect.ValueOf(cl[1]).Pointer() != reflect.ValueOf(cl).Pointer() {
+		t.Fatal("shared references not reproduced")
+	}
+	var nilMap map[string]any
+	var nilSlice []any
+	want("nil map kept", cloneAny(nilMap), nilMap)
+	want("nil slice kept", cloneAny(nilSlice), nilSlice)
 	want("catch null", mustOK(t, MustShape(obj("a", Catch(nil, Number))), obj("a", "x")), obj("a", nil))
 	want("catch dsl", mustOK(t, MustShape(MustExpr("Catch(0,Number)")), "x"), 0.0)
 	want("catch dsl bound", mustOK(t, MustShape(obj("a", MustExpr(`Catch("none",Min(2,String))`))), obj("a", "x")), obj("a", "none"))
