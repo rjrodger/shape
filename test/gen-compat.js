@@ -15,6 +15,9 @@
 //   {"$expr":"Min(2,String)"}  compile the string DSL
 //   anything else is raw JSON
 // A key of the form "name: Min(1)" exercises key-expression parsing.
+//
+// The `error` column holds the COMPLETE expected message as a JSON string, and
+// both harnesses compare it exactly.
 
 const path = require('path')
 const fs = require('fs')
@@ -22,28 +25,8 @@ const fs = require('fs')
 const S = require(path.join(__dirname, '..', 'ts', 'dist', 'shape.js'))
 const Shape = S.Shape ? S.Shape : S
 
-function decodeSpec(v) {
-  if (Array.isArray(v)) return v.map(decodeSpec)
-  if (v != null && 'object' === typeof v) {
-    const keys = Object.keys(v)
-    if (1 === keys.length) {
-      const k = keys[0]
-      if ('$type' === k) {
-        const native = { String, Number, Boolean, Object, Array, Symbol, Function }
-        return native[v.$type] || Shape[v.$type]
-      }
-      if ('$open' === k) return Shape.Open(decodeSpec(v.$open))
-      if ('$closed' === k) return Shape.Closed(decodeSpec(v.$closed))
-      if ('$required' === k) return Shape.Required(decodeSpec(v.$required))
-      if ('$optional' === k) return Shape.Optional(decodeSpec(v.$optional))
-      if ('$expr' === k) return Shape.expr(v.$expr)
-    }
-    const out = {}
-    for (const kk of keys) out[kk] = decodeSpec(v[kk])
-    return out
-  }
-  return v
-}
+const { decodeSpec: decode } = require(path.join(__dirname, 'decode-spec.js'))
+const decodeSpec = (v) => decode(v, Shape)
 
 const T = { $type: 'String' }, N = { $type: 'Number' }, B = { $type: 'Boolean' }
 
@@ -64,6 +47,15 @@ const files = {
     ['child-number', { $expr: 'Child(Number)' }, { a: 1, b: 2 }],
     ['child-number-bad', { $expr: 'Child(Number)' }, { a: 1, b: 'x' }],
     ['nested-closed-rejects', { a: { b: 1 } }, { a: { b: 2, c: 3 } }],
+    ['nested-required-absent-parent', { a: { b: N } }, {}],
+    ['nested-required-empty-parent', { a: { b: N } }, { a: {} }],
+    ['nested-required-deep-absent', { a: { b: { c: N } } }, {}],
+    ['nested-required-deep-partial', { a: { b: { c: N } } }, { a: {} }],
+    ['nested-required-sibling', { a: { b: T }, c: N }, { c: 1 }],
+    ['nested-default-absent-parent-ok', { a: { b: 1 } }, {}],
+    ['container-type-fail-single-error', { a: T }, 1],
+    ['multi-error-order', { a: T }, { b: 2 }],
+    ['multi-error-order-2', { a: T }, { a: 1, b: 2 }],
   ],
   arrays: [
     ['array-of-number', [N], [1, 2, 3]],
@@ -74,6 +66,11 @@ const files = {
     ['tuple-fixed-too-long-2', [N, T], [1, 'a', 2, 3]],
     ['tuple-fixed-bad', [N, T], [1, 2]],
     ['array-rest', { $expr: 'Rest(Number)' }, [1, 2, 3]],
+    ['array-rest-bad-element', { $expr: 'Rest(Number)' }, [1, 'x']],
+    ['array-rest-first-bad', { $expr: 'Rest(Number)' }, ['x']],
+    ['array-rest-null-element', { $expr: 'Rest(Number)' }, [1, null]],
+    ['array-rest-string', { $expr: 'Rest(String)' }, ['a', 'b']],
+    ['array-rest-string-bad', { $expr: 'Rest(String)' }, ['a', 2]],
   ],
   builders: [
     ['dsl-type-chain-fail', { a: { $expr: 'Min(2).Array' } }, { a: [1] }],
@@ -99,15 +96,35 @@ const files = {
     ['empty-string-rejected', { a: T }, { a: '' }],
     ['never-fails', { a: { $expr: 'Never' } }, { a: 1 }],
     ['type-number-ok', { a: { $expr: 'Type(Number)' } }, { a: 3 }],
+    ['type-number-fail', { a: { $expr: 'Type(Number)' } }, { a: 'x' }],
+    ['type-string-fail', { a: { $expr: 'Type(String)' } }, { a: 3 }],
+    ['type-chain-object-fail', { $expr: 'Type(Object)' }, 1],
+    ['ignore-root-bad-dropped', { $expr: 'Ignore(Number)' }, 'x'],
+    ['ignore-root-good-kept', { $expr: 'Ignore(Number)' }, 5],
+    ['any-token-accepts-number', { a: { $type: 'Any' } }, { a: 1 }],
+    ['any-token-accepts-null', { a: { $type: 'Any' } }, { a: null }],
+    ['any-token-accepts-object', { a: { $type: 'Any' } }, { a: { b: 1 } }],
+    ['never-absent-key', { a: { $expr: 'Never(String)' } }, {}],
+    ['empty-string-literal-spec', '', ''],
+    ['optional-expr-absent', { a: { $expr: 'Optional(String)' } }, {}],
+    ['min-string-type-mismatch', { a: { $expr: 'Min(2,String)' } }, { a: 1 }],
+    ['min-string-type-mismatch-array', { a: { $expr: 'Min(2,String)' } }, { a: [1, 2, 3] }],
+    ['len-array-chain-fail', { a: { $expr: 'Len(2).Array' } }, { a: [1] }],
   ],
   composition: [
     ['one-of-ok', { a: { $expr: 'One(Number,String)' } }, { a: 'x' }],
     ['one-of-fail', { a: { $expr: 'One(Number,String)' } }, { a: true }],
     ['some-of-ok', { a: { $expr: 'Some(Number,String)' } }, { a: 5 }],
+    ['all-of-fail-message', { a: { $expr: 'All(Number,Min(2))' } }, { a: 1 }],
+    ['all-of-ok', { a: { $expr: 'All(Number,Min(2))' } }, { a: 5 }],
+    ['some-of-fail', { a: { $expr: 'Some(Number,String)' } }, { a: true }],
   ],
   checks: [
     ['regexp-ok', { a: { $expr: 'Check(/^a.+/)' } }, { a: 'abc' }],
     ['regexp-fail', { a: { $expr: 'Check(/^a.+/)' } }, { a: 'zzz' }],
+    ['regexp-check-nonstring', { a: { $expr: 'Check(/^a.+/)' } }, { a: 1 }],
+    ['regexp-bare-nonstring', { a: { $expr: '/^a.+/' } }, { a: 1 }],
+    ['regexp-bare-ok', { a: { $expr: '/^a.+/' } }, { a: 'abc' }],
   ],
   keyexpr: [
     ['keyexpr-min', { 'name: Min(1)': T }, { name: 'x' }],
@@ -118,6 +135,8 @@ const files = {
     ['nested-path', { user: { addr: { zip: N } } }, { user: { addr: { zip: 'x' } } }],
     ['key-parent', { a: { b: { $expr: 'Key' } } }, { a: { b: 'V' } }],
     ['key-depth-dsl', { a: { b: { $expr: 'Key(1)' } } }, { a: { b: 'V' } }],
+    ['exact-null-rendering', { a: { $expr: 'Exact(1,null)' } }, { a: 0 }],
+    ['exact-mixed-rendering', { a: { $expr: 'Exact(1,"a",true,null)' } }, { a: 0 }],
   ],
 }
 
@@ -127,11 +146,16 @@ function rowFor(name, spec, input) {
   let errCell = ''
   try {
     const out = schema(structuredClone(input))
-    outCell = JSON.stringify(out)
+    // Normalize undefined to null exactly as both harnesses do when they
+    // compare, so a builder that drops its value (Ignore, Skip) is expressible.
+    outCell = JSON.stringify(undefined === out ? null : out)
   }
   catch (e) {
-    const first = e.desc && e.desc().err && e.desc().err[0]
-    errCell = first ? first.text : e.message
+    // The WHOLE message, JSON-encoded. Exact comparison is the point: a
+    // substring check cannot see a wrong separator, a wrong error order or an
+    // extra error, and those are precisely the ways the two languages drift.
+    // JSON encoding also keeps embedded newlines out of the TSV row.
+    errCell = JSON.stringify(e.message)
   }
   return [name, JSON.stringify(spec), JSON.stringify(input), outCell, errCell]
 }

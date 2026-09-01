@@ -42,6 +42,15 @@ function parseValueCell(src: string): any {
   }
 }
 
+// The `error` column holds the COMPLETE expected message as a JSON string (so
+// embedded newlines survive the TSV). An empty cell means "must not fail".
+function parseErrorCell(src: string): string {
+  const s = (src || '').trim()
+  if ('' === s) return ''
+  return JSON.parse(s)
+}
+
+
 function parseTSV(filePath: string): Row[] {
   const src = fs.readFileSync(filePath, 'utf8').trim()
   const lines = src.split(/\r?\n/)
@@ -59,7 +68,7 @@ function parseTSV(filePath: string): Row[] {
         spec: parseValueCell(row.spec),
         input: parseValueCell(row.input),
         output: parseValueCell(row.output),
-        error: row.error,
+        error: parseErrorCell(row.error),
       }
     })
 }
@@ -143,9 +152,9 @@ describe('compat-tsv', () => {
         }
         catch (e: any) {
           if ('ERR_ASSERTION' === e.code) throw e
-          assert.ok(
-            e.message.toLowerCase().includes(row.error.toLowerCase()),
-            `expected error containing "${row.error}", got "${e.message}"`)
+          // Exact, whole-message comparison: a substring check cannot see a
+          // wrong separator, a wrong error order or an extra error.
+          assert.equal(e.message, row.error)
         }
         return
       }

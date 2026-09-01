@@ -1,3 +1,6 @@
 name	spec	input	output	error
 regexp-ok	{"a":{"$expr":"Check(/^a.+/)"}}	{"a":"abc"}	{"a":"abc"}	
-regexp-fail	{"a":{"$expr":"Check(/^a.+/)"}}	{"a":"zzz"}		Validation failed for property "a" with string "zzz" because check "/^a.+/" failed.
+regexp-fail	{"a":{"$expr":"Check(/^a.+/)"}}	{"a":"zzz"}		"Validation failed for property \"a\" with string \"zzz\" because check \"/^a.+/\" failed."
+regexp-check-nonstring	{"a":{"$expr":"Check(/^a.+/)"}}	{"a":1}		"Validation failed for property \"a\" with number \"1\" because check \"/^a.+/\" failed."
+regexp-bare-nonstring	{"a":{"$expr":"/^a.+/"}}	{"a":1}		"Validation failed for property \"a\" with number \"1\" because the number is not of type string."
+regexp-bare-ok	{"a":{"$expr":"/^a.+/"}}	{"a":"abc"}	{"a":"abc"}	

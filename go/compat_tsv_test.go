@@ -29,10 +29,12 @@ func TestCompatTSV(t *testing.T) {
 
 			if row.Err != "" {
 				if err == nil {
-					t.Fatalf("expected error containing %q", row.Err)
+					t.Fatalf("expected error %q, got success", row.Err)
 				}
-				if !strings.Contains(strings.ToLower(err.Error()), strings.ToLower(row.Err)) {
-					t.Fatalf("expected error containing %q, got %q", row.Err, err.Error())
+				// Exact, whole-message comparison: a substring check cannot see
+				// a wrong separator, a wrong error order or an extra error.
+				if err.Error() != row.Err {
+					t.Fatalf("error mismatch\nexpected: %q\nactual:   %q", row.Err, err.Error())
 				}
 				return
 			}
@@ -107,7 +109,7 @@ func loadCompatFile(t *testing.T, path, base string) []compatRow {
 			Spec:   parseValueCell(t, col(cols, idx, "spec")),
 			Input:  parseValueCell(t, col(cols, idx, "input")),
 			Output: parseValueCell(t, col(cols, idx, "output")),
-			Err:    col(cols, idx, "error"),
+			Err:    parseErrorCell(t, col(cols, idx, "error")),
 		}
 		out = append(out, row)
 	}
@@ -139,6 +141,23 @@ func col(cols []string, idx map[string]int, key string) string {
 		return ""
 	}
 	return cols[i]
+}
+
+// parseErrorCell decodes the `error` column, which holds the COMPLETE expected
+// message as a JSON string (so embedded newlines survive the TSV). An empty
+// cell means "must not fail".
+func parseErrorCell(t *testing.T, src string) string {
+	t.Helper()
+	src = strings.TrimSpace(src)
+	if src == "" {
+		return ""
+	}
+
+	var msg string
+	if err := json.Unmarshal([]byte(src), &msg); err != nil {
+		t.Fatalf("bad error cell %q: %v", src, err)
+	}
+	return msg
 }
 
 func parseValueCell(t *testing.T, src string) any {

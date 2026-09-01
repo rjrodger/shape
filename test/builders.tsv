@@ -1,24 +1,38 @@
 name	spec	input	output	error
-dsl-type-chain-fail	{"a":{"$expr":"Min(2).Array"}}	{"a":[1]}		Value "[1]" for property "a" must be a minimum length of 2 (was 1).
+dsl-type-chain-fail	{"a":{"$expr":"Min(2).Array"}}	{"a":[1]}		"Value \"[1]\" for property \"a\" must be a minimum length of 2 (was 1)."
 dsl-type-chain-ok	{"a":{"$expr":"Min(2).Array"}}	{"a":[1,2]}	{"a":[1,2]}	
 min-number-ok	{"a":{"$expr":"Min(3,Number)"}}	{"a":5}	{"a":5}	
-min-number-fail	{"a":{"$expr":"Min(3,Number)"}}	{"a":1}		Value "1" for property "a" must be a minimum of 3 (was 1).
-max-number-fail	{"a":{"$expr":"Max(3,Number)"}}	{"a":9}		Value "9" for property "a" must be a maximum of 3 (was 9).
-above-number-fail	{"a":{"$expr":"Above(3,Number)"}}	{"a":3}		Value "3" for property "a" must be above 3 (was 3).
-below-number-fail	{"a":{"$expr":"Below(3,Number)"}}	{"a":3}		Value "3" for property "a" must be below 3 (was 3).
-len-number-fail	{"a":{"$expr":"Len(3,Number)"}}	{"a":4}		Value "4" for property "a" must be exactly 3 (was 4).
-min-string-fail	{"a":{"$expr":"Min(3,String)"}}	{"a":"hi"}		Value "hi" for property "a" must be a minimum length of 3 (was 2).
-max-string-fail	{"a":{"$expr":"Max(2,String)"}}	{"a":"hey"}		Value "hey" for property "a" must be a maximum length of 2 (was 3).
+min-number-fail	{"a":{"$expr":"Min(3,Number)"}}	{"a":1}		"Value \"1\" for property \"a\" must be a minimum of 3 (was 1)."
+max-number-fail	{"a":{"$expr":"Max(3,Number)"}}	{"a":9}		"Value \"9\" for property \"a\" must be a maximum of 3 (was 9)."
+above-number-fail	{"a":{"$expr":"Above(3,Number)"}}	{"a":3}		"Value \"3\" for property \"a\" must be above 3 (was 3)."
+below-number-fail	{"a":{"$expr":"Below(3,Number)"}}	{"a":3}		"Value \"3\" for property \"a\" must be below 3 (was 3)."
+len-number-fail	{"a":{"$expr":"Len(3,Number)"}}	{"a":4}		"Value \"4\" for property \"a\" must be exactly 3 (was 4)."
+min-string-fail	{"a":{"$expr":"Min(3,String)"}}	{"a":"hi"}		"Value \"hi\" for property \"a\" must be a minimum length of 3 (was 2)."
+max-string-fail	{"a":{"$expr":"Max(2,String)"}}	{"a":"hey"}		"Value \"hey\" for property \"a\" must be a maximum length of 2 (was 3)."
 len-string-ok	{"a":{"$expr":"Len(3,String)"}}	{"a":"abc"}	{"a":"abc"}	
-len-string-fail	{"a":{"$expr":"Len(3,String)"}}	{"a":"ab"}		Value "ab" for property "a" must be exactly 3 in length (was 2).
-min-array-fail	{"a":{"$expr":"Min(2)"}}	{"a":[1]}		Value "[1]" for property "a" must be a minimum length of 2 (was 1).
+len-string-fail	{"a":{"$expr":"Len(3,String)"}}	{"a":"ab"}		"Value \"ab\" for property \"a\" must be exactly 3 in length (was 2)."
+min-array-fail	{"a":{"$expr":"Min(2)"}}	{"a":[1]}		"Value \"[1]\" for property \"a\" must be a minimum length of 2 (was 1)."
 exact-ok	{"role":{"$expr":"Exact(\"admin\",\"user\")"}}	{"role":"user"}	{"role":"user"}	
-exact-fail	{"role":{"$expr":"Exact(\"admin\",\"user\")"}}	{"role":"root"}		Value "root" for property "role" must be exactly one of: admin, user
+exact-fail	{"role":{"$expr":"Exact(\"admin\",\"user\")"}}	{"role":"root"}		"Value \"root\" for property \"role\" must be exactly one of: admin, user"
 skip-absent	{"a":{"$expr":"Skip(Number)"}}	{}	{}	
 ignore-bad-dropped	{"a":{"$expr":"Ignore(Number)"}}	{"a":"x"}	{}	
 ignore-good-kept	{"a":{"$expr":"Ignore(Number)"}}	{"a":5}	{"a":5}	
 default-explicit	{"a":{"$expr":"Default(7,Number)"}}	{}	{"a":7}	
 empty-string-allowed	{"a":{"$expr":"Empty"}}	{"a":""}	{"a":""}	
-empty-string-rejected	{"a":{"$type":"String"}}	{"a":""}		Validation failed for property "a" with string "" because an empty string is not allowed.
-never-fails	{"a":{"$expr":"Never"}}	{"a":1}		Validation failed for property "a" with number "1" because no value is allowed.
+empty-string-rejected	{"a":{"$type":"String"}}	{"a":""}		"Validation failed for property \"a\" with string \"\" because an empty string is not allowed."
+never-fails	{"a":{"$expr":"Never"}}	{"a":1}		"Validation failed for property \"a\" with number \"1\" because no value is allowed."
 type-number-ok	{"a":{"$expr":"Type(Number)"}}	{"a":3}	{"a":3}	
+type-number-fail	{"a":{"$expr":"Type(Number)"}}	{"a":"x"}		"Validation failed for property \"a\" with string \"x\" because the string is not of type number."
+type-string-fail	{"a":{"$expr":"Type(String)"}}	{"a":3}		"Validation failed for property \"a\" with number \"3\" because the number is not of type string."
+type-chain-object-fail	{"$expr":"Type(Object)"}	1		"Validation failed for number \"1\" because the number is not of type object."
+ignore-root-bad-dropped	{"$expr":"Ignore(Number)"}	"x"	null	
+ignore-root-good-kept	{"$expr":"Ignore(Number)"}	5	5	
+any-token-accepts-number	{"a":{"$type":"Any"}}	{"a":1}		"Validation failed for property \"a\" with number \"1\" because the number is not an instance of Any."
+any-token-accepts-null	{"a":{"$type":"Any"}}	{"a":null}		"Validation failed for property \"a\" with value \"null\" because the value is not an instance of Any."
+any-token-accepts-object	{"a":{"$type":"Any"}}	{"a":{"b":1}}		"Validation failed for property \"a\" with object \"{b:1}\" because the object is not an instance of Any."
+never-absent-key	{"a":{"$expr":"Never(String)"}}	{}		"Validation failed for property \"a\" with value \"undefined\" because no value is allowed."
+empty-string-literal-spec	""	""	""	
+optional-expr-absent	{"a":{"$expr":"Optional(String)"}}	{}	{}	
+min-string-type-mismatch	{"a":{"$expr":"Min(2,String)"}}	{"a":1}		"Value \"1\" for property \"a\" must be a minimum of 2 (was 1)."
+min-string-type-mismatch-array	{"a":{"$expr":"Min(2,String)"}}	{"a":[1,2,3]}		"Validation failed for index \"a\" with array \"[1,2,3]\" because the array is not of type string."
+len-array-chain-fail	{"a":{"$expr":"Len(2).Array"}}	{"a":[1]}		"Value \"[1]\" for property \"a\" must be exactly 2 in length (was 1)."

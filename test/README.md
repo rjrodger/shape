@@ -13,15 +13,22 @@ from it, so TS passes by construction and Go is measured against it.
 
 Tab-separated, one case per row, with a header row:
 
-| column   | meaning                                                            |
-| -------- | ----------------------------------------------------------------- |
-| `name`   | test name (prefixed with the file's basename by each harness)     |
-| `spec`   | the shape specification (JSON, with sentinels — see below)         |
-| `input`  | the value to validate (JSON)                                      |
-| `output` | expected produced value (JSON), compared JSON-normalized          |
-| `error`  | if non-empty, validation must fail and the message must contain it |
+| column   | meaning                                                              |
+| -------- | -------------------------------------------------------------------- |
+| `name`   | test name (prefixed with the file's basename by each harness)        |
+| `spec`   | the shape specification (JSON, with sentinels — see below)            |
+| `input`  | the value to validate (JSON)                                         |
+| `output` | expected produced value (JSON), compared JSON-normalized             |
+| `error`  | if non-empty, the **complete** expected message, JSON-encoded         |
 
 A row sets **either** `output` (must pass) **or** `error` (must fail).
+
+The `error` cell is compared **exactly**, not by substring. It holds the whole
+message as a JSON string, which both keeps embedded newlines out of the TSV row
+and makes separator, ordering and extra-error differences fail the gate — those
+are precisely the ways the two implementations drift. A produced `undefined`
+(from `Ignore`/`Skip`) is written as `null`, matching how both harnesses
+normalize before comparing.
 
 ## Spec sentinels
 
@@ -50,3 +57,18 @@ node test/gen-compat.js
 ```
 
 Then run both suites (`make test`) to confirm parity.
+
+## The wider net
+
+This corpus is the committed gate, but it only covers rows someone thought to
+write. [`differential/`](differential/) generates thousands of `(spec, input)`
+pairs, runs them through both implementations and diffs verdict, produced value
+and exact error text:
+
+```
+make diff        # sampled report
+make diff-full   # every mismatch
+```
+
+Use it after any behaviour change, and promote anything it finds into a corpus
+row here.

@@ -1,5 +1,7 @@
 name	spec	input	output	error
 null-required	{"a":{"$expr":"null"}}	{"a":null}	{"a":null}	
-nested-path	{"user":{"addr":{"zip":{"$type":"Number"}}}}	{"user":{"addr":{"zip":"x"}}}		Validation failed for property "user.addr.zip" with string "x" because the string is not of type number.
+nested-path	{"user":{"addr":{"zip":{"$type":"Number"}}}}	{"user":{"addr":{"zip":"x"}}}		"Validation failed for property \"user.addr.zip\" with string \"x\" because the string is not of type number."
 key-parent	{"a":{"b":{"$expr":"Key"}}}	{"a":{"b":"V"}}	{"a":{"b":"a"}}	
 key-depth-dsl	{"a":{"b":{"$expr":"Key(1)"}}}	{"a":{"b":"V"}}	{"a":{"b":["a"]}}	
+exact-null-rendering	{"a":{"$expr":"Exact(1,null)"}}	{"a":0}		"Value \"0\" for property \"a\" must be exactly one of: 1, null"
+exact-mixed-rendering	{"a":{"$expr":"Exact(1,\"a\",true,null)"}}	{"a":0}		"Value \"0\" for property \"a\" must be exactly one of: 1, a, true, null"
