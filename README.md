@@ -71,6 +71,7 @@ lives in **[`docs/`](docs/README.md)**:
   [arrays & tuples](docs/how-to/validate-arrays-and-tuples.md),
   [custom validation](docs/how-to/add-custom-validation.md),
   [composition](docs/how-to/compose-shapes.md),
+  [coercion & formats](docs/how-to/coerce-and-formats.md),
   [errors](docs/how-to/handle-and-collect-errors.md), and
   [more](docs/README.md#how-to-guides).
 - **Reference** — [builders](docs/reference/builders.md),
@@ -90,6 +91,12 @@ lives in **[`docs/`](docs/README.md)**:
 - Deep object/array filling and validation.
 - A rich, composable builder set (`Min`, `Max`, `One`, `Exact`, `Check`,
   `Rename`, `Refer`, …).
+- Coercion (`Coerce`), string formats (`Email`, `Url`, `Uuid`, `DateTime`,
+  `Ip`), `Integer` and `Date` kinds, `Nullable`.
+- Discriminated unions, and an object algebra (`Pick`, `Omit`, `Partial`,
+  `Extend`) to build one shape out of another.
+- `Catch` a failure with a fallback, `Transform` a valid value, `Describe` a
+  node for tooling.
 - A compact string DSL (`expr` / `build`) and inline key expressions.
 - Detailed, path-aware error messages.
 - TypeScript and Go implementations kept at behavioural parity by a
@@ -99,7 +106,7 @@ lives in **[`docs/`](docs/README.md)**:
 
 | Path        | Contents |
 | ----------- | -------- |
-| `ts/`       | Canonical TypeScript implementation and tests. |
+| `ts/`       | Canonical TypeScript implementation and tests. See [`ts/README.md`](ts/README.md). |
 | `go/`       | Go port and tests. See [`go/README.md`](go/README.md). |
 | `docs/`     | Diátaxis documentation. |
 | `test/`     | Shared, language-neutral conformance corpus. |
@@ -108,8 +115,10 @@ lives in **[`docs/`](docs/README.md)**:
 ## Contributing
 
 `make build` builds both languages; `make test` runs both test suites (including
-the shared corpus). TypeScript is canonical — behaviour changes start there and
-are mirrored in Go. See **[AGENTS.md](AGENTS.md)**.
+the shared corpus); `make diff` runs the differential parity harness, which puts
+thousands of generated cases through both and compares exact error text.
+TypeScript is canonical — behaviour changes start there and are mirrored in Go.
+See **[AGENTS.md](AGENTS.md)**.
 
 ## Credits
 

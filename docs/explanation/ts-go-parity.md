@@ -49,7 +49,10 @@ row so the committed gate keeps it closed.
   order errors are reported in, the `undefined`-vs-`null` rendering, the
   `index`-vs-`property` wording, and how a node renders inside a composite
   `One`/`Some`/`All` message.
-- The builder set, the chainable-method set, and the string DSL grammar.
+- The builder set, the chainable-method set, and the string DSL grammar —
+  including the coercions, the string formats, the isolation builders
+  (`Catch`, `Transform`, `Ignore`), discriminated unions and the object
+  algebra (`Pick`, `Omit`, `Partial`, `Extend`).
 
 ## Intentional divergences
 
@@ -83,9 +86,19 @@ Some differences are inherent to Go and are unlikely ever to close.
   exported type reads as `fmt.Stringer` and `go vet` rejects the signature. Use
   `.Type(String)`, which is what the shortcuts call anyway.
 
-- **`Any` is a token, not a builder.** In TypeScript `Any` is a builder
-  function, usable bare (`{ a: Any }`) or called (`Any()`). In Go it is a
-  `TypeToken`; to narrow, use `Type(Any, spec)` or the `.Any()` chain method.
+- **`Any`, `Integer` and `Date` are tokens, not builders.** In TypeScript
+  `Any` and `Integer` are builder functions, usable bare (`{ a: Any }`) or
+  called (`Any()`), and `Date` is the constructor. In Go they are `TypeToken`s;
+  to narrow, use `Type(Any, spec)` or the `.Any()`, `.Integer()` and `.Date()`
+  chain methods.
+
+- **Construction faults surface at different times.** TypeScript throws when a
+  builder is called wrongly — `Discriminated` without a branch, `Pick` of an
+  unknown property, `Extend` with a non-object. A Go builder returns a `*Node`
+  and cannot, so the fault surfaces at validation, as it does for any bad spec,
+  with the same message on a `never` node. In the string DSL both fail at
+  build: `expr` throws and `Expr` returns an error. The differential harness
+  compares valid constructions only.
 
 ## Error metadata
 

@@ -19,7 +19,7 @@ the node tree.
 | `k` | final property keys, in order |
 | `e` | whether match failures are reported as errors |
 | `b` / `a` | before / after validator lists |
-| `u` / `m` | user data / metadata |
+| `u` / `m` | user data / metadata — `u.nullable` for `Nullable`, `m.description` for `Describe` |
 | `z` | custom (Fault) message |
 
 Go stores the equivalent on an unexported `node`; use `s.Spec()` for a
