@@ -73,6 +73,27 @@ function build() {
   add('nullable-object', E('Nullable(Closed({}))'), SCALARS)
   add('nullable-bare', { a: E('Nullable') }, OBJS)
 
+  // Coerce: unambiguous conversions before the type check; anything else is
+  // left alone so the usual type error speaks.
+  add('coerce-num', E('Coerce(Number)'),
+    SCALARS.concat(['5', ' 5 ', '5.5', '1e3', '+5', '.5', '5.', '0x10', 'Infinity', '5abc', ' ']))
+  add('coerce-int', E('Coerce(Integer)'), ['5', '5.5', '1e2', true, 'x', 7])
+  add('coerce-str', E('Coerce(String)'),
+    SCALARS.concat([1e21, 1e-7, 0.00001, 0.000001, 1.5, 1000000, 123456789012345680000, -2.5]))
+  add('coerce-bool', E('Coerce(Boolean)'), SCALARS.concat(['TRUE', ' false ', 'yes', '1', '0', 2]))
+  add('coerce-date', E('Coerce(Date)'), [
+    '2020-01-01T00:00:00Z', '2020-01-01T12:30:00.5+02:00', '2020-02-29T00:00:00Z',
+    '2021-02-29T00:00:00Z', '2020-02-30T00:00:00Z', '2020-13-01T00:00:00Z',
+    '2020-01-01T24:00:00Z', '2020-01-01T00:00:00+24:00', '2020-01-01', 1577836800000, 1.5,
+    'x', null, true, [], {},
+  ])
+  add('coerce-obj', { a: E('Coerce(Number)') }, OBJS)
+  add('coerce-bound', E('Coerce(Min(2,Number))'), ['1', '3', 'x', 1, 3])
+  add('coerce-bound-outer', E('Min(2,Coerce(Number))'), ['1', '3', 'x'])
+  add('coerce-nullable', E('Nullable(Coerce(Number))'), ['5', null, 'x'])
+  add('coerce-bare', E('Coerce'), SCALARS)
+  add('coerce-any-noop', E('Coerce(Any)'), SCALARS)
+
   // A type token with arguments applies the type to them.
   add('dsl-token-args-str', E('String(Min(2))'), SCALARS)
   add('dsl-token-args-num', E('Number(Max(1))'), SCALARS)

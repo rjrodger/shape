@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 )
 
 type compatRow struct {
@@ -133,7 +134,7 @@ func loadCompatFile(t *testing.T, path, base string) []compatRow {
 // jsonNorm round-trips a value through JSON so nil-valued map entries collapse
 // and all numbers become float64 — matching the JSON-authored expected column.
 func jsonNorm(v any) any {
-	b, err := json.Marshal(v)
+	b, err := json.Marshal(jsDates(v))
 	if err != nil {
 		return v
 	}
@@ -142,6 +143,28 @@ func jsonNorm(v any) any {
 		return v
 	}
 	return out
+}
+
+// jsDates rewrites every time.Time in v to the string JSON.stringify gives a
+// Date, so the two languages' produced values compare across the JSON boundary.
+func jsDates(v any) any {
+	switch x := v.(type) {
+	case time.Time:
+		return jsDateString(x)
+	case map[string]any:
+		out := make(map[string]any, len(x))
+		for k, vv := range x {
+			out[k] = jsDates(vv)
+		}
+		return out
+	case []any:
+		out := make([]any, len(x))
+		for i, vv := range x {
+			out[i] = jsDates(vv)
+		}
+		return out
+	}
+	return v
 }
 
 func col(cols []string, idx map[string]int, key string) string {

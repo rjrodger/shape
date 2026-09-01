@@ -293,3 +293,71 @@ describe('kinds: nullable, integer, date', () => {
     assert.match(failure(Shape.expr('Number(Max(1))'), 5), /must be a maximum of 1/)
   })
 })
+
+
+describe('coerce', () => {
+  const { Coerce, Integer, Optional, Min, Nullable } = Shape as any
+
+  test('to a number or integer', () => {
+    const n = Shape(Coerce(Number))
+    assert.equal(n('5'), 5)
+    assert.equal(n(' 5 '), 5)
+    assert.equal(n('1e3'), 1000)
+    assert.equal(n('.5'), 0.5)
+    assert.equal(n(true), 1)
+    assert.equal(n(false), 0)
+    assert.equal(n(7), 7)
+    // Not decimal numerals: left alone, so the type error speaks.
+    assert.match(failure(Coerce(Number), '0x10'), /the string is not of type number/)
+    assert.match(failure(Coerce(Number), 'Infinity'), /is not of type number/)
+    assert.match(failure(Coerce(Number), ''), /is not of type number/)
+    assert.match(failure(Coerce(Number), null), /is not of type number/)
+    assert.equal(Shape(Coerce(Integer))('5'), 5)
+    assert.match(failure(Coerce(Integer), '5.5'), /is not of type integer/)
+  })
+
+  test('to a string or boolean', () => {
+    const s = Shape(Coerce(String))
+    assert.equal(s(1.5), '1.5')
+    assert.equal(s(1000000), '1000000')
+    assert.equal(s(true), 'true')
+    assert.match(failure(Coerce(String), NaN), /is not of type string/)
+    assert.match(failure(Coerce(String), null), /is not of type string/)
+
+    const b = Shape(Coerce(Boolean))
+    assert.equal(b(' TRUE '), true)
+    assert.equal(b('0'), false)
+    assert.equal(b(1), true)
+    assert.equal(b(0), false)
+    assert.match(failure(Coerce(Boolean), 'yes'), /is not of type boolean/)
+    assert.match(failure(Coerce(Boolean), 2), /is not of type boolean/)
+  })
+
+  test('to a date, strictly', () => {
+    const d = Shape(Coerce(Date))
+    assert.equal(d('2020-01-01T00:00:00Z').getTime(), Date.UTC(2020, 0, 1))
+    assert.equal(d('2020-01-01T12:30:00.5+02:00').getTime(), Date.UTC(2020, 0, 1, 10, 30, 0, 500))
+    assert.equal(d('2020-02-29T00:00:00Z').getTime(), Date.UTC(2020, 1, 29))
+    assert.equal(d(1577836800000).getTime(), 1577836800000)
+    for (const bad of ['2021-02-29T00:00:00Z', '2020-02-30T00:00:00Z', '2020-13-01T00:00:00Z',
+      '2020-01-01T24:00:00Z', '2020-01-01T00:00:00+24:00', '2020-01-01', 'x', Infinity]) {
+      assert.match(failure(Coerce(Date), bad), /is not of type date/)
+    }
+  })
+
+  test('placement and no-ops', () => {
+    // Ahead of any bound, whichever way round it is written.
+    assert.equal(Shape(Coerce(Min(2, Number)))('3'), 3)
+    assert.match(failure(Coerce(Min(2, Number)), '1'), /must be a minimum of 2/)
+    assert.match(failure(Min(2, Coerce(Number)), '1'), /must be a minimum of 2/)
+    assert.equal(Shape(Nullable(Coerce(Number)))(null), null)
+    assert.equal(Shape(Optional().Coerce().Number())('4'), 4)
+    assert.equal(Shape(Shape.expr('Coerce(Number)'))('4'), 4)
+    // Nothing to convert to: an untyped Coerce leaves everything alone.
+    assert.equal(Shape(Coerce())('x'), 'x')
+    assert.equal(Shape(Coerce(Shape.Any()))('x'), 'x')
+    // An absent value is still absent: nothing is injected for it to convert.
+    assert.match(failure({ a: Coerce(Number) }, {}), /is required/)
+    assert.deepEqual(Shape({ a: Optional(Coerce(Number)) })({}), { a: 0 })
+  })
+})

@@ -406,6 +406,7 @@ func buildExprBuilders() map[string]exprBuilderFn {
 	"Never":    variadicNode(Never),
 	"Func":     variadicNode(Func),
 	"Nullable": variadicNode(Nullable),
+	"Coerce":   variadicNode(Coerce),
 
 	"Default": func(args []builderArg) (*Node, error) {
 		if len(args) < 1 {

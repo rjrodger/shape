@@ -228,6 +228,7 @@ const S = {
   Min: 'Min',
   Never: 'Never',
   Nullable: 'Nullable',
+  Coerce: 'Coerce',
   Len: 'Len',
   One: 'One',
   Open: 'Open',
@@ -1856,6 +1857,111 @@ const Optional = function <V>(this: any, shape?: Node<V> | V): Node<V> {
 }
 
 
+// Strict ISO 8601 / RFC 3339 date-time: the one form both implementations parse
+// identically. Calendar ranges are checked so that 2024-02-30 is rejected
+// rather than rolled over into March.
+const ISO_DATETIME_RE =
+  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?(Z|[+-]\d{2}:\d{2})$/
+
+function isoDateTime(s: string): boolean {
+  const m = ISO_DATETIME_RE.exec(s)
+  if (null == m) {
+    return false
+  }
+
+  const y = +m[1], mo = +m[2], d = +m[3], h = +m[4], mi = +m[5], sec = +m[6]
+  if (mo < 1 || 12 < mo || 23 < h || 59 < mi || 59 < sec) {
+    return false
+  }
+
+  const leap = (0 === y % 4 && 0 !== y % 100) || 0 === y % 400
+  const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][mo - 1]
+  if (d < 1 || days < d) {
+    return false
+  }
+
+  if ('Z' !== m[8] && (23 < +m[8].substring(1, 3) || 59 < +m[8].substring(4, 6))) {
+    return false
+  }
+
+  return true
+}
+
+
+// Decimal numeric strings only: no hex, no Infinity, nothing JS's Number()
+// would accept that a Go strconv would not.
+const NUMERIC_RE = /^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/
+
+
+// The value a Coerce node converts to for kind t, or undefined to leave it as
+// it is (and let the type check report it).
+function coerceTo(t: string, val: any): any {
+  const vt = typeof val
+
+  if (S.number === t || S.integer === t) {
+    if (S.string === vt) {
+      const str = val.trim()
+      return NUMERIC_RE.test(str) && isFinite(Number(str)) ? Number(str) : undefined
+    }
+    if (S.boolean === vt) {
+      return val ? 1 : 0
+    }
+  }
+  else if (S.string === t) {
+    if (S.number === vt) {
+      return isFinite(val) ? String(val) : undefined
+    }
+    if (S.boolean === vt) {
+      return val ? 'true' : 'false'
+    }
+  }
+  else if (S.boolean === t) {
+    if (S.string === vt) {
+      const str = val.trim().toLowerCase()
+      return 'true' === str || '1' === str ? true :
+        'false' === str || '0' === str ? false : undefined
+    }
+    if (S.number === vt) {
+      return 1 === val ? true : 0 === val ? false : undefined
+    }
+  }
+  else if (S.date === t) {
+    if (S.string === vt) {
+      const str = val.trim()
+      return isoDateTime(str) ? new Date(str) : undefined
+    }
+    if (S.number === vt) {
+      return isFinite(val) ? new Date(val) : undefined
+    }
+  }
+
+  return undefined
+}
+
+
+// Convert the value to the node's kind where the conversion is unambiguous,
+// before the type check: a decimal string to a number, "true"/"false"/"1"/"0"
+// to a boolean, a number or boolean to a string, an ISO 8601 string or a time
+// value to a Date. Anything else is left alone, so the usual type error speaks.
+const Coerce = function <V>(this: any, shape?: Node<V> | V): Node<V> {
+  let node = buildize(this, shape)
+
+  const coercer: any = function Coerce(val: any, update: Update, state: State) {
+    const c = coerceTo(state.node.t, val)
+    if (undefined !== c) {
+      update.val = c
+    }
+    return true
+  }
+  coercer.n = S.Coerce
+
+  // Ahead of any bound, so a bound sees the converted value.
+  node.b.unshift(coercer)
+
+  return node
+}
+
+
 // Value may also be null. Absent is still governed by required/optional.
 const Nullable = function <V>(this: any, shape?: Node<V> | V): Node<V> {
   let node = buildize(this, shape)
@@ -2797,6 +2903,7 @@ function buildize<V>(self?: any, shape?: any): Node<V> {
       Check,
       Child,
       Closed,
+      Coerce,
       Default,
       Define,
       Empty,
@@ -3208,6 +3315,7 @@ const BuilderMap = {
   Check,
   Child,
   Closed,
+  Coerce,
   Default,
   Define,
   Empty,
@@ -3238,8 +3346,8 @@ const BuilderMap = {
 // Builders that mean something applied to nothing, so a bare reference to one
 // in a spec (`{ a: Any }`) is read as a call. See nodize.
 const NULLARY_BUILDERS =
-  [Any, Closed, Empty, Func, Ignore, Integer, Key, Never, Nullable, Open, Optional,
-    Required, Skip]
+  [Any, Closed, Coerce, Empty, Func, Ignore, Integer, Key, Never, Nullable, Open,
+    Optional, Required, Skip]
 
 for (let builder of NULLARY_BUILDERS) {
   defprop(builder, 'nullary$', { value: true })
@@ -3317,6 +3425,7 @@ const GAfter = After
 const GAll = All
 const GAny = Any
 const GInteger = Integer
+const GCoerce = Coerce
 const GNullable = Nullable
 const GBefore = Before
 const GBelow = Below
@@ -3513,6 +3622,7 @@ export {
   Check,
   Child,
   Closed,
+  Coerce,
   Default,
   Define,
   Empty,
@@ -3547,6 +3657,7 @@ export {
   GCheck,
   GChild,
   GClosed,
+  GCoerce,
   GDefault,
   GDefine,
   GEmpty,

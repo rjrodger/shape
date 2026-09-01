@@ -668,3 +668,92 @@ func TestBoundArgumentRendering(t *testing.T) {
 	}
 	mustErr(t, MustShape(Min(1000000.0, Number)), 5.0, "must be a minimum of 1000000 (was 5)")
 }
+
+// --- coerce ---------------------------------------------------------------
+
+func TestCoerce(t *testing.T) {
+	n := MustShape(Coerce(Number))
+	for in, want := range map[any]float64{"5": 5, " 5 ": 5, "1e3": 1000, ".5": 0.5, "+5": 5, "5.": 5, true: 1, false: 0, 7.0: 7} {
+		if out := mustOK(t, n, in); out != want {
+			t.Fatalf("Coerce(Number)(%#v) = %#v, want %v", in, out, want)
+		}
+	}
+	for _, bad := range []any{"0x10", "Infinity", "", " ", "5abc", Null, []any{}} {
+		mustErr(t, n, bad, "is not of type number")
+	}
+	mustOK(t, MustShape(Coerce(Integer)), "5")
+	mustErr(t, MustShape(Coerce(Integer)), "5.5", "is not of type integer")
+
+	s := MustShape(Coerce(String))
+	for in, want := range map[any]string{1.5: "1.5", 1000000.0: "1000000", 1e21: "1e+21", 1e-7: "1e-7",
+		0.00001: "0.00001", -2.5: "-2.5", true: "true", false: "false", 3: "3"} {
+		if out := mustOK(t, s, in); out != want {
+			t.Fatalf("Coerce(String)(%#v) = %#v, want %q", in, out, want)
+		}
+	}
+	mustErr(t, s, math.NaN(), "is not of type string")
+	mustErr(t, s, math.Inf(1), "is not of type string")
+	mustErr(t, s, Null, "is not of type string")
+
+	b := MustShape(Coerce(Boolean))
+	for in, want := range map[any]bool{" TRUE ": true, "false": false, "1": true, "0": false, 1.0: true, 0.0: false, 1: true} {
+		if out := mustOK(t, b, in); out != want {
+			t.Fatalf("Coerce(Boolean)(%#v) = %#v, want %v", in, out, want)
+		}
+	}
+	mustErr(t, b, "yes", "is not of type boolean")
+	mustErr(t, b, 2.0, "is not of type boolean")
+	mustErr(t, b, Null, "is not of type boolean")
+
+	d := MustShape(Coerce(Date))
+	want := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+	if out := mustOK(t, d, "2020-01-01T00:00:00Z"); !out.(time.Time).Equal(want) {
+		t.Fatalf("Coerce(Date) iso = %v", out)
+	}
+	if out := mustOK(t, d, "2020-01-01T12:30:00.5+02:00"); !out.(time.Time).Equal(time.Date(2020, 1, 1, 10, 30, 0, 500000000, time.UTC)) {
+		t.Fatalf("Coerce(Date) offset = %v", out)
+	}
+	mustOK(t, d, "2020-02-29T00:00:00Z")
+	if out := mustOK(t, d, 1577836800000.0); !out.(time.Time).Equal(want) {
+		t.Fatalf("Coerce(Date) millis = %v", out)
+	}
+	for _, bad := range []any{"2021-02-29T00:00:00Z", "2020-02-30T00:00:00Z", "2020-13-01T00:00:00Z",
+		"2020-01-01T24:00:00Z", "2020-01-01T00:60:00Z", "2020-01-01T00:00:60Z", "2020-01-01T00:00:00+24:00",
+		"2020-01-01T00:00:00+00:60", "2020-00-10T00:00:00Z", "2020-01-00T00:00:00Z", "2020-01-01", "x",
+		math.Inf(1), Null, true} {
+		mustErr(t, d, bad, "is not of type date")
+	}
+
+	// Ahead of any bound, whichever way round it is written; no-ops otherwise.
+	mustOK(t, MustShape(Coerce(Min(2, Number))), "3")
+	mustErr(t, MustShape(Coerce(Min(2, Number))), "1", "must be a minimum of 2")
+	mustErr(t, MustShape(Min(2, Coerce(Number))), "1", "must be a minimum of 2")
+	if out := mustOK(t, MustShape(Nullable(Coerce(Number))), Null); out != nil {
+		t.Fatalf("Nullable(Coerce) null = %#v", out)
+	}
+	mustOK(t, MustShape(Optional().Coerce().Number()), "4")
+	mustOK(t, MustShape(MustExpr("Coerce(Number)")), "4")
+	mustOK(t, MustShape(Coerce()), "x")
+	mustOK(t, MustShape(Coerce(Any)), "x")
+	// An absent value is still absent: nothing is injected for it to convert.
+	mustErr(t, MustShape(map[string]any{"a": Coerce(Number)}), map[string]any{}, "is required")
+	out := mustOK(t, MustShape(map[string]any{"a": Optional(Coerce(Number))}), map[string]any{}).(map[string]any)
+	if out["a"] != 0.0 {
+		t.Fatalf("Optional(Coerce(Number)) absent = %#v", out)
+	}
+}
+
+func TestFmtFloatMatchesJS(t *testing.T) {
+	for f, want := range map[float64]string{0: "0", math.Copysign(0, -1): "0", 1.5: "1.5", 1000000: "1000000",
+		1577836800000: "1577836800000", 1e20: "100000000000000000000", 1e21: "1e+21", 1.5e22: "1.5e+22",
+		1e-6: "0.000001", 1e-7: "1e-7", 1.5e-7: "1.5e-7", 0.1: "0.1", -2.5: "-2.5",
+		math.NaN(): "NaN", math.Inf(1): "Infinity", math.Inf(-1): "-Infinity"} {
+		if got := fmtFloat(f); got != want {
+			t.Fatalf("fmtFloat(%v) = %q, want %q", f, got, want)
+		}
+	}
+	// The strict date-time parser rejects what time.Parse alone would accept.
+	if _, ok := parseISODateTime("2020-01-01T00:00:00Z "); ok {
+		t.Fatal("trailing space accepted")
+	}
+}

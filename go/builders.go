@@ -5,6 +5,8 @@ import (
 	"math"
 	"reflect"
 	"regexp"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -1284,11 +1286,30 @@ func valueLen(v any) (float64, bool) {
 	return 0, false
 }
 
+// fmtFloat renders a float64 as JS Number#toString does, so a number in a
+// message or a coerced string reads identically in both languages: plain digits
+// for 1e-6 <= |f| < 1e21, exponent form with a signed, unpadded exponent
+// outside that range, and NaN / Infinity by name.
 func fmtFloat(f float64) string {
-	if f == math.Trunc(f) && !math.IsInf(f, 0) {
-		return fmt.Sprintf("%d", int64(f))
+	switch {
+	case math.IsNaN(f):
+		return "NaN"
+	case math.IsInf(f, 1):
+		return "Infinity"
+	case math.IsInf(f, -1):
+		return "-Infinity"
+	case f == 0:
+		return "0"
 	}
-	return fmt.Sprintf("%v", f)
+
+	if a := math.Abs(f); a >= 1e-6 && a < 1e21 {
+		return strconv.FormatFloat(f, 'f', -1, 64)
+	}
+
+	// strconv writes "1.5e-07"; JS writes "1.5e-7". The exponent is never
+	// zero here: this branch only sees magnitudes below 1e-6 or at least 1e21.
+	mant, exp, _ := strings.Cut(strconv.FormatFloat(f, 'e', -1, 64), "e")
+	return mant + "e" + exp[:1] + strings.TrimLeft(exp[1:], "0")
 }
 
 func formatList(vals []any) string {
