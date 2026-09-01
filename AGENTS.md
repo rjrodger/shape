@@ -70,6 +70,25 @@ Both `ts/test/compat.test.ts` and `go/compat_tsv_test.go` glob and run every
 `test/*.tsv`. See [`test/README.md`](test/README.md) for the cell/sentinel
 format (`$type`, `$open`, `$closed`, `$required`, `$optional`, `$expr`).
 
+The `error` column holds the **complete** expected message and is compared
+**exactly**. A substring check cannot see a wrong separator, a wrong error order
+or an extra error — the ways the two implementations actually drift.
+
+## The differential harness (the wider net)
+
+The corpus only covers rows someone wrote. `test/differential/` generates
+thousands of `(spec, input)` pairs, runs each through both implementations and
+diffs verdict, produced value and exact error text:
+
+```sh
+make diff        # sampled report, grouped by case family
+make diff-full   # every mismatch
+```
+
+Run it after any behaviour change. Anything it finds should also become a
+corpus row in `test/gen-compat.js`, so the committed gate keeps it closed. See
+[`test/differential/README.md`](test/differential/README.md).
+
 ## Coverage bar
 
 Aim for **100% line coverage** in both languages.
@@ -120,6 +139,7 @@ parity-relevant difference, `docs/explanation/ts-go-parity.md`. The root
    regenerate the corpus.
 3. Mirror the change in `go/*.go`. Add a Go test if needed.
 4. `make test` — both languages green, including the corpus.
-5. Keep coverage at the bar; run `go vet`.
-6. Update `docs/` (and the parity page if relevant).
-7. Commit with a message that says which language(s) changed and why.
+5. `make diff` — both languages agree on every generated case.
+6. Keep coverage at the bar; run `go vet`.
+7. Update `docs/` (and the parity page if relevant).
+8. Commit with a message that says which language(s) changed and why.

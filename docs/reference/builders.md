@@ -34,7 +34,7 @@ Notes:
 
 | Builder | Effect |
 | ------- | ------ |
-| `Type(kind, spec?)` | Force a specific type/kind. TS accepts a wrapper (`Number`) or name; Go accepts a `Kind`, `TypeToken`, or string. |
+| `Type(kind, spec?)` | Force a specific type/kind, adopting its required/default state. TS accepts a wrapper (`Number`) or name; Go accepts a `Kind`, `TypeToken`, kind name, or an already-built node. Structural children are not carried across, so `Type(Object)` is a closed object and `Type(Array)` accepts any elements. |
 | `Exact(values…)` | Require equality with one of the listed literals. Also matches from the node default. |
 | `Never(spec?)` | Never matches — always fails. |
 | `Func(spec?)` | Require a function value. |
@@ -108,6 +108,21 @@ message, `update.done` to stop further checks. See [Shape nodes](nodes.md).
 - Go splits the TS options-object forms into explicit `ReferWith` / `RenameWith`
   helpers alongside the `Refer` / `Rename` shortcuts.
 - `Key()` returns the value's **parent** key in both languages.
+- `Any` is a builder function in TypeScript (usable bare or called) and a type
+  token in Go; narrow it there with `Type(Any, spec)` or `.Any()`.
+- Go has no `Symbol` token and no `.String()` chain shortcut — see the
+  [parity page](../explanation/ts-go-parity.md#intentional-divergences).
+
+## Ordering within a node
+
+A size bound (`Min`, `Max`, `Above`, `Below`, `Len`) stands aside when the node
+declares a type the value does not have, so `Min(2, String)` against `1` reports
+that `1` is not a string rather than that it is below 2. A bound that does fail
+short-circuits the rest of the node's checks, so it is the only error reported.
+
+A failed container type check ends the descent: validating `{ a: String }`
+against `1` reports one error, not a type error plus "property a is required"
+for every declared key.
 
 For per-builder examples, follow the how-to guides linked from the
 [docs index](../README.md).
