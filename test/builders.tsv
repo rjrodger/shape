@@ -101,3 +101,12 @@ catch-optional-absent	{"a":{"$expr":"Optional(Catch(7,Number))"}}	{}	{"a":0}
 catch-null-fallback	{"a":{"$expr":"Catch(null,Number)"}}	{"a":"x"}	{"a":null}	
 describe-keeps-validation	{"a":{"$expr":"Describe(\"a number\",Number)"}}	{"a":"x"}		"Validation failed for property \"a\" with string \"x\" because the string is not of type number."
 ignore-inner-bound	{"a":{"$expr":"Ignore(Min(2,Number))"}}	{"a":1}	{}	
+disc-branch-ok	{"p":{"$discriminated":["kind",{"dog":{"bark":{"$type":"Boolean"}},"fish":{"fins":{"$type":"Number"}}}]}}	{"p":{"bark":true,"kind":"dog"}}	{"p":{"bark":true,"kind":"dog"}}	
+disc-branch-error	{"p":{"$discriminated":["kind",{"dog":{"bark":{"$type":"Boolean"}},"fish":{"fins":{"$type":"Number"}}}]}}	{"p":{"fins":"x","kind":"fish"}}		"Validation failed for property \"p.fins\" with string \"x\" because the string is not of type number."
+disc-branch-missing-key	{"p":{"$discriminated":["kind",{"dog":{"bark":{"$type":"Boolean"}},"fish":{"fins":{"$type":"Number"}}}]}}	{"p":{"kind":"dog"}}		"Validation failed for property \"p.bark\" with value \"undefined\" because the value is required."
+disc-missing-tag	{"p":{"$discriminated":["kind",{"dog":{"bark":{"$type":"Boolean"}},"fish":{"fins":{"$type":"Number"}}}]}}	{"p":{"bark":true}}		"Value \"{bark:true}\" for property \"p\" is not an object with a \"kind\" property."
+disc-unknown-tag	{"p":{"$discriminated":["kind",{"dog":{"bark":{"$type":"Boolean"}},"fish":{"fins":{"$type":"Number"}}}]}}	{"p":{"kind":"cat"}}		"Value \"{kind:cat}\" for property \"p\" has unknown \"kind\" \"cat\", expected one of: dog, fish."
+disc-not-object	{"p":{"$discriminated":["kind",{"dog":{"bark":{"$type":"Boolean"}},"fish":{"fins":{"$type":"Number"}}}]}}	{"p":1}		"Value \"1\" for property \"p\" is not an object with a \"kind\" property."
+disc-required-absent	{"p":{"$discriminated":["kind",{"dog":{"bark":{"$type":"Boolean"}},"fish":{"fins":{"$type":"Number"}}}]}}	{}		"Validation failed for property \"p\" with value \"undefined\" because the value is required."
+disc-optional-absent	{"p":{"$optional":{"$discriminated":["kind",{"dog":{"bark":{"$type":"Boolean"}},"fish":{"fins":{"$type":"Number"}}}]}}}	{}	{}	
+one-optional-absent	{"a":{"$expr":"Optional(One(String,Number))"}}	{}	{}	

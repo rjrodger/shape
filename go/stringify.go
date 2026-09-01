@@ -60,6 +60,9 @@ func stringifyNode(n *node, inline bool) string {
 	case KindFunction:
 		return suffix("Function", n)
 	case KindList:
+		if n.disc != nil {
+			return suffix("Discriminated("+n.disc.tag+","+strings.Join(n.disc.tags, ",")+")", n)
+		}
 		mode := "One"
 		switch n.listMode {
 		case listSome:
@@ -71,7 +74,7 @@ func stringifyNode(n *node, inline bool) string {
 		for i, sn := range n.list {
 			parts[i] = stringifyNode(sn, true)
 		}
-		return suffix(fmt.Sprintf("%s(%s)", mode, strings.Join(parts, ", ")), n)
+		return suffix(fmt.Sprintf("%s(%s)", mode, strings.Join(parts, ",")), n)
 	case KindArray:
 		var parts []string
 		switch {
@@ -198,6 +201,14 @@ func nodeSpec(n *node) any {
 		branches := make([]any, len(n.list))
 		for i, sn := range n.list {
 			branches[i] = nodeSpec(sn)
+		}
+		out["branches"] = branches
+	}
+	if n.disc != nil {
+		out["discriminated"] = n.disc.tag
+		branches := map[string]any{}
+		for t, bn := range n.disc.branches {
+			branches[t] = nodeSpec(bn)
 		}
 		out["branches"] = branches
 	}

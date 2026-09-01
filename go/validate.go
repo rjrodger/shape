@@ -167,8 +167,10 @@ func absentSkips(state *State, update *Update) bool {
 // The afters run afterwards whatever it reported, as they do in TS.
 func validateStructure(n *node, state *State, absent bool, path []string, pathArr []any, key string, parent any, ctx *Context, match bool, verr *ValidationError) any {
 
-	// Composition shortcuts.
-	if n.kind == KindList {
+	// Composition shortcuts. An absent value on a node that does not require
+	// one is not put to the branches: TS drops the errors such a check would
+	// raise, so Optional(One(...)) given nothing is simply absent.
+	if n.kind == KindList && n.listMode != listNone && !(absent && !n.required) {
 		return evaluateList(n, state.Value, path, pathArr, key, parent, ctx, match, verr, absent)
 	}
 

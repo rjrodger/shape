@@ -117,6 +117,15 @@ function decodeSpec(v: any, Shape: any): any {
       return Shape.expr(v.$expr)
     }
 
+    if (1 === keys.length && '$discriminated' === keys[0]) {
+      const [tag, branches] = v.$discriminated
+      const out: Record<string, any> = {}
+      for (const b of Object.keys(branches)) {
+        out[b] = decodeSpec(branches[b], Shape)
+      }
+      return Shape.Discriminated(tag, out)
+    }
+
     const out: Record<string, any> = {}
     for (const k of keys) {
       out[k] = decodeSpec(v[k], Shape)

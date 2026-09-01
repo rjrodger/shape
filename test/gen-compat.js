@@ -30,6 +30,8 @@ const decodeSpec = (v) => decode(v, Shape)
 
 const T = { $type: 'String' }, N = { $type: 'Number' }, B = { $type: 'Boolean' }
 const I = { $type: 'Integer' }, D = { $type: 'Date' }
+// A discriminated union over the "kind" property; each branch gets the tag added.
+const DISC = { $discriminated: ['kind', { dog: { bark: B }, fish: { fins: N } }] }
 
 // Cases grouped by file. Each case: [name, spec, input].
 const files = {
@@ -185,6 +187,15 @@ const files = {
     ['catch-null-fallback', { a: { $expr: 'Catch(null,Number)' } }, { a: 'x' }],
     ['describe-keeps-validation', { a: { $expr: 'Describe("a number",Number)' } }, { a: 'x' }],
     ['ignore-inner-bound', { a: { $expr: 'Ignore(Min(2,Number))' } }, { a: 1 }],
+    ['disc-branch-ok', { p: DISC }, { p: { bark: true, kind: 'dog' } }],
+    ['disc-branch-error', { p: DISC }, { p: { fins: 'x', kind: 'fish' } }],
+    ['disc-branch-missing-key', { p: DISC }, { p: { kind: 'dog' } }],
+    ['disc-missing-tag', { p: DISC }, { p: { bark: true } }],
+    ['disc-unknown-tag', { p: DISC }, { p: { kind: 'cat' } }],
+    ['disc-not-object', { p: DISC }, { p: 1 }],
+    ['disc-required-absent', { p: DISC }, {}],
+    ['disc-optional-absent', { p: { $optional: DISC } }, {}],
+    ['one-optional-absent', { a: { $expr: 'Optional(One(String,Number))' } }, {}],
   ],
   composition: [
     ['one-of-ok', { a: { $expr: 'One(Number,String)' } }, { a: 'x' }],

@@ -580,3 +580,70 @@ describe('isolation: Catch, Transform, Describe, Ignore', () => {
     assert.equal(Shape.stringify(Ignore(Min(2, Number)), true), '0.Min(2)')
   })
 })
+
+
+describe('discriminated union', () => {
+  const { Discriminated, Optional, Closed, Open } = Shape as any
+  const json = (v: any) => JSON.parse(JSON.stringify(v))
+  const D = Discriminated('kind', { dog: { bark: Boolean }, fish: { fins: Number } })
+
+  test('chooses the branch by the tag and reports its errors alone', () => {
+    assert.deepEqual(Shape({ p: D })({ p: { bark: true, kind: 'dog' } }), { p: { bark: true, kind: 'dog' } })
+    assert.deepEqual(Shape(D)({ fins: 2, kind: 'fish' }), { fins: 2, kind: 'fish' })
+    assert.equal(failure({ p: D }, { p: { fins: 'x', kind: 'fish' } }),
+      'Validation failed for property "p.fins" with string "x" because the string is not of type number.')
+    assert.equal(failure({ p: D }, { p: { kind: 'dog' } }),
+      'Validation failed for property "p.bark" with value "undefined" because the value is required.')
+  })
+
+  test('the tag itself', () => {
+    assert.equal(failure({ p: D }, { p: { bark: true } }),
+      'Value "{bark:true}" for property "p" is not an object with a "kind" property.')
+    assert.equal(failure({ p: D }, { p: 1 }),
+      'Value "1" for property "p" is not an object with a "kind" property.')
+    assert.equal(failure({ p: D }, { p: [] }),
+      'Value "[]" for property "p" is not an object with a "kind" property.')
+    assert.equal(failure(D, null),
+      'Value "null" for property "" is not an object with a "kind" property.')
+    assert.equal(failure({ p: D }, { p: { kind: 'cat' } }),
+      'Value "{kind:cat}" for property "p" has unknown "kind" "cat", expected one of: dog, fish.')
+    assert.equal(failure({ p: D }, { p: { kind: 1 } }),
+      'Value "{kind:1}" for property "p" has unknown "kind" 1, expected one of: dog, fish.')
+    assert.equal(failure({ p: D }, { p: { kind: null } }),
+      'Value "{kind:null}" for property "p" has unknown "kind" null, expected one of: dog, fish.')
+    // A prototype property is not a branch.
+    assert.match(failure({ p: D }, { p: { kind: 'constructor' } }), /has unknown "kind" "constructor"/)
+  })
+
+  test('required, optional, arrays, and the shape of a branch', () => {
+    assert.equal(failure({ p: D }, {}),
+      'Validation failed for property "p" with value "undefined" because the value is required.')
+    assert.deepEqual(json(Shape({ p: Optional(D) })({})), {})
+    assert.equal(failure([D], [{ bark: true, kind: 'dog' }, { kind: 'cat' }]),
+      'Value "{kind:cat}" for property "1" has unknown "kind" "cat", expected one of: dog, fish.')
+
+    // The tag is added to an object branch that lacks it; an explicit one is kept.
+    assert.deepEqual(
+      Shape(Discriminated('kind', { dog: Closed({ kind: String, bark: Boolean }) }))({ kind: 'dog', bark: true }),
+      { kind: 'dog', bark: true })
+    assert.deepEqual(
+      Shape(Discriminated('kind', { dog: Open({ bark: Boolean }) }))({ kind: 'dog', bark: true, x: 1 }),
+      { kind: 'dog', bark: true, x: 1 })
+
+    // A branch need not be an object shape; the value still has to be one to carry the tag.
+    assert.match(failure(Discriminated('kind', { dog: String }), { kind: 'dog' }), /the object is not of type string/)
+  })
+
+  test('construction, rendering and the why-code', () => {
+    assert.throws(() => Discriminated('', { a: {} }), /needs a tag property name and at least one branch/)
+    assert.throws(() => Discriminated('k', {}), /needs a tag/)
+    assert.throws(() => Discriminated('k', []), /needs a tag/)
+    assert.equal(Shape.stringify(D, true), 'Discriminated(kind,dog,fish)')
+    assert.equal(Shape.stringify(Optional(D), true), 'Discriminated(kind,dog,fish)')
+
+    const ctx: any = { err: [] }
+    Shape({ p: D })({ p: { kind: 'cat' } }, ctx)
+    assert.equal(ctx.err[0].why, 'Discriminated')
+    assert.equal(ctx.err[0].check, 'Discriminated')
+  })
+})

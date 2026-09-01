@@ -49,6 +49,15 @@ const FORMATS = [
   'fe80::1%eth0', '', ' ', 1, null, true, [], {},
 ]
 
+// A discriminated union over "kind", and values around its two branches.
+// Multi-key objects keep alphabetical order (see OBJS).
+const DISC = { $discriminated: ['kind', { dog: { bark: B }, fish: { fins: N } }] }
+const DISC_IN = [
+  { bark: true, kind: 'dog' }, { kind: 'dog' }, { bark: 1, kind: 'dog' }, { fins: 2, kind: 'fish' },
+  { fins: 'x', kind: 'fish' }, { kind: 'cat' }, { bark: true }, { kind: 1 }, { kind: null }, {},
+  null, 1, 'dog', [], [{ kind: 'dog' }],
+]
+
 function build() {
   const cases = []
   let n = 0
@@ -130,6 +139,15 @@ function build() {
   add('describe', E('Describe("a number",Number)'), SCALARS)
   add('ignore-bound', { a: E('Ignore(Min(2,Number))') }, OBJS)
   add('ignore-arr', [E('Ignore(Number)')], ARRS)
+
+  // Discriminated unions, and composition given nothing on an optional node.
+  add('disc-root', DISC, DISC_IN)
+  add('disc-prop', { p: DISC }, DISC_IN.map((v) => ({ p: v })).concat([{}]))
+  add('disc-optional', { p: { $optional: DISC } }, [{}, { p: { kind: 'cat' } }, { p: { bark: true, kind: 'dog' } }])
+  add('disc-arr', [DISC], ARRS.concat([[{ bark: true, kind: 'dog' }, { kind: 'cat' }]]))
+  add('one-optional', { a: E('Optional(One(String,Number))') }, OBJS)
+  add('some-optional', { a: E('Optional(Some(String,Number))') }, OBJS)
+  add('all-optional', { a: E('Optional(All(String,Min(2)))') }, OBJS)
 
   // A type token with arguments applies the type to them.
   add('dsl-token-args-str', E('String(Min(2))'), SCALARS)

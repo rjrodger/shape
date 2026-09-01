@@ -54,6 +54,7 @@ type node struct {
 	// Composition: if listMode != listNone, branches define alternate shapes.
 	listMode listMode
 	list     []*node
+	disc     *discriminated // a Discriminated union chooses among list by tag
 
 	// Exact value match.
 	exactVals []any

@@ -267,6 +267,14 @@ func decodeSpec(v any) any {
 				return MustExpr(es)
 			}
 		}
+		if dv, ok := obj["$discriminated"]; ok {
+			arr := dv.([]any)
+			branches := map[string]any{}
+			for t, b := range arr[1].(map[string]any) {
+				branches[t] = decodeSpec(b)
+			}
+			return Discriminated(arr[0].(string), branches)
+		}
 	}
 
 	out := map[string]any{}

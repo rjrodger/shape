@@ -1,8 +1,10 @@
 package shape
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"strings"
 )
 
 // Isolated validation: Catch and Transform (Ignore probes the same way from
@@ -50,17 +52,24 @@ func (in inner) probe(state *State) (any, *ValidationError) {
 	return out, sub
 }
 
+// jsonText renders a value as JSON.stringify does (no HTML escaping).
+func jsonText(val any) string {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(val); err != nil {
+		return fmt.Sprintf("%T", val)
+	}
+	return strings.TrimSuffix(buf.String(), "\n")
+}
+
 // argText renders a builder argument as TS's dequoted stringify does: a string
 // bare, anything else as JSON.
 func argText(val any) string {
 	if s, ok := val.(string); ok {
 		return s
 	}
-	b, err := json.Marshal(val)
-	if err != nil {
-		return fmt.Sprintf("%T", val)
-	}
-	return string(b)
+	return jsonText(val)
 }
 
 // Catch replaces whatever fails inside with the fallback, raising nothing.

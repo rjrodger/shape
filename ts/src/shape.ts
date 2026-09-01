@@ -231,6 +231,7 @@ const S = {
   Catch: 'Catch',
   Coerce: 'Coerce',
   Describe: 'Describe',
+  Discriminated: 'Discriminated',
   DateTime: 'DateTime',
   Email: 'Email',
   Ip: 'Ip',
@@ -2239,6 +2240,79 @@ const Describe = function <V>(this: any, description: string, shape?: Node<V> | 
 }
 
 
+// Discriminated Union
+// ===================
+
+// Choose the branch by the value of a tag property, then validate against that
+// branch alone, so the errors are its own rather than a list of every
+// alternative. An object-shaped branch without the tag property has it added,
+// as the literal it is keyed by.
+const Discriminated = function(this: any, tag: string, branches: Record<string, any>) {
+  if (S.string !== typeof tag || '' === tag || null == branches ||
+    S.object !== typeof branches || isarr(branches) || 0 === keys(branches).length) {
+    throw new Error('Shape: Discriminated needs a tag property name and at least one branch')
+  }
+
+  let node = buildize(this)
+  node.t = (S.list as ValType)
+  node.r = true
+
+  const tags = keys(branches).sort()
+  const shapes = new Map<string, any>()
+  for (const t of tags) {
+    const bn = nodize(branches[t])
+    if (S.object === bn.t && null != bn.v && undefined === bn.v[tag]) {
+      bn.v[tag] = nodize(t)
+    }
+    shapes.set(t, shapify(bn))
+  }
+  node.u.list = tags.map((t) => shapes.get(t).node())
+  node.u.discriminated = { tag, tags }
+
+  const validator: any = function Discriminated(val: any, update: Update, state: State) {
+    // Required or optional is for the structural check to say.
+    if (undefined === val) {
+      return true
+    }
+
+    const tv = null != val && S.object === typeof val && !isarr(val) ? val[tag] : undefined
+    if (undefined === tv) {
+      update.err = makeErr(state,
+        S.Value + ' ' + S.$VALUE + S.forprop + S.$PATH +
+        ' is not an object with a "' + tag + '" property.',
+        S.Discriminated)
+      return false
+    }
+
+    const shape = S.string === typeof tv ? shapes.get(tv) : undefined
+    if (undefined === shape) {
+      update.err = makeErr(state,
+        S.Value + ' ' + S.$VALUE + S.forprop + S.$PATH +
+        ' has unknown "' + tag + '" ' + JSON.stringify(tv) +
+        ', expected one of: ' + tags.join(', ') + '.',
+        S.Discriminated)
+      return false
+    }
+
+    const errs: ErrDesc[] = []
+    const ref = state.ctx.ref = state.ctx.ref || {}
+    const out = shape(val, { err: errs, ref, log: state.ctx.log, path$: patharr(state) })
+    if (0 < errs.length) {
+      update.err = errs
+      return false
+    }
+    update.val = out
+    return true
+  }
+
+  validator.n = S.Discriminated
+  validator.a = [tag, branches]
+  node.b.push(validator)
+
+  return node
+}
+
+
 // Value may also be null. Absent is still governed by required/optional.
 const Nullable = function <V>(this: any, shape?: Node<V> | V): Node<V> {
   let node = buildize(this, shape)
@@ -3445,6 +3519,9 @@ function node2json(n: Node<any>): any {
     }
     return o
   }
+  else if (S.list === t && n.u.discriminated) {
+    return S.Discriminated + '(' + n.u.discriminated.tag + ',' + n.u.discriminated.tags.join(',') + ')'
+  }
   else if (S.list === t) {
     let refs: any = {}
     let rI = 0
@@ -3625,6 +3702,7 @@ const BuilderMap = {
   Default,
   Define,
   Describe,
+  Discriminated,
   Email,
   Empty,
   Exact,
@@ -3742,6 +3820,7 @@ const GInteger = Integer
 const GCoerce = Coerce
 const GCatch = Catch
 const GDescribe = Describe
+const GDiscriminated = Discriminated
 const GTransform = Transform
 const GDateTime = DateTime
 const GEmail = Email
@@ -3952,6 +4031,7 @@ export {
   Default,
   Define,
   Describe,
+  Discriminated,
   Email,
   Empty,
   Exact,
@@ -3994,6 +4074,7 @@ export {
   GCoerce,
   GCatch,
   GDescribe,
+  GDiscriminated,
   GTransform,
   GDateTime,
   GEmail,

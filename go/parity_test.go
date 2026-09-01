@@ -992,3 +992,74 @@ func TestIsolationExprArguments(t *testing.T) {
 		}
 	}
 }
+
+// --- discriminated union ------------------------------------------------------
+
+func TestDiscriminated(t *testing.T) {
+	o := func(kv ...any) map[string]any {
+		m := map[string]any{}
+		for i := 0; i < len(kv); i += 2 {
+			m[kv[i].(string)] = kv[i+1]
+		}
+		return m
+	}
+	want := func(name string, got, want any) {
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("%s = %#v, want %#v", name, got, want)
+		}
+	}
+	D := Discriminated("kind", map[string]any{"dog": o("bark", Boolean), "fish": o("fins", Number)})
+	P := MustShape(o("p", D))
+
+	// The branch is chosen by the tag, and its errors are reported alone.
+	want("branch", mustOK(t, P, o("p", o("bark", true, "kind", "dog"))), o("p", o("bark", true, "kind", "dog")))
+	want("root", mustOK(t, MustShape(D), o("fins", 2.0, "kind", "fish")), o("fins", 2.0, "kind", "fish"))
+	mustErr(t, P, o("p", o("fins", "x", "kind", "fish")),
+		"Validation failed for property \"p.fins\" with string \"x\" because the string is not of type number.")
+	mustErr(t, P, o("p", o("kind", "dog")),
+		"Validation failed for property \"p.bark\" with value \"undefined\" because the value is required.")
+
+	// The tag itself.
+	mustErr(t, P, o("p", o("bark", true)), "Value \"{bark:true}\" for property \"p\" is not an object with a \"kind\" property.")
+	mustErr(t, P, o("p", 1.0), "Value \"1\" for property \"p\" is not an object with a \"kind\" property.")
+	mustErr(t, P, o("p", []any{}), "Value \"[]\" for property \"p\" is not an object with a \"kind\" property.")
+	mustErr(t, MustShape(D), Null, "Value \"null\" for property \"\" is not an object with a \"kind\" property.")
+	mustErr(t, P, o("p", o("kind", "cat")), "Value \"{kind:cat}\" for property \"p\" has unknown \"kind\" \"cat\", expected one of: dog, fish.")
+	mustErr(t, P, o("p", o("kind", 1.0)), "Value \"{kind:1}\" for property \"p\" has unknown \"kind\" 1, expected one of: dog, fish.")
+	mustErr(t, P, o("p", o("kind", nil)), "Value \"{kind:null}\" for property \"p\" has unknown \"kind\" null, expected one of: dog, fish.")
+
+	// Required, optional, arrays, and the shape of a branch.
+	mustErr(t, P, o(), "Validation failed for property \"p\" with value \"undefined\" because the value is required.")
+	want("optional absent", mustOK(t, MustShape(o("p", Optional(D))), o()), o())
+	mustErr(t, MustShape([]any{D}), []any{o("bark", true, "kind", "dog"), o("kind", "cat")},
+		"Value \"{kind:cat}\" for property \"1\" has unknown \"kind\" \"cat\", expected one of: dog, fish.")
+	want("explicit tag", mustOK(t, MustShape(Discriminated("kind", map[string]any{"dog": Closed(o("kind", String, "bark", Boolean))})),
+		o("kind", "dog", "bark", true)), o("kind", "dog", "bark", true))
+	want("open branch", mustOK(t, MustShape(Discriminated("kind", map[string]any{"dog": Open(o("bark", Boolean))})),
+		o("kind", "dog", "bark", true, "x", 1.0)), o("kind", "dog", "bark", true, "x", 1.0))
+	// The Object token has no children map of its own; the tag is still added.
+	want("object token branch", mustOK(t, MustShape(Discriminated("kind", map[string]any{"dog": Object})),
+		o("kind", "dog", "x", 1.0)), o("kind", "dog", "x", 1.0))
+	mustErr(t, MustShape(Discriminated("kind", map[string]any{"dog": String})), o("kind", "dog"), "the object is not of type string")
+
+	// Construction faults surface at validation, as for any other bad spec.
+	mustErr(t, MustShape(Discriminated("", map[string]any{"a": o()})), o(), "needs a tag property name and at least one branch")
+	mustErr(t, MustShape(Discriminated("k", map[string]any{})), o(), "needs a tag")
+
+	want("render", stringifyNode(D.n, true), "Discriminated(kind,dog,fish)")
+	want("render wrapped", stringifyNode(Optional(D).n, true), "Discriminated(kind,dog,fish)")
+	want("render list join", stringifyNode(One(String, Number).n, true), "One(String,Number)")
+	spec := MustShape(D).Spec().(map[string]any)
+	want("spec tag", spec["discriminated"], "kind")
+	if _, ok := spec["branches"].(map[string]any)["dog"]; !ok {
+		t.Fatalf("spec branches = %#v", spec["branches"])
+	}
+	errs := P.Error(o("p", o("kind", "cat")))
+	want("why", errs[0].Why, WhyDiscriminated)
+	want("check", errs[0].Check, "Discriminated")
+
+	// Composition given nothing on an optional node is simply absent.
+	want("one optional", mustOK(t, MustShape(o("a", Optional(One(String, Number)))), o()), o())
+	want("some optional", mustOK(t, MustShape(o("a", Optional(Some(String, Number)))), o()), o())
+	want("all optional", mustOK(t, MustShape(o("a", Optional(All(String, Min(2))))), o()), o())
+}
