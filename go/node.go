@@ -24,6 +24,7 @@ type node struct {
 	skippable   bool // p in TS: optional and no default-injection
 	silent      bool // e=false in TS: drop errors raised on or below this node
 	empty       bool // empty string allowed
+	nullable    bool // an explicit null is accepted as the value
 	hasDefault  bool
 
 	defaultValue any   // injected on missing optional property

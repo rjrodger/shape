@@ -39,3 +39,20 @@ optional-expr-absent	{"a":{"$expr":"Optional(String)"}}	{}	{"a":""}
 min-string-type-mismatch	{"a":{"$expr":"Min(2,String)"}}	{"a":1}		"Validation failed for property \"a\" with number \"1\" because the number is not of type string."
 min-string-type-mismatch-array	{"a":{"$expr":"Min(2,String)"}}	{"a":[1,2,3]}		"Validation failed for index \"a\" with array \"[1,2,3]\" because the array is not of type string."
 len-array-chain-fail	{"a":{"$expr":"Len(2).Array"}}	{"a":[1]}		"Value \"[1]\" for property \"a\" must be exactly 2 in length (was 1)."
+integer-ok	{"a":{"$type":"Integer"}}	{"a":5}	{"a":5}	
+integer-fraction-fails	{"a":{"$type":"Integer"}}	{"a":1.5}		"Validation failed for property \"a\" with number \"1.5\" because the number is not of type integer."
+integer-string-fails	{"a":{"$type":"Integer"}}	{"a":"5"}		"Validation failed for property \"a\" with string \"5\" because the string is not of type integer."
+integer-required	{"a":{"$type":"Integer"}}	{}		"Validation failed for property \"a\" with value \"undefined\" because the value is required."
+integer-optional-default	{"a":{"$expr":"Optional(Integer)"}}	{}	{"a":0}	
+integer-min-type-first	{"a":{"$expr":"Min(2,Integer)"}}	{"a":1.5}		"Validation failed for property \"a\" with number \"1.5\" because the number is not of type integer."
+integer-min-bound	{"a":{"$expr":"Min(2,Integer)"}}	{"a":1}		"Value \"1\" for property \"a\" must be a minimum of 2 (was 1)."
+date-string-fails	{"a":{"$type":"Date"}}	{"a":"x"}		"Validation failed for property \"a\" with string \"x\" because the string is not of type date."
+date-number-fails	{"a":{"$type":"Date"}}	{"a":1}		"Validation failed for property \"a\" with number \"1\" because the number is not of type date."
+date-required	{"a":{"$type":"Date"}}	{}		"Validation failed for property \"a\" with value \"undefined\" because the value is required."
+nullable-null-ok	{"a":{"$expr":"Nullable(Number)"}}	{"a":null}	{"a":null}	
+nullable-value-ok	{"a":{"$expr":"Nullable(Number)"}}	{"a":5}	{"a":5}	
+nullable-wrong-type	{"a":{"$expr":"Nullable(Number)"}}	{"a":"x"}		"Validation failed for property \"a\" with string \"x\" because the string is not of type number."
+nullable-still-required	{"a":{"$expr":"Nullable(Number)"}}	{}		"Validation failed for property \"a\" with value \"undefined\" because the value is required."
+nullable-optional-absent	{"a":{"$expr":"Optional(Nullable(Number))"}}	{}	{"a":0}	
+nullable-object-null	{"a":{"$expr":"Nullable(Closed({}))"}}	{"a":null}	{"a":null}	
+token-args-apply	{"a":{"$expr":"String(Min(2))"}}	{"a":"a"}		"Value \"a\" for property \"a\" must be a minimum length of 2 (was 1)."

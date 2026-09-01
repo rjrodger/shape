@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 )
 
 // stringifyNode renders a node as a compact debug string.
@@ -18,6 +19,19 @@ func stringifyNode(n *node, inline bool) string {
 		return suffix(typeOrValue(n, "Number", inline), n)
 	case KindBoolean:
 		return suffix(typeOrValue(n, "Boolean", inline), n)
+	case KindInteger:
+		return suffix(typeOrValue(n, "Integer", inline), n)
+	case KindDate:
+		base := "Date"
+		if !n.required && n.hasDefault {
+			if t, ok := n.defaultValue.(time.Time); ok {
+				base = jsDateString(t)
+				if !inline {
+					base = fmt.Sprintf("%q", base)
+				}
+			}
+		}
+		return suffix(base, n)
 	case KindNull:
 		return "null"
 	case KindNaN:

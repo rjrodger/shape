@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"time"
 )
 
 // errValueLimit mirrors TS truncate(jstr, 111) — value renderings in error
@@ -232,6 +233,8 @@ func valueToString(v any) string {
 			return "true"
 		}
 		return "false"
+	case time.Time:
+		return jsDateString(x)
 	}
 	// JSON render maps/arrays/numbers; mirrors TS by stripping inner quotes so
 	// the result reads naturally inside the surrounding `... "..."` template.
@@ -317,9 +320,18 @@ func valueKind(v any) string {
 		return "array"
 	case map[string]any:
 		return "object"
+	case time.Time:
+		// typeof a Date is "object" in JS.
+		return "object"
 	}
 	if isNumber(v) {
 		return "number"
 	}
 	return "value"
+}
+
+// jsDateString renders a time the way JSON.stringify renders a Date: UTC, with
+// millisecond precision.
+func jsDateString(t time.Time) string {
+	return t.UTC().Format("2006-01-02T15:04:05.000Z")
 }

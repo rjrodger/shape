@@ -94,7 +94,9 @@ type ValType =
   'array' |     // An array.
   'bigint' |    // A BigInt value.
   'boolean' |   // The values `true` or `false`.
+  'date' |      // A Date instance.
   'function' |  // A function.
+  'integer' |   // A number with no fractional part.
   'instance' |  // An instance of a constructed object.
   'list' |      // A list of types under a given logical rule.
   'nan' |       // The `NaN` value.
@@ -193,6 +195,8 @@ const S = {
   closed: 'closed',
   check: 'check',
   regexp: 'regexp',
+  integer: 'integer',
+  date: 'date',
 
   String: 'String',
   Number: 'Number',
@@ -201,6 +205,8 @@ const S = {
   Array: 'Array',
   Symbol: 'Symbol',
   Function: 'Function',
+  Integer: 'Integer',
+  Date: 'Date',
   Value: 'Value',
 
   Above: 'Above',
@@ -221,6 +227,7 @@ const S = {
   Max: 'Max',
   Min: 'Min',
   Never: 'Never',
+  Nullable: 'Nullable',
   Len: 'Len',
   One: 'One',
   Open: 'Open',
@@ -248,6 +255,7 @@ const TNAT = {
   [S.Array]: Array,
   [S.Symbol]: Symbol,
   [S.Function]: Function,
+  [S.Date]: Date,
 }
 
 
@@ -572,6 +580,7 @@ const IS_TYPE: { [name: string]: boolean } = {
   Array: true,
   BigInt: true,
   Boolean: true,
+  Date: true,
   Function: true,
   Number: true,
   Object: true,
@@ -584,6 +593,7 @@ const IS_TYPE: { [name: string]: boolean } = {
 const EMPTY_VAL: { [name: string]: any } = {
   string: '',
   number: 0,
+  integer: 0,
   boolean: false,
   object: {},
   array: [],
@@ -685,6 +695,9 @@ function nodize<S>(shape?: any, depth?: number, meta?: NodeMeta): Node<S> {
       if ('[object RegExp]' === strdesc) {
         t = (S.regexp as ValType)
         r = true
+      }
+      else if ('[object Date]' === strdesc) {
+        t = (S.date as ValType)
       }
       else {
         t = (S.instance as ValType)
@@ -886,7 +899,12 @@ function shapify<S>(intop?: S | Node<S>, inopts?: ShapeOptions) {
         let descend = true
         let valundef = undefined === s.val
 
-        if (S.never === s.type) {
+        // Nullable: an explicit null is accepted as the value.
+        if (null === s.val && n.u.nullable) {
+          s.ctx.log && s.ctx.log('kv', s)
+        }
+
+        else if (S.never === s.type) {
           s.curerr.push(makeErrImpl(S.never, s, 1070))
         }
 
@@ -1181,7 +1199,9 @@ function shapify<S>(intop?: S | Node<S>, inopts?: ShapeOptions) {
           undefined === s.val ||
           s.type === s.valType ||
           (S.instance === s.type && n.u.i && s.val instanceof n.u.i) ||
-          (S.null === s.type && null === s.val)
+          (S.null === s.type && null === s.val) ||
+          (S.integer === s.type && S.number === s.valType && Number.isInteger(s.val)) ||
+          (S.date === s.type && s.val instanceof Date && !isNaN(s.val.getTime()))
         )) {
           s.curerr.push(makeErrImpl(S.type, s, 1050))
         }
@@ -1757,11 +1777,17 @@ function patharr(s: State): (string | number)[] {
 }
 
 
+// A bound on a number or a date compares the value itself; anything else is
+// measured by its length or key count.
+const isNumeric = (val: any) => S.number === typeof (val) || val instanceof Date
+
+
 function valueLen(val: any) {
   return S.number === typeof (val) ? val :
     S.number === typeof (val?.length) ? val.length :
-      null != val && S.object === typeof (val) ? keys(val).length :
-        NaN
+      val instanceof Date ? val.getTime() :
+        null != val && S.object === typeof (val) ? keys(val).length :
+          NaN
 }
 
 
@@ -1826,6 +1852,27 @@ const Optional = function <V>(this: any, shape?: Node<V> | V): Node<V> {
     node.t = (S.undefined as ValType)
     node.v = undefined
   }
+  return node
+}
+
+
+// Value may also be null. Absent is still governed by required/optional.
+const Nullable = function <V>(this: any, shape?: Node<V> | V): Node<V> {
+  let node = buildize(this, shape)
+  node.u.nullable = true
+  return node
+}
+
+
+// A number with no fractional part. Behaves as a type token: required, with
+// the default 0, so Optional(Integer) injects 0 and Integer alone demands one.
+const Integer = function <V>(this: any, shape?: Node<V> | V): Node<V> {
+  let node = buildize(this, shape)
+  node.t = (S.integer as ValType)
+  node.r = true
+  node.p = false
+  node.v = 0
+  node.f = 0
   return node
 }
 
@@ -2476,6 +2523,9 @@ const Type = function <V extends
   'Array' |
   'Function' |
   'Symbol' |
+  'Integer' |
+  'Date' |
+  DateConstructor |
   StringConstructor |
   NumberConstructor |
   BooleanConstructor |
@@ -2500,7 +2550,7 @@ const Type = function <V extends
     V extends null ? null :
     V extends undefined ? undefined :
     V) {
-  let tnat = nodize(TNAT[tref as string] || tref)
+  let tnat = nodize(TNAT[tref as string] || (S.Integer === tref ? Integer : tref))
 
   let node = buildize(this, shape)
   if (node !== tnat) {
@@ -2544,6 +2594,8 @@ function typeWillFail(state: State): boolean {
   if (S.null === t) return null !== val
   if (S.instance === t) return !(n.u.i && val instanceof n.u.i)
   if (S.regexp === t) return S.string !== state.valType
+  if (S.integer === t) return !Number.isInteger(val)
+  if (S.date === t) return !(val instanceof Date)
 
   return t !== state.valType
 }
@@ -2594,7 +2646,7 @@ const Min = function <V>(
       }
 
       state.checkargs = { min: 1 }
-      let errmsgpart = S.number === typeof (val) ? '' : 'length '
+      let errmsgpart = isNumeric(val) ? '' : 'length '
       update.err =
         makeErr(state,
           S.Value + ' ' + S.$VALUE + S.forprop + S.$PATH +
@@ -2616,7 +2668,7 @@ const Max = function <V>(
         return true
       }
 
-      let errmsgpart = S.number === typeof (val) ? '' : 'length '
+      let errmsgpart = isNumeric(val) ? '' : 'length '
       update.err =
         makeErr(state,
           S.Value + ' ' + S.$VALUE + S.forprop + S.$PATH +
@@ -2638,7 +2690,7 @@ const Above = function <V>(
         return true
       }
 
-      let errmsgpart = S.number === typeof (val) ? 'be' : 'have length'
+      let errmsgpart = isNumeric(val) ? 'be' : 'have length'
       update.err =
         makeErr(state,
           S.Value + ' ' + S.$VALUE + S.forprop + S.$PATH +
@@ -2660,7 +2712,7 @@ const Below = function <V>(
         return true
       }
 
-      let errmsgpart = S.number === typeof (val) ? 'be' : 'have length'
+      let errmsgpart = isNumeric(val) ? 'be' : 'have length'
       update.err =
         makeErr(state,
           S.Value + ' ' + S.$VALUE + S.forprop + S.$PATH +
@@ -2682,7 +2734,7 @@ const Len = function <V>(
         return true
       }
 
-      let errmsgpart = S.number === typeof (val) ? '' : ' in length'
+      let errmsgpart = isNumeric(val) ? '' : ' in length'
       update.err =
         makeErr(state,
           S.Value + ' ' + S.$VALUE + S.forprop + S.$PATH +
@@ -2752,10 +2804,12 @@ function buildize<V>(self?: any, shape?: any): Node<V> {
       Fault,
       Func,
       Ignore,
+      Integer,
       Len,
       Max,
       Min,
       Never,
+      Nullable,
       Open,
       Optional,
       Refer,
@@ -2772,6 +2826,7 @@ function buildize<V>(self?: any, shape?: any): Node<V> {
       Array: () => Type.call(node, Array),
       Function: () => Type.call(node, Function),
       Symbol: () => Type.call(node, Symbol),
+      Date: () => Type.call(node, Date),
     })
 }
 
@@ -2889,6 +2944,7 @@ function node2json(n: Node<any>): any {
     number: S.Number,
     string: S.String,
     boolean: S.Boolean,
+    integer: S.Integer,
   }
 
 
@@ -3001,6 +3057,11 @@ function node2json(n: Node<any>): any {
   }
   else if (S.regexp === t) {
     return n.v.toString()
+  }
+  else if (S.date === t) {
+    let s = n.r ? S.Date : JSON.stringify(n.v)
+    s += n.b.map((v: any) => v.s ? ('.' + v.s(n)) : '').join('')
+    return s
   }
 }
 
@@ -3154,11 +3215,13 @@ const BuilderMap = {
   Fault,
   Func,
   Ignore,
+  Integer,
   Key,
   Len,
   Max,
   Min,
   Never,
+  Nullable,
   One,
   Open,
   Optional,
@@ -3175,7 +3238,8 @@ const BuilderMap = {
 // Builders that mean something applied to nothing, so a bare reference to one
 // in a spec (`{ a: Any }`) is read as a call. See nodize.
 const NULLARY_BUILDERS =
-  [Any, Closed, Empty, Func, Ignore, Key, Never, Open, Optional, Required, Skip]
+  [Any, Closed, Empty, Func, Ignore, Integer, Key, Never, Nullable, Open, Optional,
+    Required, Skip]
 
 for (let builder of NULLARY_BUILDERS) {
   defprop(builder, 'nullary$', { value: true })
@@ -3252,6 +3316,8 @@ const GAbove = Above
 const GAfter = After
 const GAll = All
 const GAny = Any
+const GInteger = Integer
+const GNullable = Nullable
 const GBefore = Before
 const GBelow = Below
 const GCheck = Check
@@ -3454,11 +3520,13 @@ export {
   Fault,
   Func,
   Ignore,
+  Integer,
   Key,
   Len,
   Max,
   Min,
   Never,
+  Nullable,
   One,
   Open,
   Optional,
@@ -3486,11 +3554,13 @@ export {
   GFault,
   GFunc,
   GIgnore,
+  GInteger,
   GKey,
   GLen,
   GMax,
   GMin,
   GNever,
+  GNullable,
   GOne,
   GOpen,
   GOptional,

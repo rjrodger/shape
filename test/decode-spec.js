@@ -15,7 +15,7 @@ function decodeSpec(v, Shape) {
     if (1 === keys.length) {
       const k = keys[0]
       if ('$type' === k) {
-        const native = { String, Number, Boolean, Object, Array, Symbol, Function }
+        const native = { String, Number, Boolean, Object, Array, Symbol, Function, Date }
         return native[v.$type] || Shape[v.$type]
       }
       if ('$open' === k) return Shape.Open(decodeSpec(v.$open, Shape))

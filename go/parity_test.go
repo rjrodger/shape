@@ -6,10 +6,12 @@ package shape
 // regressions that were easiest to reintroduce.
 
 import (
+	"math"
 	"reflect"
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 )
 
 // --- required descendants under an absent parent -------------------------
@@ -509,4 +511,160 @@ func TestKeyExpressionEdgeCases(t *testing.T) {
 	if _, err := Shape(map[string]any{"a: Optional": make(chan int)}); err == nil {
 		t.Fatal("expected an error for an unnormalizable example value")
 	}
+}
+
+// --- kinds: nullable, integer, date ---------------------------------------
+
+func TestNullable(t *testing.T) {
+	s := MustShape(Nullable(Number))
+	if out := mustOK(t, s, Null); out != nil {
+		t.Fatalf("Nullable(Number) with null = %#v", out)
+	}
+	if out := mustOK(t, s, 5.0); out != 5.0 {
+		t.Fatalf("Nullable(Number) with 5 = %#v", out)
+	}
+	mustErr(t, s, "x", "the string is not of type number")
+
+	// Absent is still governed by required/optional.
+	obj := mustOK(t, MustShape(map[string]any{"a": Nullable(String)}), map[string]any{"a": nil}).(map[string]any)
+	if v, present := obj["a"]; !present || v != nil {
+		t.Fatalf("nullable property: %#v", obj)
+	}
+	mustErr(t, MustShape(map[string]any{"a": Nullable(Number)}), map[string]any{}, "is required")
+	opt := mustOK(t, MustShape(map[string]any{"a": Optional(Nullable(Number))}), map[string]any{}).(map[string]any)
+	if opt["a"] != 0.0 {
+		t.Fatalf("Optional(Nullable(Number)) absent = %#v", opt)
+	}
+
+	// Containers, the DSL, bare use, and the chain.
+	if out := mustOK(t, MustShape(Nullable(map[string]any{"b": 1.0})), Null); out != nil {
+		t.Fatalf("Nullable(object) with null = %#v", out)
+	}
+	if out := mustOK(t, MustShape(MustExpr("Nullable(Number)")), Null); out != nil {
+		t.Fatalf("DSL Nullable with null = %#v", out)
+	}
+	bare := mustOK(t, MustShape(map[string]any{"a": MustExpr("Nullable")}), map[string]any{"a": nil}).(map[string]any)
+	if v, present := bare["a"]; !present || v != nil {
+		t.Fatalf("bare Nullable: %#v", bare)
+	}
+	if out := mustOK(t, MustShape(Optional().Nullable().Number()), Null); out != nil {
+		t.Fatalf("chained Nullable with null = %#v", out)
+	}
+	// Nullable(Never) still accepts null, as in TS (the null check comes first).
+	if out := mustOK(t, MustShape(Nullable(Never())), Null); out != nil {
+		t.Fatalf("Nullable(Never) with null = %#v", out)
+	}
+}
+
+func TestIntegerKind(t *testing.T) {
+	s := MustShape(Integer)
+	mustOK(t, s, 5.0)
+	mustOK(t, s, 5)
+	mustOK(t, s, int32(-2))
+	mustOK(t, s, float32(3))
+	mustErr(t, s, 1.5, "the number is not of type integer")
+	mustErr(t, s, float32(1.5), "is not of type integer")
+	mustErr(t, s, "5", "the string is not of type integer")
+	mustErr(t, s, math.NaN(), "is not of type integer")
+	mustErr(t, s, math.Inf(1), "is not of type integer")
+
+	// A type token: required, default 0.
+	mustErr(t, MustShape(map[string]any{"a": Integer}), map[string]any{}, "is required")
+	out := mustOK(t, MustShape(map[string]any{"a": Optional(Integer)}), map[string]any{}).(map[string]any)
+	if out["a"] != 0.0 {
+		t.Fatalf("Optional(Integer) absent = %#v", out)
+	}
+
+	// Bounds defer to the type check; Type() and the DSL know the name.
+	mustErr(t, MustShape(MustExpr("Min(2,Integer)")), 1.5, "is not of type integer")
+	mustErr(t, MustShape(MustExpr("Min(2,Integer)")), 1.0, "must be a minimum of 2")
+	mustErr(t, MustShape(MustExpr("Type(Integer)")), 2.5, "is not of type integer")
+	mustErr(t, MustShape(Type(Integer)), 2.5, "is not of type integer")
+	mustOK(t, MustShape(Optional().Integer()), 4.0)
+	mustErr(t, MustShape(map[string]any{"a: Integer": 0.0}), map[string]any{"a": 1.5}, "is not of type integer")
+	if got := stringifyNode(MustExpr("Min(2,Integer)").n, true); got != "Integer.Min(2)" {
+		t.Fatalf("Integer render = %q", got)
+	}
+	if got := stringifyNode(MustExpr("Optional(Integer)").n, true); got != "0" {
+		t.Fatalf("Optional(Integer) render = %q", got)
+	}
+}
+
+func TestDateKind(t *testing.T) {
+	d := time.Unix(0, 0).UTC()
+	s := MustShape(Date)
+	if out := mustOK(t, s, d); out != d {
+		t.Fatalf("Date passthrough = %#v", out)
+	}
+	mustErr(t, s, "x", "the string is not of type date")
+	mustErr(t, s, 1.0, "the number is not of type date")
+	mustErr(t, MustShape(map[string]any{"a": Date}), map[string]any{}, "is required")
+
+	// No default to inject for an optional date; a literal date is a default.
+	if out := mustOK(t, MustShape(map[string]any{"a": Optional(Date)}), map[string]any{}).(map[string]any); len(out) != 0 {
+		t.Fatalf("Optional(Date) absent injected %#v", out)
+	}
+	lit := mustOK(t, MustShape(map[string]any{"a": d}), map[string]any{}).(map[string]any)
+	if lit["a"] != d {
+		t.Fatalf("date literal default = %#v", lit)
+	}
+	if out := mustOK(t, MustShape(Optional().Date()), d); out != d {
+		t.Fatalf("chained Date = %#v", out)
+	}
+	mustErr(t, MustShape(MustExpr("Date")), 1.0, "the number is not of type date")
+
+	// A bound compares the instant, and reads as a value, not a length.
+	y2020 := float64(time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC).UnixMilli())
+	mustOK(t, MustShape(Min(y2020, Date)), time.Date(2021, 1, 1, 0, 0, 0, 0, time.UTC))
+	mustErr(t, MustShape(Min(y2020, Date)), time.Date(2019, 6, 1, 0, 0, 0, 0, time.UTC),
+		"must be a minimum of 1577836800000 (was 1559347200000)")
+
+	// A date value in an error message renders as JSON.stringify does.
+	mustErr(t, MustShape(Number), d,
+		`Validation failed for object "1970-01-01T00:00:00.000Z" because the object is not of type number.`)
+
+	// Rendering.
+	if got := stringifyNode(MustExpr("Date").n, false); got != "Date" {
+		t.Fatalf("Date render = %q", got)
+	}
+	if got := stringifyNode(MustShape(d).Node(), false); got != `"1970-01-01T00:00:00.000Z"` {
+		t.Fatalf("date literal render = %q", got)
+	}
+	if got := stringifyNode(MustShape(d).Node(), true); got != "1970-01-01T00:00:00.000Z" {
+		t.Fatalf("inline date literal render = %q", got)
+	}
+}
+
+func TestTypeTokenArgumentsApply(t *testing.T) {
+	// String(Min(2)) is Type('String', Min(2)) in TS; the arguments used to be
+	// parsed and dropped here.
+	mustErr(t, MustShape(MustExpr("String(Min(2))")), "a", "must be a minimum length of 2")
+	mustOK(t, MustShape(MustExpr("String(Min(2))")), "abc")
+	mustErr(t, MustShape(MustExpr("Number(Max(1))")), 5.0, "must be a maximum of 1")
+	// ...including when the token starts a chain.
+	mustErr(t, MustShape(MustExpr("String(Min(2)).Max(3)")), "abcd", "must be a maximum length of 3")
+	if _, err := Expr("String(Min("); err == nil {
+		t.Fatal("expected a parse error for an unterminated argument list")
+	}
+}
+
+func TestTypeTokenArgumentsInArgumentPosition(t *testing.T) {
+	// The same applies when the token is itself an argument.
+	mustErr(t, MustShape(MustExpr("Optional(String(Min(2)))")), "a", "must be a minimum length of 2")
+	mustOK(t, MustShape(MustExpr("Optional(String(Min(2)))")), "abc")
+	if _, err := Expr("Optional(String(Min("); err == nil {
+		t.Fatal("expected a parse error for an unterminated nested argument list")
+	}
+}
+
+func TestBoundArgumentRendering(t *testing.T) {
+	// Large integral bounds print in full, as JS prints them, not in %v's
+	// exponent form; a non-numeric bound falls back to %v.
+	if got := stringifyNode(Min(1577836800000.0).n, true); got != "Min(1577836800000)" {
+		t.Fatalf("large bound render = %q", got)
+	}
+	if got := stringifyNode(Min("x").n, true); got != "Min(x)" {
+		t.Fatalf("non-numeric bound render = %q", got)
+	}
+	mustErr(t, MustShape(Min(1000000.0, Number)), 5.0, "must be a minimum of 1000000 (was 5)")
 }

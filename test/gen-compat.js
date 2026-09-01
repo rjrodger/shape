@@ -29,6 +29,7 @@ const { decodeSpec: decode } = require(path.join(__dirname, 'decode-spec.js'))
 const decodeSpec = (v) => decode(v, Shape)
 
 const T = { $type: 'String' }, N = { $type: 'Number' }, B = { $type: 'Boolean' }
+const I = { $type: 'Integer' }, D = { $type: 'Date' }
 
 // Cases grouped by file. Each case: [name, spec, input].
 const files = {
@@ -122,6 +123,23 @@ const files = {
     ['min-string-type-mismatch', { a: { $expr: 'Min(2,String)' } }, { a: 1 }],
     ['min-string-type-mismatch-array', { a: { $expr: 'Min(2,String)' } }, { a: [1, 2, 3] }],
     ['len-array-chain-fail', { a: { $expr: 'Len(2).Array' } }, { a: [1] }],
+    ['integer-ok', { a: I }, { a: 5 }],
+    ['integer-fraction-fails', { a: I }, { a: 1.5 }],
+    ['integer-string-fails', { a: I }, { a: '5' }],
+    ['integer-required', { a: I }, {}],
+    ['integer-optional-default', { a: { $expr: 'Optional(Integer)' } }, {}],
+    ['integer-min-type-first', { a: { $expr: 'Min(2,Integer)' } }, { a: 1.5 }],
+    ['integer-min-bound', { a: { $expr: 'Min(2,Integer)' } }, { a: 1 }],
+    ['date-string-fails', { a: D }, { a: 'x' }],
+    ['date-number-fails', { a: D }, { a: 1 }],
+    ['date-required', { a: D }, {}],
+    ['nullable-null-ok', { a: { $expr: 'Nullable(Number)' } }, { a: null }],
+    ['nullable-value-ok', { a: { $expr: 'Nullable(Number)' } }, { a: 5 }],
+    ['nullable-wrong-type', { a: { $expr: 'Nullable(Number)' } }, { a: 'x' }],
+    ['nullable-still-required', { a: { $expr: 'Nullable(Number)' } }, {}],
+    ['nullable-optional-absent', { a: { $expr: 'Optional(Nullable(Number))' } }, {}],
+    ['nullable-object-null', { a: { $expr: 'Nullable(Closed({}))' } }, { a: null }],
+    ['token-args-apply', { a: { $expr: 'String(Min(2))' } }, { a: 'a' }],
   ],
   composition: [
     ['one-of-ok', { a: { $expr: 'One(Number,String)' } }, { a: 'x' }],

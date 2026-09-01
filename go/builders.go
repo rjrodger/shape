@@ -5,6 +5,7 @@ import (
 	"math"
 	"reflect"
 	"regexp"
+	"time"
 )
 
 // buildize prepares a *Node for further builder mutation. Pass nil to start a
@@ -237,6 +238,25 @@ func (n *Node) Fault(msg string) *Node {
 	return n
 }
 
+// Nullable accepts an explicit null as the value. Whether the value may be
+// absent is still governed by Required/Optional.
+func Nullable(spec ...any) *Node {
+	var nb *Node
+	if len(spec) == 0 {
+		nb = buildize(nil)
+	} else {
+		nb = buildize(spec[0])
+	}
+	nb.n.nullable = true
+	return nb
+}
+
+// Nullable (chained).
+func (n *Node) Nullable() *Node {
+	n.n.nullable = true
+	return n
+}
+
 // Never always fails to match.
 func Never(spec ...any) *Node {
 	var nb *Node
@@ -371,18 +391,18 @@ func Min(min any, spec ...any) *Node {
 				return true
 			}
 			lenpart := ""
-			if !isNumber(val) {
+			if !isNumeric(val) {
 				lenpart = "length "
 			}
 			update.Why = WhyMin
 			update.Done = true
 			update.Mark = 4011
 			update.Err = makeErr(state, WhyMin, 4011,
-				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" must be a minimum %sof %v (was %s).",
-					lenpart, min, sizeText(vsize, ok)))
+				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" must be a minimum %sof %s (was %s).",
+					lenpart, numText(min), sizeText(vsize, ok)))
 			return false
 		},
-		stringify: func() string { return fmt.Sprintf("Min(%v)", min) },
+		stringify: func() string { return "Min(" + numText(min) + ")" },
 	}
 	nb.n.befores = append(nb.n.befores, v)
 	return nb
@@ -416,18 +436,18 @@ func Max(max any, spec ...any) *Node {
 				return true
 			}
 			lenpart := ""
-			if !isNumber(val) {
+			if !isNumeric(val) {
 				lenpart = "length "
 			}
 			update.Why = WhyMax
 			update.Done = true
 			update.Mark = 4012
 			update.Err = makeErr(state, WhyMax, 4012,
-				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" must be a maximum %sof %v (was %s).",
-					lenpart, max, sizeText(vsize, ok)))
+				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" must be a maximum %sof %s (was %s).",
+					lenpart, numText(max), sizeText(vsize, ok)))
 			return false
 		},
-		stringify: func() string { return fmt.Sprintf("Max(%v)", max) },
+		stringify: func() string { return "Max(" + numText(max) + ")" },
 	}
 	nb.n.befores = append(nb.n.befores, v)
 	return nb
@@ -461,18 +481,18 @@ func Above(above any, spec ...any) *Node {
 				return true
 			}
 			verb := "be"
-			if !isNumber(val) {
+			if !isNumeric(val) {
 				verb = "have length"
 			}
 			update.Why = WhyAbove
 			update.Done = true
 			update.Mark = 4013
 			update.Err = makeErr(state, WhyAbove, 4013,
-				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" must %s above %v (was %s).",
-					verb, above, sizeText(vsize, ok)))
+				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" must %s above %s (was %s).",
+					verb, numText(above), sizeText(vsize, ok)))
 			return false
 		},
-		stringify: func() string { return fmt.Sprintf("Above(%v)", above) },
+		stringify: func() string { return "Above(" + numText(above) + ")" },
 	}
 	nb.n.befores = append(nb.n.befores, v)
 	return nb
@@ -506,18 +526,18 @@ func Below(below any, spec ...any) *Node {
 				return true
 			}
 			verb := "be"
-			if !isNumber(val) {
+			if !isNumeric(val) {
 				verb = "have length"
 			}
 			update.Why = WhyBelow
 			update.Done = true
 			update.Mark = 4014
 			update.Err = makeErr(state, WhyBelow, 4014,
-				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" must %s below %v (was %s).",
-					verb, below, sizeText(vsize, ok)))
+				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" must %s below %s (was %s).",
+					verb, numText(below), sizeText(vsize, ok)))
 			return false
 		},
-		stringify: func() string { return fmt.Sprintf("Below(%v)", below) },
+		stringify: func() string { return "Below(" + numText(below) + ")" },
 	}
 	nb.n.befores = append(nb.n.befores, v)
 	return nb
@@ -551,7 +571,7 @@ func Len(length int, spec ...any) *Node {
 				return true
 			}
 			suffix := ""
-			if !isNumber(val) {
+			if !isNumeric(val) {
 				suffix = " in length"
 			}
 			update.Why = WhyLen
@@ -815,6 +835,12 @@ func (n *Node) Array() *Node { return Type(Array, n) }
 
 // Function (chained).
 func (n *Node) Function() *Node { return Type(Function, n) }
+
+// Integer (chained).
+func (n *Node) Integer() *Node { return Type(Integer, n) }
+
+// Date (chained).
+func (n *Node) Date() *Node { return Type(Date, n) }
 
 // Rest (chained).
 func (n *Node) Rest(child any) *Node {
@@ -1200,8 +1226,31 @@ func typeWillFail(n *node, val any) bool {
 		return val != nil
 	case KindNaN:
 		return !isNumber(val) || !isNaN(val)
+	case KindInteger:
+		return !isInteger(val)
+	case KindDate:
+		_, ok := val.(time.Time)
+		return !ok
 	}
 	return false
+}
+
+// numText renders a bound argument as JS renders a number: an integral value
+// in full, never in exponent form.
+func numText(v any) string {
+	if isNumber(v) {
+		return fmtFloat(toFloat(v))
+	}
+	return fmt.Sprintf("%v", v)
+}
+
+// isNumeric reports whether a bound compares the value itself (a number or a
+// date, measured by its time value) rather than a length or key count.
+func isNumeric(v any) bool {
+	if _, ok := v.(time.Time); ok {
+		return true
+	}
+	return isNumber(v)
 }
 
 // sizeText renders a measured size, or NaN when the value has none — a boolean
@@ -1214,6 +1263,10 @@ func sizeText(vsize float64, ok bool) string {
 }
 
 func valueLen(v any) (float64, bool) {
+	// A date's size is its time value, so bounds compare instants.
+	if t, ok := v.(time.Time); ok {
+		return float64(t.UnixMilli()), true
+	}
 	if v == nil {
 		return 0, false
 	}

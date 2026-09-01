@@ -14,6 +14,7 @@
 
 const T = { $type: 'String' }, N = { $type: 'Number' }, B = { $type: 'Boolean' }
 const O = { $type: 'Object' }, A = { $type: 'Array' }, ANY = { $type: 'Any' }
+const I = { $type: 'Integer' }, D = { $type: 'Date' }
 const E = (s) => ({ $expr: s })
 
 // Input batteries. Each spec is crossed with the battery that suits its shape,
@@ -51,6 +52,32 @@ function build() {
     add('token-' + k, t, SCALARS)
     add('token-obj-' + k, { a: t }, OBJS)
   }
+
+  // Integer and Date kinds. No battery holds a Date instance, so every Date
+  // case here is a failure and is comparable across the JSON boundary.
+  add('token-Integer', I, SCALARS)
+  add('token-obj-Integer', { a: I }, OBJS)
+  add('int-optional', E('Optional(Integer)'), SCALARS)
+  add('int-min', E('Min(2,Integer)'), SCALARS)
+  add('int-type', E('Type(Integer)'), SCALARS)
+  add('int-nullable', E('Nullable(Integer)'), SCALARS)
+  add('ke-integer', { 'a: Integer': 0 }, OBJS)
+  add('token-Date-fail', D, SCALARS)
+  add('token-obj-Date-fail', { a: D }, OBJS)
+  add('date-optional-fail', E('Optional(Date)'), SCALARS)
+
+  // Nullable: an explicit null is a value; absent is still required/optional.
+  add('nullable-num', E('Nullable(Number)'), SCALARS)
+  add('nullable-str-obj', { a: E('Nullable(String)') }, OBJS)
+  add('nullable-optional', { a: E('Optional(Nullable(Number))') }, OBJS)
+  add('nullable-object', E('Nullable(Closed({}))'), SCALARS)
+  add('nullable-bare', { a: E('Nullable') }, OBJS)
+
+  // A type token with arguments applies the type to them.
+  add('dsl-token-args-str', E('String(Min(2))'), SCALARS)
+  add('dsl-token-args-num', E('Number(Max(1))'), SCALARS)
+  add('dsl-token-args-nested', E('Optional(String(Min(2)))'), SCALARS)
+  add('b-large-bound', E('Min(1000000,Number)'), SCALARS)
 
   // Literal defaults.
   for (const lit of [1, 'x', true, 0, '', false]) {

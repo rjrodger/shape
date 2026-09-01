@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // TS-aligned marks. See src/shape.ts makeErrImpl call sites.
@@ -149,6 +150,14 @@ func validateNode(n *node, in any, path []string, pathArr []any, key string, par
 		return state.Value
 	}
 
+	// Nullable: an explicit null is accepted as the value. Absent is still
+	// governed by required/optional below, since a nil that is absent is not
+	// yet in play here — the absent sentinel was translated above.
+	if state.Value == nil && !absent && n.nullable {
+		runAfters(state, verr)
+		return state.Value
+	}
+
 	// Never rejects any value, present or absent. This precedes the missing-value
 	// handling below: an absent value against Never is "no value is allowed",
 	// not "the value is required".
@@ -260,6 +269,16 @@ func validateNode(n *node, in any, path []string, pathArr []any, key string, par
 		}
 	case KindBoolean:
 		if _, ok := state.Value.(bool); !ok {
+			emitTypeErr(state, verr, n)
+			return state.Value
+		}
+	case KindInteger:
+		if !isInteger(state.Value) {
+			emitTypeErr(state, verr, n)
+			return state.Value
+		}
+	case KindDate:
+		if _, ok := state.Value.(time.Time); !ok {
 			emitTypeErr(state, verr, n)
 			return state.Value
 		}
@@ -810,6 +829,20 @@ func isNumber(v any) bool {
 		return true
 	}
 	return false
+}
+
+// isInteger reports whether v is a number with no fractional part. Every
+// integer Go type qualifies; a float qualifies when it is finite and whole,
+// mirroring Number.isInteger.
+func isInteger(v any) bool {
+	switch x := v.(type) {
+	case float64:
+		return !math.IsNaN(x) && !math.IsInf(x, 0) && x == math.Trunc(x)
+	case float32:
+		f := float64(x)
+		return !math.IsNaN(f) && !math.IsInf(f, 0) && f == math.Trunc(f)
+	}
+	return isNumber(v)
 }
 
 func isNaN(v any) bool {

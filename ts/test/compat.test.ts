@@ -91,6 +91,7 @@ function decodeSpec(v: any, Shape: any): any {
         Array,
         Symbol,
         Function,
+        Date,
       }
 
       return native[t] || Shape[t]

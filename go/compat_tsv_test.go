@@ -219,6 +219,10 @@ func decodeSpec(v any) any {
 					return Object
 				case "Array":
 					return Array
+				case "Integer":
+					return Integer
+				case "Date":
+					return Date
 				}
 			}
 		}

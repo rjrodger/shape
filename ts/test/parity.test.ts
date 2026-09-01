@@ -207,3 +207,89 @@ describe('parity', () => {
   })
 
 })
+
+
+describe('kinds: nullable, integer, date', () => {
+  const { Nullable, Integer, Optional, Min } = Shape as any
+
+  test('Nullable accepts an explicit null and nothing else new', () => {
+    assert.equal(Shape(Nullable(Number))(null), null)
+    assert.equal(Shape(Nullable(Number))(5), 5)
+    assert.match(failure(Nullable(Number), 'x'), /the string is not of type number/)
+
+    // Absent is still governed by required/optional.
+    assert.deepEqual(Shape({ a: Nullable(String) })({ a: null }), { a: null })
+    assert.match(failure({ a: Nullable(Number) }, {}), /is required/)
+    assert.deepEqual(Shape({ a: Optional(Nullable(Number)) })({}), { a: 0 })
+
+    // Containers, bare use, and the chain.
+    assert.equal(Shape(Nullable({ b: 1 }))(null), null)
+    assert.deepEqual(Shape({ a: Nullable })({ a: null }), { a: null })
+    assert.equal(Shape(Optional().Nullable().Number())(null), null)
+    assert.equal(Shape(Shape.expr('Nullable(Number)'))(null), null)
+  })
+
+  test('Integer is a number with no fractional part', () => {
+    assert.equal(Shape(Integer)(5), 5)
+    assert.equal(Shape(Integer)(-0), -0)
+    assert.match(failure(Integer, 1.5), /the number is not of type integer/)
+    assert.match(failure(Integer, '5'), /the string is not of type integer/)
+    assert.match(failure(Integer, NaN), /is not of type integer/)
+
+    // A type token: required, default 0.
+    assert.match(failure({ a: Integer }, {}), /is required/)
+    assert.deepEqual(Shape({ a: Optional(Integer) })({}), { a: 0 })
+    assert.deepEqual(Shape({ a: Shape.Integer() })({ a: 3 }), { a: 3 })
+
+    // Bounds defer to the type check, and Type() knows the name.
+    assert.match(failure(Shape.expr('Min(2,Integer)'), 1.5), /is not of type integer/)
+    assert.match(failure(Shape.expr('Min(2,Integer)'), 1), /must be a minimum of 2/)
+    assert.match(failure(Shape.expr('Type(Integer)'), 2.5), /is not of type integer/)
+    assert.match(failure(Shape.Type('Integer'), 2.5), /is not of type integer/)
+    assert.equal(Shape(Optional().Integer())(4), 4)
+    assert.match(failure({ 'a: Integer': 0 }, { a: 1.5 }), /is not of type integer/)
+  })
+
+  test('Date is a kind, not an instance check', () => {
+    const d = new Date(0)
+    assert.equal(Shape(Date)(d), d)
+    assert.match(failure(Date, 'x'), /the string is not of type date/)
+    assert.match(failure(Date, new Date('nonsense')), /is not of type date/)
+    assert.match(failure({ a: Date }, {}), /is required/)
+
+    // No default to inject for an optional date — the slot is left undefined,
+    // which is absent once serialized; a literal date is a default.
+    assert.deepEqual(JSON.parse(JSON.stringify(Shape({ a: Optional(Date) })({}))), {})
+    assert.deepEqual(Shape({ a: d })({}), { a: d })
+    assert.equal(Shape(Optional().Date())(d), d)
+    assert.match(failure(Shape.expr('Date'), 1), /the number is not of type date/)
+
+    // A bound compares the instant, and reads as a value, not a length.
+    const y2020 = Date.UTC(2020, 0, 1)
+    assert.equal(Shape(Min(y2020, Date))(new Date(Date.UTC(2021, 0, 1))).getTime(), Date.UTC(2021, 0, 1))
+    assert.match(
+      failure(Min(y2020, Date), new Date(Date.UTC(2019, 5, 1))),
+      /must be a minimum of 1577836800000 \(was 1559347200000\)/)
+
+    // A Date value in an error message renders as JSON does.
+    assert.equal(
+      failure(Number, d),
+      'Validation failed for object "1970-01-01T00:00:00.000Z" because the object is not of type number.')
+  })
+
+  test('rendering of the new kinds', () => {
+    const r = (e: string) => Shape.stringify(Shape.expr(e), true)
+    assert.equal(r('Integer'), 'Integer')
+    assert.equal(r('Optional(Integer)'), '0')
+    assert.equal(r('Min(2,Integer)'), 'Integer.Min(2)')
+    assert.equal(r('Date'), 'Date')
+    assert.equal(r('Nullable(Number)'), 'Number')
+    assert.equal(Shape.stringify(Shape.nodize(new Date(0)), true), '1970-01-01T00:00:00.000Z')
+  })
+
+  test('a type token with arguments applies the type to them', () => {
+    assert.match(failure(Shape.expr('String(Min(2))'), 'a'), /must be a minimum length of 2/)
+    assert.equal(Shape(Shape.expr('String(Min(2))'))('abc'), 'abc')
+    assert.match(failure(Shape.expr('Number(Max(1))'), 5), /must be a maximum of 1/)
+  })
+})

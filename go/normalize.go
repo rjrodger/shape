@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 )
 
 // keyExprRE matches "name: expr" — mirrors TS KEY_EXPR_RE.
@@ -32,6 +33,10 @@ func normalizeWith(spec any, opts ShapeOptions) (*node, error) {
 		// A regexp anywhere in a spec is a string-shaped node, as in TS. Without
 		// this, One(/re/, Number) and a raw regexp spec both failed to build.
 		return regexpNode(v), nil
+	case time.Time:
+		// A date value in a spec is a date default, as a number literal is a
+		// number default.
+		return &node{kind: KindDate, defaultValue: v, hasDefault: true, hasLiteral: true, literal: v}, nil
 	case Kind:
 		return typeTokenNode(v), nil
 	case string:
@@ -105,7 +110,7 @@ func zeroForKind(k Kind) any {
 	switch k {
 	case KindString:
 		return ""
-	case KindNumber:
+	case KindNumber, KindInteger:
 		return float64(0)
 	case KindBoolean:
 		return false

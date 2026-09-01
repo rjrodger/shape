@@ -179,11 +179,17 @@ func (p *exprParser) parseTerm(top bool) (*Node, error) {
 		return fn(args)
 	}
 	if tok, ok := exprTypeTokens[head]; ok {
-		// Type token. May still have arg list (e.g. "String()") but unusual.
-		// Build the token's own node rather than wrapping in Required: Any is
-		// the one token that does not require a value, and Required(Any) made
-		// { a: Type(Any) } reject an object without "a".
-		_, _ = p.parseArgs()
+		args, err := p.parseArgs()
+		if err != nil {
+			return nil, err
+		}
+		// A type token with arguments applies the type to them, as TS does
+		// (String(Min(2)) is Type('String', Min(2))); the arguments used to be
+		// parsed and dropped. Bare, the token's own node is built rather than
+		// Required(tok): Any is the one token that does not require a value.
+		if len(args) > 0 {
+			return Type(tok, exprShapes(args)...), nil
+		}
 		return newNodeWrap(typeTokenNode(tok.kind)), nil
 	}
 	if head == "NaN" {
@@ -313,7 +319,13 @@ func (p *exprParser) parseArg() (any, error) {
 		return chainContinuation(p, node)
 	}
 	if tok, ok := exprTypeTokens[head]; ok {
-		_, _ = p.parseArgs()
+		args, err := p.parseArgs()
+		if err != nil {
+			return nil, err
+		}
+		if len(args) > 0 {
+			return chainContinuation(p, Type(tok, exprShapes(args)...))
+		}
 		return chainContinuation(p, newNodeWrap(typeTokenNode(tok.kind)))
 	}
 	if head == "NaN" {
@@ -362,6 +374,8 @@ var exprTypeTokens = map[string]TypeToken{
 	"Object":   Object,
 	"Array":    Array,
 	"Function": Function,
+	"Integer":  Integer,
+	"Date":     Date,
 }
 
 type exprBuilderFn func(args []builderArg) (*Node, error)
@@ -391,6 +405,7 @@ func buildExprBuilders() map[string]exprBuilderFn {
 	"Empty":    variadicNode(Empty),
 	"Never":    variadicNode(Never),
 	"Func":     variadicNode(Func),
+	"Nullable": variadicNode(Nullable),
 
 	"Default": func(args []builderArg) (*Node, error) {
 		if len(args) < 1 {
