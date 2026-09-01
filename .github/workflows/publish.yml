@@ -10,6 +10,11 @@ name: Publish
 #
 # Each input is a version bump (`patch`, `minor`, `major`), an explicit
 # `x.y.z`, `current` to publish the version already in the tree, or `skip`.
+#
+# Only main is released. A run that failed after `npm publish` can simply be
+# re-run with the same inputs: a version already on the registry is not
+# published again, and the tag, the push and the GitHub release are each
+# done only if missing.
 
 on:
   workflow_dispatch:
@@ -40,6 +45,12 @@ jobs:
       GO_INPUT: ${{ inputs.go }}
 
     steps:
+      - name: Only main is released
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "publish runs on main only, not ${{ github.ref }}" >&2
+          exit 1
+
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -80,16 +91,20 @@ jobs:
           # Rebuild, so dist carries the bumped VERSION constant.
           npm run build
           V=$(node -p "require('./package.json').version")
-          if npm view "shape@$V" version >/dev/null 2>&1; then
-            echo "shape@$V is already published" >&2; exit 1
-          fi
           echo "Publishing ts/v$V"
           git add package.json src/shape.ts
           git diff --cached --quiet || git commit -m "ts: v$V"
-          git tag "ts/v$V"
-          npm publish --access public
+          git rev-parse -q --verify "refs/tags/ts/v$V" >/dev/null || git tag "ts/v$V"
+          # A version already on the registry is a run that failed after
+          # publishing: finish its push and release rather than publish again.
+          if npm view "shape@$V" version >/dev/null 2>&1; then
+            echo "shape@$V is already on the registry; completing the release"
+          else
+            npm publish --access public
+          fi
           git push origin HEAD:main "ts/v$V"
-          gh release create "ts/v$V" --title "ts/v$V" --notes "npm package release v$V"
+          gh release view "ts/v$V" >/dev/null 2>&1 ||
+            gh release create "ts/v$V" --title "ts/v$V" --notes "npm package release v$V"
         env:
           GH_TOKEN: ${{ github.token }}
 
@@ -108,16 +123,22 @@ jobs:
                 console.log(v.join('.'))") ;;
             *) V="$GO_INPUT" ;;
           esac
-          if git rev-parse -q --verify "refs/tags/go/v$V" >/dev/null; then
-            echo "go/v$V is already tagged" >&2; exit 1
+          if ! [[ "$V" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "go: '$V' is not an x.y.z version" >&2; exit 1
+          fi
+          # A tag that already exists may only be finished, not moved: the
+          # tree must already carry that version.
+          if git rev-parse -q --verify "refs/tags/go/v$V" >/dev/null && [ "$CUR" != "$V" ]; then
+            echo "go/v$V is already tagged, but go/shape.go says $CUR" >&2; exit 1
           fi
           echo "Publishing go/v$V"
           sed -i "s/^const Version = \".*\"/const Version = \"$V\"/" go/shape.go
           git add go/shape.go
           git diff --cached --quiet || git commit -m "go: v$V"
-          git tag "go/v$V"
+          git rev-parse -q --verify "refs/tags/go/v$V" >/dev/null || git tag "go/v$V"
           git push origin HEAD:main "go/v$V"
-          gh release create "go/v$V" --title "go/v$V" --notes "Go module release v$V"
+          gh release view "go/v$V" >/dev/null 2>&1 ||
+            gh release create "go/v$V" --title "go/v$V" --notes "Go module release v$V"
           # Ask the proxy for the new version so it is cached at once.
           GOPROXY=https://proxy.golang.org GOFLAGS=-mod=mod go list -m "github.com/rjrodger/shape/go@v$V" || true
         env:
