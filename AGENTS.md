@@ -126,6 +126,21 @@ cd go && go test -cover .
   `ts/src/shape.ts` (kept in sync by `npm run version`), and `const Version` in
   `go/shape.go`. The Makefile `publish` targets bump these.
 
+## Publishing
+
+The **Publish** workflow (`.github/workflows/publish.yml`) is run by hand from
+the Actions tab or with `gh workflow run publish.yml -f npm=current -f go=current`.
+Each input is `patch`, `minor`, `major`, an explicit `x.y.z`, `current` (publish
+the version already in the tree) or `skip`. Only `main` is released. It builds
+and tests both languages,
+then publishes npm with OpenID Connect trusted publishing (no token: npmjs.com
+lists this repository and workflow as the package's trusted publisher), commits
+and tags `ts/vX.Y.Z`, and tags `go/vX.Y.Z` for the Go module, pushing both to
+`main`. A run that failed after `npm publish` is re-run with the same inputs:
+a version already on the registry is not published again, and the tag, push and
+release are each done only if missing. The Makefile `publish` targets are the
+local equivalent and need npm credentials.
+
 ## Docs
 
 Documentation is [Diátaxis](https://diataxis.fr)-structured under `docs/`. When
