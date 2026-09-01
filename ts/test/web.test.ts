@@ -5,12 +5,45 @@ import assert from 'node:assert'
 import fs from 'node:fs'
 import path from 'node:path'
 import vm from 'node:vm'
+import esbuild from 'esbuild'
 
 
-// The browser bundle: dist/shape.min.js, the package's browser entry, is a
-// self-contained script exposing a global Shape. It is run here in a bare
-// context, as a script tag would run it.
+// In the browser the package is used two ways: a bundler imports it, with
+// Node's util swapped for a stub by the package's browser field; or a script
+// tag loads dist/shape.min.js, a self-contained bundle exposing a global
+// Shape. Both are run here in a bare context, as a browser would run them.
 describe('web-bundle', () => {
+
+  test('bundler-import', () => {
+    // A consumer bundle, resolved through this package's package.json.
+    const built = esbuild.buildSync({
+      stdin: {
+        contents: `
+          import { Shape, Min, Pick } from 'shape'
+          globalThis.result = [
+            Shape(Min(2, Number))(5),
+            Shape(Pick('a', { a: 1, b: 2 }))({}).a,
+            typeof Shape.jsonSchema,
+            (() => { try { Shape({ a: Number })({}) } catch (e) { return e.message } })(),
+          ]`,
+        resolveDir: process.cwd(),
+      },
+      bundle: true,
+      platform: 'browser',
+      format: 'iife',
+      write: false,
+      alias: { shape: process.cwd() },
+      logLevel: 'silent',
+    })
+    const src = built.outputFiles[0].text
+    assert.ok(!src.includes('require("util")'), 'util must be stubbed for the browser')
+
+    const ctx: any = vm.createContext({})
+    vm.runInContext(src, ctx)
+    assert.deepEqual(ctx.result, [5, 1, 'function',
+      'Validation failed for property "a" with value "undefined" because the value is required.'])
+  })
+
 
   test('global-shape', () => {
     const src = fs.readFileSync(path.join(process.cwd(), 'dist', 'shape.min.js'), 'utf8')
@@ -35,5 +68,10 @@ describe('web-bundle', () => {
       'Validation failed for property "a" with value "undefined" because the value is required.')
     assert.equal(run('(() => { try { Shape({ a: Shape.Min(2, Number) })({ a: 1 }) } catch (e) { return e.message } })()'),
       'Value "1" for property "a" must be a minimum of 2 (was 1).')
+
+    // The same file is also a CommonJS module, for a require of it directly.
+    const S = require(path.join(process.cwd(), 'dist', 'shape.min.js'))
+    assert.equal(S(String)('OK'), 'OK')
+    assert.equal(S.Shape, S)
   })
 })

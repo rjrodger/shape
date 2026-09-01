@@ -3,7 +3,9 @@
   "version": "11.0.0",
   "description": "An object shape validation utility.",
   "main": "dist/shape.js",
-  "browser": "dist/shape.min.js",
+  "browser": {
+    "util": "./src/web/util.js"
+  },
   "type": "commonjs",
   "types": "dist/shape.d.ts",
   "homepage": "https://github.com/rjrodger/shape",
@@ -21,7 +23,7 @@
     "test": "node --enable-source-maps --test dist-test/**/*.test.js",
     "test-some": "node --enable-source-maps --test --test-name-pattern",
     "build": "npm run version && tsc --build src test && npm run build-web",
-    "build-web": "esbuild src/shape.web.js --bundle --minify --keep-names --format=iife --global-name=Shape --platform=browser --alias:util=./src/web/util.js --outfile=dist/shape.min.js --log-level=warning",
+    "build-web": "esbuild src/shape.web.js --bundle --minify --keep-names --format=iife --global-name=Shape --platform=browser --alias:util=./src/web/util.js --footer:js=\"if(typeof module!=='undefined'&&module.exports)module.exports=Shape;\" --outfile=dist/shape.min.js --log-level=warning",
     "watch": "npm run version && tsc --build src test -w",
     "version": "node -r fs -e \"v=require('./package.json').version;s=fs.readFileSync('./src/shape.ts').toString();if(!s.includes('VERSION = \\''+v+'\\'')){s=s.replace(/VERSION = '.*?'/,'VERSION = \\''+v+'\\'');fs.writeFileSync('./src/shape.ts',s)}\"",
     "clean": "rm -rf node_modules yarn.lock package-lock.json dist dist-test",

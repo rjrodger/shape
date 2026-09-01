@@ -43,8 +43,9 @@ import { Shape, Min, Optional } from 'shape'         // ESM / TypeScript
 ```
 
 Node 22+ (24 in CI). Type declarations ship with the package. Bundlers pick up
-the CommonJS build; a minified standalone bundle, `dist/shape.min.js`, exposes
-a global `Shape` for a plain script tag. See
+the CommonJS build, with Node's `util` swapped for a stub by the `browser`
+field; a minified standalone bundle, `dist/shape.min.js`, exposes a global
+`Shape` for a plain script tag. See
 [the browser how-to](../docs/how-to/use-shape-in-the-browser.md).
 
 ## Using a shape

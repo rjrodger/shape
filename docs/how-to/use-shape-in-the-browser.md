@@ -16,12 +16,15 @@ const validate = Shape({ name: Min(1, String) })
 ```
 
 This is the same API as on the backend — everything in these docs applies.
+The package's `browser` field swaps Node's `util` (the one Node module
+`shape.js` touches, only for `inspect`) for a two-line stub, so no polyfill is
+needed.
 
 ## Standalone script tag
 
-A pre-minified build is published as `dist/shape.min.js` (the package's
-`browser` entry, built by `npm run build-web` with esbuild). Loaded directly it
-exposes a global `Shape`, which also carries the builders:
+A pre-minified build is published as `dist/shape.min.js` (built by
+`npm run build-web` with esbuild). Loaded directly it exposes a global `Shape`,
+which also carries the builders; the same file is a CommonJS module if required:
 
 ```html
 <script src="shape.min.js"></script>
