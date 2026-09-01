@@ -180,8 +180,11 @@ func (p *exprParser) parseTerm(top bool) (*Node, error) {
 	}
 	if tok, ok := exprTypeTokens[head]; ok {
 		// Type token. May still have arg list (e.g. "String()") but unusual.
+		// Build the token's own node rather than wrapping in Required: Any is
+		// the one token that does not require a value, and Required(Any) made
+		// { a: Type(Any) } reject an object without "a".
 		_, _ = p.parseArgs()
-		return Required(tok), nil
+		return newNodeWrap(typeTokenNode(tok.kind)), nil
 	}
 	if head == "NaN" {
 		_, _ = p.parseArgs()
@@ -201,7 +204,14 @@ func (p *exprParser) parseTerm(top bool) (*Node, error) {
 		if err != nil {
 			return nil, fmt.Errorf("Shape: invalid regexp %q: %w", head, err)
 		}
-		return Check(re), nil
+		// A bare /re/ is a type, not a check: a non-string fails as a type
+		// error. Check(/re/) is the explicit-check form and reports as one.
+		nb := buildize(nil)
+		nb.n.kind = KindRegexp
+		nb.n.regexpVal = re
+		nb.n.required = true
+		nb.n.requiredSet = true
+		return nb, nil
 	}
 	// JSON literal
 	var lit any
@@ -309,7 +319,7 @@ func (p *exprParser) parseArg() (any, error) {
 	}
 	if tok, ok := exprTypeTokens[head]; ok {
 		_, _ = p.parseArgs()
-		return chainContinuation(p, Required(tok))
+		return chainContinuation(p, newNodeWrap(typeTokenNode(tok.kind)))
 	}
 	if head == "NaN" {
 		nb := buildize(nil)

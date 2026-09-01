@@ -25,7 +25,16 @@ func TestCompatTSV(t *testing.T) {
 	for _, row := range rows {
 		t.Run(row.Name, func(t *testing.T) {
 			s := MustShape(decodeSpec(row.Spec))
-			out, err := s.Validate(row.Input)
+
+			// A JSON null in the corpus is a value that is present and null.
+			// Go reads a plain nil as "no value supplied", so hand over the
+			// sentinel instead.
+			in := row.Input
+			if in == nil {
+				in = Null
+			}
+
+			out, err := s.Validate(in)
 
 			if row.Err != "" {
 				if err == nil {

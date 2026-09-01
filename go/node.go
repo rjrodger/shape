@@ -1,5 +1,7 @@
 package shape
 
+import "regexp"
+
 // listMode controls how a composition node (One/Some/All) evaluates its branches.
 type listMode int
 
@@ -41,6 +43,9 @@ type node struct {
 	// Validators run before/after the structural type check.
 	befores []validator
 	afters  []validator
+
+	// Compiled pattern for a KindRegexp node (a bare /re/ in the string DSL).
+	regexpVal *regexp.Regexp
 
 	// Custom Fault message overrides default error text.
 	faultMsg string

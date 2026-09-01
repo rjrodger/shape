@@ -28,6 +28,7 @@ const (
 	WhyBelow    = "Below"
 	WhyLen      = "Len"
 	WhyNever    = "never"
+	WhyRegexp   = "regexp"
 	WhyEmpty    = "empty"
 )
 
@@ -51,6 +52,8 @@ type FieldError struct {
 	// absent records that the value was missing (JS undefined) rather than an
 	// explicit null, so error text renders it as "undefined" (mirrors TS).
 	absent bool
+	// regexpSrc is the /pattern/ rendering for a failed KindRegexp match.
+	regexpSrc string
 }
 
 func (e FieldError) Error() string {
@@ -115,6 +118,9 @@ func makeErr(s *State, why string, mark int, text string) FieldError {
 	}
 	if s != nil {
 		err.node = s.Node
+		if s.Node != nil && s.Node.regexpVal != nil {
+			err.regexpSrc = "/" + s.Node.regexpVal.String() + "/"
+		}
 	}
 	if text != "" {
 		err.Text = expandErrText(text, err.Path, s.Value)
@@ -179,6 +185,9 @@ func defaultErrText(e FieldError) string {
 	case WhyNever:
 		return fmt.Sprintf("Validation failed for %s%s %q because no value is allowed.",
 			pathPart, valkind, valstr)
+	case WhyRegexp:
+		return fmt.Sprintf("Validation failed for %s%s %q because the %s did not match %s.",
+			pathPart, valkind, valstr, valkind, e.regexpSrc)
 	default:
 		// TS: check "<fname or why>" failed — prefer the check name.
 		name := e.Check

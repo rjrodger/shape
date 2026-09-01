@@ -261,15 +261,45 @@ func Type(kind any, spec ...any) *Node {
 	} else {
 		nb = buildize(spec[0])
 	}
+	// Adopt the reference type's kind AND its required/skippable/default state,
+	// mirroring TS Type(). Setting only the kind made Type() a silent no-op for
+	// a *Node argument — which is exactly what the string DSL hands it, since a
+	// bare type token there parses to Required(tok). Structural children are
+	// deliberately not copied: TS leaves them behind too, so Type(Object) is a
+	// closed object and Type(Array) accepts any elements.
+	tn := typeRefNode(kind)
+	if tn == nil || tn == nb.n {
+		return nb
+	}
+
+	nb.n.kind = tn.kind
+	nb.n.required = tn.required
+	nb.n.requiredSet = tn.requiredSet
+	nb.n.skippable = tn.skippable
+	nb.n.hasDefault = tn.hasDefault
+	nb.n.defaultValue = cloneAny(tn.defaultValue)
+	nb.n.hasLiteral = tn.hasLiteral
+	nb.n.literal = tn.literal
+
+	return nb
+}
+
+// typeRefNode resolves Type()'s first argument — a Kind, a TypeToken, a kind
+// name, or an already-built node — to the node that type stands for.
+func typeRefNode(kind any) *node {
 	switch v := kind.(type) {
 	case Kind:
-		nb.n.kind = v
+		return typeTokenNode(v)
 	case TypeToken:
-		nb.n.kind = v.kind
+		return typeTokenNode(v.kind)
 	case string:
-		nb.n.kind = Kind(v)
+		return typeTokenNode(Kind(v))
+	case *Node:
+		return v.n
+	case *node:
+		return v
 	}
-	return nb
+	return nil
 }
 
 // Exact requires the value equal one of the provided literals.
@@ -736,6 +766,52 @@ func Rest(child any, spec ...any) *Node {
 	nb.n.arrRest = cn
 	return nb
 }
+
+// Any (chained): the value may be anything.
+func (n *Node) Any() *Node {
+	n.n.kind = KindAny
+	return n
+}
+
+// Type (chained): assert a kind, given a Kind, TypeToken, kind name or node.
+func (n *Node) Type(kind any) *Node {
+	return Type(kind, n)
+}
+
+// Define (chained): name this node so a later Refer can clone it.
+func (n *Node) Define(name string) *Node {
+	return Define(name, n)
+}
+
+// Refer (chained): substitute the named node at validation time.
+func (n *Node) Refer(name string) *Node {
+	return Refer(name, n)
+}
+
+// Rename (chained): rename this property after validation.
+func (n *Node) Rename(name string) *Node {
+	return Rename(name, n)
+}
+
+// Type-token shortcuts, mirroring the TS chain (.Number(), .Boolean(), ...).
+// There is deliberately no String() shortcut: a method of that name on an
+// exported type reads as fmt.Stringer and go vet rejects the signature. Use
+// Type(String) for a string, which is what these shortcuts call anyway.
+
+// Number (chained).
+func (n *Node) Number() *Node { return Type(Number, n) }
+
+// Boolean (chained).
+func (n *Node) Boolean() *Node { return Type(Boolean, n) }
+
+// Object (chained).
+func (n *Node) Object() *Node { return Type(Object, n) }
+
+// Array (chained).
+func (n *Node) Array() *Node { return Type(Array, n) }
+
+// Function (chained).
+func (n *Node) Function() *Node { return Type(Function, n) }
 
 // Rest (chained).
 func (n *Node) Rest(child any) *Node {

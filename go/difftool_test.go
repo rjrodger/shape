@@ -79,7 +79,14 @@ func runDiffCase(c diffCase) (res diffResult) {
 		return
 	}
 
-	out, verr := s.Validate(c.Input)
+	// A JSON null is a value that is present and null. Go reads a plain nil as
+	// "no value supplied", so hand the sentinel over instead.
+	in := c.Input
+	if in == nil {
+		in = Null
+	}
+
+	out, verr := s.Validate(in)
 	if verr != nil {
 		no := false
 		res.OK, res.Err = &no, verr.Error()

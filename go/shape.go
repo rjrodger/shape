@@ -55,7 +55,17 @@ func (s *Schema) ValidateCtx(input any, ctx *Context) (any, error) {
 	c.Match = false
 	collectDefines(s.root, c)
 	verr := &ValidationError{}
-	out := validateNode(s.root, rootInput(input), []string{}, []any{}, "", nil, c, false, verr)
+
+	var out any
+	if isIgnore(s.root) {
+		// Ignore at the root drops a value that does not validate, exactly as
+		// it does for an object property. Without this the failing value was
+		// handed back unchanged.
+		out, _ = validateIgnored(s.root, rootInput(input), []string{}, []any{}, "", nil, c, false)
+	} else {
+		out = validateNode(s.root, rootInput(input), []string{}, []any{}, "", nil, c, false, verr)
+	}
+
 	if ctx != nil {
 		ctx.Err = append(ctx.Err, verr.Issues...)
 	}

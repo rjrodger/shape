@@ -31,7 +31,11 @@ func normalizeWith(spec any, opts ShapeOptions) (*node, error) {
 	case Kind:
 		return typeTokenNode(v), nil
 	case string:
-		return &node{kind: KindString, defaultValue: v, hasDefault: true, hasLiteral: true, literal: v}, nil
+		// An empty-string literal spec allows the empty string, mirroring TS
+		// nodize (u.empty = true). Without this Shape("") rejected its own
+		// default value.
+		return &node{kind: KindString, defaultValue: v, hasDefault: true, hasLiteral: true,
+			literal: v, empty: v == ""}, nil
 	case bool:
 		return &node{kind: KindBoolean, defaultValue: v, hasDefault: true, hasLiteral: true, literal: v}, nil
 	case float64:
@@ -62,8 +66,10 @@ func normalizeWith(spec any, opts ShapeOptions) (*node, error) {
 // EMPTY_VAL default; requiredness gates whether the default is used).
 func typeTokenNode(k Kind) *node {
 	n := &node{
-		kind:         k,
-		required:     true,
+		kind: k,
+		// Any is the one token that does not require a value: TS Any() builds
+		// an unrequired node, so { a: Any } accepts an object without "a".
+		required:     k != KindAny,
 		requiredSet:  true,
 		hasDefault:   true,
 		defaultValue: zeroForKind(k),
@@ -259,8 +265,15 @@ func buildExprWithDefault(src string, dflt any) (*Node, error) {
 		exprNode.n.defaultValue = dflt
 		exprNode.n.hasLiteral = true
 		exprNode.n.literal = dflt
-		exprNode.n.required = false
-		exprNode.n.requiredSet = true
+
+		// The default only makes the key optional when the expression has not
+		// already said otherwise. TS applies the expression to the value as a
+		// carrier, so an explicit type token in the key ("a: String") keeps its
+		// requiredness and the literal is just the fallback.
+		if !exprNode.n.requiredSet {
+			exprNode.n.required = false
+			exprNode.n.requiredSet = true
+		}
 	}
 	return exprNode, nil
 }

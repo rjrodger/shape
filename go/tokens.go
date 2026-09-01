@@ -15,6 +15,7 @@ const (
 	KindFunction Kind = "function"
 	KindNever    Kind = "never"
 	KindCheck    Kind = "check"
+	KindRegexp   Kind = "regexp"
 	KindList     Kind = "list"
 )
 
