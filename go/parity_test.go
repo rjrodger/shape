@@ -899,3 +899,96 @@ func TestChecksRunInOrder(t *testing.T) {
 	mustErr(t, MustShape(map[string]any{"a": Before(func(_ any, u *Update, _ *State) bool { u.Done = true; return false }, Optional(Number))}),
 		map[string]any{}, "check \"Before\" failed.")
 }
+
+// --- isolation: Catch, Transform, Describe, Ignore ----------------------------
+
+func TestIsolation(t *testing.T) {
+	obj := func(kv ...any) map[string]any {
+		m := map[string]any{}
+		for i := 0; i < len(kv); i += 2 {
+			m[kv[i].(string)] = kv[i+1]
+		}
+		return m
+	}
+	want := func(name string, got, want any) {
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("%s = %#v, want %#v", name, got, want)
+		}
+	}
+
+	// Catch replaces whatever fails inside with the fallback.
+	want("catch", mustOK(t, MustShape(Catch(0.0, Number)), "x"), 0.0)
+	want("catch pass", mustOK(t, MustShape(Catch(0.0, Number)), 5.0), 5.0)
+	want("catch nested", mustOK(t, MustShape(obj("o", Catch(obj("a", 0.0), obj("a", Number)))), obj("o", obj("a", "x"))), obj("o", obj("a", 0.0)))
+	want("catch nested ok", mustOK(t, MustShape(obj("o", Catch(obj("a", 0.0), obj("a", Number)))), obj("o", obj("a", 1.0))), obj("o", obj("a", 1.0)))
+	// The checks it wraps are inside the catch; the checks that wrap it are not.
+	want("catch inner bound", mustOK(t, MustShape(Catch(0.0, Min(2, Number))), 1.0), 0.0)
+	mustErr(t, MustShape(Min(2, Catch(0.0, Number))), "x", "must be a minimum of 2 (was 0)")
+	// Required and optional still apply, inside the catch.
+	want("catch required absent", mustOK(t, MustShape(obj("a", Catch(7.0, Number))), obj()), obj("a", 7.0))
+	want("catch optional absent", mustOK(t, MustShape(obj("a", Optional(Catch(7.0, Number)))), obj()), obj("a", 0.0))
+	// The fallback is a fresh copy each time.
+	s := MustShape(obj("a", Catch(obj("n", 1.0), obj("n", Number))))
+	r1 := mustOK(t, s, obj("a", "x")).(map[string]any)
+	r2 := mustOK(t, s, obj("a", "x")).(map[string]any)
+	r1["a"].(map[string]any)["n"] = 9.0
+	want("catch fresh fallback", r2["a"].(map[string]any)["n"], 1.0)
+	want("catch null", mustOK(t, MustShape(obj("a", Catch(nil, Number))), obj("a", "x")), obj("a", nil))
+	want("catch dsl", mustOK(t, MustShape(MustExpr("Catch(0,Number)")), "x"), 0.0)
+	want("catch dsl bound", mustOK(t, MustShape(obj("a", MustExpr(`Catch("none",Min(2,String))`))), obj("a", "x")), obj("a", "none"))
+	want("catch chained", mustOK(t, MustShape(Required(Number).Catch(-1.0)), "x"), -1.0)
+	want("catch untyped", mustOK(t, MustShape(Catch(0.0)), "x"), "x")
+	want("catch render", stringifyNode(Catch(0.0, Min(2, Number)).n, true), "Number.Min(2).Catch(0)")
+	want("catch render string", stringifyNode(Catch("x", String).n, true), "String.Catch(x)")
+	want("catch render odd", stringifyNode(Catch(func() {}, String).n, true), "String.Catch(func())")
+
+	// Transform maps a valid value; an invalid one fails as it would have.
+	add := func(v any, _ *State) any {
+		m := v.(map[string]any)
+		m["n"] = m["a"].(float64) + 1
+		return m
+	}
+	want("transform", mustOK(t, MustShape(obj("o", Transform(add, obj("a", Number)))), obj("o", obj("a", 1.0))), obj("o", obj("a", 1.0, "n", 2.0)))
+	_, e1 := MustShape(obj("o", Transform(add, obj("a", Number)))).Validate(obj("o", obj("a", "x")))
+	_, e2 := MustShape(obj("o", obj("a", Number))).Validate(obj("o", obj("a", "x")))
+	if e1 == nil || e2 == nil || e1.Error() != e2.Error() {
+		t.Fatalf("transform failure text %v != %v", e1, e2)
+	}
+	double := func(v any, _ *State) any { return v.(float64) * 2 }
+	mustErr(t, MustShape(obj("a", Transform(double, Min(2, Number)))), obj("a", 1.0), "Value \"1\" for property \"a\" must be a minimum of 2 (was 1).")
+	want("transform bound ok", mustOK(t, MustShape(obj("a", Transform(double, Min(2, Number)))), obj("a", 3.0)), obj("a", 6.0))
+	// The produced value is what is transformed: defaults included.
+	inc := func(v any, _ *State) any { return v.(float64) + 1 }
+	want("transform default", mustOK(t, MustShape(obj("a", Optional(Transform(inc, Number)))), obj()), obj("a", 1.0))
+	// The state is at hand: here, the key.
+	want("transform key", mustOK(t, MustShape(obj("k", Transform(func(_ any, s *State) any { return s.Key }, String))), obj("k", "x")), obj("k", "k"))
+	want("transform chained", mustOK(t, MustShape(Required(Number).Transform(func(v any, _ *State) any { return -v.(float64) })), 2.0), -2.0)
+	want("transform untyped", mustOK(t, MustShape(Transform(func(v any, _ *State) any { return v })), "x"), "x")
+	want("transform render", stringifyNode(Transform(inc, Min(2, Number)).n, true), "Number.Min(2).Transform")
+
+	// Describe attaches a description.
+	want("describe", Describe("a number", Number).Meta()["description"], "a number")
+	want("describe dsl", MustExpr(`Describe("a number",Number)`).Meta()["description"], "a number")
+	want("describe validates", mustOK(t, MustShape(Describe("a number", Number)), 1.0), 1.0)
+	mustErr(t, MustShape(Describe("a number", Number)), "x", "is not of type number")
+	want("describe wrapped", Optional(Describe("x", Number)).Meta()["description"], "x")
+	want("describe chained", Required().Describe("y").Number().Meta()["description"], "y")
+	want("describe untyped", Describe("d").Meta()["description"], "d")
+
+	// Ignore swallows the whole subtree.
+	want("ignore nested", mustOK(t, MustShape(obj("o", Ignore(obj("a", Number)))), obj("o", obj("a", "x"))), obj())
+	want("ignore nested ok", mustOK(t, MustShape(obj("o", Ignore(obj("a", Number)))), obj("o", obj("a", 1.0))), obj("o", obj("a", 1.0)))
+	want("ignore array", mustOK(t, MustShape([]any{Ignore(Number)}), []any{1.0, "x", 3.0}), []any{1.0, nil, 3.0})
+	want("ignore root", mustOK(t, MustShape(Ignore(Number)), "x"), nil)
+	want("ignore bound", mustOK(t, MustShape(obj("a", Ignore(Min(2, Number)))), obj("a", 1.0)), obj())
+	want("ignore bound ok", mustOK(t, MustShape(obj("a", Ignore(Min(2, Number)))), obj("a", 3.0)), obj("a", 3.0))
+	want("ignore render", stringifyNode(Ignore(Min(2, Number)).n, true), "0.Min(2)")
+}
+
+func TestIsolationExprArguments(t *testing.T) {
+	for _, src := range []string{"Catch()", "Describe()", "Describe(1,Number)"} {
+		if _, err := Expr(src); err == nil {
+			t.Fatalf("%s: expected an argument error", src)
+		}
+	}
+}

@@ -228,7 +228,9 @@ const S = {
   Min: 'Min',
   Never: 'Never',
   Nullable: 'Nullable',
+  Catch: 'Catch',
   Coerce: 'Coerce',
+  Describe: 'Describe',
   DateTime: 'DateTime',
   Email: 'Email',
   Ip: 'Ip',
@@ -244,6 +246,7 @@ const S = {
   Rename: 'Rename',
   Required: 'Required',
   Skip: 'Skip',
+  Transform: 'Transform',
   Ignore: 'Ignore',
   Some: 'Some',
   Fault: 'Fault',
@@ -1758,7 +1761,7 @@ function handleValidate(vf: Validate, s: State): Update {
 
 // Create string description of property path, using "dot notation".
 function pathstr(s: State) {
-  let out = ''
+  let out = null == s.ctx.path$ ? '' : s.ctx.path$.join('.')
   for (let i = 1; i <= s.dI; i++) {
     const p = s.path[i]
     if (null != p) {
@@ -1773,7 +1776,7 @@ function pathstr(s: State) {
 // Create an array form of the property path. Numeric entries for array
 // element indices are emitted as numbers; object keys remain strings.
 function patharr(s: State): (string | number)[] {
-  const out: (string | number)[] = []
+  const out: (string | number)[] = null == s.ctx.path$ ? [] : s.ctx.path$.slice()
   for (let i = 1; i <= s.dI; i++) {
     const p = s.path[i]
     if (null != p) {
@@ -2112,6 +2115,130 @@ const Ipv6 = function <V>(this: any, shape?: Node<V> | V): Node<V> {
 }
 
 
+// Isolated Validation: Catch, Transform, Ignore
+// =============================================
+// These builders take the checks a node carries — its befores, its afters —
+// inside, and validate the node as a whole (those checks, the structural
+// check, every descendant) in a sub-run before the node itself proceeds. Only
+// then is the outcome of the entire subtree known: a node's afters run before
+// its children are visited, so an after alone cannot see a descendant fail.
+
+type Inner = { b: Validate[], a: Validate[] }
+
+function takeInner(node: Node<any>): Inner {
+  const inner = { b: node.b, a: node.a }
+  node.b = []
+  node.a = []
+  return inner
+}
+
+
+// Render the taken checks ahead of the taking builder, so that the shape
+// still reads Number.Min(2).Catch(0).
+function innerDesc(inner: Inner, n: Node<any>): string {
+  return inner.b.concat(inner.a).map((v: any) => v.s ? v.s(n) + '.' : '').join('')
+}
+
+
+const probeShapes = new WeakMap<Inner, { top: any, exec: any }>()
+
+// Validate the node as it stands, with the taken checks, in isolation. Errors
+// are collected, with their full paths, rather than thrown; Define names are
+// shared with the run that is probing.
+function probeNode(state: State, inner: Inner, val: any): { out: any, errs: ErrDesc[] } {
+  // Errors must be observable, so the probe is never silent (Ignore's e).
+  let ps = probeShapes.get(inner)
+  if (undefined === ps) {
+    const top: any = { ...state.node, b: inner.b, a: inner.a, e: true }
+    ps = { top, exec: shapify(top) }
+    probeShapes.set(inner, ps)
+  }
+  else {
+    // The node may have been wrapped further since (Optional, Default, ...).
+    Object.assign(ps.top, state.node, { b: inner.b, a: inner.a, e: true })
+  }
+
+  const errs: ErrDesc[] = []
+  const ref = state.ctx.ref = state.ctx.ref || {}
+  const out = ps.exec(val, { err: errs, ref, log: state.ctx.log, path$: patharr(state) })
+  return { out, errs }
+}
+
+
+// The taken checks and the structural check ran in the probe; the value still
+// goes back to the parent, which a lone done would prevent.
+const release: Validate = function release(_val: any, update: Update) {
+  update.done = false
+  return true
+}
+
+
+function jsonText(val: any): string {
+  return '' + JSON.stringify(val)
+}
+
+
+// Whatever fails inside is replaced by the fallback, and raises nothing.
+const Catch = function <V>(this: any, fallback: any, shape?: Node<V> | V): Node<V> {
+  let node = buildize(this, shape)
+  const inner = takeInner(node)
+
+  const catcher: any = function Catch(val: any, update: Update, state: State) {
+    const { out, errs } = probeNode(state, inner, val)
+    update.uval = 0 < errs.length ? clone(fallback) : out
+    update.done = true
+    return true
+  }
+  catcher.n = S.Catch
+  catcher.a = [fallback]
+  catcher.s = (n: Node<any>) => innerDesc(inner, n) + S.Catch + '(' + jsonText(fallback) + ')'
+  catcher.inner = inner
+  node.b.push(catcher)
+  node.a.push(release)
+
+  return node
+}
+
+
+// Replace a valid value with a function of it. An invalid one fails as it
+// would have, with the same errors.
+const Transform = function <V>(
+  this: any,
+  transform: (val: any, state: State) => any,
+  shape?: Node<V> | V
+): Node<V> {
+  let node = buildize(this, shape)
+  const inner = takeInner(node)
+
+  const transformer: any = function Transform(val: any, update: Update, state: State) {
+    const { out, errs } = probeNode(state, inner, val)
+    if (0 < errs.length) {
+      update.err = errs
+      return false
+    }
+    update.uval = transform(out, state)
+    update.done = true
+    return true
+  }
+  transformer.n = S.Transform
+  transformer.s = (n: Node<any>) => innerDesc(inner, n) + S.Transform
+  transformer.inner = inner
+  node.b.push(transformer)
+  node.a.push(release)
+
+  return node
+}
+
+
+// Attach a description to the node, read back as node.m.description.
+const Describe = function <V>(this: any, description: string, shape?: Node<V> | V): Node<V> {
+  let node = buildize(this, shape)
+  node.m = node.m || {}
+  node.m.description = '' + description
+  return node
+}
+
+
 // Value may also be null. Absent is still governed by required/optional.
 const Nullable = function <V>(this: any, shape?: Node<V> | V): Node<V> {
   let node = buildize(this, shape)
@@ -2171,7 +2298,8 @@ const Skip = function <V>(this: any, shape?: Node<V> | V): Node<V> {
 }
 
 
-// Errors for this value are ignored, and the value is undefined.
+// Errors for this value are ignored, and the value is undefined. The whole
+// subtree is probed, so a failing descendant is swallowed too.
 const Ignore = function <V>(this: any, shape?: Node<V> | V): Node<V> {
   let node = buildize(this, shape)
   node.r = false
@@ -2181,13 +2309,19 @@ const Ignore = function <V>(this: any, shape?: Node<V> | V): Node<V> {
 
   node.e = false
 
-  node.a.push(function Ignore(_val: any, update: Update, state: State) {
-    if (0 < state.curerr.length) {
-      update.uval = undefined
-      update.done = false
-    }
+  const inner = takeInner(node)
+
+  const ignorer: any = function Ignore(val: any, update: Update, state: State) {
+    const { out, errs } = probeNode(state, inner, val)
+    update.uval = 0 < errs.length ? undefined : out
+    update.done = true
     return true
-  })
+  }
+  ignorer.n = S.Ignore
+  ignorer.s = (n: Node<any>) => innerDesc(inner, n).replace(/\.$/, '')
+  ignorer.inner = inner
+  node.b.push(ignorer)
+  node.a.push(release)
 
   return node
 }
@@ -3050,6 +3184,7 @@ function buildize<V>(self?: any, shape?: any): Node<V> {
       Any,
       Before,
       Below,
+      Catch,
       Check,
       Child,
       Closed,
@@ -3057,6 +3192,7 @@ function buildize<V>(self?: any, shape?: any): Node<V> {
       DateTime,
       Default,
       Define,
+      Describe,
       Empty,
       Email,
       Exact,
@@ -3079,6 +3215,7 @@ function buildize<V>(self?: any, shape?: any): Node<V> {
       Required,
       Rest,
       Skip,
+      Transform,
       Type,
       Url,
       Uuid,
@@ -3201,6 +3338,16 @@ function makeErrImpl(
 
 
 // Convert Node to JSON suitable for Shape.build.
+// The builder suffixes of a node's checks, skipping any that render as nothing.
+function bdesc(n: Node<any>): string {
+  return n.b
+    .map((v: any) => v.s ? v.s(n) : '')
+    .filter((d: string) => '' !== d)
+    .map((d: string) => '.' + d)
+    .join('')
+}
+
+
 function node2json(n: Node<any>): any {
   let t = n.t
 
@@ -3223,7 +3370,7 @@ function node2json(n: Node<any>): any {
       s = JSON.stringify(n.v)
     }
 
-    s += n.b.map((v: any) => v.s ? ('.' + v.s(n)) : '').join('')
+    s += bdesc(n)
 
     return s
   }
@@ -3238,7 +3385,7 @@ function node2json(n: Node<any>): any {
       s += ('' === s ? '' : '.') + S.Open
     }
 
-    s += n.b.map((v: any) => v.s ? ('.' + v.s(n)) : '').join('')
+    s += bdesc(n)
 
     if (s.startsWith('.')) {
       s = s.slice(1)
@@ -3255,7 +3402,7 @@ function node2json(n: Node<any>): any {
 
     // Required is implicit with Check
 
-    s += n.b.map((v: any) => v.s ? ('.' + v.s(n)) : '').join('')
+    s += bdesc(n)
 
     if (s.startsWith('.')) {
       s = s.slice(1)
@@ -3286,7 +3433,7 @@ function node2json(n: Node<any>): any {
       if (undefined === o.$$) {
         o.$$ = ''
       }
-      o.$$ += n.b.map((v: any) => v.s ? ('.' + v.s(n)) : '').join('')
+      o.$$ += bdesc(n)
       if (o.$$.startsWith('.')) {
         o.$$ = o.$$.slice(1)
       }
@@ -3324,7 +3471,7 @@ function node2json(n: Node<any>): any {
   }
   else if (S.date === t) {
     let s = n.r ? S.Date : JSON.stringify(n.v)
-    s += n.b.map((v: any) => v.s ? ('.' + v.s(n)) : '').join('')
+    s += bdesc(n)
     return s
   }
 }
@@ -3469,6 +3616,7 @@ const BuilderMap = {
   Any,
   Before,
   Below,
+  Catch,
   Check,
   Child,
   Closed,
@@ -3476,6 +3624,7 @@ const BuilderMap = {
   DateTime,
   Default,
   Define,
+  Describe,
   Email,
   Empty,
   Exact,
@@ -3500,6 +3649,7 @@ const BuilderMap = {
   Required,
   Skip,
   Some,
+  Transform,
   Rest,
   Type,
   Url,
@@ -3590,6 +3740,9 @@ const GAll = All
 const GAny = Any
 const GInteger = Integer
 const GCoerce = Coerce
+const GCatch = Catch
+const GDescribe = Describe
+const GTransform = Transform
 const GDateTime = DateTime
 const GEmail = Email
 const GIp = Ip
@@ -3790,6 +3943,7 @@ export {
   Any,
   Before,
   Below,
+  Catch,
   Check,
   Child,
   Closed,
@@ -3797,6 +3951,7 @@ export {
   DateTime,
   Default,
   Define,
+  Describe,
   Email,
   Empty,
   Exact,
@@ -3821,6 +3976,7 @@ export {
   Required,
   Skip,
   Some,
+  Transform,
   Type,
   Rest,
   Url,
@@ -3836,6 +3992,9 @@ export {
   GChild,
   GClosed,
   GCoerce,
+  GCatch,
+  GDescribe,
+  GTransform,
   GDateTime,
   GEmail,
   GIp,

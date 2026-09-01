@@ -119,6 +119,18 @@ function build() {
   add('fault-format', E('Fault("boom",Email)'), FORMATS)
   add('fault-type', E('Fault("boom",String)'), SCALARS)
 
+  // Catch, Describe and Ignore: the subtree is judged as a whole.
+  add('catch-num', E('Catch(0,Number)'), SCALARS)
+  add('catch-str-bound', E('Catch("none",Min(2,String))'), SCALARS)
+  add('catch-outer-bound', E('Min(2,Catch(0,Number))'), SCALARS)
+  add('catch-obj', { a: E('Catch(0,Number)') }, OBJS)
+  add('catch-optional', { a: E('Optional(Catch(7,Number))') }, OBJS)
+  add('catch-closed', E('Catch(null,Closed({}))'), SCALARS)
+  add('catch-arr', [E('Catch(0,Number)')], ARRS)
+  add('describe', E('Describe("a number",Number)'), SCALARS)
+  add('ignore-bound', { a: E('Ignore(Min(2,Number))') }, OBJS)
+  add('ignore-arr', [E('Ignore(Number)')], ARRS)
+
   // A type token with arguments applies the type to them.
   add('dsl-token-args-str', E('String(Min(2))'), SCALARS)
   add('dsl-token-args-num', E('Number(Max(1))'), SCALARS)

@@ -423,6 +423,22 @@ func buildExprBuilders() map[string]exprBuilderFn {
 		spec := args[1:]
 		return Default(dval, exprShapes(spec)...), nil
 	},
+	"Catch": func(args []builderArg) (*Node, error) {
+		if len(args) < 1 {
+			return nil, fmt.Errorf("Catch: missing fallback value")
+		}
+		return Catch(args[0], exprShapes(args[1:])...), nil
+	},
+	"Describe": func(args []builderArg) (*Node, error) {
+		if len(args) < 1 {
+			return nil, fmt.Errorf("Describe: missing description")
+		}
+		msg, ok := args[0].(string)
+		if !ok {
+			return nil, fmt.Errorf("Describe: description must be a string")
+		}
+		return Describe(msg, exprShapes(args[1:])...), nil
+	},
 	"Fault": func(args []builderArg) (*Node, error) {
 		if len(args) < 1 {
 			return nil, fmt.Errorf("Fault: missing message")

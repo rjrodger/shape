@@ -504,3 +504,79 @@ describe('checks run in order', () => {
       /check ".*" failed\.$/)
   })
 })
+
+
+describe('isolation: Catch, Transform, Describe, Ignore', () => {
+  const { Catch, Transform, Describe, Ignore, Min, Optional, Required } = Shape as any
+  const json = (v: any) => JSON.parse(JSON.stringify(v))
+
+  test('Catch replaces whatever fails inside with the fallback', () => {
+    assert.equal(Shape(Catch(0, Number))('x'), 0)
+    assert.equal(Shape(Catch(0, Number))(5), 5)
+    assert.deepEqual(Shape({ o: Catch({ a: 0 }, { a: Number }) })({ o: { a: 'x' } }), { o: { a: 0 } })
+    assert.deepEqual(Shape({ o: Catch({ a: 0 }, { a: Number }) })({ o: { a: 1 } }), { o: { a: 1 } })
+
+    // The checks it wraps are inside the catch; the checks that wrap it are not.
+    assert.equal(Shape(Catch(0, Min(2, Number)))(1), 0)
+    assert.match(failure(Min(2, Catch(0, Number)), 'x'), /must be a minimum of 2 \(was 0\)/)
+
+    // Required and optional still apply, inside the catch.
+    assert.deepEqual(Shape({ a: Catch(7, Number) })({}), { a: 7 })
+    assert.deepEqual(Shape({ a: Optional(Catch(7, Number)) })({}), { a: 0 })
+
+    // The fallback is a fresh copy each time.
+    const s = Shape({ a: Catch({ n: 1 }, { n: Number }) })
+    const r1 = s({ a: 'x' }), r2 = s({ a: 'x' })
+    r1.a.n = 9
+    assert.equal(r2.a.n, 1)
+
+    assert.deepEqual(Shape({ a: Catch(null, Number) })({ a: 'x' }), { a: null })
+    assert.equal(Shape(Shape.expr('Catch(0,Number)'))('x'), 0)
+    assert.deepEqual(Shape({ a: Shape.expr('Catch("none",Min(2,String))') })({ a: 'x' }), { a: 'none' })
+    assert.equal(Shape(Required(Number).Catch(-1))('x'), -1)
+    assert.equal(Shape.stringify(Catch(0, Min(2, Number)), true), 'Number.Min(2).Catch(0)')
+    assert.equal(Shape.stringify(Catch('x', String), true), 'String.Catch(x)')
+  })
+
+  test('Transform maps a valid value; an invalid one fails as it would have', () => {
+    const add = (o: any) => ({ ...o, n: o.a + 1 })
+    assert.deepEqual(Shape({ o: Transform(add, { a: Number }) })({ o: { a: 1 } }), { o: { a: 1, n: 2 } })
+    assert.equal(
+      failure({ o: Transform(add, { a: Number }) }, { o: { a: 'x' } }),
+      failure({ o: { a: Number } }, { o: { a: 'x' } }))
+    assert.equal(
+      failure({ a: Transform((v: number) => v * 2, Min(2, Number)) }, { a: 1 }),
+      'Value "1" for property "a" must be a minimum of 2 (was 1).')
+    assert.deepEqual(Shape({ a: Transform((v: number) => v * 2, Min(2, Number)) })({ a: 3 }), { a: 6 })
+
+    // The produced value is what is transformed: defaults included.
+    assert.deepEqual(Shape({ a: Optional(Transform((v: number) => v + 1, Number)) })({}), { a: 1 })
+
+    // The state is at hand: here, the key.
+    assert.deepEqual(Shape({ k: Transform((_v: any, s: any) => s.key, String) })({ k: 'x' }), { k: 'k' })
+
+    assert.equal(Shape(Required(Number).Transform((v: number) => -v))(2), -2)
+    assert.equal(Shape.stringify(Transform((v: any) => v, Min(2, Number)), true), 'Number.Min(2).Transform')
+  })
+
+  test('Describe attaches a description', () => {
+    assert.equal(Shape.nodize(Describe('a number', Number)).m.description, 'a number')
+    assert.equal(Shape.nodize(Shape.expr('Describe("a number",Number)')).m.description, 'a number')
+    assert.equal(Shape(Describe('a number', Number))(1), 1)
+    assert.match(failure(Describe('a number', Number), 'x'), /is not of type number/)
+
+    // Chained, and kept when wrapped.
+    assert.equal(Shape.nodize(Optional(Describe('x', Number))).m.description, 'x')
+    assert.equal(Shape.nodize(Required().Describe('y').Number()).m.description, 'y')
+  })
+
+  test('Ignore swallows the whole subtree', () => {
+    assert.deepEqual(json(Shape({ o: Ignore({ a: Number }) })({ o: { a: 'x' } })), {})
+    assert.deepEqual(Shape({ o: Ignore({ a: Number }) })({ o: { a: 1 } }), { o: { a: 1 } })
+    assert.deepEqual(json(Shape([Ignore(Number)])([1, 'x', 3])), [1, null, 3])
+    assert.equal(Shape(Ignore(Number))('x'), undefined)
+    assert.deepEqual(json(Shape({ a: Ignore(Min(2, Number)) })({ a: 1 })), {})
+    assert.deepEqual(Shape({ a: Ignore(Min(2, Number)) })({ a: 3 }), { a: 3 })
+    assert.equal(Shape.stringify(Ignore(Min(2, Number)), true), '0.Min(2)')
+  })
+})

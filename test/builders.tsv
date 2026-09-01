@@ -92,3 +92,12 @@ format-ipv6-mapped	{"a":{"$expr":"Ipv6"}}	{"a":"::ffff:192.168.1.1"}	{"a":"::fff
 format-bound-order	{"a":{"$expr":"Email(Min(10,String))"}}	{"a":"nope"}		"Value \"nope\" for property \"a\" must be a minimum length of 10 (was 4).\nValue \"nope\" for property \"a\" is not a valid email address."
 fault-keeps-check-text	{"a":{"$expr":"Fault(\"boom\",Min(2,Number))"}}	{"a":1}		"Value \"1\" for property \"a\" must be a minimum of 2 (was 1)."
 fault-replaces-type-text	{"a":{"$expr":"Fault(\"boom\",Email)"}}	{"a":1}		"boom"
+catch-fallback	{"a":{"$expr":"Catch(0,Number)"}}	{"a":"x"}	{"a":0}	
+catch-passes-through	{"a":{"$expr":"Catch(0,Number)"}}	{"a":5}	{"a":5}	
+catch-inner-bound	{"a":{"$expr":"Catch(\"none\",Min(2,String))"}}	{"a":"x"}	{"a":"none"}	
+catch-outer-bound-fails	{"a":{"$expr":"Min(2,Catch(0,Number))"}}	{"a":"x"}		"Value \"0\" for property \"a\" must be a minimum of 2 (was 0)."
+catch-required-absent	{"a":{"$expr":"Catch(7,Number)"}}	{}	{"a":7}	
+catch-optional-absent	{"a":{"$expr":"Optional(Catch(7,Number))"}}	{}	{"a":0}	
+catch-null-fallback	{"a":{"$expr":"Catch(null,Number)"}}	{"a":"x"}	{"a":null}	
+describe-keeps-validation	{"a":{"$expr":"Describe(\"a number\",Number)"}}	{"a":"x"}		"Validation failed for property \"a\" with string \"x\" because the string is not of type number."
+ignore-inner-bound	{"a":{"$expr":"Ignore(Min(2,Number))"}}	{"a":1}	{}	
