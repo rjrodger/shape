@@ -507,7 +507,9 @@ func validateObject(n *node, in any, path []string, pathArr []any, parent any, c
 			}
 			// A nil produced value means nothing was injected (required error, or
 			// an optional field with no default) — omit the key, matching TS.
-			if produced == nil {
+			// The exception is a null literal, whose default is the null
+			// itself: TS injects it, so the key is present and null.
+			if produced == nil && !(cn.kind == KindNull && cn.hasDefault && !cn.required) {
 				delete(out, k)
 				continue
 			}

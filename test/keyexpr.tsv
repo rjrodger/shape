@@ -16,3 +16,16 @@ keyexpr-child-array-not-array	{"a: Child(Number)":[]}	{"a":{}}		"Validation fail
 keyexpr-bare-literal	{"a: 5":3}	{}	{"a":5}	
 keyexpr-bare-literal-present	{"a: 5":3}	{"a":9}	{"a":9}	
 keyexpr-one-of-keeps-choice	{"a: One(String,Number)":5}	{"a":"q"}	{"a":"q"}	
+keyexpr-quoted-name	{"\"a b\": Min(1)":0}	{"a b":2}	{"a b":2}	
+keyexpr-quoted-name-fail	{"\"a b\": Min(1)":0}	{"a b":0}		"Value \"0\" for property \"a b\" must be a minimum of 1 (was 0)."
+keyexpr-quoted-name-absent	{"\"a b\": String":""}	{}		"Validation failed for property \"a b\" with value \"undefined\" because the value is required."
+keyexpr-empty-expression-is-a-literal-key	{"a:":1}	{"a:":2}	{"a:":2}	
+keyexpr-empty-expression-rejects-bare-name	{"a:":1}	{"a":2}		"Validation failed for object \"{a:2}\" because the property \"a\" is not allowed."
+keyexpr-escaped-quoted-name	{"\"a\\\"b\": Min(1)":0}	{"a\"b":2}	{"a\"b":2}	
+keyexpr-value-builder-takes-example	{"a: Default()":5}	{}	{"a":5}	
+keyexpr-bound-takes-example	{"a: Min()":3}	{"a":1}		"Value \"1\" for property \"a\" must be a minimum of 3 (was 1)."
+keyexpr-catch-takes-example	{"a: Catch()":7}	{"a":"x"}	{"a":"x"}	
+keyexpr-exact-takes-example	{"a: Exact()":7}	{}	{"a":7}	
+keyexpr-exact-present-null-fails	{"a: Exact()":7}	{"a":null}		"Value \"null\" for property \"a\" must be exactly one of: 7"
+exact-default-absent-ok	{"a":{"$expr":"Default(7,Exact(7,8))"}}	{}	{"a":7}	
+exact-default-present-null-fails	{"a":{"$expr":"Default(7,Exact(7,8))"}}	{"a":null}		"Value \"null\" for property \"a\" must be exactly one of: 7, 8"

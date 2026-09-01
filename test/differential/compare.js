@@ -46,7 +46,7 @@ const cases = Object.fromEntries(
 const ts = loadJsonl(process.argv[3])
 const go = loadJsonl(process.argv[4])
 
-const buckets = { build: [], verdict: [], output: [], errtext: [] }
+const buckets = { build: [], schema: [], verdict: [], output: [], errtext: [] }
 
 for (const name of Object.keys(ts)) {
   const t = ts[name]
@@ -64,6 +64,9 @@ for (const name of Object.keys(ts)) {
     continue
   }
 
+  // The JSON Schema export, before the verdict: a spec renders one schema.
+  if (J(t.schema) !== J(g.schema)) { buckets.schema.push(row); continue }
+
   if (t.ok !== g.ok) { buckets.verdict.push(row); continue }
 
   if (t.ok) {
@@ -77,14 +80,16 @@ for (const name of Object.keys(ts)) {
 const total = Object.keys(ts).length
 const failed = Object.values(buckets).reduce((a, b) => a + b.length, 0)
 
-const side = r => r.ok ? 'PASS ' + J(r.out)
-  : undefined !== r.build ? 'BUILD ' + r.build
-    : 'FAIL ' + JSON.stringify(r.err)
+const side = (r, kind) => 'schema' === kind ? 'SCHEMA ' + J(r.schema)
+  : r.ok ? 'PASS ' + J(r.out)
+    : undefined !== r.build ? 'BUILD ' + r.build
+      : 'FAIL ' + JSON.stringify(r.err)
 
 console.log(`differential: ${total} cases, ${total - failed} agree, ${failed} differ`)
 
 const LABEL = {
   build: 'build/compile disagreement',
+  schema: 'different JSON Schema export',
   verdict: 'pass-vs-fail disagreement',
   output: 'different produced value',
   errtext: 'different error text',
@@ -105,8 +110,8 @@ for (const [kind, rows] of Object.entries(buckets)) {
     console.log(`  ${g} (${rs.length})`)
     for (const r of (full ? rs : rs.slice(0, SAMPLES))) {
       console.log(`    spec=${r.spec} input=${r.input}`)
-      console.log(`      ts: ${side(r.ts)}`)
-      console.log(`      go: ${side(r.go)}`)
+      console.log(`      ts: ${side(r.ts, kind)}`)
+      console.log(`      go: ${side(r.go, kind)}`)
     }
     if (!full && rs.length > SAMPLES) console.log(`    … ${rs.length - SAMPLES} more`)
   }

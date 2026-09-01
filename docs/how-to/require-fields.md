@@ -56,6 +56,26 @@ Shape({ note: Optional(String) })  // may be absent
 Shape({ note: Skip(String) })      // absent → key omitted, not defaulted
 ```
 
+## Make every property optional at once
+
+[`Partial`](../reference/builders.md#object-algebra) does to each declared
+property what `Optional` does to one:
+
+```js
+Shape(Partial({ name: String, age: Number }))({})   // → { name: '', age: 0 }
+```
+
+## Allow null
+
+A required field rejects `null` — it is a present value of the wrong type. Use
+[`Nullable`](../reference/builders.md#required--optional--defaults) to accept
+it; absent is still governed by required/optional:
+
+```js
+Shape({ note: Nullable(String) })({ note: null })   // → { note: null }
+Shape({ note: Nullable(String) })({})               // throws: required
+```
+
 ## Notes
 
 - Required fields never have a default — there is nothing to default to.

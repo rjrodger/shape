@@ -61,6 +61,37 @@ s := shape.MustShape(map[string]any{
 })
 ```
 
+## A tagged union: `Discriminated`
+
+When the alternatives are objects told apart by one property, `Discriminated`
+picks the branch by that property's value and reports **only that branch's**
+errors — not a list of every alternative.
+
+**TS**
+
+```js
+const { Shape, Discriminated } = require('shape')
+
+const pet = Shape(Discriminated('kind', {
+  dog:  { bark: Boolean },
+  fish: { fins: Number },
+}))
+
+pet({ kind: 'dog', bark: true })   // OK — the "kind" property is added to each branch
+pet({ kind: 'fish', fins: 'x' })   // throws: property "fins" ... not of type number
+pet({ kind: 'cat' })               // throws: has unknown "kind" "cat", expected one of: dog, fish
+pet({ bark: true })                // throws: is not an object with a "kind" property
+```
+
+**Go**
+
+```go
+pet := shape.MustShape(shape.Discriminated("kind", map[string]any{
+    "dog":  map[string]any{"bark": shape.Boolean},
+    "fish": map[string]any{"fins": shape.Number},
+}))
+```
+
 ## Notes
 
 - `One` stops at the **first** matching branch and uses that branch's output.
@@ -69,3 +100,5 @@ s := shape.MustShape(map[string]any{
 - `Exact` also matches when the value is absent but the node's default equals one
   of the listed literals.
 - These builders are not chainable methods — call them as top-level builders.
+- An absent optional composition (`Optional(One(String, Number))`) is simply
+  absent; it is not put to its branches.

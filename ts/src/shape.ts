@@ -232,6 +232,10 @@ const S = {
   Coerce: 'Coerce',
   Describe: 'Describe',
   Discriminated: 'Discriminated',
+  Pick: 'Pick',
+  Omit: 'Omit',
+  Partial: 'Partial',
+  Extend: 'Extend',
   DateTime: 'DateTime',
   Email: 'Email',
   Ip: 'Ip',
@@ -1010,8 +1014,8 @@ function shapify<S>(intop?: S | Node<S>, inopts?: ShapeOptions) {
 
                   if (optskeyexpr.active) {
                     let m = KEY_EXPR_RE.exec(k)
-                    if (m) {
-                      rk = m[1]
+                    if (m && '' !== m[3]) {
+                      rk = keyExprName(m[1])
                       let src = m[3]
 
                       ov = keyExprNode(src, ov, 1 + s.dI, meta)
@@ -1365,6 +1369,9 @@ function shapify<S>(intop?: S | Node<S>, inopts?: ShapeOptions) {
     return null == json ? (json = node2json(shape.node())) : json
   }
 
+  // JSON Schema (draft 2020-12) for the values this shape accepts.
+  shape.jsonSchema = () => jsonSchema(shape.node())
+
 
   shape.toString = function(this: any) {
     desc = '' === desc ? this.stringify() : desc
@@ -1591,6 +1598,22 @@ function expr(
 }
 
 
+// The property name of a key expression. A name may be quoted to hold a
+// space, a colon or an escaped quote: `{ '"a b": Min(1)': 0 }` declares the
+// property "a b", and `{ '"a\\"b": Min(1)': 0 }` the property a"b.
+function keyExprName(name: string): string {
+  if (2 <= name.length && '"' === name[0] && '"' === name[name.length - 1]) {
+    try {
+      return JP(name)
+    }
+    catch (_e: any) {
+      return name.substring(1, name.length - 1)
+    }
+  }
+  return name
+}
+
+
 // Build the node for a key expression such as `{ 'a: Optional(Number)': 5 }`.
 //
 // expr() splices the example value in as the innermost builder call's last
@@ -1612,7 +1635,15 @@ function keyExprNode(src: string, example: any, depth: number, meta?: NodeMeta) 
     return node
   }
 
-  const bare: any = expr({ src, d: depth, meta })
+  let bare: any
+  try {
+    bare = expr({ src, d: depth, meta })
+  }
+  catch (_e: any) {
+    // The expression cannot be built without the example — Pick(["a"]) has
+    // nothing to pick from — so the example plainly made a difference.
+    return node
+  }
 
   if (null == bare || !bare.$?.shape$ || !sameShapeNode(node, bare)) {
     return node
@@ -2313,6 +2344,156 @@ const Discriminated = function(this: any, tag: string, branches: Record<string, 
 }
 
 
+// Object Algebra
+// ==============
+// Build a new object shape out of an existing one. The result is a fresh
+// node, so the source is left as it was and one base can be reshaped many
+// times. Key expressions in the source (`{ 'a: Min(2)': 0 }`) are compiled
+// here, since the algebra has to know the real property names.
+
+type Entry = { key: string, child: any }
+
+function objectEntries(n: Node<any>): Entry[] {
+  const out: Entry[] = []
+  const vkeys = keys(n.v)
+  for (let kI = 0; kI < vkeys.length; kI++) {
+    const k = vkeys[kI]
+    const m = KEY_EXPR_RE.exec(k)
+    if (m && '' !== m[3]) {
+      out.push({ key: keyExprName(m[1]), child: keyExprNode(m[3], n.v[k], 0) })
+    }
+    else {
+      out.push({ key: k, child: n.v[k] })
+    }
+  }
+  return out
+}
+
+
+// A structural copy of a node: the same settings, with its own value and
+// check lists, so that changing the copy leaves the original as it was.
+function copyNode(n: Node<any>, over?: Record<string, any>): Node<any> {
+  const v = isarr(n.v) ? n.v.slice() :
+    (null != n.v && S.object === typeof n.v) ? { ...n.v } : n.v
+  const copy = {
+    $: SHAPE,
+    t: n.t, d: n.d, v, f: n.f, n: n.n, c: n.c, r: n.r, p: n.p, k: [], e: n.e, z: n.z,
+    u: { ...n.u }, b: n.b.slice(), a: n.a.slice(), m: { ...n.m },
+    ...over,
+  } as unknown as Node<any>
+  return buildize(copy)
+}
+
+
+function ownprop(o: any, k: string, value: any) {
+  defprop(o, k, { value, enumerable: true, writable: true, configurable: true })
+}
+
+
+function objectBase(self: any, shape: any, name: string): Node<any> {
+  const base = buildize(self, shape)
+  if (S.object !== base.t) {
+    throw new Error('Shape: ' + name + ' needs an object shape')
+  }
+  return base
+}
+
+
+// The base's settings with just these properties. An object default is
+// narrowed to them too.
+function objectNode(base: Node<any>, entries: Entry[]): Node<any> {
+  // Own properties, so that a "__proto__" key is a property and not the
+  // prototype.
+  const v: any = {}
+  for (const e of entries) {
+    ownprop(v, e.key, e.child)
+  }
+
+  let f = base.f
+  if (null != f && S.object === typeof f && !isarr(f)) {
+    f = {}
+    for (const e of entries) {
+      if (undefined !== base.f[e.key]) {
+        ownprop(f, e.key, base.f[e.key])
+      }
+    }
+  }
+
+  return copyNode(base, { v, f, n: entries.length })
+}
+
+
+function keyList(names: any, name: string): string[] {
+  const list = isarr(names) ? names : [names]
+  for (const k of list) {
+    if (S.string !== typeof k) {
+      throw new Error('Shape: ' + name + ' needs a list of property names')
+    }
+  }
+  return list
+}
+
+
+// Keep only the named properties. Naming one the shape does not declare is
+// an error: there is nothing there to pick.
+const Pick = function <V>(this: any, names: string | string[], shape?: Node<V> | V): Node<V> {
+  const base = objectBase(this, shape, S.Pick)
+  const want = keyList(names, S.Pick)
+  const entries = objectEntries(base)
+  for (const k of want) {
+    if (undefined === entries.find((e) => e.key === k)) {
+      throw new Error('Shape: ' + S.Pick + ': unknown property "' + k + '"')
+    }
+  }
+  return objectNode(base, entries.filter((e) => want.includes(e.key)))
+}
+
+
+// Drop the named properties. A name the shape does not declare is simply not
+// there to drop.
+const Omit = function <V>(this: any, names: string | string[], shape?: Node<V> | V): Node<V> {
+  const base = objectBase(this, shape, S.Omit)
+  const want = keyList(names, S.Omit)
+  return objectNode(base, objectEntries(base).filter((e) => !want.includes(e.key)))
+}
+
+
+// Every declared property becomes optional, as Optional would make it: a
+// type token then injects its empty value, a literal its own. Shallow: a
+// nested object's own properties are as they were.
+const Partial = function <V>(this: any, shape?: Node<V> | V): Node<V> {
+  const base = objectBase(this, shape, S.Partial)
+  return objectNode(base, objectEntries(base).map((e) => ({
+    key: e.key,
+    child: copyNode(nodize(e.child), { r: false }),
+  })))
+}
+
+
+// Add the properties of another object shape; a property both declare takes
+// the extension's. Only its properties are taken: the result stays open or
+// closed as the base was.
+const Extend = function <V>(this: any, extra: any, shape?: Node<V> | V): Node<V> {
+  const base = objectBase(this, shape, S.Extend)
+  const ext = nodize(extra)
+  if (S.object !== ext.t) {
+    throw new Error('Shape: ' + S.Extend + ' needs an object to extend with')
+  }
+
+  const entries = objectEntries(base)
+  for (const e of objectEntries(ext)) {
+    const i = entries.findIndex((x) => x.key === e.key)
+    if (-1 === i) {
+      entries.push(e)
+    }
+    else {
+      entries[i] = e
+    }
+  }
+  return objectNode(base, entries)
+}
+
+
 // Value may also be null. Absent is still governed by required/optional.
 const Nullable = function <V>(this: any, shape?: Node<V> | V): Node<V> {
   let node = buildize(this, shape)
@@ -2777,11 +2958,14 @@ const Define = function <V>(this: any, inopts: any, shape?: Node<V> | V): Node<V
 
 
   if (null != name && '' != name) {
-    node.b.push(function Define(_val: any, _update: Update, state: State) {
+    const definer: any = function Define(_val: any, _update: Update, state: State) {
       let ref = state.ctx.ref = state.ctx.ref || {}
       ref[name] = state.node
       return true
-    })
+    }
+    definer.n = S.Define
+    definer.a = [name]
+    node.b.push(definer)
   }
 
   return node
@@ -2800,7 +2984,7 @@ const Refer = function <V>(this: any, inopts: any, shape?: Node<V> | V): Node<V>
   let fill = !!opts.fill
 
   if (null != name && '' != name) {
-    node.b.push(function Refer(val: any, update: Update, state: State) {
+    const referrer: any = function Refer(val: any, update: Update, state: State) {
       if (undefined !== val || fill) {
         let ref = state.ctx.ref = state.ctx.ref || {}
 
@@ -2816,7 +3000,10 @@ const Refer = function <V>(this: any, inopts: any, shape?: Node<V> | V): Node<V>
 
       // TODO: option to fail if ref not found?
       return true
-    })
+    }
+    referrer.n = S.Refer
+    referrer.a = [name]
+    node.b.push(referrer)
   }
 
   return node
@@ -3270,6 +3457,7 @@ function buildize<V>(self?: any, shape?: any): Node<V> {
       Empty,
       Email,
       Exact,
+      Extend,
       Fault,
       Func,
       Ignore,
@@ -3282,8 +3470,11 @@ function buildize<V>(self?: any, shape?: any): Node<V> {
       Min,
       Never,
       Nullable,
+      Omit,
       Open,
       Optional,
+      Partial,
+      Pick,
       Refer,
       Rename,
       Required,
@@ -3358,12 +3549,16 @@ function makeErrImpl(
 
     let propkind = (valstr.startsWith('[') || isarr(s.parents[s.pI])) ?
       'index' : 'property'
+
+    // The disallowed keys of a closed object are listed in one error, so the
+    // clause about them pluralizes; the path before it names one value.
+    let listkind = propkind
     let propkindverb = 'is'
     let propkey = user?.k
 
     propkey = isarr(propkey) ?
-      (propkind = (1 < propkey.length ?
-        (propkindverb = 'are', 'properties') : propkind),
+      (listkind = (1 < propkey.length ?
+        (propkindverb = 'are', 'properties') : listkind),
         propkey.join(', ')) :
       propkey
 
@@ -3388,7 +3583,7 @@ function makeErrImpl(
             )
             :
             'closed' === why ?
-              `the ${propkind} "${propkey}" ${propkindverb} not allowed`
+              `the ${listkind} "${propkey}" ${propkindverb} not allowed`
               :
               S.regexp === why ?
                 'the string did not match ' + s.node.v
@@ -3663,20 +3858,274 @@ function stringify(
 }
 
 
-function clone(x: any) {
+// Deep, so that a Catch fallback holding an object is never shared between
+// two results; anything that is not a plain object or array is kept as-is.
+function clone(x: any): any {
   if (null == x || S.object !== typeof x) return x
-  if (isarr(x)) return x.slice()
+  if (isarr(x)) return x.map(clone)
   if (x instanceof RegExp) return new RegExp(x.source, x.flags)
   if (x instanceof Date) return new Date(x.getTime())
+  const proto = Object.getPrototypeOf(x)
+  if (Object.prototype !== proto && null !== proto) return x
   const out: any = {}
-  // Defensive: internal callers only ever clone the empty EMPTY_VAL objects, so
-  // this copy loop is never reached with own-enumerable keys in practice.
-  /* node:coverage disable */
-  for (const k in x) {
-    if (x.hasOwnProperty(k)) out[k] = x[k]
+  for (const k of keys(x)) {
+    defprop(out, k, { value: clone(x[k]), enumerable: true, writable: true, configurable: true })
   }
-  /* node:coverage enable */
   return out
+}
+
+
+// JSON Schema
+// ===========
+// Export a node as a JSON Schema (draft 2020-12) describing the values it
+// accepts. Every kind, bound, format, literal set, composition, reference and
+// default has a rendering; a check that is a function, and the builders that
+// only change what comes out (Coerce, Catch, Transform, Rename, Key), have
+// none. The Go port renders the same schema for the same shape, and the
+// differential harness compares the two.
+
+const JSON_SCHEMA_DRAFT = 'https://json-schema.org/draft/2020-12/schema'
+
+function jsonSchema(top: Node<any>): any {
+  const defs: any = {}
+  const body = nodeSchema(top, defs)
+  const out: any = { $schema: JSON_SCHEMA_DRAFT, ...body }
+  if (0 < keys(defs).length) {
+    out.$defs = defs
+  }
+  return out
+}
+
+
+const JSON_SCHEMA_TYPE: any = {
+  string: 'string',
+  number: 'number',
+  nan: 'number',
+  integer: 'integer',
+  boolean: 'boolean',
+  null: 'null',
+  object: 'object',
+  array: 'array',
+  date: 'string',
+  regexp: 'string',
+}
+
+
+const JSON_SCHEMA_FORMAT: any = {
+  Email: 'email',
+  Url: 'uri',
+  Uuid: 'uuid',
+  DateTime: 'date-time',
+  Ipv4: 'ipv4',
+  Ipv6: 'ipv6',
+}
+
+
+function nodeSchema(raw: any, defs: any): any {
+  const n = nodize(raw)
+  const s: any = {}
+
+  // A reference stands for the named shape, which is rendered where it is
+  // defined.
+  const referrer: any = n.b.find((v: any) => S.Refer === v.n)
+  if (undefined !== referrer) {
+    s.$ref = '#/$defs/' + referrer.a[0]
+    return describe(n, s)
+  }
+
+  if (undefined !== JSON_SCHEMA_TYPE[n.t]) {
+    s.type = JSON_SCHEMA_TYPE[n.t]
+  }
+
+  if (S.string === n.t && !n.u.empty) {
+    s.minLength = 1
+  }
+  else if (S.date === n.t) {
+    s.format = 'date-time'
+  }
+  else if (S.regexp === n.t) {
+    s.pattern = n.v.source
+  }
+  else if (S.never === n.t) {
+    s.not = {}
+  }
+  else if (S.object === n.t) {
+    objectSchema(n, s, defs)
+  }
+  else if (S.array === n.t) {
+    arraySchema(n, s, defs)
+  }
+  else if (S.list === n.t) {
+    listSchema(n, s, defs)
+  }
+
+  checkSchema(n, s)
+
+  if (n.u.nullable && undefined !== s.type) {
+    s.type = [s.type, 'null']
+  }
+
+  if (!n.r && !n.p && undefined !== n.f && S.function !== typeof n.f && !isNaN2(n.f)) {
+    s.default = n.f
+  }
+
+  describe(n, s)
+
+  const definer: any = n.b.find((v: any) => S.Define === v.n)
+  if (undefined !== definer) {
+    defs[definer.a[0]] = s
+  }
+
+  return s
+}
+
+
+function isNaN2(v: any): boolean {
+  return S.number === typeof v && isNaN(v)
+}
+
+
+function describe(n: Node<any>, s: any): any {
+  if (S.string === typeof n.m?.description) {
+    s.description = n.m.description
+  }
+  return s
+}
+
+
+function objectSchema(n: Node<any>, s: any, defs: any) {
+  const entries = objectEntries(n)
+  const props: any = {}
+  const required: string[] = []
+  for (const e of entries) {
+    const cn = nodize(e.child)
+    ownprop(props, e.key, nodeSchema(cn, defs))
+    if (cn.r) {
+      required.push(e.key)
+    }
+  }
+  if (0 < entries.length) {
+    s.properties = props
+  }
+  if (0 < required.length) {
+    s.required = required.sort()
+  }
+  if (undefined === n.c) {
+    s.additionalProperties = false
+  }
+  else if (S.any !== nodize(n.c).t) {
+    s.additionalProperties = nodeSchema(n.c, defs)
+  }
+}
+
+
+function arraySchema(n: Node<any>, s: any, defs: any) {
+  const fixed = keys(n.v)
+    .filter((k: string) => !isNaN(+k))
+    .sort((a: string, b: string) => +a - +b)
+    .map((k: string) => nodeSchema(n.v[k], defs))
+  // An element shape of Any says nothing, as an Any rest shape does not for
+  // an object.
+  const child = undefined === n.c || S.any === nodize(n.c).t ? undefined : n.c
+  if (0 < fixed.length) {
+    s.prefixItems = fixed
+    s.items = undefined === child ? false : nodeSchema(child, defs)
+  }
+  else if (undefined !== child) {
+    s.items = nodeSchema(child, defs)
+  }
+}
+
+
+function listSchema(n: Node<any>, s: any, defs: any) {
+  const branches = n.u.list.map((bn: any) => nodeSchema(bn, defs))
+  const disc = n.u.discriminated
+  if (undefined !== disc) {
+    for (let bI = 0; bI < branches.length; bI++) {
+      const b = branches[bI]
+      b.properties = b.properties || {}
+      b.properties[disc.tag] = { type: S.string, const: disc.tags[bI] }
+      b.required = (b.required || []).filter((k: string) => k !== disc.tag).concat(disc.tag).sort()
+    }
+    s.oneOf = branches
+  }
+  else {
+    s[S.All === n.b[0].n ? 'allOf' : 'anyOf'] = branches
+  }
+}
+
+
+// The bounds a size builder puts on a value: the number families for a
+// number, the length families for a string, array or object, and every
+// family for a node that has not said.
+const SIZE_FAMILIES: any = {
+  number: ['minimum'],
+  nan: ['minimum'],
+  integer: ['minimum'],
+  string: ['minLength'],
+  array: ['minItems'],
+  object: ['minProperties'],
+}
+
+const SIZE_MAX: any = {
+  minimum: 'maximum',
+  minLength: 'maxLength',
+  minItems: 'maxItems',
+  minProperties: 'maxProperties',
+}
+
+
+function checkSchema(n: Node<any>, s: any) {
+  const families = SIZE_FAMILIES[n.t] || keys(SIZE_MAX)
+  const vs: any[] = n.b.concat(n.a)
+
+  for (let vI = 0; vI < vs.length; vI++) {
+    const v = vs[vI]
+
+    // Catch, Transform and Ignore take the node's checks inside.
+    if (undefined !== v.inner) {
+      vs.push(...v.inner.b, ...v.inner.a)
+      continue
+    }
+
+    const name = v.n || v.name
+    if (S.Exact === name) {
+      s.enum = v.a.slice()
+    }
+    else if (undefined !== JSON_SCHEMA_FORMAT[name]) {
+      s.format = JSON_SCHEMA_FORMAT[name]
+    }
+    else if (S.Ip === name) {
+      s.anyOf = [{ format: 'ipv4' }, { format: 'ipv6' }]
+    }
+    else if (S.Min === name || S.Max === name || S.Above === name || S.Below === name ||
+      S.Len === name) {
+      const size = +v.a[0]
+      for (const lo of families) {
+        const hi = SIZE_MAX[lo]
+        const numeric = 'minimum' === lo
+        if (S.Min === name) {
+          s[lo] = size
+        }
+        else if (S.Max === name) {
+          s[hi] = size
+        }
+        else if (S.Above === name) {
+          numeric ? (s.exclusiveMinimum = size) : (s[lo] = size + 1)
+        }
+        else if (S.Below === name) {
+          numeric ? (s.exclusiveMaximum = size) : (s[hi] = size - 1)
+        }
+        else {
+          s[lo] = size
+          s[hi] = size
+        }
+      }
+    }
+    else if (S.string === typeof name && v.shape$?.Check && name.startsWith('/')) {
+      s.pattern = name.substring(1, name.lastIndexOf('/'))
+    }
+  }
 }
 
 
@@ -3706,6 +4155,7 @@ const BuilderMap = {
   Email,
   Empty,
   Exact,
+  Extend,
   Fault,
   Func,
   Ignore,
@@ -3719,9 +4169,12 @@ const BuilderMap = {
   Min,
   Never,
   Nullable,
+  Omit,
   One,
   Open,
   Optional,
+  Partial,
+  Pick,
   Refer,
   Rename,
   Required,
@@ -3771,6 +4224,7 @@ Object.assign(shapify, {
   buildize,
   makeErr,
   stringify,
+  jsonSchema,
   truncate,
   nodize,
   expr,
@@ -3786,6 +4240,7 @@ type ShapeShape = ReturnType<typeof shapify> &
   error: (root?: any, ctx?: Context) => ShapeError[],
   spec: () => any,
   node: () => Node<any>,
+  jsonSchema: () => any,
   isShape: (v: any) => boolean,
   shape: typeof SHAPE
 } & StandardSchemaV1
@@ -3797,6 +4252,7 @@ type Shape = typeof shapify & typeof BuilderMap & {
   buildize: typeof buildize,
   makeErr: typeof makeErr,
   stringify: typeof stringify,
+  jsonSchema: typeof jsonSchema,
   truncate: typeof truncate,
   nodize: typeof nodize,
   expr: typeof expr,
@@ -3821,6 +4277,10 @@ const GCoerce = Coerce
 const GCatch = Catch
 const GDescribe = Describe
 const GDiscriminated = Discriminated
+const GPick = Pick
+const GOmit = Omit
+const GPartial = Partial
+const GExtend = Extend
 const GTransform = Transform
 const GDateTime = DateTime
 const GEmail = Email
@@ -4032,6 +4492,10 @@ export {
   Define,
   Describe,
   Discriminated,
+  Extend,
+  Omit,
+  Partial,
+  Pick,
   Email,
   Empty,
   Exact,
@@ -4075,6 +4539,10 @@ export {
   GCatch,
   GDescribe,
   GDiscriminated,
+  GPick,
+  GOmit,
+  GPartial,
+  GExtend,
   GTransform,
   GDateTime,
   GEmail,

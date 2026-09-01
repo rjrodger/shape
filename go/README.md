@@ -7,8 +7,8 @@ validator. Your schema looks (almost) exactly like your data.
 import "github.com/rjrodger/shape/go"
 
 s := shape.MustShape(map[string]any{
-    "port":  8080,         // optional, defaults to 8080, must be a number
-    "host":  "localhost",  // optional, defaults to "localhost", must be a string
+    "port":  8080,          // optional, defaults to 8080, must be a number
+    "host":  "localhost",   // optional, defaults to "localhost", must be a string
     "debug": shape.Boolean, // required, must be a boolean
 })
 
@@ -16,13 +16,20 @@ out, err := s.Validate(map[string]any{"debug": true})
 // out == map[string]any{"port": 8080, "host": "localhost", "debug": true}
 ```
 
+The TypeScript implementation in [`../ts`](../ts/README.md) is canonical: this
+port matches it for validation outcomes, produced values and exact error text,
+and a [shared conformance corpus](../test/README.md) plus a
+[differential harness](../test/differential/README.md) keep it that way. The
+full documentation is in [`../docs`](../docs/README.md); this file is the Go
+surface in one place.
+
 ## Install
 
 ```
 go get github.com/rjrodger/shape/go
 ```
 
-Requires Go 1.22+.
+Requires Go 1.22+. The module has no dependencies.
 
 ## Concepts
 
@@ -34,30 +41,43 @@ a default**; sentinel tokens become **required**.
 Go cannot use predeclared types as runtime values, so the package exports
 sentinels for each kind:
 
-| Token             | Matches                                       |
-| ----------------- | --------------------------------------------- |
-| `shape.Any`       | any value                                     |
-| `shape.String`    | strings                                       |
-| `shape.Number`    | any numeric kind (`int*`, `uint*`, `float*`)  |
-| `shape.Boolean`   | booleans                                      |
-| `shape.Object`    | `map[string]any`                              |
-| `shape.Array`     | `[]any`                                       |
-| `shape.Function`  | `reflect.Func` values                         |
+| Token             | Matches                                                  |
+| ----------------- | -------------------------------------------------------- |
+| `shape.Any`       | any value (the one token that does not require a value)  |
+| `shape.String`    | strings (not the empty string, unless `Empty`)           |
+| `shape.Number`    | any numeric kind (`int*`, `uint*`, `float*`)             |
+| `shape.Integer`   | a number with no fractional part                         |
+| `shape.Boolean`   | booleans                                                 |
+| `shape.Object`    | `map[string]any` — open, as a token                      |
+| `shape.Array`     | `[]any` (typed slices are accepted and converted)        |
+| `shape.Function`  | `reflect.Func` values                                    |
+| `shape.Date`      | `time.Time` values                                       |
 
 If you prefer a dot-import without colliding with stdlib names, `G`-prefixed
-aliases are provided: `GString`, `GNumber`, `GBoolean`, `GRequired`, `GMin`,
-etc.
+aliases are provided for every token and builder: `GString`, `GNumber`,
+`GRequired`, `GMin`, `GPick`, etc.
+
+### Absent versus null
+
+Go has no `undefined`. A **missing** map key is absent — it may be defaulted or
+flagged required. An explicit `nil` value is a present null, a type error
+against a typed shape. At the top level `Validate(nil)` means "no value
+supplied" and fills defaults; pass `shape.Null` to mean a present null there.
 
 ### Objects
 
-Objects are **closed by default** — extra keys cause a validation error.
-Use `shape.Open(...)` to allow unknown properties, or `shape.Child(...)` to
-declare a default shape for unknown values.
+Objects are **closed by default** — extra keys cause a validation error. An
+empty `map[string]any{}` is open. Use `shape.Open(...)` to allow unknown
+properties, or `shape.Child(...)` to declare a shape for unknown values.
 
 ```go
-shape.MustShape(shape.Open(map[string]any{"a": 1})) // extra keys allowed
+shape.MustShape(shape.Open(map[string]any{"a": 1}))          // extra keys allowed
 shape.MustShape(shape.Child(shape.Number, map[string]any{})) // every value must be a number
 ```
+
+Go maps are unordered, so an object's keys are processed in **alphabetical**
+order: that fixes the order of multiple errors and how an object value is
+rendered inside a message. The produced value is unaffected.
 
 ### Arrays
 
@@ -82,6 +102,7 @@ shape.MustShapeWith(spec, opts)
 shape.Build(spec)                      // like Shape, but recursively expands string DSL
 shape.Expr("String.Min(2).Max(10)")    // parse the string DSL into a *Node
 shape.MustExpr(...)
+shape.IsShape(v)                       // is v a *Schema?
 ```
 
 ### Validation
@@ -94,10 +115,16 @@ ok       := s.Valid(input)             // alias of Match
 issues   := s.Error(input)             // []FieldError, nil when valid
 spec     := s.Spec()                   // structural snapshot of the compiled schema
 str      := s.String()                 // debug rendering
+schema   := s.JSONSchema()             // a JSON Schema (draft 2020-12), as map[string]any
 ```
 
-`*ValidationError` aggregates one or more `FieldError`s; each carries
-`Path`, `Key`, `Type`, `Value`, `Why`, `Mark`, and `Text`.
+Validation returns a new value; the input map is not mutated. Injected defaults
+are deep-cloned, so two results never share state.
+
+`*ValidationError` aggregates one or more `FieldError`s, joined by newline in
+`Error()`; each carries `Path`, `PathArr`, `Key`, `Type`, `Value`, `Why`,
+`Check`, `Mark`, `Args` and `Text`. The message text is identical to the
+TypeScript implementation's.
 
 ### Options
 
@@ -112,19 +139,23 @@ shape.ShapeOptions{
 ```
 
 With key-expression parsing on (the default), object keys may carry inline
-builders:
+builders, and the value is the example the builder works on:
 
 ```go
 shape.MustShape(map[string]any{
-    "name: Min(1)":  shape.String,
-    "tags: Max(10)": []any{shape.String},
+    "name: Min(1)":       shape.String,
+    "tags: Max(10)":      []any{shape.String},
+    "port: Optional(Number)": 8080,                    // optional, defaults to 8080
+    `user: Pick(["id"])`: map[string]any{"id": shape.Number, "name": shape.String},
 })
 ```
 
 ## Builders
 
-All builders have a top-level form **and** a chainable method form on `*Node`.
-Most accept an optional spec argument that the builder narrows or wraps.
+All builders have a top-level form **and**, unless noted, a chainable method
+form on `*Node`. Most accept an optional spec argument that the builder narrows
+or wraps. The [builder reference](../docs/reference/builders.md) has the
+detail; the tables here list the Go signatures.
 
 ### Required / optional / defaults
 
@@ -134,18 +165,26 @@ Most accept an optional spec argument that the builder narrows or wraps.
 | `Optional(spec?)`                | mark optional                                                      |
 | `Default(value, spec?)`          | optional with an explicit default                                  |
 | `Skip(spec?)`                    | optional, no default injection                                     |
-| `Ignore(spec?)`                  | like `Skip`, suppresses errors on the value                        |
+| `Ignore(spec?)`                  | like `Skip`, and drop the value if anything in its subtree fails   |
 | `Empty(spec?)`                   | allow the empty string for a `String` shape                        |
-| `Fault(msg, spec?)`              | override the error message produced when this node fails           |
+| `Nullable(spec?)`                | accept an explicit `nil` as the value                              |
+| `Fault(msg, spec?)`              | override the structural error message of this node                 |
 
-### Type / equality
+### Type / equality / coercion
 
 | Builder                          | Effect                                                             |
 | -------------------------------- | ------------------------------------------------------------------ |
-| `Type(kind, spec?)`              | force a specific `Kind` on the node                                |
-| `Exact(values...)`               | require equality with one of the listed literals                   |
+| `Type(kind, spec?)`              | force a `Kind`, `TypeToken`, kind name or node's type on the node  |
+| `Exact(values...)`               | require equality with one of the listed literals (top-level only)  |
 | `Never(spec?)`                   | always fails to match                                              |
-| `Func(spec?)`                    | require a function-typed value                                     |
+| `Func(spec?)`                    | a function-typed value; optional of itself (the `Function` token is required) |
+| `Coerce(spec?)`                  | convert a string/number/bool to the node's kind first, where unambiguous |
+| `.Any()`, `.Integer()`, `.Date()` | chain shortcuts for the `Any`, `Integer` and `Date` tokens        |
+
+### String formats
+
+`Email`, `Url`, `Uuid`, `DateTime`, `Ip`, `Ipv4`, `Ipv6` — each `(spec?)`,
+each requiring a string in that format; bare, a required string.
 
 ### Bounds
 
@@ -155,13 +194,16 @@ Most accept an optional spec argument that the builder narrows or wraps.
 | `Above(n, spec?)` / `Below(n, spec?)` | strict bounds                                                  |
 | `Len(n, spec?)`                  | exact value or collection length                                   |
 
-### Custom checks
+### Custom checks and isolation
 
 | Builder                                                    | Effect                                |
 | ---------------------------------------------------------- | ------------------------------------- |
 | `Check(fn or *regexp.Regexp, spec?)`                       | custom predicate                      |
 | `Before(fn, spec?)`                                        | run before structural type checks     |
 | `After(fn, spec?)`                                         | run after structural type checks      |
+| `Catch(fallback, spec?)`                                   | replace whatever fails inside with `fallback`, raising nothing |
+| `Transform(fn, spec?)`                                     | replace a valid value with `fn(value, state)` |
+| `Describe(text, spec?)`                                    | attach a description, read back with `n.Meta()["description"]` |
 
 Custom-check signature:
 
@@ -169,13 +211,18 @@ Custom-check signature:
 func(val any, update *shape.Update, state *shape.State) bool
 ```
 
+A `*regexp.Regexp` anywhere in a spec is a string that must match it.
+
 ### Composition
 
 | Builder                          | Effect                                                             |
 | -------------------------------- | ------------------------------------------------------------------ |
-| `One(shapes...)`                 | exactly one shape must match                                       |
+| `One(shapes...)`                 | the first matching shape's output is used                          |
 | `Some(shapes...)`                | at least one shape must match                                      |
 | `All(shapes...)`                 | every shape must match                                             |
+| `Discriminated(tag, branches)`   | a tagged union: `branches` is a `map[string]any` keyed by tag value |
+
+All four are top-level only.
 
 ### Objects / arrays
 
@@ -185,6 +232,18 @@ func(val any, update *shape.Update, state *shape.State) bool
 | `Child(child, spec?)`            | default child shape for an `Open` object or for an array           |
 | `Rest(child, spec?)`             | tail-shape for arrays past tuple positions                         |
 | `Rename(name, spec?)`, `RenameWith(name, opts, spec?)` | rename an object property after validation     |
+
+### Object algebra
+
+Each returns a **new** node, leaving the source unchanged. `names` is a
+`string`, `[]string` or `[]any`.
+
+| Builder                          | Effect                                                             |
+| -------------------------------- | ------------------------------------------------------------------ |
+| `Pick(names, spec?)`             | keep only the named properties (an unknown name is a fault)        |
+| `Omit(names, spec?)`             | drop the named properties                                          |
+| `Partial(spec?)`                 | make every declared property optional (shallow)                    |
+| `Extend(extra, spec?)`           | add the properties of `extra`; the base's openness and checks stay |
 
 ### References
 
@@ -200,17 +259,28 @@ func(val any, update *shape.Update, state *shape.State) bool
 | -------------------------------- | ------------------------------------------------------------------ |
 | `Key(args...)`                   | replace the value with the validation key (or path slice)          |
 
+### Construction faults
+
+A builder called wrongly — `Discriminated` without a branch, `Pick` of an
+unknown property — returns a node that fails at validation with the message
+TypeScript would have thrown, since a `*Node` cannot carry an error. In the
+string DSL, `Expr` returns the error.
+
 ## Example: composition and error handling
 
 ```go
 s := shape.MustShape(map[string]any{
     "name":   shape.Min(1, shape.String),
-    "age":    shape.Min(0, shape.Max(120, shape.Number)),
-    "email":  shape.Check(regexp.MustCompile(`^.+@.+$`)),
+    "age":    shape.Coerce(shape.Min(0, shape.Max(120, shape.Integer))),
+    "email":  shape.Email(),
     "role":   shape.Exact("admin", "user"),
     "tags":   shape.Optional([]any{shape.String}),
     "addr":   shape.Open(map[string]any{
         "city": shape.String,
+    }),
+    "pet": shape.Discriminated("kind", map[string]any{
+        "dog":  map[string]any{"bark": shape.Boolean},
+        "fish": map[string]any{"fins": shape.Number},
     }),
 })
 
@@ -222,10 +292,24 @@ if verr, ok := err.(*shape.ValidationError); ok {
 }
 ```
 
-## Status
+## Development
 
-The Go port covers the core TS behavior: required/optional semantics,
-default injection, object/array recursion, open/closed handling, the full
-builder set, key-expression parsing, the string DSL (`Expr` / `Build`), and
-`Define`/`Refer`. See `PLAN.md` for the original porting plan and design
-notes.
+```sh
+go build ./... && go vet ./... && go test -cover -count=1 .
+```
+
+The package is held at **100% statement coverage**, and Go has no coverage
+pragma: anything new is covered by a test or removed. `go test` also runs the
+shared corpus in `../test/*.tsv`; `make diff` from the repository root runs the
+differential harness against the TypeScript build. `expr.go` and `node.go`
+carry original-port formatting that is not gofmt-clean — leave their unrelated
+regions as they are; every other file is gofmt-clean.
+
+See [`../AGENTS.md`](../AGENTS.md) for the parity rules and the change
+checklist, and [`PLAN.md`](PLAN.md) for the original porting plan.
+
+## Version
+
+```go
+const Version = "0.2.0"
+```

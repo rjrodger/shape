@@ -23,6 +23,10 @@ function decodeSpec(v, Shape) {
       if ('$required' === k) return Shape.Required(decodeSpec(v.$required, Shape))
       if ('$optional' === k) return Shape.Optional(decodeSpec(v.$optional, Shape))
       if ('$expr' === k) return Shape.expr(v.$expr)
+      if ('$call' === k) {
+        const [name, ...args] = v.$call
+        return Shape[name](...args.map(a => decodeSpec(a, Shape)))
+      }
       if ('$discriminated' === k) {
         const [tag, branches] = v.$discriminated
         const out = {}

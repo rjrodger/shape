@@ -341,7 +341,9 @@ func Exact(vals ...any) *Node {
 					return true
 				}
 			}
-			if val == nil && state.Node.hasDefault {
+			// The default stands in for an absent value only; a present null
+			// is a value in its own right (TS: undefined === val).
+			if state.absent && state.Node.hasDefault {
 				for _, want := range vals {
 					if reflect.DeepEqual(state.Node.defaultValue, want) {
 						return true
@@ -729,7 +731,10 @@ func makeListBuilder(mode listMode, shapes []any) *Node {
 func Child(child any, spec ...any) *Node {
 	var nb *Node
 	if len(spec) == 0 {
+		// Given no shape, Child is an object with the empty default TS gives
+		// it (f = {}), which its JSON Schema carries.
 		nb = buildize(map[string]any{})
+		nb.n.hasDefault = true
 	} else {
 		nb = buildize(spec[0])
 	}
@@ -958,6 +963,9 @@ func RenameWith(name string, opts RenameOptions, spec ...any) *Node {
 }
 
 // Func declares a function-typed value (best-effort: any reflect.Func value).
+// It is a builder, not a type token, so it does not require a value of
+// itself: TS Func() leaves the node optional, and { n: Func() } accepts an
+// object without n. The Function token is the required form.
 func Func(spec ...any) *Node {
 	var nb *Node
 	if len(spec) == 0 {
@@ -966,21 +974,12 @@ func Func(spec ...any) *Node {
 		nb = buildize(spec[0])
 	}
 	nb.n.kind = KindFunction
-	nb.n.required = true
-	nb.n.requiredSet = true
 	return nb
 }
 
-// Func (chained).
+// Func (chained): the receiver's required state is kept.
 func (n *Node) Func() *Node {
 	n.n.kind = KindFunction
-	// Only assert requiredness if the chain has not already stated it: TS
-	// merges the receiver's flags over the builder's, so Optional().Func()
-	// stays optional.
-	if !n.n.requiredSet {
-		n.n.required = true
-		n.n.requiredSet = true
-	}
 	return n
 }
 
@@ -1114,6 +1113,8 @@ var (
 	GObject   = Object
 	GArray    = Array
 	GFunction = Function
+	GInteger  = Integer
+	GDate     = Date
 )
 
 // Builder aliases (functions, not vars, so they can be method-valued).
@@ -1329,4 +1330,23 @@ func formatList(vals []any) string {
 		}
 	}
 	return out
+}
+
+// G-prefixed aliases for the builders added since v10, for a dot-import.
+func GNullable(spec ...any) *Node                     { return Nullable(spec...) }
+func GCoerce(spec ...any) *Node                       { return Coerce(spec...) }
+func GEmail(spec ...any) *Node                        { return Email(spec...) }
+func GUrl(spec ...any) *Node                          { return Url(spec...) }
+func GUuid(spec ...any) *Node                         { return Uuid(spec...) }
+func GDateTime(spec ...any) *Node                     { return DateTime(spec...) }
+func GIp(spec ...any) *Node                           { return Ip(spec...) }
+func GIpv4(spec ...any) *Node                         { return Ipv4(spec...) }
+func GIpv6(spec ...any) *Node                         { return Ipv6(spec...) }
+func GCatch(fallback any, spec ...any) *Node          { return Catch(fallback, spec...) }
+func GDescribe(description string, spec ...any) *Node { return Describe(description, spec...) }
+func GDiscriminated(tag string, branches map[string]any) *Node {
+	return Discriminated(tag, branches)
+}
+func GTransform(fn func(val any, state *State) any, spec ...any) *Node {
+	return Transform(fn, spec...)
 }

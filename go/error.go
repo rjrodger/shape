@@ -173,13 +173,15 @@ func defaultErrText(e FieldError) string {
 	if e.parentArr || strings.HasPrefix(valstr, "[") {
 		propkind = "index"
 	}
+	// Rendered raw inside the quotes, as TS does: a key holding a backslash
+	// or a quote is not escaped again.
 	pathPart := ""
 	if e.Path != "" {
-		pathPart = fmt.Sprintf("%s %q with ", propkind, e.Path)
+		pathPart = fmt.Sprintf("%s \"%s\" with ", propkind, e.Path)
 	}
 	switch e.Why {
 	case WhyType:
-		return fmt.Sprintf("Validation failed for %s%s %q because the %s is not of type %s.",
+		return fmt.Sprintf("Validation failed for %s%s \"%s\" because the %s is not of type %s.",
 			pathPart, valkind, valstr, valkind, e.Type)
 	case WhyRequired:
 		if e.Value == "" || e.Value == nil {
@@ -188,13 +190,13 @@ func defaultErrText(e FieldError) string {
 				emptyTxt = "an empty string is not allowed"
 			}
 			if e.Path == "" {
-				return fmt.Sprintf("Validation failed for %s %q because %s.",
+				return fmt.Sprintf("Validation failed for %s \"%s\" because %s.",
 					valkind, valstr, emptyTxt)
 			}
-			return fmt.Sprintf("Validation failed for %s%s %q because %s.",
+			return fmt.Sprintf("Validation failed for %s%s \"%s\" because %s.",
 				pathPart, valkind, valstr, emptyTxt)
 		}
-		return fmt.Sprintf("Validation failed for %s%s %q because the %s is required.",
+		return fmt.Sprintf("Validation failed for %s%s \"%s\" because the %s is required.",
 			pathPart, valkind, valstr, valkind)
 	case WhyClosed:
 		// TS pattern: parent is mentioned only if path != "". The offending key is
@@ -207,16 +209,16 @@ func defaultErrText(e FieldError) string {
 			noun, verb = "properties", "are"
 		}
 		if e.Path == "" {
-			return fmt.Sprintf("Validation failed for %s %q because the %s %q %s not allowed.",
+			return fmt.Sprintf("Validation failed for %s \"%s\" because the %s \"%s\" %s not allowed.",
 				valkind, valstr, noun, e.Key, verb)
 		}
-		return fmt.Sprintf("Validation failed for %s%s %q because the %s %q %s not allowed.",
+		return fmt.Sprintf("Validation failed for %s%s \"%s\" because the %s \"%s\" %s not allowed.",
 			pathPart, valkind, valstr, noun, e.Key, verb)
 	case WhyNever:
-		return fmt.Sprintf("Validation failed for %s%s %q because no value is allowed.",
+		return fmt.Sprintf("Validation failed for %s%s \"%s\" because no value is allowed.",
 			pathPart, valkind, valstr)
 	case WhyRegexp:
-		return fmt.Sprintf("Validation failed for %s%s %q because the %s did not match %s.",
+		return fmt.Sprintf("Validation failed for %s%s \"%s\" because the %s did not match %s.",
 			pathPart, valkind, valstr, valkind, e.regexpSrc)
 	default:
 		// TS: check "<fname or why>" failed — prefer the check name.
@@ -224,7 +226,7 @@ func defaultErrText(e FieldError) string {
 		if name == "" {
 			name = e.Why
 		}
-		return fmt.Sprintf("Validation failed for %s%s %q because check %q failed.",
+		return fmt.Sprintf("Validation failed for %s%s \"%s\" because check \"%s\" failed.",
 			pathPart, valkind, valstr, name)
 	}
 }
@@ -235,7 +237,9 @@ func valueToString(v any) string {
 	}
 	switch x := v.(type) {
 	case string:
-		return truncateText(x, errValueLimit)
+		// As TS renders it: JSON-escaped, with the quotes stripped, so that a
+		// backslash reads as \\ and a quote as \ — then truncated.
+		return truncateText(strings.ReplaceAll(jsonText(x), `"`, ""), errValueLimit)
 	case bool:
 		if x {
 			return "true"
@@ -272,8 +276,8 @@ func jsonRender(v any) string {
 		}
 		return "[" + strings.Join(parts, ",") + "]"
 	case string:
-		b, _ := json.Marshal(x)
-		return string(b)
+		// jsonText, not json.Marshal: no HTML escaping, as JSON.stringify.
+		return jsonText(x)
 	case bool:
 		if x {
 			return "true"

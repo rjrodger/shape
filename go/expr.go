@@ -157,7 +157,7 @@ func (p *exprParser) parseFull() (*Node, error) {
 		}
 		val = next
 	}
-	return val, nil
+	return buildize(val), nil
 }
 
 // parseTerm parses a single primary: a builder call, type token, literal, or regex.
@@ -185,24 +185,21 @@ func (p *exprParser) parseTerm(top bool) (*Node, error) {
 		}
 		// A type token with arguments applies the type to them, as TS does
 		// (String(Min(2)) is Type('String', Min(2))); the arguments used to be
-		// parsed and dropped. Bare, the token's own node is built rather than
-		// Required(tok): Any is the one token that does not require a value.
-		if len(args) > 0 {
-			return Type(tok, exprShapes(args)...), nil
-		}
-		return newNodeWrap(typeTokenNode(tok.kind)), nil
+		// parsed and dropped. Bare, it is Type(tok) as well — which is how TS
+		// reads the token, so that a bare Object is closed, as Type(Object)
+		// is, rather than the open object the Object token stands for in a
+		// map. Any still does not require a value.
+		return Type(tok, exprShapes(args)...), nil
 	}
 	if head == "NaN" {
 		_, _ = p.parseArgs()
-		nb := buildize(nil)
-		nb.n.kind = KindNaN
-		nb.n.required = true
-		return nb, nil
+		return newNodeWrap(nanNode()), nil
 	}
 	if head == "undefined" || head == "null" {
 		_, _ = p.parseArgs()
 		nb := buildize(nil)
 		nb.n.kind = KindNull
+		nb.n.hasDefault = true
 		return nb, nil
 	}
 	if strings.HasPrefix(head, "/") && strings.HasSuffix(head, "/") && len(head) >= 2 {
@@ -230,10 +227,10 @@ func (p *exprParser) parseTerm(top bool) (*Node, error) {
 	return nil, fmt.Errorf("Shape: unexpected token %s in builder expression %s", head, p.src)
 }
 
-func (p *exprParser) parseChained(carrier *Node) (*Node, error) {
+func (p *exprParser) parseChained(carrier any) (*Node, error) {
 	head := p.take()
 	if head == "" {
-		return carrier, nil
+		return buildize(carrier), nil
 	}
 	if fn, ok := getExprBuilders()[head]; ok {
 		args, err := p.parseArgs()
@@ -257,13 +254,13 @@ func (p *exprParser) parseChained(carrier *Node) (*Node, error) {
 // expr(src, current) — the builders mutate the carrier in place. Used by
 // value expressions (the "$$" keymark) so that e.g. "Open" opens the parent
 // object rather than replacing it.
-func exprApply(src string, carrier *Node) (*Node, error) {
+func exprApply(src string, carrier any) (*Node, error) {
 	tokens, err := tokenize(src)
 	if err != nil {
 		return nil, err
 	}
 	p := &exprParser{tokens: tokens, src: src}
-	val := carrier
+	var val any = carrier
 	for p.peek() != "" {
 		if p.peek() == "." {
 			p.take()
@@ -274,7 +271,7 @@ func exprApply(src string, carrier *Node) (*Node, error) {
 		}
 		val = next
 	}
-	return val, nil
+	return buildize(val), nil
 }
 
 // parseArgs reads "( arg, arg, ... )" if next token is "(".
@@ -323,16 +320,11 @@ func (p *exprParser) parseArg() (any, error) {
 		if err != nil {
 			return nil, err
 		}
-		if len(args) > 0 {
-			return chainContinuation(p, Type(tok, exprShapes(args)...))
-		}
-		return chainContinuation(p, newNodeWrap(typeTokenNode(tok.kind)))
+		// Type(tok), bare or with arguments, as in parseTerm.
+		return chainContinuation(p, Type(tok, exprShapes(args)...))
 	}
 	if head == "NaN" {
-		nb := buildize(nil)
-		nb.n.kind = KindNaN
-		nb.n.required = true
-		return chainContinuation(p, nb)
+		return chainContinuation(p, newNodeWrap(nanNode()))
 	}
 	if head == "undefined" || head == "null" {
 		return nil, nil
@@ -438,6 +430,27 @@ func buildExprBuilders() map[string]exprBuilderFn {
 			return nil, fmt.Errorf("Describe: description must be a string")
 		}
 		return Describe(msg, exprShapes(args[1:])...), nil
+	},
+	"Pick": func(args []builderArg) (*Node, error) {
+		if len(args) < 1 {
+			return nil, fmt.Errorf("Pick: missing property names")
+		}
+		return algebraExpr(pickNode(args[0], exprShapes(args[1:])))
+	},
+	"Omit": func(args []builderArg) (*Node, error) {
+		if len(args) < 1 {
+			return nil, fmt.Errorf("Omit: missing property names")
+		}
+		return algebraExpr(omitNode(args[0], exprShapes(args[1:])))
+	},
+	"Partial": func(args []builderArg) (*Node, error) {
+		return algebraExpr(partialNode(exprShapes(args)))
+	},
+	"Extend": func(args []builderArg) (*Node, error) {
+		if len(args) < 1 {
+			return nil, fmt.Errorf("Extend: missing extension")
+		}
+		return algebraExpr(extendNode(exprShape(args[0]), exprShapes(args[1:])))
 	},
 	"Fault": func(args []builderArg) (*Node, error) {
 		if len(args) < 1 {
@@ -556,6 +569,15 @@ func buildExprBuilders() map[string]exprBuilderFn {
 	}
 }
 
+// algebraExpr is algebraNode for the expression dispatcher, where a
+// construction fault is an expression error, as it is thrown in TS.
+func algebraExpr(n *node, err error) (*Node, error) {
+	if err != nil {
+		return nil, fmt.Errorf("Shape: %s", err.Error())
+	}
+	return newNodeWrap(n), nil
+}
+
 // variadicNode wraps a builder of signature `func(spec ...any) *Node` for the
 // expression dispatcher.
 func variadicNode(fn func(spec ...any) *Node) exprBuilderFn {
@@ -572,7 +594,7 @@ func exprShapes(args []builderArg) []any {
 	out := make([]any, len(args))
 	for i, a := range args {
 		if a == nil {
-			out[i] = newNodeWrap(&node{kind: KindNull})
+			out[i] = newNodeWrap(&node{kind: KindNull, hasDefault: true})
 			continue
 		}
 		out[i] = a

@@ -43,6 +43,8 @@ builder in both languages:
 | `{"$required":X}`            | `Required(X)`                       |
 | `{"$optional":X}`            | `Optional(X)`                       |
 | `{"$expr":"Min(2,String)"}`  | the string DSL, compiled (`expr`)   |
+| `{"$discriminated":[tag, {…}]}` | `Discriminated(tag, branches)`  |
+| `{"$call":["Pick", ["a"], X]}` | the named builder called with these arguments, for a builder whose arguments the DSL cannot express (a list, an object): `Pick`, `Omit`, `Partial`, `Extend` |
 
 A `{"$expr":"…"}` cell unlocks the entire builder DSL in a single row. Object
 keys of the form `"name: Min(1)"` exercise key-expression parsing directly.
