@@ -361,13 +361,11 @@ func Min(min any, spec ...any) *Node {
 		name: "Min",
 		args: []any{min},
 		fn: func(val any, update *Update, state *State) bool {
-			vsize, ok := valueLen(val)
-			if !ok {
-				update.Err = makeErr(state, WhyMin, 4011,
-					fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" must be a minimum of %v.", min))
-				return false
+			if boundDefers(state) {
+				return true
 			}
-			if limit <= vsize {
+			vsize, ok := valueLen(val)
+			if ok && limit <= vsize {
 				return true
 			}
 			lenpart := ""
@@ -375,22 +373,23 @@ func Min(min any, spec ...any) *Node {
 				lenpart = "length "
 			}
 			update.Why = WhyMin
+			update.Done = true
 			update.Mark = 4011
 			update.Err = makeErr(state, WhyMin, 4011,
-				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" must be a minimum %sof %v (was %v).",
-					lenpart, min, fmtFloat(vsize)))
+				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" must be a minimum %sof %v (was %s).",
+					lenpart, min, sizeText(vsize, ok)))
 			return false
 		},
 		stringify: func() string { return fmt.Sprintf("Min(%v)", min) },
 	}
-	nb.n.afters = append(nb.n.afters, v)
+	nb.n.befores = append(nb.n.befores, v)
 	return nb
 }
 
 // Min (chained).
 func (n *Node) Min(min any) *Node {
 	other := Min(min)
-	n.n.afters = append(n.n.afters, other.n.afters...)
+	n.n.befores = append(n.n.befores, other.n.befores...)
 	return n
 }
 
@@ -407,13 +406,11 @@ func Max(max any, spec ...any) *Node {
 		name: "Max",
 		args: []any{max},
 		fn: func(val any, update *Update, state *State) bool {
-			vsize, ok := valueLen(val)
-			if !ok {
-				update.Err = makeErr(state, WhyMax, 4012,
-					fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" must be a maximum of %v.", max))
-				return false
+			if boundDefers(state) {
+				return true
 			}
-			if vsize <= limit {
+			vsize, ok := valueLen(val)
+			if ok && vsize <= limit {
 				return true
 			}
 			lenpart := ""
@@ -421,22 +418,23 @@ func Max(max any, spec ...any) *Node {
 				lenpart = "length "
 			}
 			update.Why = WhyMax
+			update.Done = true
 			update.Mark = 4012
 			update.Err = makeErr(state, WhyMax, 4012,
-				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" must be a maximum %sof %v (was %v).",
-					lenpart, max, fmtFloat(vsize)))
+				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" must be a maximum %sof %v (was %s).",
+					lenpart, max, sizeText(vsize, ok)))
 			return false
 		},
 		stringify: func() string { return fmt.Sprintf("Max(%v)", max) },
 	}
-	nb.n.afters = append(nb.n.afters, v)
+	nb.n.befores = append(nb.n.befores, v)
 	return nb
 }
 
 // Max (chained).
 func (n *Node) Max(max any) *Node {
 	other := Max(max)
-	n.n.afters = append(n.n.afters, other.n.afters...)
+	n.n.befores = append(n.n.befores, other.n.befores...)
 	return n
 }
 
@@ -453,11 +451,11 @@ func Above(above any, spec ...any) *Node {
 		name: "Above",
 		args: []any{above},
 		fn: func(val any, update *Update, state *State) bool {
-			vsize, ok := valueLen(val)
-			if !ok {
-				return false
+			if boundDefers(state) {
+				return true
 			}
-			if limit < vsize {
+			vsize, ok := valueLen(val)
+			if ok && limit < vsize {
 				return true
 			}
 			verb := "be"
@@ -465,22 +463,23 @@ func Above(above any, spec ...any) *Node {
 				verb = "have length"
 			}
 			update.Why = WhyAbove
+			update.Done = true
 			update.Mark = 4013
 			update.Err = makeErr(state, WhyAbove, 4013,
-				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" must %s above %v (was %v).",
-					verb, above, fmtFloat(vsize)))
+				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" must %s above %v (was %s).",
+					verb, above, sizeText(vsize, ok)))
 			return false
 		},
 		stringify: func() string { return fmt.Sprintf("Above(%v)", above) },
 	}
-	nb.n.afters = append(nb.n.afters, v)
+	nb.n.befores = append(nb.n.befores, v)
 	return nb
 }
 
 // Above (chained).
 func (n *Node) Above(above any) *Node {
 	other := Above(above)
-	n.n.afters = append(n.n.afters, other.n.afters...)
+	n.n.befores = append(n.n.befores, other.n.befores...)
 	return n
 }
 
@@ -497,11 +496,11 @@ func Below(below any, spec ...any) *Node {
 		name: "Below",
 		args: []any{below},
 		fn: func(val any, update *Update, state *State) bool {
-			vsize, ok := valueLen(val)
-			if !ok {
-				return false
+			if boundDefers(state) {
+				return true
 			}
-			if vsize < limit {
+			vsize, ok := valueLen(val)
+			if ok && vsize < limit {
 				return true
 			}
 			verb := "be"
@@ -509,22 +508,23 @@ func Below(below any, spec ...any) *Node {
 				verb = "have length"
 			}
 			update.Why = WhyBelow
+			update.Done = true
 			update.Mark = 4014
 			update.Err = makeErr(state, WhyBelow, 4014,
-				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" must %s below %v (was %v).",
-					verb, below, fmtFloat(vsize)))
+				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" must %s below %v (was %s).",
+					verb, below, sizeText(vsize, ok)))
 			return false
 		},
 		stringify: func() string { return fmt.Sprintf("Below(%v)", below) },
 	}
-	nb.n.afters = append(nb.n.afters, v)
+	nb.n.befores = append(nb.n.befores, v)
 	return nb
 }
 
 // Below (chained).
 func (n *Node) Below(below any) *Node {
 	other := Below(below)
-	n.n.afters = append(n.n.afters, other.n.afters...)
+	n.n.befores = append(n.n.befores, other.n.befores...)
 	return n
 }
 
@@ -541,11 +541,11 @@ func Len(length int, spec ...any) *Node {
 		name: "Len",
 		args: []any{length},
 		fn: func(val any, update *Update, state *State) bool {
-			vsize, ok := valueLen(val)
-			if !ok {
-				return false
+			if boundDefers(state) {
+				return true
 			}
-			if vsize == limit {
+			vsize, ok := valueLen(val)
+			if ok && vsize == limit {
 				return true
 			}
 			suffix := ""
@@ -553,22 +553,23 @@ func Len(length int, spec ...any) *Node {
 				suffix = " in length"
 			}
 			update.Why = WhyLen
+			update.Done = true
 			update.Mark = 4015
 			update.Err = makeErr(state, WhyLen, 4015,
-				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" must be exactly %d%s (was %v).",
-					length, suffix, fmtFloat(vsize)))
+				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" must be exactly %d%s (was %s).",
+					length, suffix, sizeText(vsize, ok)))
 			return false
 		},
 		stringify: func() string { return fmt.Sprintf("Len(%d)", length) },
 	}
-	nb.n.afters = append(nb.n.afters, v)
+	nb.n.befores = append(nb.n.befores, v)
 	return nb
 }
 
 // Len (chained).
 func (n *Node) Len(length int) *Node {
 	other := Len(length)
-	n.n.afters = append(n.n.afters, other.n.afters...)
+	n.n.befores = append(n.n.befores, other.n.befores...)
 	return n
 }
 
@@ -1152,6 +1153,51 @@ func toFloat(v any) float64 {
 
 // valueLen mirrors TS valueLen: number → number, otherwise length-of-string/array
 // or count of object keys. ok=false if not measurable.
+// boundDefers reports whether a size bound should stand aside and let the rest
+// of validation speak. Two cases: the value is of the wrong type, so the
+// structural check is about to report that and a bound message would mask it;
+// or the value is absent on a node that does not require it, which TS drops.
+// Mirrors TS typeWillFail plus the undefined guard in handleValidate.
+func boundDefers(state *State) bool {
+	n := state.Node
+	if state.absent && (n.skippable || !n.required) {
+		return true
+	}
+	return typeWillFail(n, state.Value)
+}
+
+// typeWillFail reports whether the node declares a concrete type that this
+// value does not have.
+func typeWillFail(n *node, val any) bool {
+	switch n.kind {
+	case KindString:
+		_, ok := val.(string)
+		return !ok
+	case KindNumber:
+		return !isNumber(val) || isNaN(val)
+	case KindBoolean:
+		_, ok := val.(bool)
+		return !ok
+	case KindObject:
+		_, ok := val.(map[string]any)
+		return !ok
+	case KindArray:
+		return !isAnyArray(val)
+	case KindFunction:
+		return !isFunction(val)
+	}
+	return false
+}
+
+// sizeText renders a measured size, or NaN when the value has none — a boolean
+// or null has no length, and TS reports "(was NaN)" rather than omitting it.
+func sizeText(vsize float64, ok bool) string {
+	if !ok {
+		return "NaN"
+	}
+	return fmtFloat(vsize)
+}
+
 func valueLen(v any) (float64, bool) {
 	if v == nil {
 		return 0, false
@@ -1185,6 +1231,8 @@ func formatList(vals []any) string {
 		}
 		// TS renders Exact values dequoted (stringify(v, true)), e.g. admin, user.
 		switch x := v.(type) {
+		case nil:
+			out += "null"
 		case string:
 			out += x
 		default:

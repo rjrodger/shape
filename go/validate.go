@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"sort"
 	"strconv"
 )
 
@@ -141,7 +142,7 @@ func validateNode(n *node, in any, path []string, pathArr []any, key string, par
 
 	// Composition shortcuts.
 	if n.kind == KindList {
-		out := evaluateList(n, state.Value, path, pathArr, key, parent, ctx, match, verr)
+		out := evaluateList(n, state.Value, path, pathArr, key, parent, ctx, match, verr, absent)
 		state.Value = out
 		runAfters(state, verr)
 		return state.Value
@@ -161,11 +162,17 @@ func validateNode(n *node, in any, path []string, pathArr []any, key string, par
 		return state.Value
 	}
 
+	// A regexp node never reports "required": TS treats an absent value as a
+	// non-string and reports the type error, or ignores it when not required.
+	if n.kind == KindRegexp && state.Value == nil && absent && !n.required {
+		return nil
+	}
+
 	// Missing value (JS undefined): required error, skip, or inject the default.
 	// An explicit null (present, not absent) falls through to structural checks
 	// below — where, e.g., null against a String is a type error, not a required
 	// error (mirrors TS undefined-vs-null semantics).
-	if state.Value == nil && absent {
+	if state.Value == nil && absent && n.kind != KindRegexp {
 		if n.required {
 			err := makeErr(state, WhyRequired, requiredMarkFor(n.kind), "")
 			if n.faultMsg != "" {
@@ -266,12 +273,12 @@ func validateNode(n *node, in any, path []string, pathArr []any, key string, par
 			return state.Value
 		}
 	case KindArray:
-		out = validateArray(n, state.Value, path, pathArr, ctx, match, verr)
+		out = validateArray(n, state.Value, path, pathArr, parent, ctx, match, verr)
 		if out == nil {
 			return state.Value
 		}
 	case KindObject:
-		out = validateObject(n, state.Value, path, pathArr, ctx, match, verr)
+		out = validateObject(n, state.Value, path, pathArr, parent, ctx, match, verr)
 		if out == nil {
 			return state.Value
 		}
@@ -318,10 +325,10 @@ func runAfters(state *State, verr *ValidationError) {
 	}
 }
 
-func validateArray(n *node, in any, path []string, pathArr []any, ctx *Context, match bool, verr *ValidationError) any {
+func validateArray(n *node, in any, path []string, pathArr []any, parent any, ctx *Context, match bool, verr *ValidationError) any {
 	arr, ok := toAnySlice(in)
 	if !ok {
-		state := &State{Path: path, PathArr: pathArr, Value: in, Node: n, Match: match, Ctx: ctx}
+		state := &State{Path: path, PathArr: pathArr, Value: in, Node: n, Parent: parent, Match: match, Ctx: ctx}
 		emitTypeErr(state, verr, n)
 		return nil
 	}
@@ -382,10 +389,10 @@ func validateArray(n *node, in any, path []string, pathArr []any, ctx *Context, 
 	}
 }
 
-func validateObject(n *node, in any, path []string, pathArr []any, ctx *Context, match bool, verr *ValidationError) any {
+func validateObject(n *node, in any, path []string, pathArr []any, parent any, ctx *Context, match bool, verr *ValidationError) any {
 	obj, ok := in.(map[string]any)
 	if !ok {
-		state := &State{Path: path, PathArr: pathArr, Value: in, Node: n, Match: match, Ctx: ctx}
+		state := &State{Path: path, PathArr: pathArr, Value: in, Node: n, Parent: parent, Match: match, Ctx: ctx}
 		emitTypeErr(state, verr, n)
 		return nil
 	}
@@ -406,6 +413,30 @@ func validateObject(n *node, in any, path []string, pathArr []any, ctx *Context,
 		}
 		for _, src := range cn.renameClaim {
 			consumed[src] = true
+		}
+	}
+
+	// Unknown keys are reported before descending into the declared ones, which
+	// is the order TS emits them in. The keys are sorted because Go map
+	// iteration is random and the message order is compared exactly.
+	if !n.open {
+		unknown := make([]string, 0, len(obj))
+		for k := range obj {
+			if !consumed[k] {
+				unknown = append(unknown, k)
+			}
+		}
+		sort.Strings(unknown)
+
+		for _, k := range unknown {
+			// The path is the parent's; the offending key is reported separately.
+			// TS renders this as:
+			//   Validation failed for property "<parent>" because the property "<k>" is not allowed.
+			state := &State{Path: path, PathArr: pathArr, Key: k, Value: obj, Node: n, Match: match, Ctx: ctx}
+			err := makeErr(state, WhyClosed, markObjectClosed, "")
+			if !n.silent {
+				verr.add(err)
+			}
 		}
 	}
 
@@ -480,36 +511,26 @@ func validateObject(n *node, in any, path []string, pathArr []any, ctx *Context,
 		}
 	}
 
-	switch {
-	case n.open && n.objRest != nil:
-		for k, v := range obj {
-			if _, declared := n.objChildren[k]; declared {
-				continue
-			}
-			out[k] = validateNode(n.objRest, v, append(path, k), append(pathArr, k), k, out, ctx, match, verr)
-		}
-	case n.open:
-		// keep unknown as-is
-	default:
+	if n.open && n.objRest != nil {
+		// Sorted: Go map iteration is random and the message order is compared
+		// exactly, so an unsorted walk makes the error order flaky.
+		rest := make([]string, 0, len(obj))
 		for k := range obj {
-			if consumed[k] {
-				continue
+			if _, declared := n.objChildren[k]; !declared {
+				rest = append(rest, k)
 			}
-			// Closed: path is the parent's path; the offending key is
-			// reported separately. TS makeErrImpl renders this as:
-			//   Validation failed for property "<parent>" because the property "<k>" is not allowed.
-			state := &State{Path: path, PathArr: pathArr, Key: k, Value: obj, Node: n, Match: match, Ctx: ctx}
-			err := makeErr(state, WhyClosed, markObjectClosed, "")
-			if !n.silent {
-				verr.add(err)
-			}
+		}
+		sort.Strings(rest)
+
+		for _, k := range rest {
+			out[k] = validateNode(n.objRest, obj[k], append(path, k), append(pathArr, k), k, out, ctx, match, verr)
 		}
 	}
 
 	return out
 }
 
-func evaluateList(n *node, in any, path []string, pathArr []any, key string, parent any, ctx *Context, match bool, verr *ValidationError) any {
+func evaluateList(n *node, in any, path []string, pathArr []any, key string, parent any, ctx *Context, match bool, verr *ValidationError, absent bool) any {
 	switch n.listMode {
 	case listOne:
 		passN := 0
@@ -531,7 +552,7 @@ func evaluateList(n *node, in any, path []string, pathArr []any, key string, par
 			}
 		}
 		if passN != 1 {
-			state := &State{Path: path, PathArr: pathArr, Key: key, Value: in, Node: n, Match: match, Ctx: ctx}
+			state := &State{Path: path, PathArr: pathArr, Key: key, Value: in, Node: n, Match: match, Ctx: ctx, absent: absent}
 			err := makeErr(state, WhyOne, 4030,
 				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" does not satisfy one of: %s", listShapeNames(n)))
 			if n.faultMsg != "" {
@@ -556,7 +577,7 @@ func evaluateList(n *node, in any, path []string, pathArr []any, key string, par
 			}
 		}
 		if !matched {
-			state := &State{Path: path, PathArr: pathArr, Key: key, Value: in, Node: n, Match: match, Ctx: ctx}
+			state := &State{Path: path, PathArr: pathArr, Key: key, Value: in, Node: n, Match: match, Ctx: ctx, absent: absent}
 			err := makeErr(state, WhySome, 4031,
 				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" does not satisfy any of: %s", listShapeNames(n)))
 			if n.faultMsg != "" {
@@ -575,16 +596,15 @@ func evaluateList(n *node, in any, path []string, pathArr []any, key string, par
 			sub := &ValidationError{}
 			res := validateNode(sn, out, path, pathArr, key, parent, ctx, match, sub)
 			if sub.hasAny() {
+				// The branch errors are diagnostic only: TS collects them into a
+				// throwaway context and reports just the composite failure.
 				passAll = false
-				if !match {
-					verr.Issues = append(verr.Issues, sub.Issues...)
-				}
 			} else {
 				out = res
 			}
 		}
 		if !passAll {
-			state := &State{Path: path, PathArr: pathArr, Key: key, Value: in, Node: n, Match: match, Ctx: ctx}
+			state := &State{Path: path, PathArr: pathArr, Key: key, Value: in, Node: n, Match: match, Ctx: ctx, absent: absent}
 			err := makeErr(state, WhyAll, 4032,
 				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" does not satisfy all of: %s", listShapeNames(n)))
 			if !n.silent {

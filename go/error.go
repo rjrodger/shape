@@ -79,7 +79,8 @@ func (e *ValidationError) Error() string {
 	for i, issue := range e.Issues {
 		parts[i] = issue.Error()
 	}
-	return strings.Join(parts, "; ")
+	// Newline, as TS joins aggregated messages (shape.ts ValidationError).
+	return strings.Join(parts, "\n")
 }
 
 func (e *ValidationError) add(err FieldError) {
@@ -123,11 +124,21 @@ func makeErr(s *State, why string, mark int, text string) FieldError {
 		}
 	}
 	if text != "" {
-		err.Text = expandErrText(text, err.Path, s.Value)
+		err.Text = expandErrTextFor(text, err.Path, s.Value, err.absent)
 	} else {
 		err.Text = defaultErrText(err)
 	}
 	return err
+}
+
+// expandErrTextFor expands a message template, rendering a missing value as
+// "undefined" rather than "null" — TS distinguishes the two.
+func expandErrTextFor(text, path string, val any, absent bool) string {
+	if absent {
+		out := strings.ReplaceAll(text, "$PATH", path)
+		return strings.ReplaceAll(out, "$VALUE", "undefined")
+	}
+	return expandErrText(text, path, val)
 }
 
 func expandErrText(text, path string, val any) string {

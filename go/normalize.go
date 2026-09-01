@@ -266,6 +266,18 @@ func buildExprWithDefault(src string, dflt any) (*Node, error) {
 		exprNode.n.hasLiteral = true
 		exprNode.n.literal = dflt
 
+		// The literal is the carrier the expression applies to (TS applies the
+		// expression to the value node), so an untyped expression takes the
+		// literal's kind: "a: Min(2)" with 0 is a number with a lower bound,
+		// not an untyped value with one — and a non-number then fails the type
+		// check rather than the bound.
+		if exprNode.n.kind == KindAny {
+			if dn, nerr := normalize(dflt); nerr == nil {
+				exprNode.n.kind = dn.kind
+				exprNode.n.empty = exprNode.n.empty || dn.empty
+			}
+		}
+
 		// The default only makes the key optional when the expression has not
 		// already said otherwise. TS applies the expression to the value as a
 		// carrier, so an explicit type token in the key ("a: String") keeps its

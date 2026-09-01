@@ -536,7 +536,7 @@ func TestZZValidateAftersAndLists(t *testing.T) {
 
 	// evaluateList with no list mode returns the input (527).
 	if got := evaluateList(&node{kind: KindList, listMode: listNone}, 5.0,
-		[]string{}, []any{}, "", nil, newContext(nil), false, &ValidationError{}); got != 5.0 {
+		[]string{}, []any{}, "", nil, newContext(nil), false, &ValidationError{}, false); got != 5.0 {
 		t.Fatal("evaluateList(none)")
 	}
 }
