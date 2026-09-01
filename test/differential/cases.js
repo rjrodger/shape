@@ -9,7 +9,8 @@
 //
 // Spec cells use the same sentinel encoding as the corpus (see ../README.md):
 //   {"$type":"String"} {"$open":X} {"$closed":X} {"$required":X}
-//   {"$optional":X} {"$expr":"Min(2,String)"}
+//   {"$optional":X} {"$expr":"Min(2,String)"} {"$discriminated":[tag,{...}]}
+//   {"$call":["Pick",["a"],X]}
 // Anything else is raw JSON.
 
 const T = { $type: 'String' }, N = { $type: 'Number' }, B = { $type: 'Boolean' }
@@ -58,8 +59,14 @@ const DISC_IN = [
   null, 1, 'dog', [], [{ kind: 'dog' }],
 ]
 
-// A closed object for the object algebra: a and b required, c optional.
-const BASE = { a: N, b: T, c: { $optional: B } }
+// The object algebra: a builder called by name (the DSL has no list or object
+// literals), and the key-expression form, which hands the example over.
+const CALL = (name, ...args) => ({ $call: [name, ...args] })
+const ABASE = { a: 1, b: T, c: true }
+const KE_IN = [
+  {}, { u: {} }, { u: { a: 2 } }, { u: { b: 2 } }, { u: { a: 'x' } }, { u: { a: 1, b: 2, z: 3 } },
+  { u: 1 }, { u: null }, { u: [] }, null, 'x',
+]
 
 function build() {
   const cases = []
@@ -152,15 +159,28 @@ function build() {
   add('some-optional', { a: E('Optional(Some(String,Number))') }, OBJS)
   add('all-optional', { a: E('Optional(All(String,Min(2)))') }, OBJS)
 
-  // Object algebra: new object nodes, the given shape left as it was.
-  add('pick', { $call: ['Pick', ['a', 'c'], BASE] }, OBJS)
-  add('omit', { $call: ['Omit', ['b'], BASE] }, OBJS)
-  add('partial', { $call: ['Partial', BASE] }, OBJS)
-  add('extend', { $call: ['Extend', { d: { $optional: N } }, BASE] }, OBJS)
-  add('extend-override', { $call: ['Extend', { a: T }, BASE] }, OBJS)
-  add('pick-keyexpr', { $call: ['Pick', ['a'], { 'a: Integer': 0, b: T }] }, OBJS)
-  add('partial-prop', { p: { $call: ['Partial', BASE] } }, [{}, { p: {} }, { p: { a: 1 } }, { p: { a: 'x' } }, { p: 1 }])
-  add('partial-open', { $call: ['Partial', { $open: BASE }] }, OBJS)
+  // Object algebra.
+  add('alg-pick', CALL('Pick', ['a'], ABASE), OBJS)
+  add('alg-pick-required', CALL('Pick', ['a', 'b'], ABASE), OBJS)
+  add('alg-pick-open', CALL('Pick', ['a'], { $open: ABASE }), OBJS)
+  add('alg-pick-keyexpr-src', CALL('Pick', ['a'], { 'a: Min(2)': 0, b: 1 }), OBJS)
+  add('alg-omit', CALL('Omit', ['b'], ABASE), OBJS)
+  add('alg-omit-all', CALL('Omit', ['a', 'b', 'c'], ABASE), OBJS)
+  add('alg-omit-unknown', CALL('Omit', ['z'], { $closed: ABASE }), OBJS)
+  add('alg-partial', CALL('Partial', ABASE), OBJS)
+  add('alg-partial-nested', CALL('Partial', { a: { b: N } }), OBJS)
+  add('alg-partial-bound', CALL('Partial', { a: E('Min(2,Number)') }), OBJS)
+  add('alg-extend', CALL('Extend', { e: N }, ABASE), OBJS.concat([{ a: 1, b: 'x', e: 2 }, { b: 'x', e: 'z' }]))
+  add('alg-extend-override', CALL('Extend', { a: T }, ABASE), OBJS)
+  add('alg-extend-open', CALL('Extend', { e: 1 }, { $open: ABASE }), OBJS)
+  add('alg-extend-open-ext', CALL('Extend', { $open: { e: 1 } }, ABASE), OBJS)
+  add('alg-composed', CALL('Partial', CALL('Pick', ['b'], CALL('Extend', { e: N }, ABASE))), OBJS)
+  add('alg-optional', { a: { $optional: CALL('Pick', ['b'], ABASE) } }, OBJS)
+  add('alg-arr', [CALL('Omit', ['b'], ABASE)], ARRS)
+  add('alg-ke-pick', { 'u: Pick(["a"])': { a: 1, b: 2 } }, KE_IN)
+  add('alg-ke-omit', { 'u: Omit(["a"])': { a: 1, b: 2 } }, KE_IN)
+  add('alg-ke-partial', { 'u: Partial': { a: T, b: N } }, KE_IN)
+  add('alg-ke-partial-called', { 'u: Partial()': { a: T, b: N } }, KE_IN)
 
   // A type token with arguments applies the type to them.
   add('dsl-token-args-str', E('String(Min(2))'), SCALARS)
@@ -173,6 +193,14 @@ function build() {
     add('lit-' + JSON.stringify(lit), lit, SCALARS)
     add('lit-obj-' + JSON.stringify(lit), { a: lit }, OBJS)
   }
+
+  // A null literal is an optional null defaulting to null.
+  add('lit-obj-null', { a: null }, OBJS)
+  add('null-optional', { a: E('Optional(null)') }, OBJS)
+  add('null-skip', { a: E('Skip(null)') }, OBJS)
+  add('null-required', { a: E('Required(null)') }, OBJS)
+  add('null-nested', { a: { b: null } }, OBJS)
+  add('arr-any', [ANY], ARRS)
 
   // Object structure.
   add('obj-empty', {}, OBJS)
@@ -256,6 +284,23 @@ function build() {
   add('c-one-ignore', E('One(Ignore(Min(2,Number)),String)'), SCALARS)
   add('c-all-ignore', E('All(Ignore(Min(2,Number)),Number)'), SCALARS)
 
+  // A bare type token in the DSL is Type(token): Object is closed there.
+  for (const t of ['String', 'Number', 'Boolean', 'Object', 'Array', 'Any', 'Integer']) {
+    add('dsl-bare-' + t, E(t), SCALARS)
+    add('dsl-bare-obj-' + t, { a: E(t) }, OBJS)
+    add('dsl-bare-optional-' + t, { a: E(`Optional(${t})`) }, OBJS)
+  }
+  add('dsl-bare-Array-arr', E('Array'), ARRS)
+  add('dsl-one-Object', E('One(Object,Number)'), SCALARS)
+
+  // Several disallowed keys on a nested closed object.
+  add('nested-closed-multi', { a: { b: 1 } },
+    [{ a: { b: 2, c: 3, d: 4 } }, { a: { c: 3, d: 4 } }, { a: { b: 2, c: 3 } }, { a: [1, 2] }])
+  add('nested-closed-arr-multi', { a: [N, T] }, [{ a: [1, 'a', 2, 3] }, { a: [1, 'a', 2] }, { a: [1] }])
+  // Keys and values holding a backslash or a quote render raw inside the message.
+  add('closed-odd-keys', { a: 1 }, [{ 'x\\y': 2 }, { 'x"y': 2 }, { 'x\\"y': 2 }, { a: 'p\\q', z: 1 }, { a: 'p"q', z: 1 }, { 'a<b': '&' }])
+  add('type-odd-values', { a: N }, [{ a: 'p\\q' }, { a: 'p"q' }, { a: { 'k\\': 'v"' } }])
+
   // Type() — both the builder-style DSL call and a chained type token.
   for (const t of ['String', 'Number', 'Boolean', 'Object', 'Array', 'Any']) {
     add('t-Type-' + t, E(`Type(${t})`), SCALARS)
@@ -300,9 +345,26 @@ function build() {
   add('ke-child-array', { 'a: Child(Number)': [] }, OBJS)
   add('ke-one-of', { 'a: One(String,Number)': 5 }, OBJS)
   add('ke-bare-literal', { 'a: 5': 3 }, OBJS)
+  // A quoted name holds a space; an empty expression is no expression at all.
+  add('ke-quoted-name', { '"a b": Min(1)': 0 }, [{ 'a b': 2 }, { 'a b': 0 }, { 'a b': 'x' }, {}, { a: 1 }])
+  add('ke-quoted-string', { '"a b": String': '' }, [{ 'a b': 'x' }, { 'a b': 1 }, {}])
+  add('ke-empty-expr', { 'a:': 1 }, [{ 'a:': 2 }, { 'a:': 'x' }, { a: 1 }, {}])
+  add('ke-escaped-name', { '"a\\"b": Min(1)': 0 }, [{ 'a"b': 2 }, { 'a"b': 0 }, { 'a\\"b': 2 }, {}])
+  // A value-taking builder reads the example as its value.
+  add('ke-default-empty', { 'a: Default()': 5 }, OBJS)
+  add('ke-min-empty', { 'a: Min()': 3 }, OBJS)
+  add('ke-catch-empty', { 'a: Catch()': 7 }, OBJS)
+  add('ke-exact-empty', { 'a: Exact()': 7 }, OBJS)
 
-  // Func / Key.
+  // Func / Key. Func is a builder, so it is optional; the Function token is
+  // required. A NaN literal is an optional NaN default.
   add('fn-1', E('Func'), SCALARS)
+  add('fn-obj', { a: E('Func') }, OBJS)
+  add('fn-token-obj', { a: { $type: 'Function' } }, OBJS)
+  add('nan-obj', { a: E('NaN') }, OBJS)
+  add('nan-optional', { a: E('Optional(NaN)') }, OBJS)
+  add('nan-required', { a: E('Required(NaN)') }, OBJS)
+  add('nan-bound-obj', { a: E('Min(2,NaN)') }, OBJS)
   add('key-1', { a: E('Key()') }, OBJS)
 
   // Deep nesting.

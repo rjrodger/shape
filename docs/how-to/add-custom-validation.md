@@ -81,6 +81,18 @@ Shape({
 })
 ```
 
+## Coerce, repair or rewrite the value
+
+For the common cases there is no need to write a validator:
+
+- [`Coerce`](coerce-and-formats.md) converts `"8080"` to `8080` (and the other
+  unambiguous conversions) before the type check.
+- [`Catch`](coerce-and-formats.md) replaces whatever fails with a fallback.
+- [`Transform`](coerce-and-formats.md) replaces a valid value with a function
+  of it.
+- The [string formats](../reference/builders.md#string-formats) (`Email`,
+  `Url`, `Uuid`, `DateTime`, `Ip`) check the usual formats portably.
+
 ## Replace the message
 
 Wrap any shape in [`Fault`](../reference/builders.md#fault) to override the

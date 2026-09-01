@@ -3,6 +3,7 @@ package shape
 import (
 	"bufio"
 	"encoding/json"
+	"math"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -146,11 +147,16 @@ func jsonNorm(v any) any {
 }
 
 // jsDates rewrites every time.Time in v to the string JSON.stringify gives a
-// Date, so the two languages' produced values compare across the JSON boundary.
+// Date, and a NaN to the null it gives that, so the two languages' produced
+// values compare across the JSON boundary.
 func jsDates(v any) any {
 	switch x := v.(type) {
 	case time.Time:
 		return jsDateString(x)
+	case float64:
+		if math.IsNaN(x) {
+			return nil
+		}
 	case map[string]any:
 		out := make(map[string]any, len(x))
 		for k, vv := range x {
@@ -242,6 +248,8 @@ func decodeSpec(v any) any {
 					return Object
 				case "Array":
 					return Array
+				case "Function":
+					return Function
 				case "Integer":
 					return Integer
 				case "Date":
@@ -269,24 +277,11 @@ func decodeSpec(v any) any {
 		}
 		if cv, ok := obj["$call"]; ok {
 			arr := cv.([]any)
-			names := func(v any) []string {
-				var out []string
-				for _, s := range v.([]any) {
-					out = append(out, s.(string))
-				}
-				return out
+			args := make([]any, len(arr)-1)
+			for i := range args {
+				args[i] = decodeSpec(arr[i+1])
 			}
-			switch arr[0].(string) {
-			case "Pick":
-				return Pick(names(arr[1]), decodeSpec(arr[2]))
-			case "Omit":
-				return Omit(names(arr[1]), decodeSpec(arr[2]))
-			case "Partial":
-				return Partial(decodeSpec(arr[1]))
-			case "Extend":
-				return Extend(decodeSpec(arr[1]), decodeSpec(arr[2]))
-			}
-			panic("unknown $call " + arr[0].(string))
+			return callBuilder(arr[0].(string), args)
 		}
 		if dv, ok := obj["$discriminated"]; ok {
 			arr := dv.([]any)
@@ -304,4 +299,21 @@ func decodeSpec(v any) any {
 	}
 
 	return out
+}
+
+// callBuilder applies a builder the string DSL cannot express — one whose
+// arguments include a list or an object — by name, as the {"$call": [name,
+// ...args]} sentinel asks.
+func callBuilder(name string, args []any) any {
+	switch name {
+	case "Pick":
+		return Pick(args[0], args[1:]...)
+	case "Omit":
+		return Omit(args[0], args[1:]...)
+	case "Partial":
+		return Partial(args...)
+	case "Extend":
+		return Extend(args[0], args[1:]...)
+	}
+	panic("decodeSpec: unknown builder " + name)
 }

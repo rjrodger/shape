@@ -1,0 +1,27 @@
+name	spec	input	output	error
+pick-keeps-default	{"$call":["Pick",["a"],{"a":1,"b":{"$type":"String"},"c":true}]}	{}	{"a":1}	
+pick-single-name	{"$call":["Pick","a",{"a":1,"b":{"$type":"String"},"c":true}]}	{}	{"a":1}	
+pick-required-kept	{"$call":["Pick",["b"],{"a":1,"b":{"$type":"String"},"c":true}]}	{}		"Validation failed for property \"b\" with value \"undefined\" because the value is required."
+pick-two	{"$call":["Pick",["a","c"],{"a":1,"b":{"$type":"String"},"c":true}]}	{"c":false}	{"c":false,"a":1}	
+pick-stays-closed	{"$call":["Pick",["a"],{"a":1,"b":{"$type":"String"},"c":true}]}	{"a":2,"b":"x"}		"Validation failed for object \"{a:2,b:x}\" because the property \"b\" is not allowed."
+pick-open-base	{"$call":["Pick",["a"],{"$open":{"a":1,"b":{"$type":"String"},"c":true}}]}	{"a":2,"z":1}	{"a":2,"z":1}	
+pick-keyexpr-source	{"$call":["Pick",["a"],{"a: Min(2)":0,"b":1}]}	{"a":1}		"Value \"1\" for property \"a\" must be a minimum of 2 (was 1)."
+omit-drops-required	{"$call":["Omit",["b"],{"a":1,"b":{"$type":"String"},"c":true}]}	{}	{"a":1,"c":true}	
+omit-unknown-ignored	{"$call":["Omit",["z"],{"a":1,"b":{"$type":"String"},"c":true}]}	{"b":"x"}	{"b":"x","a":1,"c":true}	
+omit-then-extra	{"$call":["Omit",["b"],{"a":1,"b":{"$type":"String"},"c":true}]}	{"b":"x"}		"Validation failed for object \"{b:x}\" because the property \"b\" is not allowed."
+omit-all	{"$call":["Omit",["a","b","c"],{"a":1,"b":{"$type":"String"},"c":true}]}	{"a":1}		"Validation failed for object \"{a:1}\" because the property \"a\" is not allowed."
+partial-absent	{"$call":["Partial",{"a":1,"b":{"$type":"String"},"c":true}]}	{}	{"a":1,"b":"","c":true}	
+partial-type-kept	{"$call":["Partial",{"a":1,"b":{"$type":"String"},"c":true}]}	{"b":1}		"Validation failed for property \"b\" with number \"1\" because the number is not of type string."
+partial-is-shallow	{"$call":["Partial",{"a":{"b":{"$type":"Number"}}}]}	{}		"Validation failed for property \"a.b\" with value \"undefined\" because the value is required."
+partial-nested-present	{"$call":["Partial",{"a":{"b":{"$type":"Number"}}}]}	{"a":{"b":1}}	{"a":{"b":1}}	
+extend-adds	{"$call":["Extend",{"e":2},{"a":1,"b":{"$type":"String"},"c":true}]}	{"b":"x"}	{"b":"x","a":1,"c":true,"e":2}	
+extend-adds-required	{"$call":["Extend",{"e":{"$type":"Number"}},{"a":1,"b":{"$type":"String"},"c":true}]}	{"b":"x"}		"Validation failed for property \"e\" with value \"undefined\" because the value is required."
+extend-overrides	{"$call":["Extend",{"b":5},{"a":1,"b":{"$type":"String"},"c":true}]}	{}	{"a":1,"b":5,"c":true}	
+extend-stays-closed	{"$call":["Extend",{"e":2},{"a":1,"b":{"$type":"String"},"c":true}]}	{"b":"x","z":1}		"Validation failed for object \"{b:x,z:1}\" because the property \"z\" is not allowed."
+extend-open-base	{"$call":["Extend",{"e":2},{"$open":{"a":1,"b":{"$type":"String"},"c":true}}]}	{"b":"x","z":1}	{"b":"x","z":1,"a":1,"c":true,"e":2}	
+extend-ext-openness-ignored	{"$call":["Extend",{"$open":{"e":2}},{"a":1,"b":{"$type":"String"},"c":true}]}	{"b":"x","z":1}		"Validation failed for object \"{b:x,z:1}\" because the property \"z\" is not allowed."
+composed	{"$call":["Partial",{"$call":["Pick",["b"],{"$call":["Extend",{"e":{"$type":"Number"}},{"a":1,"b":{"$type":"String"},"c":true}]}]}]}	{}	{"b":""}	
+keyexpr-pick	{"u: Pick([\"a\"])":{"a":1,"b":2}}	{}	{"u":{"a":1}}	
+keyexpr-omit	{"u: Omit([\"a\"])":{"a":1,"b":2}}	{"u":{"a":1}}		"Validation failed for property \"u\" with object \"{a:1}\" because the property \"a\" is not allowed."
+keyexpr-partial	{"u: Partial":{"a":{"$type":"String"}}}	{}	{"u":{"a":""}}	
+keyexpr-partial-present	{"u: Partial()":{"a":{"$type":"String"}}}	{"u":{"a":"x"}}	{"u":{"a":"x"}}	

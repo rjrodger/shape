@@ -84,8 +84,9 @@ func Catch(fallback any, spec ...any) *Node {
 func (n *Node) Catch(fallback any) *Node {
 	in := takeInner(n.n)
 	n.n.befores = []validator{{
-		name: "Catch",
-		args: []any{fallback},
+		name:  "Catch",
+		args:  []any{fallback},
+		inner: &in,
 		fn: func(_ any, update *Update, state *State) bool {
 			out, sub := in.probe(state)
 			if sub.hasAny() {
@@ -112,7 +113,8 @@ func Transform(fn func(val any, state *State) any, spec ...any) *Node {
 func (n *Node) Transform(fn func(val any, state *State) any) *Node {
 	in := takeInner(n.n)
 	n.n.befores = []validator{{
-		name: "Transform",
+		name:  "Transform",
+		inner: &in,
 		fn: func(_ any, update *Update, state *State) bool {
 			out, sub := in.probe(state)
 			if sub.hasAny() {

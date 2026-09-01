@@ -400,9 +400,13 @@ func TestChainedFuncKeepsOptionality(t *testing.T) {
 	// already said "optional" stays optional.
 	mustOK(t, MustShape(map[string]any{"a": Optional().Func()}), map[string]any{})
 
-	// A chain that has not stated it still becomes required.
-	mustErr(t, MustShape(map[string]any{"a": buildize(nil).Func()}),
-		map[string]any{}, "is required")
+	// Func is a builder, not a type token, so it does not require a value of
+	// itself: TS Func() and Any().Func() are both optional. The Function
+	// token is the required form.
+	mustOK(t, MustShape(map[string]any{"a": buildize(nil).Func()}), map[string]any{})
+	mustOK(t, MustShape(map[string]any{"a": Func()}), map[string]any{})
+	mustErr(t, MustShape(map[string]any{"a": Function}), map[string]any{}, "is required")
+	mustErr(t, MustShape(map[string]any{"a": Required(Func())}), map[string]any{}, "is required")
 }
 
 func TestExplicitAnyInKeyExpression(t *testing.T) {
@@ -1090,7 +1094,10 @@ func TestObjectAlgebra(t *testing.T) {
 	want("pick", mustOK(t, MustShape(Pick([]string{"a"}, base())), o("a", 1.0)), o("a", 1.0))
 	want("pick two", mustOK(t, MustShape(Pick([]string{"a", "c"}, base())), o("a", 1.0)), o("a", 1.0, "c", false))
 	mustErr(t, MustShape(Pick([]string{"a"}, base())), o("a", 1.0, "b", "x"), `the property "b" is not allowed`)
-	want("pick unknown name", mustOK(t, MustShape(Pick([]string{"a", "zz"}, base())), o("a", 1.0)), o("a", 1.0))
+	// A name that is not a property is a fault: there is nothing to pick.
+	mustErr(t, MustShape(Pick([]string{"a", "zz"}, base())), o("a", 1.0), `Pick: unknown property "zz"`)
+	// Omitting one is not: it is simply not there to drop.
+	want("omit unknown name", mustOK(t, MustShape(Omit([]string{"zz"}, base())), o("a", 1.0, "b", "x")), o("a", 1.0, "b", "x", "c", false))
 
 	// Omit drops the named properties, and what is kept stays as it was.
 	want("omit", mustOK(t, MustShape(Omit([]string{"b"}, base())), o("a", 1.0)), o("a", 1.0, "c", false))
@@ -1135,7 +1142,9 @@ func TestObjectAlgebra(t *testing.T) {
 	want("chain partial", mustOK(t, MustShape(Closed(o("a", Number)).Partial()), o()), o("a", 0.0))
 	want("render", stringifyNode(Pick([]string{"a"}, base()).n, true), "{a: Number}")
 	want("dsl partial", mustOK(t, MustShape(MustExpr("Partial(Closed({}))")), o()), o())
-	want("dsl pick", mustOK(t, MustShape(MustExpr(`Pick(["a"],Closed({}))`)), o()), o())
+	if _, err := Expr(`Pick(["a"],Closed({}))`); err == nil || !strings.Contains(err.Error(), `Pick: unknown property "a"`) {
+		t.Fatalf("dsl pick of an unknown name: %v", err)
+	}
 	want("dsl omit", mustOK(t, MustShape(MustExpr(`Omit(["a"],Closed({}))`)), o()), o())
 	want("dsl extend", mustOK(t, MustShape(MustExpr("Extend(Open({}),Closed({}))")), o()), o())
 
@@ -1144,7 +1153,7 @@ func TestObjectAlgebra(t *testing.T) {
 	mustErr(t, MustShape(Omit([]string{"a"}, Number)), 1.0, "Omit needs an object shape")
 	mustErr(t, MustShape(Partial(Number)), 1.0, "Partial needs an object shape")
 	mustErr(t, MustShape(Extend(o("d", Number), Number)), 1.0, "Extend needs an object shape")
-	mustErr(t, MustShape(Extend(Number, base())), o(), "Extend needs an object shape")
+	mustErr(t, MustShape(Extend(Number, base())), o(), "Extend needs an object to extend with")
 
 	// A description survives the copy, so an extended shape stays documented.
 	described := Describe("a base", base()).Pick([]string{"a"})
@@ -1160,20 +1169,18 @@ func TestObjectAlgebra(t *testing.T) {
 	mustErr(t, MustShape(Partial()), 1.0, "Partial needs an object shape")
 	mustErr(t, MustShape(Extend(o("d", Number))), 1.0, "Extend needs an object shape")
 
-	// The DSL reports a bad names argument rather than building something odd.
+	// The DSL reports a bad names argument rather than building something odd;
+	// a single name is a list of one.
 	for _, bad := range []string{
 		"Pick(Closed({}))",
-		`Omit("a",Closed({}))`,
 		"Pick([1],Closed({}))",
 		"Omit([1],Closed({}))",
 		"Extend()",
+		"Pick()",
 	} {
 		if _, err := Expr(bad); err == nil {
 			t.Fatalf("%s should fail to build", bad)
 		}
 	}
-	// A names argument that is missing entirely, rather than the wrong type.
-	if _, err := exprNames("Pick", nil); err == nil {
-		t.Fatal("Pick with no arguments should fail")
-	}
+	want("dsl single name", mustOK(t, MustShape(MustExpr(`Omit("a",Closed({}))`)), o()), o())
 }

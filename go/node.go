@@ -99,4 +99,7 @@ type validator struct {
 	args []any
 	// stringify renders the validator into its TS-style ".Name(args)" suffix.
 	stringify func() string
+	// inner holds the checks an isolating builder (Catch, Transform) took
+	// inside, so that an export can still see them.
+	inner *inner
 }

@@ -71,6 +71,38 @@ Error paths use dot notation, e.g. `server.tls.enabled`.
 If a shape became open (e.g. via `Child`/`Open`) and you want it closed again,
 wrap it with [`Closed`](../reference/builders.md#closed).
 
+## Reshape a declared object: `Pick`, `Omit`, `Partial`, `Extend`
+
+Build one object shape out of another, without repeating it. Each returns a
+**new** shape; the source is untouched.
+
+**TS**
+
+```js
+const { Shape, Pick, Omit, Partial, Extend, Email } = require('shape')
+
+const User = { id: Number, name: String, role: 'user' }
+
+Shape(Pick(['id', 'name'], User))        // only id and name
+Shape(Omit('id', User))                  // everything but id
+Shape(Partial(User))({})                 // → { id: 0, name: '', role: 'user' }
+Shape(Extend({ email: Email }, User))    // User plus a required email
+```
+
+**Go**
+
+```go
+user := map[string]any{"id": shape.Number, "name": shape.String, "role": "user"}
+
+shape.MustShape(shape.Pick([]string{"id", "name"}, user))
+shape.MustShape(shape.Extend(map[string]any{"email": shape.Email()}, user))
+```
+
+`Partial` is shallow: a nested object keeps its own required properties.
+`Extend` keeps the base's openness and checks, and only takes the extension's
+properties. The steps chain, each producing a new node:
+`Closed(User).Pick('id').Extend({ v: 1 })`.
+
 ## See also
 
 - [Require fields](require-fields.md)

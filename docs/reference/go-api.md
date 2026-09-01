@@ -23,23 +23,31 @@ func (s *Schema) Error(input any) []FieldError              // nil when valid
 func (s *Schema) Spec() any                                 // JSON-friendly
 func (s *Schema) Node() *node                               // introspection
 func (s *Schema) String() string                            // debug render
+func (s *Schema) JSONSchema() map[string]any                // JSON Schema, draft 2020-12
 ```
+
+`(*Node).JSONSchema()` renders a built node the same way.
 
 ## Tokens
 
 Sentinel `TypeToken` values used in a spec to require a type:
 
 ```go
-var Any, String, Number, Boolean, Object, Array, Function TypeToken
+var Any, String, Number, Boolean, Object, Array, Function, Integer, Date TypeToken
 func (t TypeToken) Kind() Kind
 ```
 
 `Any` is the one token that does not require a value, so `{ "a": Any }` accepts
-an object without `a`. To narrow it, use `Type(Any, spec)`.
+an object without `a`. To narrow it, use `Type(Any, spec)`. `Integer` is a
+number with no fractional part; `Date` is a `time.Time`, and a `time.Time` in a
+spec is an optional date with that default. `Integer` and `Date` are builder
+functions in TypeScript, so the chain shortcuts `.Integer()` and `.Date()` are
+how a node is narrowed to them here.
 
 `Kind` is the normalized kind identifier (`KindString`, `KindNumber`,
 `KindBoolean`, `KindObject`, `KindArray`, `KindAny`, `KindNull`, `KindNaN`,
-`KindFunction`, `KindNever`, `KindCheck`, `KindList`).
+`KindFunction`, `KindNever`, `KindCheck`, `KindRegexp`, `KindInteger`,
+`KindDate`, `KindList`).
 
 ## Builders
 
@@ -57,6 +65,24 @@ func Rename(name string, spec ...any) *Node
 func RenameWith(name string, opts RenameOptions, spec ...any) *Node
 ```
 
+Builders that take more than a shape:
+
+```go
+func Discriminated(tag string, branches map[string]any) *Node   // top-level only
+func Catch(fallback any, spec ...any) *Node
+func Transform(fn func(val any, state *State) any, spec ...any) *Node
+func Describe(description string, spec ...any) *Node            // read back with (*Node).Meta()
+func Pick(names any, spec ...any) *Node                          // names: string, []string or []any
+func Omit(names any, spec ...any) *Node
+func Partial(spec ...any) *Node
+func Extend(extra any, spec ...any) *Node
+```
+
+A builder called wrongly — `Discriminated` without a branch, `Pick` of an
+unknown property — cannot return an error, so the fault surfaces at validation
+as a `never` node carrying the message, as for any bad spec. In the string DSL
+`Expr` returns it as an error.
+
 `G`-prefixed aliases exist for every builder and token (`GString`, `GMin`,
 `GRequired`, …) for use with a dot-import.
 
@@ -66,15 +92,22 @@ Every builder that takes only a shape is also a `*Node` method, so specs read as
 a chain: `Optional().Number().Min(2)`.
 
 ```go
-Above  After  Any     Before   Below   Check  Child  Closed  Default
-Define Empty  Exact   Fault    Func    Ignore Len    Max     Min
-Never  Open   Optional Refer   Rename  Required Rest Skip    Type
+Above    After    Any      Before   Below    Catch    Check    Child
+Closed   Coerce   DateTime Default  Define   Describe Email    Empty
+Exact    Extend   Fault    Func     Ignore   Ip       Ipv4     Ipv6
+Len      Max      Min      Never    Nullable Omit     Open     Optional
+Partial  Pick     Refer    Rename   Required Rest     Skip     Transform
+Type     Url      Uuid
 ```
 
-plus the type shortcuts `.Number()`, `.Boolean()`, `.Object()`, `.Array()` and
-`.Function()`. There is no `.String()`: a method of that name on an exported
-type reads as `fmt.Stringer` and `go vet` rejects the signature — use
-`.Type(String)`, which is what the shortcuts call anyway.
+plus the type shortcuts `.Number()`, `.Boolean()`, `.Object()`, `.Array()`,
+`.Function()`, `.Integer()` and `.Date()`. There is no `.String()`: a method of
+that name on an exported type reads as `fmt.Stringer` and `go vet` rejects the
+signature — use `.Type(String)`, which is what the shortcuts call anyway.
+
+The object algebra methods (`.Pick`, `.Omit`, `.Partial`, `.Extend`) return a
+new node and leave the receiver as it was; every other chain method narrows the
+receiver in place and returns it.
 
 ## Absent versus null
 
@@ -162,7 +195,7 @@ name keys `a`, `b`, `c`, … to fix argument positions.
 ## Version
 
 ```go
-const Version = "0.1.2"
+const Version = "0.2.0"
 ```
 
 See [Use Shape in Go](../how-to/use-shape-in-go.md) for idioms and the

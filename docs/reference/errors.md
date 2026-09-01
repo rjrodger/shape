@@ -43,9 +43,12 @@ TS calls it `ErrDesc`; Go calls it `FieldError`. The fields line up:
 
 ### Why-codes
 
-`type`, `required`, `closed`, `check`, `never`, `regexp`, and the composition
-codes `One`/`Some`/`All`/`Exact`. Built-in bounded checks (`Min`/`Max`/`Above`/
-`Below`/`Len`) report `why: "check"` with the builder name in `check`.
+`type`, `required`, `closed`, `check`, `never`, `regexp`, the composition
+codes `One`/`Some`/`All`/`Exact`/`Discriminated`, and the format codes
+`Email`/`Url`/`Uuid`/`DateTime`/`Ip`/`Ipv4`/`Ipv6`. Built-in bounded checks
+(`Min`/`Max`/`Above`/`Below`/`Len`) report `why: "check"` with the builder name
+in `check`. `Coerce` and `Catch` never raise; `Transform` re-raises whatever
+failed inside it.
 
 ## Message format
 
@@ -61,6 +64,7 @@ Examples:
 Validation failed for property "name" with value "undefined" because the value is required.
 Validation failed for index "1" with string "x" because the string is not of type number.
 Validation failed for object "{a:2,b:true}" because the property "b" is not allowed.
+Validation failed for property "a" with object "{b:2,c:3,d:4}" because the properties "c, d" are not allowed.
 ```
 
 Builder messages read:

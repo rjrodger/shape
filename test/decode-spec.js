@@ -25,7 +25,7 @@ function decodeSpec(v, Shape) {
       if ('$expr' === k) return Shape.expr(v.$expr)
       if ('$call' === k) {
         const [name, ...args] = v.$call
-        return Shape[name](...args.map((a) => decodeSpec(a, Shape)))
+        return Shape[name](...args.map(a => decodeSpec(a, Shape)))
       }
       if ('$discriminated' === k) {
         const [tag, branches] = v.$discriminated

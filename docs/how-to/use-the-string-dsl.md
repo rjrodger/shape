@@ -31,11 +31,22 @@ s, _ := shape.Shape(n)
 - **Chaining** with `.`: `Number.Min(1).Below(10)`. Adjacent builders without a
   dot also chain.
 - **Type tokens**: `String`, `Number`, `Boolean`, `Object`, `Array`,
-  `Function`, `Any` — each is a required type.
+  `Function`, `Integer`, `Date`, `Any` — each reads as `Type(token)`: a
+  required type (`Any` excepted), so a bare `Object` is a closed object and
+  `Array` accepts any elements. A token with arguments applies the type to
+  them: `String(Min(2))`.
 - **Literals** are JSON: `42`, `"text"`, `true`, plus `null`, `undefined`,
-  `NaN`. A bare literal at the top level becomes a `Default`.
-- **Regular expressions**: `/pattern/` becomes a `Check`.
+  `NaN`. A bare literal at the top level becomes a `Default`. A list literal
+  can hold one element (`["a"]`); the tokenizer splits on commas, so a longer
+  one cannot be written.
+- **Regular expressions**: `/pattern/` is a string that must match — a type,
+  so a non-string fails as a type error. `Check(/pattern/)` is the explicit
+  check form.
 - Commas between arguments are optional.
+- There is no object literal. A builder that needs one — `Extend`, or the
+  shape `Pick`/`Omit`/`Partial` work on — is reached through a
+  [key expression](use-key-and-value-expressions.md), whose example value is
+  handed to the builder: `{ 'u: Pick(["a"])': { a: 1, b: 2 } }`.
 
 ## `build` — expand a JSON structure
 

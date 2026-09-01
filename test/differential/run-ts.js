@@ -29,6 +29,14 @@ for (const c of cases) {
     continue
   }
 
+  // The JSON Schema export is compared too, once per case.
+  try {
+    rec.schema = JSON.parse(JSON.stringify(schema.jsonSchema()))
+  }
+  catch (e) {
+    rec.schema = 'ERR: ' + e.message
+  }
+
   try {
     const out = schema(structuredClone(c.input))
     rec.ok = true

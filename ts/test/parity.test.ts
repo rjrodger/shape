@@ -664,8 +664,10 @@ describe('object algebra: Pick, Omit, Partial, Extend', () => {
     // What was dropped is no longer declared, so a closed object rejects it.
     assert.match(failure(Pick(['a'], BASE()), { a: 1, b: 'x' }),
       /the property "b" is not allowed/)
-    // A name that is not a property is simply not picked.
-    assert.deepEqual(Shape(Pick(['a', 'zz'], BASE()))({ a: 1 }), { a: 1 })
+    // A name that is not a property is an error: there is nothing to pick.
+    assert.throws(() => Pick(['a', 'zz'], BASE()), /Pick: unknown property "zz"/)
+    // Omitting one is not: it is simply not there to drop.
+    assert.deepEqual(Shape(Omit(['zz'], BASE()))({ a: 1, b: 'x' }), { a: 1, b: 'x', c: false })
   })
 
   test('Omit drops the named properties, and what is kept stays as it was', () => {
@@ -720,14 +722,15 @@ describe('object algebra: Pick, Omit, Partial, Extend', () => {
     assert.deepEqual(Shape(Closed(BASE()).Pick(['b']))({ b: 'x' }), { b: 'x' })
     assert.deepEqual(Shape(Closed({ a: Number }).Partial())({}), { a: 0 })
 
-    assert.equal(Shape.stringify(Pick(['a'], BASE()), true), '{a:Number}')
+    assert.equal(Shape(Pick(['a'], BASE())).stringify(), '{"a":"Number"}')
     assert.deepEqual(json(Shape(Shape.expr('Partial(Closed({}))'))({})), {})
-    assert.deepEqual(json(Shape(Shape.expr('Pick(["a"],Closed({}))'))({})), {})
+    assert.throws(() => Shape.expr('Pick(["a"],Closed({}))'), /Pick: unknown property "a"/)
+    assert.deepEqual(json(Shape(Shape.expr('Omit(["a"],Closed({}))'))({})), {})
 
     assert.throws(() => Pick(['a'], Number), /Pick needs an object shape/)
     assert.throws(() => Omit(['a'], Number), /Omit needs an object shape/)
     assert.throws(() => Partial(Number), /Partial needs an object shape/)
     assert.throws(() => Extend({ d: Number }, Number), /Extend needs an object shape/)
-    assert.throws(() => Extend(Number, BASE()), /Extend needs an object shape/)
+    assert.throws(() => Extend(Number, BASE()), /Extend needs an object to extend with/)
   })
 })

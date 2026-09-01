@@ -36,6 +36,7 @@ s := shape.MustShapeWith(spec, options)
 | `shape.node()` | `s.Node()` | the compiled root node. |
 | `shape.stringify(...)` | `s.String()` | DSL-ish string rendering. |
 | `shape.jsonify()` | — | JSON form used by `stringify`. |
+| `shape.jsonSchema()` | `s.JSONSchema()` | a JSON Schema (draft 2020-12) for the values accepted — see [the how-to](../how-to/export-json-schema.md). |
 | `Shape.isShape(v)` | `shape.IsShape(v)` | is `v` a compiled shape? |
 
 ## The validation context
