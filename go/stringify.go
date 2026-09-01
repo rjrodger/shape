@@ -13,11 +13,11 @@ func stringifyNode(n *node, inline bool) string {
 	}
 	switch n.kind {
 	case KindString:
-		return suffix(quoteOrType(n, "String"), n)
+		return suffix(typeOrValue(n, "String"), n)
 	case KindNumber:
-		return suffix(literalOrType(n, "Number"), n)
+		return suffix(typeOrValue(n, "Number"), n)
 	case KindBoolean:
-		return suffix(literalOrType(n, "Boolean"), n)
+		return suffix(typeOrValue(n, "Boolean"), n)
 	case KindNull:
 		return "null"
 	case KindNaN:
@@ -89,15 +89,8 @@ func suffix(base string, n *node) string {
 	out := base
 	// TS node2json renders a required scalar as just its type name ("Number"),
 	// never ".Required()", so no required annotation is emitted here.
-	if n.skippable {
-		out += ".Skip()"
-	}
-	if n.silent {
-		out += ".Ignore()"
-	}
-	if n.empty {
-		out += ".Empty()"
-	}
+	// Skip / Ignore / Empty are not annotated: they change whether a value is
+	// demanded, not what shape it has, and TS leaves them out of the rendering.
 	for _, b := range n.befores {
 		if b.stringify != nil {
 			out += "." + b.stringify()
@@ -111,20 +104,14 @@ func suffix(base string, n *node) string {
 	return out
 }
 
-func quoteOrType(n *node, fallback string) string {
-	if n.hasLiteral {
-		if s, ok := n.literal.(string); ok {
-			return fmt.Sprintf("%q", s)
-		}
+// typeOrValue renders a typed node the way TS does: a required node shows its
+// type name ("Number"), an unrequired one shows the value it would produce
+// ("0"), because that value is what the schema actually stands for there.
+func typeOrValue(n *node, typeName string) string {
+	if n.required || !n.hasDefault {
+		return typeName
 	}
-	return fallback
-}
-
-func literalOrType(n *node, fallback string) string {
-	if n.hasLiteral {
-		return fmt.Sprintf("%v", n.literal)
-	}
-	return fallback
+	return fmt.Sprintf("%v", n.defaultValue)
 }
 
 // nodeSpec produces a JSON-friendly description of the node tree.

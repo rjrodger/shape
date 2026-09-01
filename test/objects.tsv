@@ -14,3 +14,6 @@ nested-default-absent-parent-ok	{"a":{"b":1}}	{}	{"a":{"b":1}}
 container-type-fail-single-error	{"a":{"$type":"String"}}	1		"Validation failed for number \"1\" because the number is not of type object."
 multi-error-order	{"a":{"$type":"String"}}	{"b":2}		"Validation failed for object \"{b:2}\" because the property \"b\" is not allowed.\nValidation failed for property \"a\" with value \"undefined\" because the value is required."
 multi-error-order-2	{"a":{"$type":"String"}}	{"a":1,"b":2}		"Validation failed for object \"{a:1,b:2}\" because the property \"b\" is not allowed.\nValidation failed for property \"a\" with number \"1\" because the number is not of type string."
+child-ignore-drops-bad	{"$expr":"Child(Ignore(Number))"}	{"a":"x","b":1}	{"b":1}	
+child-ignore-keeps-good	{"$expr":"Child(Ignore(Number))"}	{"a":1,"b":2}	{"a":1,"b":2}	
+child-ignore-bound	{"$expr":"Child(Ignore(Min(2,Number)))"}	{"a":1,"b":3}	{"b":3}	

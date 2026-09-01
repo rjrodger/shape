@@ -56,6 +56,9 @@ const files = {
     ['container-type-fail-single-error', { a: T }, 1],
     ['multi-error-order', { a: T }, { b: 2 }],
     ['multi-error-order-2', { a: T }, { a: 1, b: 2 }],
+    ['child-ignore-drops-bad', { $expr: 'Child(Ignore(Number))' }, { a: 'x', b: 1 }],
+    ['child-ignore-keeps-good', { $expr: 'Child(Ignore(Number))' }, { a: 1, b: 2 }],
+    ['child-ignore-bound', { $expr: 'Child(Ignore(Min(2,Number)))' }, { a: 1, b: 3 }],
   ],
   arrays: [
     ['array-of-number', [N], [1, 2, 3]],
@@ -71,6 +74,9 @@ const files = {
     ['array-rest-null-element', { $expr: 'Rest(Number)' }, [1, null]],
     ['array-rest-string', { $expr: 'Rest(String)' }, ['a', 'b']],
     ['array-rest-string-bad', { $expr: 'Rest(String)' }, ['a', 2]],
+    ['array-ignore-drops-bad', [{ $expr: 'Ignore(Number)' }], [1, 'x']],
+    ['array-ignore-keeps-good', [{ $expr: 'Ignore(Number)' }], [1, 2]],
+    ['array-ignore-bound', [{ $expr: 'Ignore(Min(2,Number))' }], [1, 3]],
   ],
   builders: [
     ['dsl-type-chain-fail', { a: { $expr: 'Min(2).Array' } }, { a: [1] }],
@@ -118,6 +124,8 @@ const files = {
     ['all-of-fail-message', { a: { $expr: 'All(Number,Min(2))' } }, { a: 1 }],
     ['all-of-ok', { a: { $expr: 'All(Number,Min(2))' } }, { a: 5 }],
     ['some-of-fail', { a: { $expr: 'Some(Number,String)' } }, { a: true }],
+    ['one-of-ignore-branch', { a: { $expr: 'One(Ignore(Min(2,Number)),String)' } }, { a: 1 }],
+    ['all-of-ignore-branch', { a: { $expr: 'All(Ignore(Min(2,Number)),Number)' } }, { a: 1 }],
   ],
   checks: [
     ['regexp-ok', { a: { $expr: 'Check(/^a.+/)' } }, { a: 'abc' }],

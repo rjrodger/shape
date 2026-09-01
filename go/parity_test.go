@@ -224,3 +224,137 @@ func TestDiffCasePanicIsRecorded(t *testing.T) {
 		t.Fatalf("expected a recorded build failure, got %#v", res)
 	}
 }
+
+// --- coverage for the paths the parity fixes introduced ------------------
+
+func TestOptionalContainerDefaults(t *testing.T) {
+	// A container token that is optional still injects its empty default, so
+	// cloneDefault's container branches remain live after the descent change.
+	obj := mustOK(t, MustShape(map[string]any{"a": Optional(Object)}), map[string]any{}).(map[string]any)
+	if !reflect.DeepEqual(obj["a"], map[string]any{}) {
+		t.Fatalf("optional object default: %#v", obj)
+	}
+
+	arr := mustOK(t, MustShape(map[string]any{"a": Optional(Array)}), map[string]any{}).(map[string]any)
+	if !reflect.DeepEqual(arr["a"], []any{}) {
+		t.Fatalf("optional array default: %#v", arr)
+	}
+
+	// A container default nested inside another container default.
+	nested := mustOK(t, MustShape(map[string]any{"a": Optional(map[string]any{
+		"b": Optional(Object),
+		"c": 1.0,
+	})}), map[string]any{}).(map[string]any)
+	inner, ok := nested["a"].(map[string]any)
+	if !ok || !reflect.DeepEqual(inner["b"], map[string]any{}) || inner["c"] != 1.0 {
+		t.Fatalf("nested container default: %#v", nested)
+	}
+}
+
+func TestOptionalRegexpAbsent(t *testing.T) {
+	// An unrequired regexp node ignores an absent value rather than reporting
+	// a type error for it.
+	out := mustOK(t, MustShape(map[string]any{"a": Optional(MustExpr(`/^a/`))}), map[string]any{})
+	if _, present := out.(map[string]any)["a"]; present {
+		t.Fatalf("optional regexp injected a value: %#v", out)
+	}
+}
+
+func TestBoundDefersToTypeCheck(t *testing.T) {
+	// Every bound stands aside when the declared type will not match, so the
+	// structural error speaks instead of a misleading size message.
+	for _, tc := range []struct{ expr, want string }{
+		{"Min(2,String)", "is not of type string"},
+		{"Max(2,Number)", "is not of type number"},
+		{"Above(1,String)", "is not of type string"},
+		{"Below(1,Number)", "is not of type number"},
+		{"Len(1,String)", "is not of type string"},
+		{"Min(2,Object)", "is not of type object"},
+		{"Min(1,Func)", "is not of type function"},
+		{"Min(1,Boolean)", "is not of type boolean"},
+		{"Min(1).Array", "is not of type array"},
+	} {
+		s := MustShape(MustExpr(tc.expr))
+		mustErr(t, s, wrongTypeFor(tc.expr), tc.want)
+	}
+
+	// An absent value on a node that does not require one raises nothing.
+	mustOK(t, MustShape(map[string]any{"a": Optional(MustExpr("Min(2)"))}), map[string]any{})
+}
+
+// wrongTypeFor picks a value guaranteed not to match the expression's type.
+func wrongTypeFor(expr string) any {
+	if strings.Contains(expr, "Number") {
+		return "x"
+	}
+	return 1.0
+}
+
+func TestIgnoreSuppressesBoundErrors(t *testing.T) {
+	// A silent node drops the errors its befores raise, so emitUpdateErrors
+	// returns early rather than recording them.
+	out := mustOK(t, MustShape(map[string]any{"a": Ignore(MustExpr("Min(2,Number)"))}),
+		map[string]any{"a": 1.0})
+	if _, present := out.(map[string]any)["a"]; present {
+		t.Fatalf("ignore kept a failing value: %#v", out)
+	}
+}
+
+func TestCompositeMessageRendersAbsentValue(t *testing.T) {
+	// A missing value renders as "undefined", not "null", in a $VALUE template.
+	mustErr(t, MustShape(map[string]any{"a": MustExpr("One(String,Number)")}),
+		map[string]any{}, `Value "undefined" for property "a"`)
+}
+
+func TestTypeRefFromInternalNode(t *testing.T) {
+	// Type() also accepts the unexported node form, which normalize hands it.
+	if k := Type(&node{kind: KindBoolean}).Kind(); k != KindBoolean {
+		t.Fatalf("Type(*node) kind = %q", k)
+	}
+}
+
+func TestExplicitContainerDefaultWins(t *testing.T) {
+	// A container with an explicit default injects that default as-is, rather
+	// than rebuilding one from its children's defaults.
+	s := MustShape(map[string]any{
+		"a": Default(map[string]any{}, map[string]any{"b": 1.0, "c": Number}),
+	})
+	out := mustOK(t, s, map[string]any{}).(map[string]any)
+	if !reflect.DeepEqual(out["a"], map[string]any{}) {
+		t.Fatalf("explicit default not used: %#v", out)
+	}
+}
+
+func TestIgnoreInArraysAndOpenObjects(t *testing.T) {
+	// Ignore drops a failing value wherever it appears, not only on a declared
+	// object property.
+	arr := mustOK(t, MustShape([]any{Ignore(Number)}), []any{1.0, "x"}).([]any)
+	if len(arr) != 2 || arr[0] != 1.0 || arr[1] != nil {
+		t.Fatalf("array Ignore: %#v", arr)
+	}
+
+	rest := mustOK(t, MustShape(Child(Ignore(Number))),
+		map[string]any{"a": "x", "b": 1.0}).(map[string]any)
+	if _, present := rest["a"]; present || rest["b"] != 1.0 {
+		t.Fatalf("open-object Ignore: %#v", rest)
+	}
+}
+
+func TestNodeRenderingMatchesTS(t *testing.T) {
+	// A required typed node renders as its type name; an unrequired one renders
+	// as the value it produces. Skip/Ignore/Empty are not annotated.
+	for _, tc := range []struct{ expr, want string }{
+		{"Number", "Number"},
+		{"Min(2,Number)", "Number.Min(2)"},
+		{"Optional(Number)", "0"},
+		{"Skip(Number)", "0"},
+		{"Ignore(Number)", "0"},
+		{"Ignore(Min(2,Number))", "0.Min(2)"},
+		{"Empty(String)", "String"},
+		{"Min(2)", "Min(2)"},
+	} {
+		if got := stringifyNode(MustExpr(tc.expr).n, true); got != tc.want {
+			t.Fatalf("stringify %s = %q, want %q", tc.expr, got, tc.want)
+		}
+	}
+}

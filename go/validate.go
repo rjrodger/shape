@@ -354,11 +354,10 @@ func validateArray(n *node, in any, path []string, pathArr []any, parent any, ct
 		out := make([]any, len(arr))
 		for i, v := range arr {
 			if i < tupleLen {
-				cn := n.arrChildren[i]
-				out[i] = validateNode(cn, v, append(path, strconv.Itoa(i)), append(pathArr, i), strconv.Itoa(i), out, ctx, match, verr)
+				out[i] = validateElem(n.arrChildren[i], v, path, pathArr, i, out, ctx, match, verr)
 			} else {
 				// len(arr) > tupleLen only reaches here when arrRest is set.
-				out[i] = validateNode(n.arrRest, v, append(path, strconv.Itoa(i)), append(pathArr, i), strconv.Itoa(i), out, ctx, match, verr)
+				out[i] = validateElem(n.arrRest, v, path, pathArr, i, out, ctx, match, verr)
 			}
 		}
 		// Missing tuple positions get their default.
@@ -370,7 +369,7 @@ func validateArray(n *node, in any, path []string, pathArr []any, parent any, ct
 	case n.arrChild != nil:
 		out := make([]any, len(arr))
 		for i, v := range arr {
-			out[i] = validateNode(n.arrChild, v, append(path, strconv.Itoa(i)), append(pathArr, i), strconv.Itoa(i), out, ctx, match, verr)
+			out[i] = validateElem(n.arrChild, v, path, pathArr, i, out, ctx, match, verr)
 		}
 		return out
 	case n.arrRest != nil:
@@ -379,7 +378,7 @@ func validateArray(n *node, in any, path []string, pathArr []any, parent any, ct
 		// nothing was validated at all.
 		out := make([]any, len(arr))
 		for i, v := range arr {
-			out[i] = validateNode(n.arrRest, v, append(path, strconv.Itoa(i)), append(pathArr, i), strconv.Itoa(i), out, ctx, match, verr)
+			out[i] = validateElem(n.arrRest, v, path, pathArr, i, out, ctx, match, verr)
 		}
 		return out
 	default:
@@ -523,6 +522,18 @@ func validateObject(n *node, in any, path []string, pathArr []any, parent any, c
 		sort.Strings(rest)
 
 		for _, k := range rest {
+			// Honour Ignore here too: an open object whose rest shape is an
+			// Ignore drops the keys that do not validate.
+			if isIgnore(n.objRest) {
+				produced, kept := validateIgnored(n.objRest, obj[k],
+					append(path, k), append(pathArr, k), k, out, ctx, match)
+				if !kept {
+					delete(out, k)
+					continue
+				}
+				out[k] = produced
+				continue
+			}
 			out[k] = validateNode(n.objRest, obj[k], append(path, k), append(pathArr, k), k, out, ctx, match, verr)
 		}
 	}
@@ -691,6 +702,25 @@ func replaceLastErrText(verr *ValidationError, msg string, val any, path string)
 	verr.Issues[idx].Text = expandErrText(msg, path, val)
 }
 
+// validateElem validates one array element, honouring Ignore the same way an
+// object property and the root do: a value that does not validate is dropped
+// along with the errors it would raise.
+func validateElem(cn *node, v any, path []string, pathArr []any, i int, parent any, ctx *Context, match bool, verr *ValidationError) any {
+	key := strconv.Itoa(i)
+	epath := append(path, key)
+	epathArr := append(pathArr, i)
+
+	if isIgnore(cn) {
+		produced, kept := validateIgnored(cn, v, epath, epathArr, key, parent, ctx, match)
+		if !kept {
+			return nil
+		}
+		return produced
+	}
+
+	return validateNode(cn, v, epath, epathArr, key, parent, ctx, match, verr)
+}
+
 // isIgnore reports whether a node was built by Ignore: optional, no default
 // injection, and errors below it suppressed.
 func isIgnore(n *node) bool {
@@ -721,31 +751,19 @@ func emptyContainer(k Kind) any {
 	return map[string]any{}
 }
 
+// cloneDefault produces the value injected for an absent, unrequired node.
+//
+// It is only reached for a scalar, or for a container that carries an explicit
+// default — a container without one descends into an empty container instead,
+// so that required descendants still raise. That is why there is no longer any
+// child walk here: building a container out of its children's defaults would
+// also ignore the explicit default the node was given, and TS returns that
+// default as-is.
 func cloneDefault(n *node) any {
-	switch n.kind {
-	case KindObject:
-		out := map[string]any{}
-		for _, k := range n.objKeys {
-			cn := n.objChildren[k]
-			if cn.required || cn.skippable {
-				continue
-			}
-			if cn.hasDefault || cn.kind == KindObject || cn.kind == KindArray || cn.kind == KindNull {
-				out[k] = cloneDefault(cn)
-			}
-		}
-		return out
-	case KindArray:
-		if n.hasDefault {
-			return cloneAny(n.defaultValue)
-		}
-		return []any{}
-	default:
-		if n.hasDefault {
-			return cloneAny(n.defaultValue)
-		}
-		return n.defaultValue
+	if n.hasDefault {
+		return cloneAny(n.defaultValue)
 	}
+	return n.defaultValue
 }
 
 func cloneAny(v any) any {

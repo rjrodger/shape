@@ -131,6 +131,28 @@ describe('parity', () => {
   })
 
 
+  test('a container with an explicit default injects it as-is', () => {
+    // Not rebuilt from the children's defaults, which would ignore the default
+    // the node was actually given.
+    assert.deepEqual(
+      Shape({ a: Shape.Default({}, { b: 1, c: Number }) })({}),
+      { a: {} })
+  })
+
+
+  test('Ignore drops a failing value wherever it appears', () => {
+    // The dropped slot is left undefined, which is absent once serialized —
+    // the form the shared corpus compares.
+    const json = (v: any) => JSON.parse(JSON.stringify(v))
+
+    assert.deepEqual(json(Shape([Shape.Ignore(Number)])([1, 'x'])), [1, null])
+    assert.deepEqual(
+      json(Shape(Shape.Child(Shape.Ignore(Number)))({ a: 'x', b: 1 })),
+      { b: 1 })
+    assert.equal(Shape(Shape.Ignore(Number))('x'), undefined)
+  })
+
+
   test('Func is chainable', () => {
     const fn = () => 0
     const shape = Shape({ a: Shape.Optional().Func() })

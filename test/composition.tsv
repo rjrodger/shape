@@ -5,3 +5,5 @@ some-of-ok	{"a":{"$expr":"Some(Number,String)"}}	{"a":5}	{"a":5}
 all-of-fail-message	{"a":{"$expr":"All(Number,Min(2))"}}	{"a":1}		"Value \"1\" for property \"a\" does not satisfy all of: Number, Min(2)"
 all-of-ok	{"a":{"$expr":"All(Number,Min(2))"}}	{"a":5}	{"a":5}	
 some-of-fail	{"a":{"$expr":"Some(Number,String)"}}	{"a":true}		"Value \"true\" for property \"a\" does not satisfy any of: Number, String"
+one-of-ignore-branch	{"a":{"$expr":"One(Ignore(Min(2,Number)),String)"}}	{"a":1}	{"a":1}	
+all-of-ignore-branch	{"a":{"$expr":"All(Ignore(Min(2,Number)),Number)"}}	{"a":1}	{"a":1}	

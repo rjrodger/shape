@@ -12,3 +12,6 @@ array-rest-first-bad	{"$expr":"Rest(Number)"}	["x"]		"Validation failed for inde
 array-rest-null-element	{"$expr":"Rest(Number)"}	[1,null]		"Validation failed for index \"1\" with value \"null\" because the value is not of type number."
 array-rest-string	{"$expr":"Rest(String)"}	["a","b"]	["a","b"]	
 array-rest-string-bad	{"$expr":"Rest(String)"}	["a",2]		"Validation failed for index \"1\" with number \"2\" because the number is not of type string."
+array-ignore-drops-bad	[{"$expr":"Ignore(Number)"}]	[1,"x"]	[1,null]	
+array-ignore-keeps-good	[{"$expr":"Ignore(Number)"}]	[1,2]	[1,2]	
+array-ignore-bound	[{"$expr":"Ignore(Min(2,Number))"}]	[1,3]	[null,3]	

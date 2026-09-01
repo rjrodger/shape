@@ -64,6 +64,8 @@ function build() {
   add('obj-child-num', E('Child(Number)'), OBJS)
   add('obj-child-str', E('Child(String)'), OBJS)
   add('obj-optional-key', { a: { $optional: N } }, OBJS)
+  add('obj-child-ignore', E('Child(Ignore(Number))'), OBJS)
+  add('obj-child-ignore-bound', E('Child(Ignore(Min(2,Number)))'), OBJS)
 
   // Required fields reached through an absent parent (regression guard: Go
   // used to inject an empty default object and skip the requirement entirely).
@@ -83,6 +85,8 @@ function build() {
   add('arr-child', E('Child(Number)'), ARRS)
   add('arr-empty', [], ARRS)
   add('arr-nested', [[N]], [[], [[1]], [[1, 2]], [[1], [2]], [['x']], [1]])
+  add('arr-ignore', [E('Ignore(Number)')], ARRS)
+  add('arr-ignore-bound', [E('Ignore(Min(2,Number))')], ARRS)
 
   // Bounded builders, bare and with a type argument.
   for (const b of ['Min', 'Max', 'Above', 'Below', 'Len']) {
@@ -119,6 +123,8 @@ function build() {
   add('c-all', E('All(Number,Min(2))'), SCALARS)
   add('c-all-str', E('All(String,Min(2))'), SCALARS)
   add('c-one-obj', { a: E('One(String,Number)') }, OBJS)
+  add('c-one-ignore', E('One(Ignore(Min(2,Number)),String)'), SCALARS)
+  add('c-all-ignore', E('All(Ignore(Min(2,Number)),Number)'), SCALARS)
 
   // Type() — both the builder-style DSL call and a chained type token.
   for (const t of ['String', 'Number', 'Boolean', 'Object', 'Array', 'Any']) {
