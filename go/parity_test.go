@@ -757,3 +757,145 @@ func TestFmtFloatMatchesJS(t *testing.T) {
 		t.Fatal("trailing space accepted")
 	}
 }
+
+// --- string formats ---------------------------------------------------------
+
+func TestFormats(t *testing.T) {
+	long := strings.Repeat("x", 64) + "@" + strings.Repeat(strings.Repeat("a", 63)+".", 3) + "com"
+	v4ok := []string{"0.0.0.0", "127.0.0.1", "255.255.255.255", "1.2.3.4"}
+	v4bad := []string{"256.0.0.1", "1.2.3", "1.2.3.4.5", "01.2.3.4", "1.2.3.4 ", "::1", "a.b.c.d", "1.2.3.-4", ""}
+	v6ok := []string{"::", "::1", "1::", "fe80::1", "2001:db8::8a2e:370:7334", "1:2:3:4:5:6:7:8",
+		"::ffff:192.168.1.1", "::1.2.3.4", "1:2:3:4:5:6:1.2.3.4", "1:2:3:4:5:6:7::",
+		"ABCD:EF01:2345:6789:abcd:ef01:2345:6789"}
+	v6bad := []string{"1.2.3.4", "1:2:3:4:5:6:7", "1:2:3:4:5:6:7:8:9", "1::2::3", ":::",
+		":1:2:3:4:5:6:7", "1:2:3:4:5:6:7:8::", "12345::", "g::1", "1::2:", "fe80::1%eth0",
+		"::1/64", "1:2:3:4:5:6::1.2.3.4", "1.2.3.4::", "1:2:3:4:5:6:7:1.2.3.4", "", ":"}
+
+	cases := []struct {
+		b       *Node
+		what    string
+		ok, bad []string
+	}{
+		{Email(), "email address",
+			[]string{"a@b.co", "first.last+tag@sub.example.org", "o'neil@example.com", "A_B-c@x-y.example", "a@b.museum"},
+			[]string{"nope", "@b.co", "a@", "a@b", "a@b.c", "a..b@c.co", ".a@b.co", "a.@b.co", "a@-b.co", "a@b-.co",
+				"a@b..co", "a b@c.co", "a@b.c0",
+				// Length limits: a 65-character local part, a 64-character label, 260 in all.
+				strings.Repeat("x", 65) + "@b.co", "a@" + strings.Repeat("b", 64) + ".co", long}},
+		{Url(), "URL",
+			[]string{"http://example.com", "https://a.b/c/d?e=f#g", "ftp://user:pw@host:21/path", "http://[::1]:8080/x",
+				"custom+scheme.x://host", "http://localhost", "http://1.2.3.4/"},
+			[]string{"example.com", "http://", "http:// example.com", "http://exa mple.com/", "://host", "http://host:port",
+				"1http://host", "mailto:a@b.co", "http://@host", "http://host/a b"}},
+		{Uuid(), "UUID",
+			[]string{"123e4567-e89b-12d3-a456-426614174000", "00000000-0000-0000-0000-000000000000",
+				"ABCDEF01-2345-6789-ABCD-EF0123456789"},
+			[]string{"123e4567e89b12d3a456426614174000", "123e4567-e89b-12d3-a456-42661417400",
+				"123e4567-e89b-12d3-a456-4266141740000", "g23e4567-e89b-12d3-a456-426614174000",
+				"{123e4567-e89b-12d3-a456-426614174000}"}},
+		{DateTime(), "ISO 8601 date-time",
+			[]string{"2020-01-01T00:00:00Z", "2020-02-29T23:59:59.999+05:30"},
+			[]string{"2020-01-01", "2021-02-29T00:00:00Z", "2020-01-01 00:00:00Z", "now", ""}},
+		{Ipv4(), "IPv4 address", v4ok, v4bad},
+		{Ipv6(), "IPv6 address", v6ok, v6bad},
+		{Ip(), "IP address", append(append([]string{}, v4ok...), v6ok...), []string{"x", "1.2.3", "1::2::3", ""}},
+	}
+	for _, c := range cases {
+		s := MustShape(c.b)
+		for _, v := range c.ok {
+			if out := mustOK(t, s, v); out != v {
+				t.Fatalf("%s: %q became %#v", c.what, v, out)
+			}
+		}
+		for _, v := range c.bad {
+			mustErr(t, s, v, "is not a valid "+c.what+".")
+		}
+	}
+	// DateTime keeps the string; Coerce(Date) is the one that parses.
+	if _, ok := mustOK(t, MustShape(DateTime()), "2020-01-01T00:00:00Z").(string); !ok {
+		t.Fatal("DateTime did not keep the string")
+	}
+
+	// A format is a shape of string: required by default, "" when optional.
+	mustErr(t, MustShape(map[string]any{"a": Email()}), map[string]any{}, "is required")
+	if out := mustOK(t, MustShape(map[string]any{"a": Optional(Email())}), map[string]any{}).(map[string]any); out["a"] != "" {
+		t.Fatalf("Optional(Email) absent = %#v", out)
+	}
+	if out := mustOK(t, MustShape(map[string]any{"a": Email(Nullable(String))}), map[string]any{"a": nil}).(map[string]any); out["a"] != nil {
+		t.Fatalf("Email(Nullable(String)) null = %#v", out)
+	}
+	mustErr(t, MustShape(map[string]any{"a": Email()}), map[string]any{"a": 1.0}, "the number is not of type string")
+	mustErr(t, MustShape(Email(Any)), 1.0, "is not of type string")
+
+	// Like .String(), a chained format re-asserts the string type.
+	mustErr(t, MustShape(map[string]any{"a": Optional().Email()}), map[string]any{}, "is required")
+	for _, chained := range []struct {
+		f   func(*Node) *Node
+		bad string
+	}{{(*Node).Url, "x"}, {(*Node).Uuid, "x"}, {(*Node).DateTime, "x"}, {(*Node).Ip, "x"}, {(*Node).Ipv4, "::1"}, {(*Node).Ipv6, "1.2.3.4"}} {
+		mustErr(t, MustShape(chained.f(Required(String))), chained.bad, "is not a valid")
+	}
+
+	// Befores run in the order they were added; every failing one speaks.
+	mustErr(t, MustShape(Email(Min(10, String))), "nope",
+		"Value \"nope\" for property \"\" must be a minimum length of 10 (was 4).\nValue \"nope\" for property \"\" is not a valid email address.")
+	mustErr(t, MustShape(Min(10, Email())), "a@b.co", "must be a minimum length of 10 (was 6).")
+
+	// The format's own text survives Fault; the type error takes it.
+	mustErr(t, MustShape(Fault("boom", Email())), "bad", "Value \"bad\" for property \"\" is not a valid email address.")
+	mustErr(t, MustShape(Fault("boom", Email())), 1.0, "boom")
+
+	mustOK(t, MustShape(MustExpr("Email")), "a@b.co")
+	if out := mustOK(t, MustShape(map[string]any{"a": MustExpr("Optional(Url)")}), map[string]any{}).(map[string]any); out["a"] != "" {
+		t.Fatalf("expr Optional(Url) absent = %#v", out)
+	}
+	mustErr(t, MustShape(MustExpr("Uuid(Min(2,String))")), "x", "minimum length of 2")
+
+	if got := stringifyNode(Email(String).n, true); got != "String.Email" {
+		t.Fatalf("render = %q", got)
+	}
+	if got := stringifyNode(MustExpr("Ipv6").n, true); got != "String.Ipv6" {
+		t.Fatalf("render = %q", got)
+	}
+
+	errs := MustShape(Email()).Error("nope")
+	if len(errs) != 1 || errs[0].Why != WhyEmail || errs[0].Check != "Email" {
+		t.Fatalf("why/check = %#v", errs)
+	}
+}
+
+// --- checks run in order -----------------------------------------------------
+
+func TestChecksRunInOrder(t *testing.T) {
+	fail := func(any, *Update, *State) bool { return false }
+
+	// A failing before ends the structural checks; the afters still run.
+	mustErr(t, MustShape(After(fail, Min(2, Number))), 1.0,
+		"Value \"1\" for property \"\" must be a minimum of 2 (was 1).\nValidation failed for number \"1\" because check \"After\" failed.")
+	mustErr(t, MustShape(After(fail, Number)), "x",
+		"is not of type number.\nValidation failed for string \"x\" because check \"After\" failed.")
+	mustErr(t, MustShape(After(fail, Never())), 1.0,
+		"no value is allowed.\nValidation failed for number \"1\" because check \"After\" failed.")
+
+	// Fault replaces structural text, not a check's own.
+	mustErr(t, MustShape(Fault("boom", Min(2, Number))), 1.0, "Value \"1\" for property \"\" must be a minimum of 2 (was 1).")
+	mustErr(t, MustShape(Fault("boom", Check(fail))), "x", "boom")
+	mustErr(t, MustShape(Fault("boom", Check(func(_ any, u *Update, _ *State) bool { u.Err = "custom"; return false }))), "x", "custom")
+	mustErr(t, MustShape(Fault("boom", After(fail, Number))), 1.0, "boom")
+	mustErr(t, MustShape(Fault("boom", String)), 1.0, "boom")
+
+	// An absent value on an unrequired node raises nothing from its checks.
+	if out := mustOK(t, MustShape(map[string]any{"a": After(fail, Skip(Number))}), map[string]any{}).(map[string]any); len(out) != 0 {
+		t.Fatalf("After on skipped absent = %#v", out)
+	}
+	if out := mustOK(t, MustShape(map[string]any{"a": Before(fail, Optional(Number))}), map[string]any{}).(map[string]any); out["a"] != 0.0 {
+		t.Fatalf("Before on optional absent = %#v", out)
+	}
+	mustErr(t, MustShape(map[string]any{"a": Before(fail, Number)}), map[string]any{},
+		"Validation failed for property \"a\" with value \"undefined\" because check \"Before\" failed.")
+	mustErr(t, MustShape(map[string]any{"a": After(fail, Number)}), map[string]any{},
+		"is required.\nValidation failed for property \"a\" with value \"undefined\" because check \"After\" failed.")
+	// ...unless the check insists.
+	mustErr(t, MustShape(map[string]any{"a": Before(func(_ any, u *Update, _ *State) bool { u.Done = true; return false }, Optional(Number))}),
+		map[string]any{}, "check \"Before\" failed.")
+}

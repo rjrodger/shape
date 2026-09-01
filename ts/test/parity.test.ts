@@ -361,3 +361,146 @@ describe('coerce', () => {
     assert.deepEqual(Shape({ a: Optional(Coerce(Number)) })({}), { a: 0 })
   })
 })
+
+
+describe('formats', () => {
+  const { Email, Url, Uuid, DateTime, Ip, Ipv4, Ipv6, Optional, Nullable, Min, Fault, Any } =
+    Shape as any
+
+  const accepts = (b: any, vals: string[]) => {
+    for (const v of vals) {
+      assert.equal(Shape(b)(v), v, v)
+    }
+  }
+  const rejects = (b: any, vals: string[], what: string) => {
+    for (const v of vals) {
+      assert.match(failure(b, v), new RegExp(' is not a valid ' + what + '\\.$'), v)
+    }
+  }
+
+  test('Email', () => {
+    accepts(Email, ['a@b.co', 'first.last+tag@sub.example.org', "o'neil@example.com",
+      'A_B-c@x-y.example', 'a@b.museum'])
+    rejects(Email, ['nope', '@b.co', 'a@', 'a@b', 'a@b.c', 'a..b@c.co', '.a@b.co', 'a.@b.co',
+      'a@-b.co', 'a@b-.co', 'a@b..co', 'a b@c.co', 'a@b.c0',
+      // Length limits: a 65-character local part, a 64-character label, 260 in all.
+      'x'.repeat(65) + '@b.co', 'a@' + 'b'.repeat(64) + '.co',
+      'x'.repeat(64) + '@' + ('a'.repeat(63) + '.').repeat(3) + 'com'], 'email address')
+  })
+
+  test('Url', () => {
+    accepts(Url, ['http://example.com', 'https://a.b/c/d?e=f#g', 'ftp://user:pw@host:21/path',
+      'http://[::1]:8080/x', 'custom+scheme.x://host', 'http://localhost', 'http://1.2.3.4/'])
+    rejects(Url, ['example.com', 'http://', 'http:// example.com', 'http://exa mple.com/',
+      '://host', 'http://host:port', '1http://host', 'mailto:a@b.co', 'http://@host',
+      'http://host/a b'], 'URL')
+  })
+
+  test('Uuid', () => {
+    accepts(Uuid, ['123e4567-e89b-12d3-a456-426614174000',
+      '00000000-0000-0000-0000-000000000000', 'ABCDEF01-2345-6789-ABCD-EF0123456789'])
+    rejects(Uuid, ['123e4567e89b12d3a456426614174000', '123e4567-e89b-12d3-a456-42661417400',
+      '123e4567-e89b-12d3-a456-4266141740000', 'g23e4567-e89b-12d3-a456-426614174000',
+      '{123e4567-e89b-12d3-a456-426614174000}'], 'UUID')
+  })
+
+  test('DateTime keeps the string', () => {
+    accepts(DateTime, ['2020-01-01T00:00:00Z', '2020-02-29T23:59:59.999+05:30'])
+    rejects(DateTime, ['2020-01-01', '2021-02-29T00:00:00Z', '2020-01-01 00:00:00Z', 'now', ''],
+      'ISO 8601 date-time')
+    assert.equal(typeof Shape(DateTime)('2020-01-01T00:00:00Z'), 'string')
+  })
+
+  test('Ipv4, Ipv6 and Ip', () => {
+    const v4ok = ['0.0.0.0', '127.0.0.1', '255.255.255.255', '1.2.3.4']
+    const v4bad = ['256.0.0.1', '1.2.3', '1.2.3.4.5', '01.2.3.4', '1.2.3.4 ', '::1', 'a.b.c.d',
+      '1.2.3.-4', '']
+    const v6ok = ['::', '::1', '1::', 'fe80::1', '2001:db8::8a2e:370:7334', '1:2:3:4:5:6:7:8',
+      '::ffff:192.168.1.1', '::1.2.3.4', '1:2:3:4:5:6:1.2.3.4', '1:2:3:4:5:6:7::',
+      'ABCD:EF01:2345:6789:abcd:ef01:2345:6789']
+    const v6bad = ['1.2.3.4', '1:2:3:4:5:6:7', '1:2:3:4:5:6:7:8:9', '1::2::3', ':::',
+      ':1:2:3:4:5:6:7', '1:2:3:4:5:6:7:8::', '12345::', 'g::1', '1::2:', 'fe80::1%eth0',
+      '::1/64', '1:2:3:4:5:6::1.2.3.4', '1.2.3.4::', '1:2:3:4:5:6:7:1.2.3.4', '', ':']
+
+    accepts(Ipv4, v4ok)
+    rejects(Ipv4, v4bad, 'IPv4 address')
+    accepts(Ipv6, v6ok)
+    rejects(Ipv6, v6bad, 'IPv6 address')
+    accepts(Ip, v4ok.concat(v6ok))
+    rejects(Ip, ['x', '1.2.3', '1::2::3', ''], 'IP address')
+  })
+
+  test('placement, typing and rendering', () => {
+    // A format is a shape of string: required by default, '' when optional.
+    assert.match(failure({ a: Email }, {}), /is required/)
+    assert.deepEqual(Shape({ a: Optional(Email) })({}), { a: '' })
+    assert.deepEqual(Shape({ a: Email(Nullable(String)) })({ a: null }), { a: null })
+    assert.match(failure({ a: Email }, { a: 1 }), /the number is not of type string/)
+    assert.match(failure(Email(Any()), 1), /is not of type string/)
+
+    // Like .String(), a chained format re-asserts the string type.
+    assert.match(failure({ a: Optional().Email() }, {}), /is required/)
+    assert.equal(Shape(Optional().Uuid())('123e4567-e89b-12d3-a456-426614174000'),
+      '123e4567-e89b-12d3-a456-426614174000')
+
+    // Befores run in the order they were added; every failing one speaks.
+    assert.equal(failure(Email(Min(10, String)), 'nope'),
+      'Value "nope" for property "" must be a minimum length of 10 (was 4).\n' +
+      'Value "nope" for property "" is not a valid email address.')
+    assert.match(failure(Min(10, Email), 'a@b.co'), /^Value "a@b.co" for property "" must be a minimum length of 10 \(was 6\)\.$/)
+
+    // The format's own text survives Fault; the type error takes it.
+    assert.equal(failure(Fault('boom', Email), 'bad'),
+      'Value "bad" for property "" is not a valid email address.')
+    assert.equal(failure(Fault('boom', Email), 1), 'boom')
+
+    assert.equal(Shape(Shape.expr('Email'))('a@b.co'), 'a@b.co')
+    assert.deepEqual(Shape({ a: Shape.expr('Optional(Url)') })({}), { a: '' })
+    assert.match(failure(Shape.expr('Uuid(Min(2,String))'), 'x'), /minimum length of 2/)
+
+    assert.equal(Shape.stringify(Email(String), true), 'String.Email')
+    assert.equal(Shape.stringify(Shape.expr('Ipv6'), true), 'String.Ipv6')
+
+    const ctx: any = { err: [] }
+    Shape(Email)('nope', ctx)
+    assert.equal(ctx.err[0].why, 'Email')
+    assert.equal(ctx.err[0].check, 'Email')
+  })
+})
+
+
+describe('checks run in order', () => {
+  const { After, Before, Check, Fault, Min, Never, Optional, Skip } = Shape as any
+
+  test('a failing before ends the structural checks; the afters still run', () => {
+    assert.match(failure(After(() => false, Min(2, Number)), 1),
+      /^Value "1" for property "" must be a minimum of 2 \(was 1\)\.\nValidation failed for number "1" because check ".*" failed\.$/)
+    assert.match(failure(After(() => false, Number), 'x'),
+      /is not of type number\.\nValidation failed for string "x" because check ".*" failed\.$/)
+    assert.match(failure(After(() => false, Never()), 1),
+      /no value is allowed\.\nValidation failed for number "1" because check ".*" failed\.$/)
+  })
+
+  test('Fault replaces structural text, not a check\'s own', () => {
+    assert.equal(failure(Fault('boom', Min(2, Number)), 1),
+      'Value "1" for property "" must be a minimum of 2 (was 1).')
+    assert.equal(failure(Fault('boom', Check(() => false)), 'x'), 'boom')
+    assert.equal(failure(Fault('boom', Check((_v: any, u: any) => (u.err = 'custom', false))), 'x'),
+      'custom')
+    assert.equal(failure(Fault('boom', After(() => false, Number)), 1), 'boom')
+    assert.equal(failure(Fault('boom', String), 1), 'boom')
+  })
+
+  test('an absent value on an unrequired node raises nothing from its checks', () => {
+    assert.deepEqual(Shape({ a: After(() => false, Skip(Number)) })({}), {})
+    assert.deepEqual(Shape({ a: Before(() => false, Optional(Number)) })({}), { a: 0 })
+    assert.match(failure({ a: Before(() => false, Number) }, {}),
+      /^Validation failed for property "a" with value "undefined" because check ".*" failed\.$/)
+    assert.match(failure({ a: After(() => false, Number) }, {}),
+      /is required\.\nValidation failed for property "a" with value "undefined" because check ".*" failed\.$/)
+    // ...unless the check insists.
+    assert.match(
+      failure({ a: Before((_v: any, u: any) => (u.done = true, false), Optional(Number)) }, {}),
+      /check ".*" failed\.$/)
+  })
+})

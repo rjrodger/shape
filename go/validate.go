@@ -123,7 +123,10 @@ func validateNode(n *node, in any, path []string, pathArr []any, key string, par
 		absent:  absent,
 	}
 
-	// Run before-validators. They may replace value, replace node, or short-circuit.
+	// Run before-validators. They may replace the value or the node, and a
+	// failing one ends the structural checks (TS handleValidate sets
+	// update.done) — but every before still runs, and so do the afters.
+	done := false
 	for _, b := range n.befores {
 		update := &Update{}
 		state.checkName = b.name
@@ -131,30 +134,48 @@ func validateNode(n *node, in any, path []string, pathArr []any, key string, par
 		applyUpdate(state, update)
 		in = state.Value
 		n = state.Node
+		if !ok && absentSkips(state, update) {
+			continue
+		}
 		if !ok {
 			emitUpdateErrors(state, update, verr)
-			if update.Done {
-				if n.faultMsg != "" {
-					replaceLastErrText(verr, n.faultMsg, state.Value, joinPath(path))
-				}
-				return state.Value
-			}
+		}
+		if !ok || update.Done {
+			done = true
 		}
 	}
+	if done {
+		runAfters(state, verr)
+		return state.Value
+	}
+
+	state.Value = validateStructure(n, state, absent, path, pathArr, key, parent, ctx, match, verr)
+	runAfters(state, verr)
+	return state.Value
+}
+
+// absentSkips reports whether a failed check is to raise nothing: TS drops the
+// errors of a check run against an absent value on a node that does not
+// require one ("Skip allows undefined"), unless the check insisted with Done.
+func absentSkips(state *State, update *Update) bool {
+	n := state.Node
+	return state.absent && state.Value == nil && (n.skippable || !n.required) && !update.Done
+}
+
+// validateStructure runs the structural checks — composition, nullable, Never,
+// the missing-value rules and the kind check — and returns the produced value.
+// The afters run afterwards whatever it reported, as they do in TS.
+func validateStructure(n *node, state *State, absent bool, path []string, pathArr []any, key string, parent any, ctx *Context, match bool, verr *ValidationError) any {
 
 	// Composition shortcuts.
 	if n.kind == KindList {
-		out := evaluateList(n, state.Value, path, pathArr, key, parent, ctx, match, verr, absent)
-		state.Value = out
-		runAfters(state, verr)
-		return state.Value
+		return evaluateList(n, state.Value, path, pathArr, key, parent, ctx, match, verr, absent)
 	}
 
 	// Nullable: an explicit null is accepted as the value. Absent is still
 	// governed by required/optional below, since a nil that is absent is not
 	// yet in play here — the absent sentinel was translated above.
 	if state.Value == nil && !absent && n.nullable {
-		runAfters(state, verr)
 		return state.Value
 	}
 
@@ -311,9 +332,7 @@ func validateNode(n *node, in any, path []string, pathArr []any, key string, par
 		// Unknown kind: allow.
 	}
 
-	state.Value = out
-	runAfters(state, verr)
-	return state.Value
+	return out
 }
 
 func emitTypeErr(state *State, verr *ValidationError, n *node) {
@@ -327,20 +346,15 @@ func emitTypeErr(state *State, verr *ValidationError, n *node) {
 }
 
 func runAfters(state *State, verr *ValidationError) {
+	// Every after runs, whatever the ones before it reported (TS).
 	n := state.Node
 	for _, a := range n.afters {
 		update := &Update{}
 		state.checkName = a.name
 		ok := a.fn(state.Value, update, state)
 		applyUpdate(state, update)
-		if !ok {
+		if !ok && !absentSkips(state, update) {
 			emitUpdateErrors(state, update, verr)
-			if update.Done {
-				if n.faultMsg != "" {
-					replaceLastErrText(verr, n.faultMsg, state.Value, joinPath(state.Path))
-				}
-				return
-			}
 		}
 	}
 }
@@ -689,7 +703,13 @@ func emitUpdateErrors(state *State, update *Update, verr *ValidationError) {
 		if mark == 0 {
 			mark = markCustomCheckErr
 		}
-		verr.add(makeErr(state, why, mark, ""))
+		// A check that supplies no text of its own takes the Fault text, as a
+		// structural error does; one that does keeps its own (TS: text || z).
+		err := makeErr(state, why, mark, "")
+		if state.Node.faultMsg != "" {
+			err.Text = expandErrText(state.Node.faultMsg, err.Path, state.Value)
+		}
+		verr.add(err)
 	case string:
 		why := update.Why
 		mark := update.Mark
@@ -728,14 +748,6 @@ func applyUpdate(state *State, update *Update) {
 	if update.Node != nil {
 		state.Node = update.Node
 	}
-}
-
-func replaceLastErrText(verr *ValidationError, msg string, val any, path string) {
-	if len(verr.Issues) == 0 {
-		return
-	}
-	idx := len(verr.Issues) - 1
-	verr.Issues[idx].Text = expandErrText(msg, path, val)
 }
 
 // validateElem validates one array element, honouring Ignore the same way an

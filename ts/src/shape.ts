@@ -229,6 +229,13 @@ const S = {
   Never: 'Never',
   Nullable: 'Nullable',
   Coerce: 'Coerce',
+  DateTime: 'DateTime',
+  Email: 'Email',
+  Ip: 'Ip',
+  Ipv4: 'Ipv4',
+  Ipv6: 'Ipv6',
+  Url: 'Url',
+  Uuid: 'Uuid',
   Len: 'Len',
   One: 'One',
   Open: 'Open',
@@ -1962,6 +1969,149 @@ const Coerce = function <V>(this: any, shape?: Node<V> | V): Node<V> {
 }
 
 
+// String Formats: Email, Url, Uuid, DateTime, Ip, Ipv4, Ipv6
+// ==========================================================
+// Every pattern here is written so that the JavaScript engine and RE2 agree on
+// it: ASCII classes only, no lookaround, explicit whitespace.
+
+// A pragmatic RFC 5322 addr-spec: a dot-atom local part of at most 64
+// characters, then a dotted domain ending in an alphabetic top-level label,
+// 254 characters in all. No quoted local parts, no address literals.
+const EMAIL_RE =
+  /^[A-Za-z0-9!#$%&'*+\/=?^_`{|}~-]+(?:\.[A-Za-z0-9!#$%&'*+\/=?^_`{|}~-]+)*@(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63}$/
+
+function isEmail(s: string): boolean {
+  return s.length <= 254 && s.indexOf('@') <= 64 && EMAIL_RE.test(s)
+}
+
+
+// scheme://[user@]host[:port][/path][?query][#fragment]: an absolute URL with
+// a non-empty host and no whitespace. Nothing is decoded or resolved.
+const URL_RE =
+  /^[A-Za-z][A-Za-z0-9+.-]*:\/\/(?:[^ \t\r\n\/?#@]+@)?(?:\[[0-9A-Fa-f:.]+\]|[^ \t\r\n\/?#@:\[\]]+)(?::\d{1,5})?(?:[\/?#][^ \t\r\n]*)?$/
+
+
+// 8-4-4-4-12 hex digits; any version, including the nil UUID.
+const UUID_RE =
+  /^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$/
+
+
+// A dotted quad of decimal octets 0-255 without leading zeros.
+const IPV4_RE =
+  /^(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/
+
+const HEX4_RE = /^[0-9A-Fa-f]{1,4}$/
+
+
+// RFC 4291 text form: eight 16-bit hex groups, one optional "::" standing for
+// a run of zero groups, and optionally a trailing dotted quad in place of the
+// last two groups. No zone index and no prefix length.
+function isIpv6(s: string): boolean {
+  const parts = s.split('::')
+  if (2 < parts.length) {
+    return false
+  }
+
+  const head = '' === parts[0] ? [] : parts[0].split(':')
+  const tail = 2 === parts.length && '' !== parts[1] ? parts[1].split(':') : []
+  const groups = head.concat(tail)
+
+  let count = 0
+  for (let gI = 0; gI < groups.length; gI++) {
+    if (HEX4_RE.test(groups[gI])) {
+      count++
+    }
+
+    // A dotted quad may only end the address, so not ahead of a "::".
+    else if (gI === groups.length - 1 && (1 === parts.length || head.length <= gI) &&
+      IPV4_RE.test(groups[gI])) {
+      count += 2
+    }
+    else {
+      return false
+    }
+  }
+
+  return 2 === parts.length ? count <= 7 : 8 === count
+}
+
+
+// A format is a before on a string-shaped node. It speaks only once the value
+// is known to be present and of the node's kind; otherwise the structural
+// check reports the real problem.
+function makeFormatBuilder(
+  self: any,
+  shape: any,
+  name: string,
+  what: string,
+  valid: (str: string) => boolean
+) {
+  let node = buildize(self, shape)
+
+  // A format is a shape of string, so an untyped node becomes one.
+  if (S.any === node.t) {
+    Type.call(node, String)
+  }
+
+  let validator: any = function(val: any, update: Update, state: State) {
+    if (undefined === val || typeWillFail(state)) {
+      return true
+    }
+    if (S.string === typeof val && valid(val)) {
+      return true
+    }
+    update.err = makeErr(state,
+      S.Value + ' ' + S.$VALUE + S.forprop + S.$PATH + ' is not a valid ' + what + '.',
+      name)
+    return false
+  }
+
+  Object.defineProperty(validator, S.name, { value: name })
+
+  validator.n = name
+  validator.s = () => name
+
+  validator[Symbol.for('nodejs.util.inspect.custom')] = name
+  validator.toJSON = () => name
+
+  node.b.push(validator)
+
+  return node
+}
+
+
+const Email = function <V>(this: any, shape?: Node<V> | V): Node<V> {
+  return makeFormatBuilder(this, shape, S.Email, 'email address', isEmail)
+}
+
+const Url = function <V>(this: any, shape?: Node<V> | V): Node<V> {
+  return makeFormatBuilder(this, shape, S.Url, 'URL', (s) => URL_RE.test(s))
+}
+
+const Uuid = function <V>(this: any, shape?: Node<V> | V): Node<V> {
+  return makeFormatBuilder(this, shape, S.Uuid, 'UUID', (s) => UUID_RE.test(s))
+}
+
+// The string form of a date-time; the value stays a string. Coerce(Date) is
+// the one that produces a Date.
+const DateTime = function <V>(this: any, shape?: Node<V> | V): Node<V> {
+  return makeFormatBuilder(this, shape, S.DateTime, 'ISO 8601 date-time', isoDateTime)
+}
+
+const Ip = function <V>(this: any, shape?: Node<V> | V): Node<V> {
+  return makeFormatBuilder(this, shape, S.Ip, 'IP address',
+    (s) => IPV4_RE.test(s) || isIpv6(s))
+}
+
+const Ipv4 = function <V>(this: any, shape?: Node<V> | V): Node<V> {
+  return makeFormatBuilder(this, shape, S.Ipv4, 'IPv4 address', (s) => IPV4_RE.test(s))
+}
+
+const Ipv6 = function <V>(this: any, shape?: Node<V> | V): Node<V> {
+  return makeFormatBuilder(this, shape, S.Ipv6, 'IPv6 address', isIpv6)
+}
+
+
 // Value may also be null. Absent is still governed by required/optional.
 const Nullable = function <V>(this: any, shape?: Node<V> | V): Node<V> {
   let node = buildize(this, shape)
@@ -2904,14 +3054,19 @@ function buildize<V>(self?: any, shape?: any): Node<V> {
       Child,
       Closed,
       Coerce,
+      DateTime,
       Default,
       Define,
       Empty,
+      Email,
       Exact,
       Fault,
       Func,
       Ignore,
       Integer,
+      Ip,
+      Ipv4,
+      Ipv6,
       Len,
       Max,
       Min,
@@ -2925,6 +3080,8 @@ function buildize<V>(self?: any, shape?: any): Node<V> {
       Rest,
       Skip,
       Type,
+      Url,
+      Uuid,
 
       String: () => Type.call(node, String),
       Number: () => Type.call(node, Number),
@@ -3316,14 +3473,19 @@ const BuilderMap = {
   Child,
   Closed,
   Coerce,
+  DateTime,
   Default,
   Define,
+  Email,
   Empty,
   Exact,
   Fault,
   Func,
   Ignore,
   Integer,
+  Ip,
+  Ipv4,
+  Ipv6,
   Key,
   Len,
   Max,
@@ -3340,14 +3502,16 @@ const BuilderMap = {
   Some,
   Rest,
   Type,
+  Url,
+  Uuid,
 }
 
 
 // Builders that mean something applied to nothing, so a bare reference to one
 // in a spec (`{ a: Any }`) is read as a call. See nodize.
 const NULLARY_BUILDERS =
-  [Any, Closed, Coerce, Empty, Func, Ignore, Integer, Key, Never, Nullable, Open,
-    Optional, Required, Skip]
+  [Any, Closed, Coerce, DateTime, Email, Empty, Func, Ignore, Integer, Ip, Ipv4, Ipv6,
+    Key, Never, Nullable, Open, Optional, Required, Skip, Url, Uuid]
 
 for (let builder of NULLARY_BUILDERS) {
   defprop(builder, 'nullary$', { value: true })
@@ -3426,6 +3590,13 @@ const GAll = All
 const GAny = Any
 const GInteger = Integer
 const GCoerce = Coerce
+const GDateTime = DateTime
+const GEmail = Email
+const GIp = Ip
+const GIpv4 = Ipv4
+const GIpv6 = Ipv6
+const GUrl = Url
+const GUuid = Uuid
 const GNullable = Nullable
 const GBefore = Before
 const GBelow = Below
@@ -3623,14 +3794,19 @@ export {
   Child,
   Closed,
   Coerce,
+  DateTime,
   Default,
   Define,
+  Email,
   Empty,
   Exact,
   Fault,
   Func,
   Ignore,
   Integer,
+  Ip,
+  Ipv4,
+  Ipv6,
   Key,
   Len,
   Max,
@@ -3647,6 +3823,8 @@ export {
   Some,
   Type,
   Rest,
+  Url,
+  Uuid,
 
   GAbove,
   GAfter,
@@ -3658,6 +3836,13 @@ export {
   GChild,
   GClosed,
   GCoerce,
+  GDateTime,
+  GEmail,
+  GIp,
+  GIpv4,
+  GIpv6,
+  GUrl,
+  GUuid,
   GDefault,
   GDefine,
   GEmpty,

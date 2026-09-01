@@ -31,6 +31,13 @@ const (
 	WhyNever    = "never"
 	WhyRegexp   = "regexp"
 	WhyEmpty    = "empty"
+	WhyEmail    = "Email"
+	WhyUrl      = "Url"
+	WhyUuid     = "Uuid"
+	WhyDateTime = "DateTime"
+	WhyIp       = "Ip"
+	WhyIpv4     = "Ipv4"
+	WhyIpv6     = "Ipv6"
 )
 
 // FieldError captures rich information about a single validation failure.

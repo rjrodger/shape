@@ -72,3 +72,23 @@ coerce-date-with-offset	{"a":{"$expr":"Coerce(Date)"}}	{"a":"2020-01-01T12:30:00
 coerce-date-invalid-day	{"a":{"$expr":"Coerce(Date)"}}	{"a":"2020-02-30T00:00:00Z"}		"Validation failed for property \"a\" with string \"2020-02-30T00:00:00Z\" because the string is not of type date."
 coerce-date-from-millis	{"a":{"$expr":"Coerce(Date)"}}	{"a":1577836800000}	{"a":"2020-01-01T00:00:00.000Z"}	
 coerce-before-bound	{"a":{"$expr":"Coerce(Min(2,Number))"}}	{"a":"1"}		"Value \"1\" for property \"a\" must be a minimum of 2 (was 1)."
+format-email-ok	{"a":{"$expr":"Email"}}	{"a":"a@b.co"}	{"a":"a@b.co"}	
+format-email-bad	{"a":{"$expr":"Email"}}	{"a":"nope"}		"Value \"nope\" for property \"a\" is not a valid email address."
+format-email-not-string	{"a":{"$expr":"Email"}}	{"a":1}		"Validation failed for property \"a\" with number \"1\" because the number is not of type string."
+format-email-required	{"a":{"$expr":"Email"}}	{}		"Validation failed for property \"a\" with value \"undefined\" because the value is required."
+format-email-optional-absent	{"a":{"$expr":"Optional(Email)"}}	{}	{"a":""}	
+format-url-ok	{"a":{"$expr":"Url"}}	{"a":"https://example.com/a?b=c#d"}	{"a":"https://example.com/a?b=c#d"}	
+format-url-bad	{"a":{"$expr":"Url"}}	{"a":"example.com"}		"Value \"example.com\" for property \"a\" is not a valid URL."
+format-uuid-ok	{"a":{"$expr":"Uuid"}}	{"a":"123e4567-e89b-12d3-a456-426614174000"}	{"a":"123e4567-e89b-12d3-a456-426614174000"}	
+format-uuid-bad	{"a":{"$expr":"Uuid"}}	{"a":"123e4567e89b12d3a456426614174000"}		"Value \"123e4567e89b12d3a456426614174000\" for property \"a\" is not a valid UUID."
+format-datetime-ok	{"a":{"$expr":"DateTime"}}	{"a":"2020-01-01T00:00:00Z"}	{"a":"2020-01-01T00:00:00Z"}	
+format-datetime-bad	{"a":{"$expr":"DateTime"}}	{"a":"2021-02-29T00:00:00Z"}		"Value \"2021-02-29T00:00:00Z\" for property \"a\" is not a valid ISO 8601 date-time."
+format-ip-v4	{"a":{"$expr":"Ip"}}	{"a":"127.0.0.1"}	{"a":"127.0.0.1"}	
+format-ip-v6	{"a":{"$expr":"Ip"}}	{"a":"::1"}	{"a":"::1"}	
+format-ip-bad	{"a":{"$expr":"Ip"}}	{"a":"1.2.3"}		"Value \"1.2.3\" for property \"a\" is not a valid IP address."
+format-ipv4-rejects-v6	{"a":{"$expr":"Ipv4"}}	{"a":"::1"}		"Value \"::1\" for property \"a\" is not a valid IPv4 address."
+format-ipv6-rejects-v4	{"a":{"$expr":"Ipv6"}}	{"a":"1.2.3.4"}		"Value \"1.2.3.4\" for property \"a\" is not a valid IPv6 address."
+format-ipv6-mapped	{"a":{"$expr":"Ipv6"}}	{"a":"::ffff:192.168.1.1"}	{"a":"::ffff:192.168.1.1"}	
+format-bound-order	{"a":{"$expr":"Email(Min(10,String))"}}	{"a":"nope"}		"Value \"nope\" for property \"a\" must be a minimum length of 10 (was 4).\nValue \"nope\" for property \"a\" is not a valid email address."
+fault-keeps-check-text	{"a":{"$expr":"Fault(\"boom\",Min(2,Number))"}}	{"a":1}		"Value \"1\" for property \"a\" must be a minimum of 2 (was 1)."
+fault-replaces-type-text	{"a":{"$expr":"Fault(\"boom\",Email)"}}	{"a":1}		"boom"

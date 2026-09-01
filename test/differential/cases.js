@@ -39,6 +39,16 @@ const ARRS = [
   [null], [1, null], {}, null, 'x', 1, [[1]], [{ a: 1 }],
 ]
 
+// Strings in and around each format, plus the odd non-string.
+const FORMATS = [
+  'a@b.co', 'first.last+tag@sub.example.org', 'nope', 'a@b', '.a@b.co',
+  'https://example.com/a?b=c#d', 'http://[::1]:8080/x', 'example.com', 'http://exa mple.com',
+  '123e4567-e89b-12d3-a456-426614174000', '123e4567e89b12d3a456426614174000',
+  '2020-01-01T00:00:00Z', '2021-02-29T00:00:00Z', '2020-01-01',
+  '127.0.0.1', '256.0.0.1', '::1', '::ffff:192.168.1.1', '1:2:3:4:5:6:7:8:9', '1.2.3.4::',
+  'fe80::1%eth0', '', ' ', 1, null, true, [], {},
+]
+
 function build() {
   const cases = []
   let n = 0
@@ -93,6 +103,21 @@ function build() {
   add('coerce-nullable', E('Nullable(Coerce(Number))'), ['5', null, 'x'])
   add('coerce-bare', E('Coerce'), SCALARS)
   add('coerce-any-noop', E('Coerce(Any)'), SCALARS)
+
+  // String formats: befores on a string-shaped node, deferring to the type
+  // check, and Fault's reach — structural text only.
+  for (const f of ['Email', 'Url', 'Uuid', 'DateTime', 'Ip', 'Ipv4', 'Ipv6']) {
+    add('fmt-' + f, E(f), FORMATS)
+    add('fmt-obj-' + f, { a: E(f) }, OBJS)
+  }
+  add('fmt-optional', { a: E('Optional(Email)') }, OBJS)
+  add('fmt-nullable', E('Email(Nullable(String))'), FORMATS)
+  add('fmt-bound-inner', E('Email(Min(10,String))'), FORMATS)
+  add('fmt-bound-outer', E('Min(10,Email)'), FORMATS)
+  add('fmt-any', E('Email(Any)'), FORMATS)
+  add('fault-bound', E('Fault("boom",Min(2,Number))'), SCALARS)
+  add('fault-format', E('Fault("boom",Email)'), FORMATS)
+  add('fault-type', E('Fault("boom",String)'), SCALARS)
 
   // A type token with arguments applies the type to them.
   add('dsl-token-args-str', E('String(Min(2))'), SCALARS)

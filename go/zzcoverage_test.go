@@ -547,9 +547,6 @@ func TestZZValidateSmallHelpers(t *testing.T) {
 		t.Fatalf("silent before should suppress error, got %v", err)
 	}
 
-	// replaceLastErrText with no issues is a no-op (597-599).
-	replaceLastErrText(&ValidationError{}, "msg", nil, "")
-
 	// collectDefines with nil args returns immediately (695-697).
 	collectDefines(nil, nil)
 }

@@ -407,6 +407,13 @@ func buildExprBuilders() map[string]exprBuilderFn {
 	"Func":     variadicNode(Func),
 	"Nullable": variadicNode(Nullable),
 	"Coerce":   variadicNode(Coerce),
+	"Email":    variadicNode(Email),
+	"Url":      variadicNode(Url),
+	"Uuid":     variadicNode(Uuid),
+	"DateTime": variadicNode(DateTime),
+	"Ip":       variadicNode(Ip),
+	"Ipv4":     variadicNode(Ipv4),
+	"Ipv6":     variadicNode(Ipv6),
 
 	"Default": func(args []builderArg) (*Node, error) {
 		if len(args) < 1 {
