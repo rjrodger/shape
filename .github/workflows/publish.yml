@@ -1,0 +1,124 @@
+name: Publish
+
+# Publishes the npm package and tags the Go module. Run by hand from the
+# Actions tab (or `gh workflow run publish.yml`).
+#
+# npm needs no token: the job publishes with OpenID Connect trusted
+# publishing, so npmjs.com must list this repository and workflow as a
+# trusted publisher of the `shape` package. The Go module is published by
+# pushing its tag; proxy.golang.org picks it up from there.
+#
+# Each input is a version bump (`patch`, `minor`, `major`), an explicit
+# `x.y.z`, `current` to publish the version already in the tree, or `skip`.
+
+on:
+  workflow_dispatch:
+    inputs:
+      npm:
+        description: 'npm (ts/package.json): patch | minor | major | x.y.z | current | skip'
+        required: true
+        default: current
+      go:
+        description: 'Go (const Version in go/shape.go): patch | minor | major | x.y.z | current | skip'
+        required: true
+        default: current
+
+permissions:
+  contents: write
+  id-token: write
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      NPM_INPUT: ${{ inputs.npm }}
+      GO_INPUT: ${{ inputs.go }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.x
+          registry-url: https://registry.npmjs.org
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: 1.22.x
+          cache: false
+
+      # Trusted publishing needs npm 11.5.1 or later.
+      - run: npm install -g npm@latest && npm --version
+
+      - name: Build and test both languages
+        run: |
+          cd ts && npm install && cd ..
+          make build test
+
+      - name: Git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Publish npm
+        if: inputs.npm != 'skip'
+        working-directory: ts
+        run: |
+          set -euo pipefail
+          case "$NPM_INPUT" in
+            current) ;;
+            patch|minor|major) npm version "$NPM_INPUT" --no-git-tag-version >/dev/null ;;
+            *) npm version "$NPM_INPUT" --no-git-tag-version --allow-same-version >/dev/null ;;
+          esac
+          # Rebuild, so dist carries the bumped VERSION constant.
+          npm run build
+          V=$(node -p "require('./package.json').version")
+          if npm view "shape@$V" version >/dev/null 2>&1; then
+            echo "shape@$V is already published" >&2; exit 1
+          fi
+          echo "Publishing ts/v$V"
+          git add package.json src/shape.ts
+          git diff --cached --quiet || git commit -m "ts: v$V"
+          git tag "ts/v$V"
+          npm publish --access public
+          git push origin HEAD:main "ts/v$V"
+          gh release create "ts/v$V" --title "ts/v$V" --notes "npm package release v$V"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Publish Go
+        if: inputs.go != 'skip'
+        run: |
+          set -euo pipefail
+          CUR=$(sed -n 's/^const Version = "\(.*\)"/\1/p' go/shape.go)
+          case "$GO_INPUT" in
+            current) V="$CUR" ;;
+            patch|minor|major)
+              V=$(node -e "
+                const v = '$CUR'.split('.').map(Number)
+                const i = { major: 0, minor: 1, patch: 2 }['$GO_INPUT']
+                v[i]++; for (let j = i + 1; j < 3; j++) v[j] = 0
+                console.log(v.join('.'))") ;;
+            *) V="$GO_INPUT" ;;
+          esac
+          if git rev-parse -q --verify "refs/tags/go/v$V" >/dev/null; then
+            echo "go/v$V is already tagged" >&2; exit 1
+          fi
+          echo "Publishing go/v$V"
+          sed -i "s/^const Version = \".*\"/const Version = \"$V\"/" go/shape.go
+          git add go/shape.go
+          git diff --cached --quiet || git commit -m "go: v$V"
+          git tag "go/v$V"
+          git push origin HEAD:main "go/v$V"
+          gh release create "go/v$V" --title "go/v$V" --notes "Go module release v$V"
+          # Ask the proxy for the new version so it is cached at once.
+          GOPROXY=https://proxy.golang.org GOFLAGS=-mod=mod go list -m "github.com/rjrodger/shape/go@v$V" || true
+        env:
+          GH_TOKEN: ${{ github.token }}
