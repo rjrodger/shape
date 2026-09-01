@@ -1,6 +1,6 @@
 package shape
 
-const Version = "0.2.0"
+const Version = "0.2.1"
 
 // Schema is a compiled shape specification.
 type Schema struct {
