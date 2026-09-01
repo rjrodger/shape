@@ -68,7 +68,8 @@ make test                    # both languages must pass the new corpus
 
 Both `ts/test/compat.test.ts` and `go/compat_tsv_test.go` glob and run every
 `test/*.tsv`. See [`test/README.md`](test/README.md) for the cell/sentinel
-format (`$type`, `$open`, `$closed`, `$required`, `$optional`, `$expr`).
+format (`$type`, `$open`, `$closed`, `$required`, `$optional`, `$expr`,
+`$discriminated`, `$call`).
 
 The `error` column holds the **complete** expected message and is compared
 **exactly**. A substring check cannot see a wrong separator, a wrong error order

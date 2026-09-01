@@ -13,6 +13,8 @@
 //   {"$type":"String"}  required type token
 //   {"$open":X} {"$closed":X} {"$required":X} {"$optional":X}
 //   {"$expr":"Min(2,String)"}  compile the string DSL
+//   {"$call":["Pick",["a"],X]}  a builder called by name, for arguments the DSL
+//                              cannot express (lists, objects)
 //   anything else is raw JSON
 // A key of the form "name: Min(1)" exercises key-expression parsing.
 //
@@ -32,6 +34,9 @@ const T = { $type: 'String' }, N = { $type: 'Number' }, B = { $type: 'Boolean' }
 const I = { $type: 'Integer' }, D = { $type: 'Date' }
 // A discriminated union over the "kind" property; each branch gets the tag added.
 const DISC = { $discriminated: ['kind', { dog: { bark: B }, fish: { fins: N } }] }
+// A builder the string DSL cannot express, called by name with its arguments.
+const CALL = (name, ...args) => ({ $call: [name, ...args] })
+const ABASE = { a: 1, b: T, c: true }
 
 // Cases grouped by file. Each case: [name, spec, input].
 const files = {
@@ -62,6 +67,9 @@ const files = {
     ['closed-one-extra-key', { a: 1 }, { a: 1, b: 2 }],
     ['closed-two-extra-keys', { a: 1 }, { a: 1, b: 2, c: 3 }],
     ['closed-three-extra-keys', { a: 1 }, { a: 1, b: 2, c: 3, d: 4 }],
+    ['nested-closed-one-extra-key', { a: { b: 1 } }, { a: { b: 2, c: 3 } }],
+    ['nested-closed-two-extra-keys', { a: { b: 1 } }, { a: { b: 2, c: 3, d: 4 } }],
+    ['nested-closed-array-extra', { a: [N, T] }, { a: [1, 'a', 2, 3] }],
     ['child-ignore-drops-bad', { $expr: 'Child(Ignore(Number))' }, { a: 'x', b: 1 }],
     ['child-ignore-keeps-good', { $expr: 'Child(Ignore(Number))' }, { a: 1, b: 2 }],
     ['child-ignore-bound', { $expr: 'Child(Ignore(Min(2,Number)))' }, { a: 1, b: 3 }],
@@ -111,6 +119,11 @@ const files = {
     ['type-number-fail', { a: { $expr: 'Type(Number)' } }, { a: 'x' }],
     ['type-string-fail', { a: { $expr: 'Type(String)' } }, { a: 3 }],
     ['type-chain-object-fail', { $expr: 'Type(Object)' }, 1],
+    ['dsl-object-token-closed', { a: { $expr: 'Object' } }, { a: { z: 1 } }],
+    ['dsl-object-token-ok', { a: { $expr: 'Object' } }, { a: {} }],
+    ['dsl-optional-object-default', { a: { $expr: 'Optional(Object)' } }, {}],
+    ['dsl-optional-object-closed', { a: { $expr: 'Optional(Object)' } }, { a: { z: 1 } }],
+    ['dsl-array-token-any-elements', { a: { $expr: 'Array' } }, { a: [1, 'x'] }],
     ['ignore-root-bad-dropped', { $expr: 'Ignore(Number)' }, 'x'],
     ['ignore-root-good-kept', { $expr: 'Ignore(Number)' }, 5],
     ['any-token-accepts-number', { a: { $type: 'Any' } }, { a: 1 }],
@@ -241,6 +254,34 @@ const files = {
     ['keyexpr-bare-literal', { 'a: 5': 3 }, {}],
     ['keyexpr-bare-literal-present', { 'a: 5': 3 }, { a: 9 }],
     ['keyexpr-one-of-keeps-choice', { 'a: One(String,Number)': 5 }, { a: 'q' }],
+  ],
+  algebra: [
+    ['pick-keeps-default', CALL('Pick', ['a'], ABASE), {}],
+    ['pick-single-name', CALL('Pick', 'a', ABASE), {}],
+    ['pick-required-kept', CALL('Pick', ['b'], ABASE), {}],
+    ['pick-two', CALL('Pick', ['a', 'c'], ABASE), { c: false }],
+    ['pick-stays-closed', CALL('Pick', ['a'], ABASE), { a: 2, b: 'x' }],
+    ['pick-open-base', CALL('Pick', ['a'], { $open: ABASE }), { a: 2, z: 1 }],
+    ['pick-keyexpr-source', CALL('Pick', ['a'], { 'a: Min(2)': 0, b: 1 }), { a: 1 }],
+    ['omit-drops-required', CALL('Omit', ['b'], ABASE), {}],
+    ['omit-unknown-ignored', CALL('Omit', ['z'], ABASE), { b: 'x' }],
+    ['omit-then-extra', CALL('Omit', ['b'], ABASE), { b: 'x' }],
+    ['omit-all', CALL('Omit', ['a', 'b', 'c'], ABASE), { a: 1 }],
+    ['partial-absent', CALL('Partial', ABASE), {}],
+    ['partial-type-kept', CALL('Partial', ABASE), { b: 1 }],
+    ['partial-is-shallow', CALL('Partial', { a: { b: N } }), {}],
+    ['partial-nested-present', CALL('Partial', { a: { b: N } }), { a: { b: 1 } }],
+    ['extend-adds', CALL('Extend', { e: 2 }, ABASE), { b: 'x' }],
+    ['extend-adds-required', CALL('Extend', { e: N }, ABASE), { b: 'x' }],
+    ['extend-overrides', CALL('Extend', { b: 5 }, ABASE), {}],
+    ['extend-stays-closed', CALL('Extend', { e: 2 }, ABASE), { b: 'x', z: 1 }],
+    ['extend-open-base', CALL('Extend', { e: 2 }, { $open: ABASE }), { b: 'x', z: 1 }],
+    ['extend-ext-openness-ignored', CALL('Extend', { $open: { e: 2 } }, ABASE), { b: 'x', z: 1 }],
+    ['composed', CALL('Partial', CALL('Pick', ['b'], CALL('Extend', { e: N }, ABASE))), {}],
+    ['keyexpr-pick', { 'u: Pick(["a"])': { a: 1, b: 2 } }, {}],
+    ['keyexpr-omit', { 'u: Omit(["a"])': { a: 1, b: 2 } }, { u: { a: 1 } }],
+    ['keyexpr-partial', { 'u: Partial': { a: T } }, {}],
+    ['keyexpr-partial-present', { 'u: Partial()': { a: T } }, { u: { a: 'x' } }],
   ],
   misc: [
     ['null-required', { a: { $expr: 'null' } }, { a: null }],

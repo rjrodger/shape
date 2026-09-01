@@ -17,6 +17,9 @@ multi-error-order-2	{"a":{"$type":"String"}}	{"a":1,"b":2}		"Validation failed f
 closed-one-extra-key	{"a":1}	{"a":1,"b":2}		"Validation failed for object \"{a:1,b:2}\" because the property \"b\" is not allowed."
 closed-two-extra-keys	{"a":1}	{"a":1,"b":2,"c":3}		"Validation failed for object \"{a:1,b:2,c:3}\" because the properties \"b, c\" are not allowed."
 closed-three-extra-keys	{"a":1}	{"a":1,"b":2,"c":3,"d":4}		"Validation failed for object \"{a:1,b:2,c:3,d:4}\" because the properties \"b, c, d\" are not allowed."
+nested-closed-one-extra-key	{"a":{"b":1}}	{"a":{"b":2,"c":3}}		"Validation failed for property \"a\" with object \"{b:2,c:3}\" because the property \"c\" is not allowed."
+nested-closed-two-extra-keys	{"a":{"b":1}}	{"a":{"b":2,"c":3,"d":4}}		"Validation failed for property \"a\" with object \"{b:2,c:3,d:4}\" because the properties \"c, d\" are not allowed."
+nested-closed-array-extra	{"a":[{"$type":"Number"},{"$type":"String"}]}	{"a":[1,"a",2,3]}		"Validation failed for index \"a\" with array \"[1,a,2,3]\" because the index \"2\" is not allowed."
 child-ignore-drops-bad	{"$expr":"Child(Ignore(Number))"}	{"a":"x","b":1}	{"b":1}	
 child-ignore-keeps-good	{"$expr":"Child(Ignore(Number))"}	{"a":1,"b":2}	{"a":1,"b":2}	
 child-ignore-bound	{"$expr":"Child(Ignore(Min(2,Number)))"}	{"a":1,"b":3}	{"b":3}	

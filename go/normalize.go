@@ -274,13 +274,10 @@ func normalizeObject(v map[string]any, opts ShapeOptions) (*node, error) {
 // applies it to a literal default value. The resulting node validates the
 // literal-default by default but enforces the chained constraints.
 func buildExprWithDefault(src string, dflt any) (*Node, error) {
-	bare, err := Expr(src)
-	if err != nil {
-		return nil, err
-	}
+	bare, bareErr := Expr(src)
 
 	if dflt == nil {
-		return bare, nil
+		return bare, bareErr
 	}
 
 	ex, err := normalize(dflt)
@@ -300,7 +297,13 @@ func buildExprWithDefault(src string, dflt any) (*Node, error) {
 		// Not a builder chain at all — a bare literal such as "a: 5" — so there
 		// is nothing to hand the example to and the expression's own value
 		// stands, as it does in TS.
-		return bare, nil
+		return bare, bareErr
+	}
+
+	if bareErr != nil {
+		// The expression cannot be built without the example — Pick(["a"]) has
+		// nothing to pick from — so the example plainly made a difference.
+		return node, nil
 	}
 
 	if stringifyNode(node.n, false) == stringifyNode(bare.n, false) {

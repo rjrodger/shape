@@ -267,6 +267,14 @@ func decodeSpec(v any) any {
 				return MustExpr(es)
 			}
 		}
+		if cv, ok := obj["$call"]; ok {
+			arr := cv.([]any)
+			args := make([]any, len(arr)-1)
+			for i := range args {
+				args[i] = decodeSpec(arr[i+1])
+			}
+			return callBuilder(arr[0].(string), args)
+		}
 		if dv, ok := obj["$discriminated"]; ok {
 			arr := dv.([]any)
 			branches := map[string]any{}
@@ -283,4 +291,21 @@ func decodeSpec(v any) any {
 	}
 
 	return out
+}
+
+// callBuilder applies a builder the string DSL cannot express — one whose
+// arguments include a list or an object — by name, as the {"$call": [name,
+// ...args]} sentinel asks.
+func callBuilder(name string, args []any) any {
+	switch name {
+	case "Pick":
+		return Pick(args[0], args[1:]...)
+	case "Omit":
+		return Omit(args[0], args[1:]...)
+	case "Partial":
+		return Partial(args...)
+	case "Extend":
+		return Extend(args[0], args[1:]...)
+	}
+	panic("decodeSpec: unknown builder " + name)
 }

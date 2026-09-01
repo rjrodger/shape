@@ -25,6 +25,11 @@ type-number-ok	{"a":{"$expr":"Type(Number)"}}	{"a":3}	{"a":3}
 type-number-fail	{"a":{"$expr":"Type(Number)"}}	{"a":"x"}		"Validation failed for property \"a\" with string \"x\" because the string is not of type number."
 type-string-fail	{"a":{"$expr":"Type(String)"}}	{"a":3}		"Validation failed for property \"a\" with number \"3\" because the number is not of type string."
 type-chain-object-fail	{"$expr":"Type(Object)"}	1		"Validation failed for number \"1\" because the number is not of type object."
+dsl-object-token-closed	{"a":{"$expr":"Object"}}	{"a":{"z":1}}		"Validation failed for property \"a\" with object \"{z:1}\" because the property \"z\" is not allowed."
+dsl-object-token-ok	{"a":{"$expr":"Object"}}	{"a":{}}	{"a":{}}	
+dsl-optional-object-default	{"a":{"$expr":"Optional(Object)"}}	{}	{"a":{}}	
+dsl-optional-object-closed	{"a":{"$expr":"Optional(Object)"}}	{"a":{"z":1}}		"Validation failed for property \"a\" with object \"{z:1}\" because the property \"z\" is not allowed."
+dsl-array-token-any-elements	{"a":{"$expr":"Array"}}	{"a":[1,"x"]}	{"a":[1,"x"]}	
 ignore-root-bad-dropped	{"$expr":"Ignore(Number)"}	"x"	null	
 ignore-root-good-kept	{"$expr":"Ignore(Number)"}	5	5	
 any-token-accepts-number	{"a":{"$type":"Any"}}	{"a":1}	{"a":1}	

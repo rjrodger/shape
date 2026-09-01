@@ -232,6 +232,10 @@ const S = {
   Coerce: 'Coerce',
   Describe: 'Describe',
   Discriminated: 'Discriminated',
+  Pick: 'Pick',
+  Omit: 'Omit',
+  Partial: 'Partial',
+  Extend: 'Extend',
   DateTime: 'DateTime',
   Email: 'Email',
   Ip: 'Ip',
@@ -1612,7 +1616,15 @@ function keyExprNode(src: string, example: any, depth: number, meta?: NodeMeta) 
     return node
   }
 
-  const bare: any = expr({ src, d: depth, meta })
+  let bare: any
+  try {
+    bare = expr({ src, d: depth, meta })
+  }
+  catch (_e: any) {
+    // The expression cannot be built without the example — Pick(["a"]) has
+    // nothing to pick from — so the example plainly made a difference.
+    return node
+  }
 
   if (null == bare || !bare.$?.shape$ || !sameShapeNode(node, bare)) {
     return node
@@ -2310,6 +2322,149 @@ const Discriminated = function(this: any, tag: string, branches: Record<string, 
   node.b.push(validator)
 
   return node
+}
+
+
+// Object Algebra
+// ==============
+// Build a new object shape out of an existing one. The result is a fresh
+// node, so the source is left as it was and one base can be reshaped many
+// times. Key expressions in the source (`{ 'a: Min(2)': 0 }`) are compiled
+// here, since the algebra has to know the real property names.
+
+type Entry = { key: string, child: any }
+
+function objectEntries(n: Node<any>): Entry[] {
+  const out: Entry[] = []
+  const vkeys = keys(n.v)
+  for (let kI = 0; kI < vkeys.length; kI++) {
+    const k = vkeys[kI]
+    const m = KEY_EXPR_RE.exec(k)
+    if (m) {
+      out.push({ key: m[1], child: keyExprNode(m[3], n.v[k], 0) })
+    }
+    else {
+      out.push({ key: k, child: n.v[k] })
+    }
+  }
+  return out
+}
+
+
+// A structural copy of a node: the same settings, with its own value and
+// check lists, so that changing the copy leaves the original as it was.
+function copyNode(n: Node<any>, over?: Record<string, any>): Node<any> {
+  const v = isarr(n.v) ? n.v.slice() :
+    (null != n.v && S.object === typeof n.v) ? { ...n.v } : n.v
+  const copy = {
+    $: SHAPE,
+    t: n.t, d: n.d, v, f: n.f, n: n.n, c: n.c, r: n.r, p: n.p, k: [], e: n.e, z: n.z,
+    u: { ...n.u }, b: n.b.slice(), a: n.a.slice(), m: { ...n.m },
+    ...over,
+  } as unknown as Node<any>
+  return buildize(copy)
+}
+
+
+function objectBase(self: any, shape: any, name: string): Node<any> {
+  const base = buildize(self, shape)
+  if (S.object !== base.t) {
+    throw new Error('Shape: ' + name + ' needs an object shape')
+  }
+  return base
+}
+
+
+// The base's settings with just these properties. An object default is
+// narrowed to them too.
+function objectNode(base: Node<any>, entries: Entry[]): Node<any> {
+  const v: any = {}
+  for (const e of entries) {
+    v[e.key] = e.child
+  }
+
+  let f = base.f
+  if (null != f && S.object === typeof f && !isarr(f)) {
+    f = {}
+    for (const e of entries) {
+      if (undefined !== base.f[e.key]) {
+        f[e.key] = base.f[e.key]
+      }
+    }
+  }
+
+  return copyNode(base, { v, f, n: entries.length })
+}
+
+
+function keyList(names: any, name: string): string[] {
+  const list = isarr(names) ? names : [names]
+  for (const k of list) {
+    if (S.string !== typeof k) {
+      throw new Error('Shape: ' + name + ' needs a list of property names')
+    }
+  }
+  return list
+}
+
+
+// Keep only the named properties. Naming one the shape does not declare is
+// an error: there is nothing there to pick.
+const Pick = function <V>(this: any, names: string | string[], shape?: Node<V> | V): Node<V> {
+  const base = objectBase(this, shape, S.Pick)
+  const want = keyList(names, S.Pick)
+  const entries = objectEntries(base)
+  for (const k of want) {
+    if (undefined === entries.find((e) => e.key === k)) {
+      throw new Error('Shape: ' + S.Pick + ': unknown property "' + k + '"')
+    }
+  }
+  return objectNode(base, entries.filter((e) => want.includes(e.key)))
+}
+
+
+// Drop the named properties. A name the shape does not declare is simply not
+// there to drop.
+const Omit = function <V>(this: any, names: string | string[], shape?: Node<V> | V): Node<V> {
+  const base = objectBase(this, shape, S.Omit)
+  const want = keyList(names, S.Omit)
+  return objectNode(base, objectEntries(base).filter((e) => !want.includes(e.key)))
+}
+
+
+// Every declared property becomes optional, as Optional would make it: a
+// type token then injects its empty value, a literal its own. Shallow: a
+// nested object's own properties are as they were.
+const Partial = function <V>(this: any, shape?: Node<V> | V): Node<V> {
+  const base = objectBase(this, shape, S.Partial)
+  return objectNode(base, objectEntries(base).map((e) => ({
+    key: e.key,
+    child: copyNode(nodize(e.child), { r: false }),
+  })))
+}
+
+
+// Add the properties of another object shape; a property both declare takes
+// the extension's. Only its properties are taken: the result stays open or
+// closed as the base was.
+const Extend = function <V>(this: any, extra: any, shape?: Node<V> | V): Node<V> {
+  const base = objectBase(this, shape, S.Extend)
+  const ext = nodize(extra)
+  if (S.object !== ext.t) {
+    throw new Error('Shape: ' + S.Extend + ' needs an object to extend with')
+  }
+
+  const entries = objectEntries(base)
+  for (const e of objectEntries(ext)) {
+    const i = entries.findIndex((x) => x.key === e.key)
+    if (-1 === i) {
+      entries.push(e)
+    }
+    else {
+      entries[i] = e
+    }
+  }
+  return objectNode(base, entries)
 }
 
 
@@ -3270,6 +3425,7 @@ function buildize<V>(self?: any, shape?: any): Node<V> {
       Empty,
       Email,
       Exact,
+      Extend,
       Fault,
       Func,
       Ignore,
@@ -3282,8 +3438,11 @@ function buildize<V>(self?: any, shape?: any): Node<V> {
       Min,
       Never,
       Nullable,
+      Omit,
       Open,
       Optional,
+      Partial,
+      Pick,
       Refer,
       Rename,
       Required,
@@ -3358,12 +3517,16 @@ function makeErrImpl(
 
     let propkind = (valstr.startsWith('[') || isarr(s.parents[s.pI])) ?
       'index' : 'property'
+
+    // The disallowed keys of a closed object are listed in one error, so the
+    // clause about them pluralizes; the path before it names one value.
+    let listkind = propkind
     let propkindverb = 'is'
     let propkey = user?.k
 
     propkey = isarr(propkey) ?
-      (propkind = (1 < propkey.length ?
-        (propkindverb = 'are', 'properties') : propkind),
+      (listkind = (1 < propkey.length ?
+        (propkindverb = 'are', 'properties') : listkind),
         propkey.join(', ')) :
       propkey
 
@@ -3388,7 +3551,7 @@ function makeErrImpl(
             )
             :
             'closed' === why ?
-              `the ${propkind} "${propkey}" ${propkindverb} not allowed`
+              `the ${listkind} "${propkey}" ${propkindverb} not allowed`
               :
               S.regexp === why ?
                 'the string did not match ' + s.node.v
@@ -3663,19 +3826,18 @@ function stringify(
 }
 
 
-function clone(x: any) {
+// Deep, so that a Catch fallback holding an object is never shared between
+// two results; anything that is not a plain object or array is kept as-is.
+function clone(x: any): any {
   if (null == x || S.object !== typeof x) return x
-  if (isarr(x)) return x.slice()
+  if (isarr(x)) return x.map(clone)
   if (x instanceof RegExp) return new RegExp(x.source, x.flags)
   if (x instanceof Date) return new Date(x.getTime())
+  if (Object !== x.constructor && null != x.constructor) return x
   const out: any = {}
-  // Defensive: internal callers only ever clone the empty EMPTY_VAL objects, so
-  // this copy loop is never reached with own-enumerable keys in practice.
-  /* node:coverage disable */
-  for (const k in x) {
-    if (x.hasOwnProperty(k)) out[k] = x[k]
+  for (const k of keys(x)) {
+    out[k] = clone(x[k])
   }
-  /* node:coverage enable */
   return out
 }
 
@@ -3706,6 +3868,7 @@ const BuilderMap = {
   Email,
   Empty,
   Exact,
+  Extend,
   Fault,
   Func,
   Ignore,
@@ -3719,9 +3882,12 @@ const BuilderMap = {
   Min,
   Never,
   Nullable,
+  Omit,
   One,
   Open,
   Optional,
+  Partial,
+  Pick,
   Refer,
   Rename,
   Required,
@@ -3821,6 +3987,10 @@ const GCoerce = Coerce
 const GCatch = Catch
 const GDescribe = Describe
 const GDiscriminated = Discriminated
+const GPick = Pick
+const GOmit = Omit
+const GPartial = Partial
+const GExtend = Extend
 const GTransform = Transform
 const GDateTime = DateTime
 const GEmail = Email
@@ -4032,6 +4202,10 @@ export {
   Define,
   Describe,
   Discriminated,
+  Extend,
+  Omit,
+  Partial,
+  Pick,
   Email,
   Empty,
   Exact,
@@ -4075,6 +4249,10 @@ export {
   GCatch,
   GDescribe,
   GDiscriminated,
+  GPick,
+  GOmit,
+  GPartial,
+  GExtend,
   GTransform,
   GDateTime,
   GEmail,
