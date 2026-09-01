@@ -51,7 +51,8 @@ go build ./... && go vet ./... && go test ./...
 
 Toolchain: Node 24+ (works on 22), Go 1.22+. TypeScript compiles to
 `ts/dist/` and tests to `ts/dist-test/` (both git-ignored) — **always rebuild
-after editing `ts/src`**.
+after editing `ts/src`**. `npm run build` also bundles `dist/shape.min.js`, the
+package's browser entry, with esbuild (`npm run build-web`).
 
 ## The shared conformance corpus (parity gate)
 
@@ -86,8 +87,9 @@ make diff        # sampled report, grouped by case family
 make diff-full   # every mismatch
 ```
 
-Run it after any behaviour change. Anything it finds should also become a
-corpus row in `test/gen-compat.js`, so the committed gate keeps it closed. See
+Run it after any behaviour change; CI runs it too, in the `parity` job.
+Anything it finds should also become a corpus row in `test/gen-compat.js`, so
+the committed gate keeps it closed. See
 [`test/differential/README.md`](test/differential/README.md).
 
 ## Coverage bar

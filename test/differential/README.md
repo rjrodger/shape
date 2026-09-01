@@ -18,6 +18,8 @@ make diff        # sampled report, grouped by case family
 make diff-full   # every mismatch
 ```
 
+CI runs `make diff` in its `parity` job, so a divergence fails the build.
+
 ## Files
 
 | file          | role                                                      |

@@ -19,8 +19,9 @@ This is the same API as on the backend — everything in these docs applies.
 
 ## Standalone script tag
 
-A pre-minified build is published as `shape.min.js`. Loaded directly it exposes
-a global `Shape` (which also carries the builders):
+A pre-minified build is published as `dist/shape.min.js` (the package's
+`browser` entry, built by `npm run build-web` with esbuild). Loaded directly it
+exposes a global `Shape`, which also carries the builders:
 
 ```html
 <script src="shape.min.js"></script>
@@ -33,9 +34,10 @@ a global `Shape` (which also carries the builders):
 
 ## Notes
 
-- The web entry point (`shape.web.js`) simply re-exports `Shape` as the module's
-  default/global, so `Shape(...)` works and `Shape.Min`, `Shape.Open`, … are
-  attached.
+- The web entry point (`src/shape.web.js`) simply re-exports `Shape` as the
+  bundle's global, so `Shape(...)` works and `Shape.Min`, `Shape.Open`, … are
+  attached. Node's `util` is replaced by a stub inside the bundle; nothing else
+  is platform-specific.
 - Because Shape mutates its input to inject defaults, pass a fresh object if you
   need to preserve the original (browser objects are no different here).
 
