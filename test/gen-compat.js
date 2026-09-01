@@ -254,6 +254,11 @@ const files = {
     ['keyexpr-bare-literal', { 'a: 5': 3 }, {}],
     ['keyexpr-bare-literal-present', { 'a: 5': 3 }, { a: 9 }],
     ['keyexpr-one-of-keeps-choice', { 'a: One(String,Number)': 5 }, { a: 'q' }],
+    ['keyexpr-quoted-name', { '"a b": Min(1)': 0 }, { 'a b': 2 }],
+    ['keyexpr-quoted-name-fail', { '"a b": Min(1)': 0 }, { 'a b': 0 }],
+    ['keyexpr-quoted-name-absent', { '"a b": String': '' }, {}],
+    ['keyexpr-empty-expression-is-a-literal-key', { 'a:': 1 }, { 'a:': 2 }],
+    ['keyexpr-empty-expression-rejects-bare-name', { 'a:': 1 }, { a: 2 }],
   ],
   algebra: [
     ['pick-keeps-default', CALL('Pick', ['a'], ABASE), {}],

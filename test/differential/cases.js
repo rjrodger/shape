@@ -334,6 +334,10 @@ function build() {
   add('ke-child-array', { 'a: Child(Number)': [] }, OBJS)
   add('ke-one-of', { 'a: One(String,Number)': 5 }, OBJS)
   add('ke-bare-literal', { 'a: 5': 3 }, OBJS)
+  // A quoted name holds a space; an empty expression is no expression at all.
+  add('ke-quoted-name', { '"a b": Min(1)': 0 }, [{ 'a b': 2 }, { 'a b': 0 }, { 'a b': 'x' }, {}, { a: 1 }])
+  add('ke-quoted-string', { '"a b": String': '' }, [{ 'a b': 'x' }, { 'a b': 1 }, {}])
+  add('ke-empty-expr', { 'a:': 1 }, [{ 'a:': 2 }, { 'a:': 'x' }, { a: 1 }, {}])
 
   // Func / Key.
   add('fn-1', E('Func'), SCALARS)

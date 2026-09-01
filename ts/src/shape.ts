@@ -1014,8 +1014,8 @@ function shapify<S>(intop?: S | Node<S>, inopts?: ShapeOptions) {
 
                   if (optskeyexpr.active) {
                     let m = KEY_EXPR_RE.exec(k)
-                    if (m) {
-                      rk = m[1]
+                    if (m && '' !== m[3]) {
+                      rk = keyExprName(m[1])
                       let src = m[3]
 
                       ov = keyExprNode(src, ov, 1 + s.dI, meta)
@@ -1592,6 +1592,14 @@ function expr(
   }
 
   return g
+}
+
+
+// The property name of a key expression. A name may be quoted to hold a
+// space or a colon: `{ '"a b": Min(1)': 0 }` declares the property "a b".
+function keyExprName(name: string): string {
+  return 2 <= name.length && '"' === name[0] && '"' === name[name.length - 1] ?
+    name.substring(1, name.length - 1) : name
 }
 
 
@@ -2340,8 +2348,8 @@ function objectEntries(n: Node<any>): Entry[] {
   for (let kI = 0; kI < vkeys.length; kI++) {
     const k = vkeys[kI]
     const m = KEY_EXPR_RE.exec(k)
-    if (m) {
-      out.push({ key: m[1], child: keyExprNode(m[3], n.v[k], 0) })
+    if (m && '' !== m[3]) {
+      out.push({ key: keyExprName(m[1]), child: keyExprNode(m[3], n.v[k], 0) })
     }
     else {
       out.push({ key: k, child: n.v[k] })

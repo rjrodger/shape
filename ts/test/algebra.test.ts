@@ -158,6 +158,16 @@ describe('algebra', () => {
   })
 
 
+  test('key-expression-names', () => {
+    // A quoted name holds a space; an empty expression is a literal key.
+    deepEqual(Shape({ '"a b": Min(1)': 0 })({ 'a b': 2 }), { 'a b': 2 })
+    throws(() => Shape({ '"a b": Min(1)': 0 })({ 'a b': 0 }), 'Value "0" for property "a b" must be a minimum of 1 (was 0).')
+    deepEqual(Shape({ 'a:': 1 })({ 'a:': 2 }), { 'a:': 2 })
+    throws(() => Shape({ 'a:': 1 })({ a: 2 }), 'the property "a" is not allowed')
+    deepEqual(Shape(Pick('a b', { '"a b": Min(1)': 0, c: 1 }))({}), { 'a b': 0 })
+  })
+
+
   test('catch-fallback-cloned-deep', () => {
     const s: any = Shape(Catch({ x: { y: [1] } }, Number))
     const r1 = s('a')
