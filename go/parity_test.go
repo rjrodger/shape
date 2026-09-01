@@ -937,6 +937,33 @@ func TestIsolation(t *testing.T) {
 	r2 := mustOK(t, s, obj("a", "x")).(map[string]any)
 	r1["a"].(map[string]any)["n"] = 9.0
 	want("catch fresh fallback", r2["a"].(map[string]any)["n"], 1.0)
+	deep := MustShape(obj("a", Catch(obj("n", obj("m", []any{1.0})), obj("n", Number))))
+	d1 := mustOK(t, deep, obj("a", "x")).(map[string]any)
+	d2 := mustOK(t, deep, obj("a", "x")).(map[string]any)
+	d1["a"].(map[string]any)["n"].(map[string]any)["m"].([]any)[0] = 2.0
+	want("catch fresh fallback deep", d2["a"].(map[string]any)["n"].(map[string]any)["m"], []any{1.0})
+	// A cycle in the fallback is reproduced, not followed; a container
+	// reached twice is copied once.
+	cyc := map[string]any{"n": 1.0}
+	cyc["self"] = cyc
+	list := []any{cyc, nil}
+	list[1] = list
+	cyc["list"] = list
+	c1 := mustOK(t, MustShape(obj("a", Catch(cyc, Number))), obj("a", "x")).(map[string]any)["a"].(map[string]any)
+	if reflect.ValueOf(c1).Pointer() == reflect.ValueOf(cyc).Pointer() {
+		t.Fatal("fallback shared")
+	}
+	if reflect.ValueOf(c1["self"]).Pointer() != reflect.ValueOf(c1).Pointer() {
+		t.Fatal("cycle not reproduced")
+	}
+	cl := c1["list"].([]any)
+	if reflect.ValueOf(cl[0]).Pointer() != reflect.ValueOf(c1).Pointer() || reflect.ValueOf(cl[1]).Pointer() != reflect.ValueOf(cl).Pointer() {
+		t.Fatal("shared references not reproduced")
+	}
+	var nilMap map[string]any
+	var nilSlice []any
+	want("nil map kept", cloneAny(nilMap), nilMap)
+	want("nil slice kept", cloneAny(nilSlice), nilSlice)
 	want("catch null", mustOK(t, MustShape(obj("a", Catch(nil, Number))), obj("a", "x")), obj("a", nil))
 	want("catch dsl", mustOK(t, MustShape(MustExpr("Catch(0,Number)")), "x"), 0.0)
 	want("catch dsl bound", mustOK(t, MustShape(obj("a", MustExpr(`Catch("none",Min(2,String))`))), obj("a", "x")), obj("a", "none"))
@@ -1066,4 +1093,116 @@ func TestDiscriminated(t *testing.T) {
 	want("one optional", mustOK(t, MustShape(o("a", Optional(One(String, Number)))), o()), o())
 	want("some optional", mustOK(t, MustShape(o("a", Optional(Some(String, Number)))), o()), o())
 	want("all optional", mustOK(t, MustShape(o("a", Optional(All(String, Min(2))))), o()), o())
+}
+
+// --- object algebra: Pick, Omit, Partial, Extend -------------------------------
+
+func TestObjectAlgebra(t *testing.T) {
+	o := func(kv ...any) map[string]any {
+		m := map[string]any{}
+		for i := 0; i < len(kv); i += 2 {
+			m[kv[i].(string)] = kv[i+1]
+		}
+		return m
+	}
+	want := func(name string, got, expect any) {
+		if !reflect.DeepEqual(got, expect) {
+			t.Fatalf("%s = %#v, want %#v", name, got, expect)
+		}
+	}
+	base := func() map[string]any { return o("a", Number, "b", String, "c", Optional(Boolean)) }
+
+	// Pick keeps only the named properties.
+	want("pick", mustOK(t, MustShape(Pick([]string{"a"}, base())), o("a", 1.0)), o("a", 1.0))
+	want("pick two", mustOK(t, MustShape(Pick([]string{"a", "c"}, base())), o("a", 1.0)), o("a", 1.0, "c", false))
+	mustErr(t, MustShape(Pick([]string{"a"}, base())), o("a", 1.0, "b", "x"), `the property "b" is not allowed`)
+	// A name that is not a property is a fault: there is nothing to pick.
+	mustErr(t, MustShape(Pick([]string{"a", "zz"}, base())), o("a", 1.0), `Pick: unknown property "zz"`)
+	// Omitting one is not: it is simply not there to drop.
+	want("omit unknown name", mustOK(t, MustShape(Omit([]string{"zz"}, base())), o("a", 1.0, "b", "x")), o("a", 1.0, "b", "x", "c", false))
+
+	// Omit drops the named properties, and what is kept stays as it was.
+	want("omit", mustOK(t, MustShape(Omit([]string{"b"}, base())), o("a", 1.0)), o("a", 1.0, "c", false))
+	mustErr(t, MustShape(Omit([]string{"b"}, base())), o(), `property "a"`)
+	mustErr(t, MustShape(Omit([]string{"b"}, base())), o("a", 1.0, "b", "x"), `the property "b" is not allowed`)
+
+	// Partial makes every property optional, one level deep.
+	want("partial", mustOK(t, MustShape(Partial(base())), o()), o("a", 0.0, "b", "", "c", false))
+	mustErr(t, MustShape(Partial(base())), o("a", "x"), "is not of type number")
+	mustErr(t, MustShape(o("o", Partial(o("a", Number, "b", o("c", String))))), o("o", o("b", o())),
+		`property "o.b.c"`)
+
+	// Extend adds properties, and a name in both takes the new shape.
+	want("extend", mustOK(t, MustShape(Extend(o("d", Number), base())), o("a", 1.0, "b", "x", "d", 2.0)),
+		o("a", 1.0, "b", "x", "d", 2.0, "c", false))
+	want("extend override", mustOK(t, MustShape(Extend(o("a", String), base())), o("a", "x", "b", "y")),
+		o("a", "x", "b", "y", "c", false))
+	mustErr(t, MustShape(Extend(o("d", Number), base())), o("a", 1.0, "b", "x"), `property "d"`)
+	want("extend keeps openness",
+		mustOK(t, MustShape(Extend(o("d", Number), Open(base()))), o("a", 1.0, "b", "x", "d", 2.0, "z", 9.0)),
+		o("a", 1.0, "b", "x", "d", 2.0, "z", 9.0, "c", false))
+
+	// The shape given is left as it was.
+	src := base()
+	Pick([]string{"a"}, src)
+	Omit([]string{"a"}, src)
+	Partial(src)
+	Extend(o("d", Number), src)
+	mustErr(t, MustShape(src), o(), `property "a"`)
+	want("source intact", mustOK(t, MustShape(src), o("a", 1.0, "b", "x")), o("a", 1.0, "b", "x", "c", false))
+
+	// Key expressions resolve before a name is matched.
+	ke := func() map[string]any { return o("a: Integer", 0.0, "b", String) }
+	want("keyexpr pick", mustOK(t, MustShape(Pick([]string{"a"}, ke())), o("a", 1.0)), o("a", 1.0))
+	mustErr(t, MustShape(Pick([]string{"a"}, ke())), o("a", 1.5), "is not of type integer")
+	want("keyexpr omit", mustOK(t, MustShape(Omit([]string{"b"}, ke())), o("a", 1.0)), o("a", 1.0))
+
+	// Openness, chaining, the string DSL, and a non-object shape.
+	want("open omit", mustOK(t, MustShape(Open(base()).Omit([]string{"c"})), o("a", 1.0, "b", "x", "z", 9.0)),
+		o("a", 1.0, "b", "x", "z", 9.0))
+	want("chain pick", mustOK(t, MustShape(Closed(base()).Pick([]string{"b"})), o("b", "x")), o("b", "x"))
+	want("chain partial", mustOK(t, MustShape(Closed(o("a", Number)).Partial()), o()), o("a", 0.0))
+	want("render", stringifyNode(Pick([]string{"a"}, base()).n, true), "{a: Number}")
+	want("dsl partial", mustOK(t, MustShape(MustExpr("Partial(Closed({}))")), o()), o())
+	if _, err := Expr(`Pick(["a"],Closed({}))`); err == nil || !strings.Contains(err.Error(), `Pick: unknown property "a"`) {
+		t.Fatalf("dsl pick of an unknown name: %v", err)
+	}
+	want("dsl omit", mustOK(t, MustShape(MustExpr(`Omit(["a"],Closed({}))`)), o()), o())
+	want("dsl extend", mustOK(t, MustShape(MustExpr("Extend(Open({}),Closed({}))")), o()), o())
+
+	// A non-object shape faults at validation, as any other bad spec does.
+	mustErr(t, MustShape(Pick([]string{"a"}, Number)), 1.0, "Pick needs an object shape")
+	mustErr(t, MustShape(Omit([]string{"a"}, Number)), 1.0, "Omit needs an object shape")
+	mustErr(t, MustShape(Partial(Number)), 1.0, "Partial needs an object shape")
+	mustErr(t, MustShape(Extend(o("d", Number), Number)), 1.0, "Extend needs an object shape")
+	mustErr(t, MustShape(Extend(Number, base())), o(), "Extend needs an object to extend with")
+
+	// A description survives the copy, so an extended shape stays documented.
+	described := Describe("a base", base()).Pick([]string{"a"})
+	want("meta copied", described.Meta()["description"], "a base")
+	// ...and is a copy: changing one does not change the other.
+	described.Meta()["description"] = "changed"
+	kept := Describe("a base", base())
+	want("meta not shared", Partial(kept).Meta()["description"], "a base")
+
+	// With no shape at all there is nothing to pick from, so each faults.
+	mustErr(t, MustShape(Pick([]string{"a"})), 1.0, "Pick needs an object shape")
+	mustErr(t, MustShape(Omit([]string{"a"})), 1.0, "Omit needs an object shape")
+	mustErr(t, MustShape(Partial()), 1.0, "Partial needs an object shape")
+	mustErr(t, MustShape(Extend(o("d", Number))), 1.0, "Extend needs an object shape")
+
+	// The DSL reports a bad names argument rather than building something odd;
+	// a single name is a list of one.
+	for _, bad := range []string{
+		"Pick(Closed({}))",
+		"Pick([1],Closed({}))",
+		"Omit([1],Closed({}))",
+		"Extend()",
+		"Pick()",
+	} {
+		if _, err := Expr(bad); err == nil {
+			t.Fatalf("%s should fail to build", bad)
+		}
+	}
+	want("dsl single name", mustOK(t, MustShape(MustExpr(`Omit("a",Closed({}))`)), o()), o())
 }

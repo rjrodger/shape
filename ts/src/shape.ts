@@ -3860,16 +3860,32 @@ function stringify(
 
 // Deep, so that a Catch fallback holding an object is never shared between
 // two results; anything that is not a plain object or array is kept as-is.
-function clone(x: any): any {
+// A cycle, or an object reached twice, is reproduced rather than followed.
+function clone(x: any, seen?: Map<any, any>): any {
   if (null == x || S.object !== typeof x) return x
-  if (isarr(x)) return x.map(clone)
   if (x instanceof RegExp) return new RegExp(x.source, x.flags)
   if (x instanceof Date) return new Date(x.getTime())
-  const proto = Object.getPrototypeOf(x)
-  if (Object.prototype !== proto && null !== proto) return x
+  if (!isarr(x)) {
+    const proto = Object.getPrototypeOf(x)
+    if (Object.prototype !== proto && null !== proto) return x
+  }
+
+  seen = seen || new Map()
+  if (seen.has(x)) return seen.get(x)
+
+  if (isarr(x)) {
+    const out: any[] = []
+    seen.set(x, out)
+    for (let i = 0; i < x.length; i++) {
+      out.push(clone(x[i], seen))
+    }
+    return out
+  }
+
   const out: any = {}
+  seen.set(x, out)
   for (const k of keys(x)) {
-    defprop(out, k, { value: clone(x[k]), enumerable: true, writable: true, configurable: true })
+    defprop(out, k, { value: clone(x[k], seen), enumerable: true, writable: true, configurable: true })
   }
   return out
 }

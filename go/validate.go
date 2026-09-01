@@ -818,18 +818,40 @@ func cloneDefault(n *node) any {
 	return n.defaultValue
 }
 
+// cloneAny copies maps and slices deeply. A cycle, or a container reached
+// twice, is reproduced rather than followed.
 func cloneAny(v any) any {
+	return cloneSeen(v, map[uintptr]any{})
+}
+
+func cloneSeen(v any, seen map[uintptr]any) any {
 	switch x := v.(type) {
 	case map[string]any:
+		if x == nil {
+			return x
+		}
+		id := reflect.ValueOf(x).Pointer()
+		if done, ok := seen[id]; ok {
+			return done
+		}
 		out := map[string]any{}
+		seen[id] = out
 		for k, vv := range x {
-			out[k] = cloneAny(vv)
+			out[k] = cloneSeen(vv, seen)
 		}
 		return out
 	case []any:
+		if x == nil {
+			return x
+		}
+		id := reflect.ValueOf(x).Pointer()
+		if done, ok := seen[id]; ok {
+			return done
+		}
 		out := make([]any, len(x))
+		seen[id] = out
 		for i, vv := range x {
-			out[i] = cloneAny(vv)
+			out[i] = cloneSeen(vv, seen)
 		}
 		return out
 	default:
