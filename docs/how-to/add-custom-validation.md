@@ -91,7 +91,29 @@ itself):
 Shape({ port: Fault('port must be a number', Number) })
 ```
 
+## Do not use an async function
+
+Validation is synchronous by design (see
+[ADR 0001](../adr/0001-validation-is-synchronous.md)). An `async` validator
+returns a promise, a promise is truthy, and a truthy return means "passed" — so
+the check **silently succeeds** no matter what it would have decided:
+
+```js
+const check = async (v) => v > 100     // would reject 5
+Shape(Check(check, Number))(5)         // → 5. Passes.
+```
+
+Validate the shape first, then apply rules that need I/O to the produced value:
+
+```js
+const user = Shape({ email: String, name: String })(input)
+if (await emailTaken(user.email)) {
+  throw new Error('email already registered')
+}
+```
+
 ## See also
 
+- [ADR 0001 — validation is synchronous](../adr/0001-validation-is-synchronous.md).
 - [Compose shapes](compose-shapes.md) for `One` / `Some` / `All` / `Exact`.
 - [Handle and collect errors](handle-and-collect-errors.md).

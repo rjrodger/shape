@@ -63,6 +63,13 @@ Background and design discussion.
 - [TypeScript ↔ Go parity](explanation/ts-go-parity.md) — the parity contract,
   the shared conformance corpus, and known divergences.
 
+## Decision records
+
+Design decisions that are expensive to revisit, with the reasoning behind them.
+
+- [ADR index](adr/README.md)
+  - [0001 — Validation is synchronous, in both languages](adr/0001-validation-is-synchronous.md)
+
 ---
 
 ## Conventions used in these docs
