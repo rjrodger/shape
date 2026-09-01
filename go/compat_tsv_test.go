@@ -3,6 +3,7 @@ package shape
 import (
 	"bufio"
 	"encoding/json"
+	"math"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -146,11 +147,16 @@ func jsonNorm(v any) any {
 }
 
 // jsDates rewrites every time.Time in v to the string JSON.stringify gives a
-// Date, so the two languages' produced values compare across the JSON boundary.
+// Date, and a NaN to the null it gives that, so the two languages' produced
+// values compare across the JSON boundary.
 func jsDates(v any) any {
 	switch x := v.(type) {
 	case time.Time:
 		return jsDateString(x)
+	case float64:
+		if math.IsNaN(x) {
+			return nil
+		}
 	case map[string]any:
 		out := make(map[string]any, len(x))
 		for k, vv := range x {
@@ -242,6 +248,8 @@ func decodeSpec(v any) any {
 					return Object
 				case "Array":
 					return Array
+				case "Function":
+					return Function
 				case "Integer":
 					return Integer
 				case "Date":

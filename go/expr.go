@@ -193,15 +193,13 @@ func (p *exprParser) parseTerm(top bool) (*Node, error) {
 	}
 	if head == "NaN" {
 		_, _ = p.parseArgs()
-		nb := buildize(nil)
-		nb.n.kind = KindNaN
-		nb.n.required = true
-		return nb, nil
+		return newNodeWrap(nanNode()), nil
 	}
 	if head == "undefined" || head == "null" {
 		_, _ = p.parseArgs()
 		nb := buildize(nil)
 		nb.n.kind = KindNull
+		nb.n.hasDefault = true
 		return nb, nil
 	}
 	if strings.HasPrefix(head, "/") && strings.HasSuffix(head, "/") && len(head) >= 2 {
@@ -326,10 +324,7 @@ func (p *exprParser) parseArg() (any, error) {
 		return chainContinuation(p, Type(tok, exprShapes(args)...))
 	}
 	if head == "NaN" {
-		nb := buildize(nil)
-		nb.n.kind = KindNaN
-		nb.n.required = true
-		return chainContinuation(p, nb)
+		return chainContinuation(p, newNodeWrap(nanNode()))
 	}
 	if head == "undefined" || head == "null" {
 		return nil, nil
@@ -599,7 +594,7 @@ func exprShapes(args []builderArg) []any {
 	out := make([]any, len(args))
 	for i, a := range args {
 		if a == nil {
-			out[i] = newNodeWrap(&node{kind: KindNull})
+			out[i] = newNodeWrap(&node{kind: KindNull, hasDefault: true})
 			continue
 		}
 		out[i] = a

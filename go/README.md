@@ -115,6 +115,7 @@ ok       := s.Valid(input)             // alias of Match
 issues   := s.Error(input)             // []FieldError, nil when valid
 spec     := s.Spec()                   // structural snapshot of the compiled schema
 str      := s.String()                 // debug rendering
+schema   := s.JSONSchema()             // a JSON Schema (draft 2020-12), as map[string]any
 ```
 
 Validation returns a new value; the input map is not mutated. Injected defaults
@@ -176,7 +177,7 @@ detail; the tables here list the Go signatures.
 | `Type(kind, spec?)`              | force a `Kind`, `TypeToken`, kind name or node's type on the node  |
 | `Exact(values...)`               | require equality with one of the listed literals (top-level only)  |
 | `Never(spec?)`                   | always fails to match                                              |
-| `Func(spec?)`                    | require a function-typed value                                     |
+| `Func(spec?)`                    | a function-typed value; optional of itself (the `Function` token is required) |
 | `Coerce(spec?)`                  | convert a string/number/bool to the node's kind first, where unambiguous |
 | `.Any()`, `.Integer()`, `.Date()` | chain shortcuts for the `Any`, `Integer` and `Date` tokens        |
 

@@ -400,9 +400,13 @@ func TestChainedFuncKeepsOptionality(t *testing.T) {
 	// already said "optional" stays optional.
 	mustOK(t, MustShape(map[string]any{"a": Optional().Func()}), map[string]any{})
 
-	// A chain that has not stated it still becomes required.
-	mustErr(t, MustShape(map[string]any{"a": buildize(nil).Func()}),
-		map[string]any{}, "is required")
+	// Func is a builder, not a type token, so it does not require a value of
+	// itself: TS Func() and Any().Func() are both optional. The Function
+	// token is the required form.
+	mustOK(t, MustShape(map[string]any{"a": buildize(nil).Func()}), map[string]any{})
+	mustOK(t, MustShape(map[string]any{"a": Func()}), map[string]any{})
+	mustErr(t, MustShape(map[string]any{"a": Function}), map[string]any{}, "is required")
+	mustErr(t, MustShape(map[string]any{"a": Required(Func())}), map[string]any{}, "is required")
 }
 
 func TestExplicitAnyInKeyExpression(t *testing.T) {

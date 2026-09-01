@@ -729,7 +729,10 @@ func makeListBuilder(mode listMode, shapes []any) *Node {
 func Child(child any, spec ...any) *Node {
 	var nb *Node
 	if len(spec) == 0 {
+		// Given no shape, Child is an object with the empty default TS gives
+		// it (f = {}), which its JSON Schema carries.
 		nb = buildize(map[string]any{})
+		nb.n.hasDefault = true
 	} else {
 		nb = buildize(spec[0])
 	}
@@ -958,6 +961,9 @@ func RenameWith(name string, opts RenameOptions, spec ...any) *Node {
 }
 
 // Func declares a function-typed value (best-effort: any reflect.Func value).
+// It is a builder, not a type token, so it does not require a value of
+// itself: TS Func() leaves the node optional, and { n: Func() } accepts an
+// object without n. The Function token is the required form.
 func Func(spec ...any) *Node {
 	var nb *Node
 	if len(spec) == 0 {
@@ -966,21 +972,12 @@ func Func(spec ...any) *Node {
 		nb = buildize(spec[0])
 	}
 	nb.n.kind = KindFunction
-	nb.n.required = true
-	nb.n.requiredSet = true
 	return nb
 }
 
-// Func (chained).
+// Func (chained): the receiver's required state is kept.
 func (n *Node) Func() *Node {
 	n.n.kind = KindFunction
-	// Only assert requiredness if the chain has not already stated it: TS
-	// merges the receiver's flags over the builder's, so Optional().Func()
-	// stays optional.
-	if !n.n.requiredSet {
-		n.n.required = true
-		n.n.requiredSet = true
-	}
 	return n
 }
 

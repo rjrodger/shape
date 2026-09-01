@@ -72,7 +72,8 @@ lives in **[`docs/`](docs/README.md)**:
   [custom validation](docs/how-to/add-custom-validation.md),
   [composition](docs/how-to/compose-shapes.md),
   [coercion & formats](docs/how-to/coerce-and-formats.md),
-  [errors](docs/how-to/handle-and-collect-errors.md), and
+  [errors](docs/how-to/handle-and-collect-errors.md),
+  [JSON Schema export](docs/how-to/export-json-schema.md), and
   [more](docs/README.md#how-to-guides).
 - **Reference** — [builders](docs/reference/builders.md),
   [Shape API](docs/reference/shape-api.md),
@@ -97,6 +98,7 @@ lives in **[`docs/`](docs/README.md)**:
   `Extend`) to build one shape out of another.
 - `Catch` a failure with a fallback, `Transform` a valid value, `Describe` a
   node for tooling.
+- A JSON Schema export (draft 2020-12) and Standard Schema V1 interop.
 - A compact string DSL (`expr` / `build`) and inline key expressions.
 - Detailed, path-aware error messages.
 - TypeScript and Go implementations kept at behavioural parity by a

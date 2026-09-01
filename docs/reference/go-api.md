@@ -23,7 +23,10 @@ func (s *Schema) Error(input any) []FieldError              // nil when valid
 func (s *Schema) Spec() any                                 // JSON-friendly
 func (s *Schema) Node() *node                               // introspection
 func (s *Schema) String() string                            // debug render
+func (s *Schema) JSONSchema() map[string]any                // JSON Schema, draft 2020-12
 ```
+
+`(*Node).JSONSchema()` renders a built node the same way.
 
 ## Tokens
 

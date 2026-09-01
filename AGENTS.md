@@ -79,7 +79,7 @@ or an extra error — the ways the two implementations actually drift.
 
 The corpus only covers rows someone wrote. `test/differential/` generates
 thousands of `(spec, input)` pairs, runs each through both implementations and
-diffs verdict, produced value and exact error text:
+diffs the JSON Schema export, verdict, produced value and exact error text:
 
 ```sh
 make diff        # sampled report, grouped by case family

@@ -57,6 +57,7 @@ shape.error(value)         // ShapeError[] (empty when valid)
 shape.spec()               // a JSON-friendly description of the compiled shape
 shape.node()               // the compiled root node
 shape.stringify()          // the shape as DSL-ish text
+shape.jsonSchema()         // a JSON Schema (draft 2020-12) for the values accepted
 shape['~standard']         // a Standard Schema V1 validator
 ```
 

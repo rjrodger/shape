@@ -1369,6 +1369,9 @@ function shapify<S>(intop?: S | Node<S>, inopts?: ShapeOptions) {
     return null == json ? (json = node2json(shape.node())) : json
   }
 
+  // JSON Schema (draft 2020-12) for the values this shape accepts.
+  shape.jsonSchema = () => jsonSchema(shape.node())
+
 
   shape.toString = function(this: any) {
     desc = '' === desc ? this.stringify() : desc
@@ -2940,11 +2943,14 @@ const Define = function <V>(this: any, inopts: any, shape?: Node<V> | V): Node<V
 
 
   if (null != name && '' != name) {
-    node.b.push(function Define(_val: any, _update: Update, state: State) {
+    const definer: any = function Define(_val: any, _update: Update, state: State) {
       let ref = state.ctx.ref = state.ctx.ref || {}
       ref[name] = state.node
       return true
-    })
+    }
+    definer.n = S.Define
+    definer.a = [name]
+    node.b.push(definer)
   }
 
   return node
@@ -2963,7 +2969,7 @@ const Refer = function <V>(this: any, inopts: any, shape?: Node<V> | V): Node<V>
   let fill = !!opts.fill
 
   if (null != name && '' != name) {
-    node.b.push(function Refer(val: any, update: Update, state: State) {
+    const referrer: any = function Refer(val: any, update: Update, state: State) {
       if (undefined !== val || fill) {
         let ref = state.ctx.ref = state.ctx.ref || {}
 
@@ -2979,7 +2985,10 @@ const Refer = function <V>(this: any, inopts: any, shape?: Node<V> | V): Node<V>
 
       // TODO: option to fail if ref not found?
       return true
-    })
+    }
+    referrer.n = S.Refer
+    referrer.a = [name]
+    node.b.push(referrer)
   }
 
   return node
@@ -3850,6 +3859,260 @@ function clone(x: any): any {
 }
 
 
+// JSON Schema
+// ===========
+// Export a node as a JSON Schema (draft 2020-12) describing the values it
+// accepts. Every kind, bound, format, literal set, composition, reference and
+// default has a rendering; a check that is a function, and the builders that
+// only change what comes out (Coerce, Catch, Transform, Rename, Key), have
+// none. The Go port renders the same schema for the same shape, and the
+// differential harness compares the two.
+
+const JSON_SCHEMA_DRAFT = 'https://json-schema.org/draft/2020-12/schema'
+
+function jsonSchema(top: Node<any>): any {
+  const defs: any = {}
+  const body = nodeSchema(top, defs)
+  const out: any = { $schema: JSON_SCHEMA_DRAFT, ...body }
+  if (0 < keys(defs).length) {
+    out.$defs = defs
+  }
+  return out
+}
+
+
+const JSON_SCHEMA_TYPE: any = {
+  string: 'string',
+  number: 'number',
+  nan: 'number',
+  integer: 'integer',
+  boolean: 'boolean',
+  null: 'null',
+  object: 'object',
+  array: 'array',
+  date: 'string',
+  regexp: 'string',
+}
+
+
+const JSON_SCHEMA_FORMAT: any = {
+  Email: 'email',
+  Url: 'uri',
+  Uuid: 'uuid',
+  DateTime: 'date-time',
+  Ipv4: 'ipv4',
+  Ipv6: 'ipv6',
+}
+
+
+function nodeSchema(raw: any, defs: any): any {
+  const n = nodize(raw)
+  const s: any = {}
+
+  // A reference stands for the named shape, which is rendered where it is
+  // defined.
+  const referrer: any = n.b.find((v: any) => S.Refer === v.n)
+  if (undefined !== referrer) {
+    s.$ref = '#/$defs/' + referrer.a[0]
+    return describe(n, s)
+  }
+
+  if (undefined !== JSON_SCHEMA_TYPE[n.t]) {
+    s.type = JSON_SCHEMA_TYPE[n.t]
+  }
+
+  if (S.string === n.t && !n.u.empty) {
+    s.minLength = 1
+  }
+  else if (S.date === n.t) {
+    s.format = 'date-time'
+  }
+  else if (S.regexp === n.t) {
+    s.pattern = n.v.source
+  }
+  else if (S.never === n.t) {
+    s.not = {}
+  }
+  else if (S.object === n.t) {
+    objectSchema(n, s, defs)
+  }
+  else if (S.array === n.t) {
+    arraySchema(n, s, defs)
+  }
+  else if (S.list === n.t) {
+    listSchema(n, s, defs)
+  }
+
+  checkSchema(n, s)
+
+  if (n.u.nullable && undefined !== s.type) {
+    s.type = [s.type, 'null']
+  }
+
+  if (!n.r && !n.p && undefined !== n.f && S.function !== typeof n.f && !isNaN2(n.f)) {
+    s.default = n.f
+  }
+
+  describe(n, s)
+
+  const definer: any = n.b.find((v: any) => S.Define === v.n)
+  if (undefined !== definer) {
+    defs[definer.a[0]] = s
+  }
+
+  return s
+}
+
+
+function isNaN2(v: any): boolean {
+  return S.number === typeof v && isNaN(v)
+}
+
+
+function describe(n: Node<any>, s: any): any {
+  if (S.string === typeof n.m?.description) {
+    s.description = n.m.description
+  }
+  return s
+}
+
+
+function objectSchema(n: Node<any>, s: any, defs: any) {
+  const entries = objectEntries(n)
+  const props: any = {}
+  const required: string[] = []
+  for (const e of entries) {
+    const cn = nodize(e.child)
+    props[e.key] = nodeSchema(cn, defs)
+    if (cn.r) {
+      required.push(e.key)
+    }
+  }
+  if (0 < entries.length) {
+    s.properties = props
+  }
+  if (0 < required.length) {
+    s.required = required.sort()
+  }
+  if (undefined === n.c) {
+    s.additionalProperties = false
+  }
+  else if (S.any !== nodize(n.c).t) {
+    s.additionalProperties = nodeSchema(n.c, defs)
+  }
+}
+
+
+function arraySchema(n: Node<any>, s: any, defs: any) {
+  const fixed = keys(n.v)
+    .filter((k: string) => !isNaN(+k))
+    .sort((a: string, b: string) => +a - +b)
+    .map((k: string) => nodeSchema(n.v[k], defs))
+  // An element shape of Any says nothing, as an Any rest shape does not for
+  // an object.
+  const child = undefined === n.c || S.any === nodize(n.c).t ? undefined : n.c
+  if (0 < fixed.length) {
+    s.prefixItems = fixed
+    s.items = undefined === child ? false : nodeSchema(child, defs)
+  }
+  else if (undefined !== child) {
+    s.items = nodeSchema(child, defs)
+  }
+}
+
+
+function listSchema(n: Node<any>, s: any, defs: any) {
+  const branches = n.u.list.map((bn: any) => nodeSchema(bn, defs))
+  const disc = n.u.discriminated
+  if (undefined !== disc) {
+    for (let bI = 0; bI < branches.length; bI++) {
+      const b = branches[bI]
+      b.properties = b.properties || {}
+      b.properties[disc.tag] = { type: S.string, const: disc.tags[bI] }
+      b.required = (b.required || []).filter((k: string) => k !== disc.tag).concat(disc.tag).sort()
+    }
+    s.oneOf = branches
+  }
+  else {
+    s[S.All === n.b[0].n ? 'allOf' : 'anyOf'] = branches
+  }
+}
+
+
+// The bounds a size builder puts on a value: the number families for a
+// number, the length families for a string, array or object, and every
+// family for a node that has not said.
+const SIZE_FAMILIES: any = {
+  number: ['minimum'],
+  nan: ['minimum'],
+  integer: ['minimum'],
+  string: ['minLength'],
+  array: ['minItems'],
+  object: ['minProperties'],
+}
+
+const SIZE_MAX: any = {
+  minimum: 'maximum',
+  minLength: 'maxLength',
+  minItems: 'maxItems',
+  minProperties: 'maxProperties',
+}
+
+
+function checkSchema(n: Node<any>, s: any) {
+  const families = SIZE_FAMILIES[n.t] || keys(SIZE_MAX)
+  const vs: any[] = n.b.concat(n.a)
+
+  for (let vI = 0; vI < vs.length; vI++) {
+    const v = vs[vI]
+
+    // Catch, Transform and Ignore take the node's checks inside.
+    if (undefined !== v.inner) {
+      vs.push(...v.inner.b, ...v.inner.a)
+      continue
+    }
+
+    const name = v.n || v.name
+    if (S.Exact === name) {
+      s.enum = v.a.slice()
+    }
+    else if (undefined !== JSON_SCHEMA_FORMAT[name]) {
+      s.format = JSON_SCHEMA_FORMAT[name]
+    }
+    else if (S.Ip === name) {
+      s.anyOf = [{ format: 'ipv4' }, { format: 'ipv6' }]
+    }
+    else if (S.Min === name || S.Max === name || S.Above === name || S.Below === name ||
+      S.Len === name) {
+      const size = +v.a[0]
+      for (const lo of families) {
+        const hi = SIZE_MAX[lo]
+        const numeric = 'minimum' === lo
+        if (S.Min === name) {
+          s[lo] = size
+        }
+        else if (S.Max === name) {
+          s[hi] = size
+        }
+        else if (S.Above === name) {
+          numeric ? (s.exclusiveMinimum = size) : (s[lo] = size + 1)
+        }
+        else if (S.Below === name) {
+          numeric ? (s.exclusiveMaximum = size) : (s[hi] = size - 1)
+        }
+        else {
+          s[lo] = size
+          s[hi] = size
+        }
+      }
+    }
+    else if (S.string === typeof name && v.shape$?.Check && name.startsWith('/')) {
+      s.pattern = name.substring(1, name.lastIndexOf('/'))
+    }
+  }
+}
+
+
 const G$ = (node: any): Node<any> => nodize({
   ...node,
   $: { shape$: true }
@@ -3945,6 +4208,7 @@ Object.assign(shapify, {
   buildize,
   makeErr,
   stringify,
+  jsonSchema,
   truncate,
   nodize,
   expr,
@@ -3960,6 +4224,7 @@ type ShapeShape = ReturnType<typeof shapify> &
   error: (root?: any, ctx?: Context) => ShapeError[],
   spec: () => any,
   node: () => Node<any>,
+  jsonSchema: () => any,
   isShape: (v: any) => boolean,
   shape: typeof SHAPE
 } & StandardSchemaV1
@@ -3971,6 +4236,7 @@ type Shape = typeof shapify & typeof BuilderMap & {
   buildize: typeof buildize,
   makeErr: typeof makeErr,
   stringify: typeof stringify,
+  jsonSchema: typeof jsonSchema,
   truncate: typeof truncate,
   nodize: typeof nodize,
   expr: typeof expr,

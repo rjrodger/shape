@@ -194,6 +194,14 @@ function build() {
     add('lit-obj-' + JSON.stringify(lit), { a: lit }, OBJS)
   }
 
+  // A null literal is an optional null defaulting to null.
+  add('lit-obj-null', { a: null }, OBJS)
+  add('null-optional', { a: E('Optional(null)') }, OBJS)
+  add('null-skip', { a: E('Skip(null)') }, OBJS)
+  add('null-required', { a: E('Required(null)') }, OBJS)
+  add('null-nested', { a: { b: null } }, OBJS)
+  add('arr-any', [ANY], ARRS)
+
   // Object structure.
   add('obj-empty', {}, OBJS)
   add('obj-closed', { $closed: { a: N } }, OBJS)
@@ -339,8 +347,15 @@ function build() {
   add('ke-quoted-string', { '"a b": String': '' }, [{ 'a b': 'x' }, { 'a b': 1 }, {}])
   add('ke-empty-expr', { 'a:': 1 }, [{ 'a:': 2 }, { 'a:': 'x' }, { a: 1 }, {}])
 
-  // Func / Key.
+  // Func / Key. Func is a builder, so it is optional; the Function token is
+  // required. A NaN literal is an optional NaN default.
   add('fn-1', E('Func'), SCALARS)
+  add('fn-obj', { a: E('Func') }, OBJS)
+  add('fn-token-obj', { a: { $type: 'Function' } }, OBJS)
+  add('nan-obj', { a: E('NaN') }, OBJS)
+  add('nan-optional', { a: E('Optional(NaN)') }, OBJS)
+  add('nan-required', { a: E('Required(NaN)') }, OBJS)
+  add('nan-bound-obj', { a: E('Min(2,NaN)') }, OBJS)
   add('key-1', { a: E('Key()') }, OBJS)
 
   // Deep nesting.

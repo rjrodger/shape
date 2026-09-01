@@ -23,11 +23,12 @@ type diffCase struct {
 }
 
 type diffResult struct {
-	Name  string `json:"name"`
-	Build string `json:"build,omitempty"`
-	OK    *bool  `json:"ok,omitempty"`
-	Out   any    `json:"out,omitempty"`
-	Err   string `json:"err,omitempty"`
+	Name   string `json:"name"`
+	Build  string `json:"build,omitempty"`
+	Schema any    `json:"schema,omitempty"`
+	OK     *bool  `json:"ok,omitempty"`
+	Out    any    `json:"out,omitempty"`
+	Err    string `json:"err,omitempty"`
 }
 
 func TestDifferential(t *testing.T) {
@@ -78,6 +79,9 @@ func runDiffCase(c diffCase) (res diffResult) {
 		res.Build = "ERR: " + err.Error()
 		return
 	}
+
+	// The JSON Schema export is compared too, once per case.
+	res.Schema = jsonNorm(s.JSONSchema())
 
 	// A JSON null is a value that is present and null. Go reads a plain nil as
 	// "no value supplied", so hand the sentinel over instead.

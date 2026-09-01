@@ -42,7 +42,7 @@ Notes:
 | `Date` | A date value. TS: the `Date` constructor as a type marker (a `Date` instance); Go: the `Date` token (a `time.Time`). `.Date()` chains in both. A `Date` instance / `time.Time` in a spec is an optional date with that default. |
 | `Exact(values…)` | Require equality with one of the listed literals. Also matches from the node default. |
 | `Never(spec?)` | Never matches — always fails. |
-| `Func(spec?)` | Require a function value. |
+| `Func(spec?)` | A function value. A builder, not a type marker, so it is optional of itself: `Function` is the required form. |
 | `Any(spec?)` | Match any value (optionally carrying a default). |
 
 ## Coercion

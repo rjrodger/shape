@@ -40,6 +40,7 @@ Goal-oriented recipes for a task you already have.
 - [Use key and value expressions](how-to/use-key-and-value-expressions.md)
 - [Use the string DSL (`expr` / `build`)](how-to/use-the-string-dsl.md)
 - [Use Shape as a Standard Schema](how-to/use-as-standard-schema.md)
+- [Export a JSON Schema](how-to/export-json-schema.md)
 - [Use Shape in Go](how-to/use-shape-in-go.md)
 - [Use Shape in the browser](how-to/use-shape-in-the-browser.md)
 

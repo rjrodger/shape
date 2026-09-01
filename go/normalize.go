@@ -19,7 +19,9 @@ func normalize(spec any) (*node, error) {
 
 func normalizeWith(spec any, opts ShapeOptions) (*node, error) {
 	if spec == nil {
-		return &node{kind: KindNull}, nil
+		// A null literal is an optional null with null as its default, as any
+		// other literal is its own default (TS nodize(null): f = null).
+		return &node{kind: KindNull, hasDefault: true}, nil
 	}
 
 	switch v := spec.(type) {
@@ -49,12 +51,14 @@ func normalizeWith(spec any, opts ShapeOptions) (*node, error) {
 		return &node{kind: KindBoolean, defaultValue: v, hasDefault: true, hasLiteral: true, literal: v}, nil
 	case float64:
 		if math.IsNaN(v) {
-			return &node{kind: KindNaN, required: true, requiredSet: true}, nil
+			// A NaN literal is an optional NaN with NaN as its default, as any
+			// other literal is its own default (TS nodize(NaN)).
+			return nanNode(), nil
 		}
 		return &node{kind: KindNumber, defaultValue: v, hasDefault: true, hasLiteral: true, literal: v}, nil
 	case float32:
 		if math.IsNaN(float64(v)) {
-			return &node{kind: KindNaN, required: true, requiredSet: true}, nil
+			return nanNode(), nil
 		}
 		return &node{kind: KindNumber, defaultValue: v, hasDefault: true, hasLiteral: true, literal: v}, nil
 	case int, int8, int16, int32, int64,
@@ -67,6 +71,10 @@ func normalizeWith(spec any, opts ShapeOptions) (*node, error) {
 	}
 
 	return nil, fmt.Errorf("unsupported schema value type %T", spec)
+}
+
+func nanNode() *node {
+	return &node{kind: KindNaN, hasDefault: true, defaultValue: math.NaN(), hasLiteral: true, literal: math.NaN()}
 }
 
 // typeTokenNode builds a required node for a type token, carrying the kind's

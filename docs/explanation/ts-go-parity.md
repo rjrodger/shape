@@ -32,7 +32,8 @@ nothing and a `Rest()` that validated nothing passed it.
 
 [`test/differential/`](../../test/differential/README.md) is the wider net. It
 generates thousands of `(spec, input)` pairs, runs every one through both
-implementations, and diffs verdict, produced value and exact error text:
+implementations, and diffs the JSON Schema export, verdict, produced value and
+exact error text:
 
 ```sh
 make diff        # sampled report
@@ -53,6 +54,7 @@ row so the committed gate keeps it closed.
   including the coercions, the string formats, the isolation builders
   (`Catch`, `Transform`, `Ignore`), discriminated unions and the object
   algebra (`Pick`, `Omit`, `Partial`, `Extend`).
+- The JSON Schema export: the same shape renders the same document.
 
 ## Intentional divergences
 
