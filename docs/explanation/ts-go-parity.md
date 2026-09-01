@@ -57,8 +57,12 @@ Some differences are inherent to Go and are unlikely ever to close.
 
 - **Object key ordering.** Go maps are unordered, so object specs and argument
   specs are processed in **alphabetical** key order; TypeScript preserves
-  insertion order. This can affect the *order* of multiple errors and the
-  meta-key adjacency rule. Name argument keys `a`, `b`, `c`, … to fix positions.
+  insertion order. This affects three things: the *order* of multiple errors,
+  the meta-key adjacency rule, and how an object *value* is rendered inside a
+  message — validating a closed `{a: 1}` against `{b: 1, a: 2}` names the value
+  `{b:1,a:2}` in TypeScript and `{a:2,b:1}` in Go. Name argument keys `a`, `b`,
+  `c`, … to fix positions. The produced value itself is unaffected: it is the
+  same object either way, and the differential harness compares it canonically.
 
 - **Regular expressions.** Go uses the RE2 engine (`regexp`); TypeScript uses
   the JavaScript engine. Patterns relying on backtracking features differ.
@@ -82,6 +86,30 @@ Some differences are inherent to Go and are unlikely ever to close.
 - **`Any` is a token, not a builder.** In TypeScript `Any` is a builder
   function, usable bare (`{ a: Any }`) or called (`Any()`). In Go it is a
   `TypeToken`; to narrow, use `Type(Any, spec)` or the `.Any()` chain method.
+
+## Known open divergence
+
+One case is not yet closed, and the differential harness deliberately does not
+cover it.
+
+**A builder-wrapped key expression discards its example value in TypeScript.**
+TypeScript appends the example as the *last argument of the innermost builder
+call*, so `{ "a: Optional(Number)": 5 }` becomes `Optional(Number, 5)` — and
+`Optional` takes one argument, so the 5 is dropped and the injected default
+comes from the `Number` token instead (`0`). Go injects the example (`5`). A
+bare token or bare constraint behaves the same in both: `{ "a: Any": 5 }` and
+`{ "a: Min(2)": 5 }` both take the 5.
+
+| spec | TypeScript | Go |
+| ---- | ---------- | -- |
+| `{ "a: Any": 5 }` with `{}` | `{a: 5}` | `{a: 5}` |
+| `{ "a: Optional(Any)": 5 }` with `{}` | `{}` | `{a: 5}` |
+| `{ "a: Optional(Number)": 5 }` with `{}` | `{a: 0}` | `{a: 5}` |
+| `{ "a: Optional(String)": "z" }` with `{}` | `{a: ""}` | `{a: "z"}` |
+
+Closing it means deciding whether TypeScript's behaviour is right — silently
+dropping an example the author wrote looks more like an accident of argument
+splicing than a designed rule — so it is recorded here rather than mirrored.
 
 ## Error metadata
 

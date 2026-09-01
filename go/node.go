@@ -16,6 +16,10 @@ const (
 // chainable builder methods.
 type node struct {
 	kind Kind
+	// kindSet records that the kind was declared by the spec rather than left
+	// open, so a later inference (a key expression's example value) does not
+	// overwrite it.
+	kindSet bool
 
 	required    bool
 	requiredSet bool

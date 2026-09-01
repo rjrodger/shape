@@ -3114,7 +3114,7 @@ const BuilderMap = {
 // Builders that mean something applied to nothing, so a bare reference to one
 // in a spec (`{ a: Any }`) is read as a call. See nodize.
 const NULLARY_BUILDERS =
-  [Any, Closed, Empty, Func, Ignore, Never, Open, Optional, Required, Skip]
+  [Any, Closed, Empty, Func, Ignore, Key, Never, Open, Optional, Required, Skip]
 
 for (let builder of NULLARY_BUILDERS) {
   defprop(builder, 'nullary$', { value: true })

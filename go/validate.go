@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"sort"
 	"strconv"
+	"strings"
 )
 
 // TS-aligned marks. See src/shape.ts makeErrImpl call sites.
@@ -427,15 +428,18 @@ func validateObject(n *node, in any, path []string, pathArr []any, parent any, c
 		}
 		sort.Strings(unknown)
 
-		for _, k := range unknown {
-			// The path is the parent's; the offending key is reported separately.
-			// TS renders this as:
-			//   Validation failed for property "<parent>" because the property "<k>" is not allowed.
-			state := &State{Path: path, PathArr: pathArr, Key: k, Value: obj, Node: n, Match: match, Ctx: ctx}
+		// One error listing every unknown key, not one error per key. The path
+		// is the parent's; the offending keys are reported separately. TS
+		// renders this as:
+		//   Validation failed for property "<parent>" because the property "<k>" is not allowed.
+		//   ... because the properties "<k>, <k>" are not allowed.
+		if len(unknown) > 0 && !n.silent {
+			state := &State{Path: path, PathArr: pathArr, Key: strings.Join(unknown, ", "),
+				Value: obj, Node: n, Match: match, Ctx: ctx}
 			err := makeErr(state, WhyClosed, markObjectClosed, "")
-			if !n.silent {
-				verr.add(err)
-			}
+			err.plural = len(unknown) > 1
+			err.Text = defaultErrText(err)
+			verr.add(err)
 		}
 	}
 

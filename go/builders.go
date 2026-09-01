@@ -177,7 +177,9 @@ func (n *Node) Ignore() *Node {
 func Empty(spec ...any) *Node {
 	var nb *Node
 	if len(spec) == 0 {
-		nb = buildize(String)
+		// Untyped, as in TS: Empty() allows the empty string without also
+		// demanding that the value be a string.
+		nb = buildize(nil)
 	} else {
 		nb = buildize(spec[0])
 	}
@@ -273,6 +275,7 @@ func Type(kind any, spec ...any) *Node {
 	}
 
 	nb.n.kind = tn.kind
+	nb.n.kindSet = true
 	nb.n.required = tn.required
 	nb.n.requiredSet = tn.requiredSet
 	nb.n.skippable = tn.skippable
@@ -944,8 +947,14 @@ func Func(spec ...any) *Node {
 // Func (chained).
 func (n *Node) Func() *Node {
 	n.n.kind = KindFunction
-	n.n.required = true
-	n.n.requiredSet = true
+	n.n.kindSet = true
+	// Only assert requiredness if the chain has not already stated it: TS
+	// merges the receiver's flags over the builder's, so Optional().Func()
+	// stays optional.
+	if !n.n.requiredSet {
+		n.n.required = true
+		n.n.requiredSet = true
+	}
 	return n
 }
 
@@ -1185,6 +1194,14 @@ func typeWillFail(n *node, val any) bool {
 		return !isAnyArray(val)
 	case KindFunction:
 		return !isFunction(val)
+	case KindRegexp:
+		// A regexp node is string-shaped, so a non-string is a type error.
+		_, ok := val.(string)
+		return !ok
+	case KindNull:
+		return val != nil
+	case KindNaN:
+		return !isNumber(val) || !isNaN(val)
 	}
 	return false
 }

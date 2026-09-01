@@ -206,12 +206,7 @@ func (p *exprParser) parseTerm(top bool) (*Node, error) {
 		}
 		// A bare /re/ is a type, not a check: a non-string fails as a type
 		// error. Check(/re/) is the explicit-check form and reports as one.
-		nb := buildize(nil)
-		nb.n.kind = KindRegexp
-		nb.n.regexpVal = re
-		nb.n.required = true
-		nb.n.requiredSet = true
-		return nb, nil
+		return newNodeWrap(regexpNode(re)), nil
 	}
 	// JSON literal
 	var lit any
@@ -403,7 +398,7 @@ func buildExprBuilders() map[string]exprBuilderFn {
 		}
 		dval := args[0]
 		spec := args[1:]
-		return Default(dval, spec...), nil
+		return Default(dval, exprShapes(spec)...), nil
 	},
 	"Fault": func(args []builderArg) (*Node, error) {
 		if len(args) < 1 {
@@ -414,13 +409,13 @@ func buildExprBuilders() map[string]exprBuilderFn {
 			return nil, fmt.Errorf("Fault: message must be a string")
 		}
 		spec := args[1:]
-		return Fault(msg, spec...), nil
+		return Fault(msg, exprShapes(spec)...), nil
 	},
 	"Type": func(args []builderArg) (*Node, error) {
 		if len(args) < 1 {
 			return nil, fmt.Errorf("Type: missing kind")
 		}
-		return Type(args[0], args[1:]...), nil
+		return Type(args[0], exprShapes(args[1:])...), nil
 	},
 	"Exact": func(args []builderArg) (*Node, error) {
 		return Exact(args...), nil
@@ -429,25 +424,25 @@ func buildExprBuilders() map[string]exprBuilderFn {
 		if len(args) < 1 {
 			return nil, fmt.Errorf("Min: missing limit")
 		}
-		return Min(args[0], args[1:]...), nil
+		return Min(args[0], exprShapes(args[1:])...), nil
 	},
 	"Max": func(args []builderArg) (*Node, error) {
 		if len(args) < 1 {
 			return nil, fmt.Errorf("Max: missing limit")
 		}
-		return Max(args[0], args[1:]...), nil
+		return Max(args[0], exprShapes(args[1:])...), nil
 	},
 	"Above": func(args []builderArg) (*Node, error) {
 		if len(args) < 1 {
 			return nil, fmt.Errorf("Above: missing limit")
 		}
-		return Above(args[0], args[1:]...), nil
+		return Above(args[0], exprShapes(args[1:])...), nil
 	},
 	"Below": func(args []builderArg) (*Node, error) {
 		if len(args) < 1 {
 			return nil, fmt.Errorf("Below: missing limit")
 		}
-		return Below(args[0], args[1:]...), nil
+		return Below(args[0], exprShapes(args[1:])...), nil
 	},
 	"Len": func(args []builderArg) (*Node, error) {
 		if len(args) < 1 {
@@ -457,34 +452,34 @@ func buildExprBuilders() map[string]exprBuilderFn {
 		if !ok {
 			return nil, fmt.Errorf("Len: length must be integer")
 		}
-		return Len(n, args[1:]...), nil
+		return Len(n, exprShapes(args[1:])...), nil
 	},
 	"Check": func(args []builderArg) (*Node, error) {
 		if len(args) < 1 {
 			return nil, fmt.Errorf("Check: missing checker")
 		}
-		return Check(args[0], args[1:]...), nil
+		return Check(args[0], exprShapes(args[1:])...), nil
 	},
 	"One": func(args []builderArg) (*Node, error) {
-		return One(args...), nil
+		return One(exprShapes(args)...), nil
 	},
 	"Some": func(args []builderArg) (*Node, error) {
-		return Some(args...), nil
+		return Some(exprShapes(args)...), nil
 	},
 	"All": func(args []builderArg) (*Node, error) {
-		return All(args...), nil
+		return All(exprShapes(args)...), nil
 	},
 	"Child": func(args []builderArg) (*Node, error) {
 		if len(args) < 1 {
 			return nil, fmt.Errorf("Child: missing child shape")
 		}
-		return Child(args[0], args[1:]...), nil
+		return Child(exprShape(args[0]), exprShapes(args[1:])...), nil
 	},
 	"Rest": func(args []builderArg) (*Node, error) {
 		if len(args) < 1 {
 			return nil, fmt.Errorf("Rest: missing child shape")
 		}
-		return Rest(args[0], args[1:]...), nil
+		return Rest(exprShape(args[0]), exprShapes(args[1:])...), nil
 	},
 	"Define": func(args []builderArg) (*Node, error) {
 		if len(args) < 1 {
@@ -494,7 +489,7 @@ func buildExprBuilders() map[string]exprBuilderFn {
 		if !ok {
 			return nil, fmt.Errorf("Define: name must be string")
 		}
-		return Define(name, args[1:]...), nil
+		return Define(name, exprShapes(args[1:])...), nil
 	},
 	"Refer": func(args []builderArg) (*Node, error) {
 		if len(args) < 1 {
@@ -504,7 +499,7 @@ func buildExprBuilders() map[string]exprBuilderFn {
 		if !ok {
 			return nil, fmt.Errorf("Refer: name must be string")
 		}
-		return Refer(name, args[1:]...), nil
+		return Refer(name, exprShapes(args[1:])...), nil
 	},
 	"Rename": func(args []builderArg) (*Node, error) {
 		if len(args) < 1 {
@@ -514,7 +509,7 @@ func buildExprBuilders() map[string]exprBuilderFn {
 		if !ok {
 			return nil, fmt.Errorf("Rename: name must be string")
 		}
-		return Rename(name, args[1:]...), nil
+		return Rename(name, exprShapes(args[1:])...), nil
 	},
 		"Key": func(args []builderArg) (*Node, error) {
 			return Key(args...), nil
@@ -526,13 +521,29 @@ func buildExprBuilders() map[string]exprBuilderFn {
 // expression dispatcher.
 func variadicNode(fn func(spec ...any) *Node) exprBuilderFn {
 	return func(args []builderArg) (*Node, error) {
-		// Convert []builderArg → []any (already any).
-		out := make([]any, len(args))
-		for i, a := range args {
-			out[i] = a
-		}
-		return fn(out...), nil
+		return fn(exprShapes(args)...), nil
 	}
+}
+
+// exprShapes converts arguments that sit in a shape position. A bare `null`
+// parses to Go nil, which buildize reads as "no shape given"; in a shape
+// position it is the null *type*, matching TS nodize(null). As a value argument
+// — Exact(1,null), Default(null) — it stays nil.
+func exprShapes(args []builderArg) []any {
+	out := make([]any, len(args))
+	for i, a := range args {
+		if a == nil {
+			out[i] = newNodeWrap(&node{kind: KindNull, kindSet: true})
+			continue
+		}
+		out[i] = a
+	}
+	return out
+}
+
+// exprShape is exprShapes for a single argument.
+func exprShape(a builderArg) any {
+	return exprShapes([]builderArg{a})[0]
 }
 
 func toInt(v any) (int, bool) {

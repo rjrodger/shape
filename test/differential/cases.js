@@ -25,6 +25,11 @@ const SCALARS = [
 
 const OBJS = [
   {}, { a: 1 }, { a: 'x' }, { a: null }, { a: 1, b: 2 },
+  // A second and third unknown key: a closed object reports them in one
+  // pluralized message, so this pins that wording too. Keys stay in
+  // alphabetical order — Go maps have no insertion order to render, so an
+  // out-of-order object cannot be compared once it appears in a message.
+  { a: 1, b: 2, c: 3 },
   { b: 2 }, { a: {} }, { a: [] }, null, [], 'x', 1, true,
 ]
 
@@ -61,6 +66,13 @@ function build() {
   add('obj-optional', { $optional: { a: N } }, OBJS)
   add('obj-nested', { a: { b: 1 } },
     [{}, { a: {} }, { a: { b: 2 } }, { a: { b: 'x' } }, { a: { b: 2, c: 3 } }, { a: null }, { a: 1 }])
+  // Out-of-order keys, on specs that PASS: Go's JSON encoder sorts map keys and
+  // TS preserves insertion order, so this exercises the comparator's canonical
+  // form. They stay on passing specs because a rendered error message would
+  // also carry the key order, which Go genuinely cannot reproduce.
+  add('obj-open-order', { $open: {} }, [{ b: 1, a: 2 }, { c: 3, a: 1, b: 2 }, { z: 1, y: 2 }])
+  add('obj-any-order', E('Child(Any)'), [{ b: 1, a: 2 }, { c: 3, a: 1, b: 2 }])
+
   add('obj-child-num', E('Child(Number)'), OBJS)
   add('obj-child-str', E('Child(String)'), OBJS)
   add('obj-optional-key', { a: { $optional: N } }, OBJS)
@@ -104,6 +116,8 @@ function build() {
     add('m-obj-' + b, { a: E(`${b}(String)`) }, OBJS)
   }
   add('m-bare-Never', E('Never'), SCALARS)
+  add('m-bare-Empty', E('Empty'), SCALARS)
+  add('m-ignore-empty', E('Ignore(Empty)'), SCALARS)
   add('m-empty-str', E('Empty(String)'), ['', 'x', null, 1])
 
   // Default / Fault.
@@ -140,7 +154,15 @@ function build() {
   add('ch-5', E('Optional(String).Min(2)'), SCALARS)
   add('ch-6', E('Default("ab",String).Min(2)'), SCALARS)
 
-  // Regexp checks.
+  // Regexp checks. A regexp is a spec value in its own right, so it also has
+  // to work as a composition branch and under a bound.
+  add('re-one', E('One(/^a/,Number)'), SCALARS)
+  add('re-some', E('Some(/^a/,Number)'), SCALARS)
+  add('re-all', E('All(/^a/,Min(2))'), SCALARS)
+  add('re-bound', E('Min(2,/^a/)'), SCALARS)
+  add('b-bound-null', E('Min(2,null)'), SCALARS)
+  add('b-bound-nan', E('Min(2,NaN)'), SCALARS)
+  add('re-obj-one', { a: E('One(/^a/,Number)') }, OBJS)
   add('re-bare', E('/^a+$/'), SCALARS)
   add('re-check', E('Check(/^[0-9]+$/)'), SCALARS)
   add('re-obj', { a: E('/^a/') }, OBJS)
@@ -152,6 +174,11 @@ function build() {
   // Key expressions.
   add('ke-1', { 'a: Min(2)': 0 }, OBJS)
   add('ke-2', { 'a: String': '' }, OBJS)
+  // Note: a builder-wrapped key expression (e.g. "a: Optional(Number)") is a
+  // known open divergence — TS appends the example value as the innermost
+  // builder's last argument, which a one-argument builder then discards, while
+  // Go injects it. See docs/explanation/ts-go-parity.md.
+  add('ke-any', { 'a: Any': 0 }, OBJS)
 
   // Func / Key.
   add('fn-1', E('Func'), SCALARS)

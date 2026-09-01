@@ -7,6 +7,7 @@ package shape
 
 import (
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -356,5 +357,102 @@ func TestNodeRenderingMatchesTS(t *testing.T) {
 		if got := stringifyNode(MustExpr(tc.expr).n, true); got != tc.want {
 			t.Fatalf("stringify %s = %q, want %q", tc.expr, got, tc.want)
 		}
+	}
+}
+
+// --- review follow-ups ---------------------------------------------------
+
+func TestRegexpIsASpecValue(t *testing.T) {
+	// A regexp has to normalize like any other spec value, not only in the
+	// string DSL: without that, One(/re/, Number) built a Never branch and
+	// rejected every string.
+	one := MustShape(MustExpr(`One(/^a/,Number)`))
+	mustOK(t, one, "abc")
+	mustOK(t, one, 5.0)
+	mustErr(t, one, true, "does not satisfy one of: /^a/, Number")
+
+	// A raw *regexp.Regexp anywhere in a spec.
+	mustOK(t, MustShape(regexp.MustCompile(`^a`)), "abc")
+	mustErr(t, MustShape(map[string]any{"a": regexp.MustCompile(`^a`)}),
+		map[string]any{"a": "zzz"}, "did not match")
+
+	// A bound wrapping a regexp defers to the type check, like any other kind.
+	mustErr(t, MustShape(Min(2, MustExpr(`/^a/`))), 1.0, "is not of type string")
+	mustOK(t, MustShape(Min(2, MustExpr(`/^a/`))), "abc")
+}
+
+func TestBareEmptyIsUntyped(t *testing.T) {
+	// TS Empty() allows the empty string without also demanding a string.
+	mustOK(t, MustShape(Empty()), 0.0)
+	mustOK(t, MustShape(Empty()), "")
+	mustOK(t, MustShape(Empty()), "x")
+
+	// So an Ignore wrapping it keeps values a string check would have dropped.
+	if out := mustOK(t, MustShape(Ignore(Empty())), 0.0); out != 0.0 {
+		t.Fatalf("Ignore(Empty()) dropped a valid value: %#v", out)
+	}
+}
+
+func TestChainedFuncKeepsOptionality(t *testing.T) {
+	// TS merges the receiver's flags over the builder's, so a chain that has
+	// already said "optional" stays optional.
+	mustOK(t, MustShape(map[string]any{"a": Optional().Func()}), map[string]any{})
+
+	// A chain that has not stated it still becomes required.
+	mustErr(t, MustShape(map[string]any{"a": buildize(nil).Func()}),
+		map[string]any{}, "is required")
+}
+
+func TestExplicitAnyInKeyExpression(t *testing.T) {
+	// The example value supplies the kind only for a constraint-only carrier;
+	// an expression that said Any meant Any.
+	anyKey := MustShape(map[string]any{"a: Any": 0.0})
+	mustOK(t, anyKey, map[string]any{"a": "a"})
+	mustOK(t, anyKey, map[string]any{"a": true})
+	mustOK(t, anyKey, map[string]any{})
+
+	// A bare constraint still adopts the example's kind.
+	mustErr(t, MustShape(map[string]any{"a: Min(2)": 0.0}),
+		map[string]any{"a": "x"}, "is not of type number")
+}
+
+func TestClosedObjectListsEveryUnknownKey(t *testing.T) {
+	s := MustShape(map[string]any{"a": 1.0})
+	mustErr(t, s, map[string]any{"a": 1.0, "b": 2.0},
+		`the property "b" is not allowed`)
+	mustErr(t, s, map[string]any{"a": 1.0, "b": 2.0, "c": 3.0},
+		`the properties "b, c" are not allowed`)
+	mustErr(t, s, map[string]any{"a": 1.0, "b": 2.0, "c": 3.0, "d": 4.0},
+		`the properties "b, c, d" are not allowed`)
+}
+
+func TestStringValuesQuotedUnlessInline(t *testing.T) {
+	// Standalone a string value keeps its quotes, so it stays distinguishable
+	// from a type name; inside a composite message it is written bare.
+	n := MustShape("x").Node()
+	if got := stringifyNode(n, false); got != `"x"` {
+		t.Fatalf("standalone string render = %q", got)
+	}
+	if got := stringifyNode(n, true); got != "x" {
+		t.Fatalf("inline string render = %q", got)
+	}
+	if got := stringifyNode(MustShape("").Node(), false); got != `""` {
+		t.Fatalf("empty string render = %q", got)
+	}
+}
+
+func TestBoundDefersForNullAndNaNKinds(t *testing.T) {
+	// Every concrete kind defers, including the two with no Go type assertion.
+	mustErr(t, MustShape(MustExpr("Min(2,null)")), 1.0, "is not of type null")
+	mustErr(t, MustShape(MustExpr("Min(2,null)")), Null, "must be a minimum length of 2 (was NaN)")
+	mustErr(t, MustShape(MustExpr("Min(2,NaN)")), 1.0, "is not of type nan")
+	mustErr(t, MustShape(MustExpr("Min(2,NaN)")), "x", "is not of type nan")
+}
+
+func TestRegexpNodeWithoutPatternRenders(t *testing.T) {
+	// Defensive: every constructed regexp node carries its pattern, but the
+	// renderer must not print an empty // for one that somehow does not.
+	if got := stringifyNode(&node{kind: KindRegexp}, false); got != "Regexp" {
+		t.Fatalf("patternless regexp render = %q", got)
 	}
 }

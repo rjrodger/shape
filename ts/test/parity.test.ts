@@ -51,6 +51,18 @@ describe('parity', () => {
   })
 
 
+  test('a bare Key reference means Key()', () => {
+    // Key takes only optional arguments, so a bare reference reads as a call
+    // like the other nullary builders — and the string DSL already treats it
+    // that way.
+    assert.deepEqual(
+      Shape({ a: { b: Shape.Key } })({ a: { b: 'V' } }),
+      Shape({ a: { b: Shape.Key() } })({ a: { b: 'V' } }))
+
+    assert.deepEqual(Shape({ a: { b: Shape.Key } })({ a: { b: 'V' } }), { a: { b: 'a' } })
+  })
+
+
   test('a class reference is still an instance check', () => {
     class Foo { }
 

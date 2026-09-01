@@ -1,3 +1,6 @@
 name	spec	input	output	error
 keyexpr-min	{"name: Min(1)":{"$type":"String"}}	{"name":"x"}	{"name":"x"}	
 keyexpr-min-fail	{"name: Min(2)":{"$type":"String"}}	{"name":"x"}		"Value \"x\" for property \"name\" must be a minimum length of 2 (was 1)."
+keyexpr-explicit-any-string	{"a: Any":0}	{"a":"a"}	{"a":"a"}	
+keyexpr-explicit-any-absent	{"a: Any":0}	{}	{"a":0}	
+keyexpr-constraint-adopts-kind	{"a: Min(2)":0}	{"a":"x"}		"Validation failed for property \"a\" with string \"x\" because the string is not of type number."

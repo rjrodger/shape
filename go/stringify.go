@@ -13,11 +13,11 @@ func stringifyNode(n *node, inline bool) string {
 	}
 	switch n.kind {
 	case KindString:
-		return suffix(typeOrValue(n, "String"), n)
+		return suffix(typeOrValue(n, "String", inline), n)
 	case KindNumber:
-		return suffix(typeOrValue(n, "Number"), n)
+		return suffix(typeOrValue(n, "Number", inline), n)
 	case KindBoolean:
-		return suffix(typeOrValue(n, "Boolean"), n)
+		return suffix(typeOrValue(n, "Boolean", inline), n)
 	case KindNull:
 		return "null"
 	case KindNaN:
@@ -36,6 +36,11 @@ func stringifyNode(n *node, inline bool) string {
 		return out
 	case KindNever:
 		return suffix("Never", n)
+	case KindRegexp:
+		if n.regexpVal != nil {
+			return suffix("/"+n.regexpVal.String()+"/", n)
+		}
+		return suffix("Regexp", n)
 	case KindCheck:
 		return suffix("Check", n)
 	case KindFunction:
@@ -107,9 +112,17 @@ func suffix(base string, n *node) string {
 // typeOrValue renders a typed node the way TS does: a required node shows its
 // type name ("Number"), an unrequired one shows the value it would produce
 // ("0"), because that value is what the schema actually stands for there.
-func typeOrValue(n *node, typeName string) string {
+//
+// inline mirrors TS stringify's dequote flag. Inside a composite message a
+// string value is written bare, so One("a",Number) reads "a, Number"; on its
+// own it keeps its quotes, so a string value stays distinguishable from a type
+// name and the empty string stays visible.
+func typeOrValue(n *node, typeName string, inline bool) string {
 	if n.required || !n.hasDefault {
 		return typeName
+	}
+	if sv, ok := n.defaultValue.(string); ok && !inline {
+		return fmt.Sprintf("%q", sv)
 	}
 	return fmt.Sprintf("%v", n.defaultValue)
 }

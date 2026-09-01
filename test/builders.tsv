@@ -31,6 +31,9 @@ any-token-accepts-number	{"a":{"$type":"Any"}}	{"a":1}	{"a":1}
 any-token-accepts-null	{"a":{"$type":"Any"}}	{"a":null}	{"a":null}	
 any-token-accepts-object	{"a":{"$type":"Any"}}	{"a":{"b":1}}	{"a":{"b":1}}	
 never-absent-key	{"a":{"$expr":"Never(String)"}}	{}		"Validation failed for property \"a\" with value \"undefined\" because no value is allowed."
+empty-bare-is-untyped	{"a":{"$expr":"Empty"}}	{"a":0}	{"a":0}	
+empty-bare-allows-empty-string	{"a":{"$expr":"Empty"}}	{"a":""}	{"a":""}	
+ignore-empty-keeps-number	{"a":{"$expr":"Ignore(Empty)"}}	{"a":0}	{"a":0}	
 empty-string-literal-spec	""	""	""	
 optional-expr-absent	{"a":{"$expr":"Optional(String)"}}	{}	{"a":""}	
 min-string-type-mismatch	{"a":{"$expr":"Min(2,String)"}}	{"a":1}		"Validation failed for property \"a\" with number \"1\" because the number is not of type string."

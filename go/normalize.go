@@ -28,6 +28,10 @@ func normalizeWith(spec any, opts ShapeOptions) (*node, error) {
 		return v, nil
 	case TypeToken:
 		return typeTokenNode(v.kind), nil
+	case *regexp.Regexp:
+		// A regexp anywhere in a spec is a string-shaped node, as in TS. Without
+		// this, One(/re/, Number) and a raw regexp spec both failed to build.
+		return regexpNode(v), nil
 	case Kind:
 		return typeTokenNode(v), nil
 	case string:
@@ -64,9 +68,22 @@ func normalizeWith(spec any, opts ShapeOptions) (*node, error) {
 // empty default value. The default is only injected when the node is later made
 // Optional (mirrors TS, where wrapper constructors set both r=true and an
 // EMPTY_VAL default; requiredness gates whether the default is used).
+// regexpNode builds the node a regexp stands for: a required string that must
+// match the pattern.
+func regexpNode(re *regexp.Regexp) *node {
+	return &node{
+		kind:        KindRegexp,
+		kindSet:     true,
+		regexpVal:   re,
+		required:    true,
+		requiredSet: true,
+	}
+}
+
 func typeTokenNode(k Kind) *node {
 	n := &node{
-		kind: k,
+		kind:    k,
+		kindSet: true,
 		// Any is the one token that does not require a value: TS Any() builds
 		// an unrequired node, so { a: Any } accepts an object without "a".
 		required:     k != KindAny,
@@ -271,7 +288,9 @@ func buildExprWithDefault(src string, dflt any) (*Node, error) {
 		// literal's kind: "a: Min(2)" with 0 is a number with a lower bound,
 		// not an untyped value with one — and a non-number then fails the type
 		// check rather than the bound.
-		if exprNode.n.kind == KindAny {
+		// Only a constraint-only carrier adopts it: an expression that declared
+		// Any meant Any, so "a: Any" with the example 0 still accepts a string.
+		if exprNode.n.kind == KindAny && !exprNode.n.kindSet {
 			if dn, nerr := normalize(dflt); nerr == nil {
 				exprNode.n.kind = dn.kind
 				exprNode.n.empty = exprNode.n.empty || dn.empty

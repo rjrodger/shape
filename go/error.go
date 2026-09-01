@@ -54,6 +54,9 @@ type FieldError struct {
 	absent bool
 	// regexpSrc is the /pattern/ rendering for a failed KindRegexp match.
 	regexpSrc string
+	// plural records that Key names more than one disallowed property, so the
+	// message reads "the properties ... are not allowed".
+	plural bool
 }
 
 func (e FieldError) Error() string {
@@ -186,13 +189,20 @@ func defaultErrText(e FieldError) string {
 			pathPart, valkind, valstr, valkind)
 	case WhyClosed:
 		// TS pattern: parent is mentioned only if path != "". The offending key is
-		// an "index" under an array parent, else a "property".
-		if e.Path == "" {
-			return fmt.Sprintf("Validation failed for %s %q because the %s %q is not allowed.",
-				valkind, valstr, propkind, e.Key)
+		// an "index" under an array parent, else a "property"; more than one is
+		// listed in a single pluralized message.
+		// TS uses the literal "properties" for more than one key, whether the
+		// singular would have been "property" or "index".
+		noun, verb := propkind, "is"
+		if e.plural {
+			noun, verb = "properties", "are"
 		}
-		return fmt.Sprintf("Validation failed for %s%s %q because the %s %q is not allowed.",
-			pathPart, valkind, valstr, propkind, e.Key)
+		if e.Path == "" {
+			return fmt.Sprintf("Validation failed for %s %q because the %s %q %s not allowed.",
+				valkind, valstr, noun, e.Key, verb)
+		}
+		return fmt.Sprintf("Validation failed for %s%s %q because the %s %q %s not allowed.",
+			pathPart, valkind, valstr, noun, e.Key, verb)
 	case WhyNever:
 		return fmt.Sprintf("Validation failed for %s%s %q because no value is allowed.",
 			pathPart, valkind, valstr)

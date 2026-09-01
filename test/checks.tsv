@@ -4,3 +4,12 @@ regexp-fail	{"a":{"$expr":"Check(/^a.+/)"}}	{"a":"zzz"}		"Validation failed for 
 regexp-check-nonstring	{"a":{"$expr":"Check(/^a.+/)"}}	{"a":1}		"Validation failed for property \"a\" with number \"1\" because check \"/^a.+/\" failed."
 regexp-bare-nonstring	{"a":{"$expr":"/^a.+/"}}	{"a":1}		"Validation failed for property \"a\" with number \"1\" because the number is not of type string."
 regexp-bare-ok	{"a":{"$expr":"/^a.+/"}}	{"a":"abc"}	{"a":"abc"}	
+regexp-in-one-match	{"a":{"$expr":"One(/^a/,Number)"}}	{"a":"abc"}	{"a":"abc"}	
+regexp-in-one-number	{"a":{"$expr":"One(/^a/,Number)"}}	{"a":5}	{"a":5}	
+regexp-in-one-fail	{"a":{"$expr":"One(/^a/,Number)"}}	{"a":true}		"Value \"true\" for property \"a\" does not satisfy one of: /^a/, Number"
+regexp-in-some-fail	{"a":{"$expr":"Some(/^a/,Number)"}}	{"a":true}		"Value \"true\" for property \"a\" does not satisfy any of: /^a/, Number"
+regexp-under-bound	{"a":{"$expr":"Min(2,/^a/)"}}	{"a":1}		"Validation failed for property \"a\" with number \"1\" because the number is not of type string."
+regexp-under-bound-ok	{"a":{"$expr":"Min(2,/^a/)"}}	{"a":"abc"}	{"a":"abc"}	
+bound-under-null-type	{"a":{"$expr":"Min(2,null)"}}	{"a":1}		"Validation failed for property \"a\" with number \"1\" because the number is not of type null."
+bound-under-null-value	{"a":{"$expr":"Min(2,null)"}}	{"a":null}		"Value \"null\" for property \"a\" must be a minimum length of 2 (was NaN)."
+bound-under-nan-type	{"a":{"$expr":"Min(2,NaN)"}}	{"a":1}		"Validation failed for property \"a\" with number \"1\" because the number is not of type nan."

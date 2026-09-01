@@ -21,7 +21,22 @@ function loadJsonl(file) {
   return out
 }
 
-const J = v => JSON.stringify(undefined === v ? null : v)
+// Canonical JSON: object keys sorted recursively. Go's encoder sorts map keys
+// and TS preserves insertion order, so a raw JSON.stringify would report a
+// difference for two equal objects whose keys were inserted out of order.
+function canon(v) {
+  if (Array.isArray(v)) return v.map(canon)
+
+  if (null !== v && 'object' === typeof v) {
+    const out = {}
+    for (const k of Object.keys(v).sort()) out[k] = canon(v[k])
+    return out
+  }
+
+  return v
+}
+
+const J = v => JSON.stringify(canon(undefined === v ? null : v))
 
 const casesPath = process.argv[2]
 const full = process.argv.includes('--full')
