@@ -984,7 +984,7 @@ function shapify<S>(intop?: S | Node<S>, inopts?: ShapeOptions) {
                       rk = m[1]
                       let src = m[3]
 
-                      ov = expr({ src, d: 1 + s.dI, meta }, ov)
+                      ov = keyExprNode(src, ov, 1 + s.dI, meta)
                       delete n.v[k]
                     }
                   }
@@ -1559,6 +1559,57 @@ function expr(
 }
 
 
+// Build the node for a key expression such as `{ 'a: Optional(Number)': 5 }`.
+//
+// expr() splices the example value in as the innermost builder call's last
+// argument. Where that lands in a shape slot the builder reads, it does the
+// right thing: `Min(2)` becomes `Min(2, 5)` and takes the example's kind and
+// default, `Child(Number)` becomes `Child(Number, [])` and becomes an array.
+// But a builder whose arity is already satisfied drops it silently —
+// `Optional(Number, 5)` ignores the 5 and injects the Number token's 0 — and
+// the example is the author's stated default, so it should survive.
+//
+// Building both ways tells the two apart: if the example made no difference to
+// the node, the builder ignored it, and it is applied as the value/default
+// instead. The kind is left alone, since only the builder knows whether it
+// declared one or merely defaulted to it.
+function keyExprNode(src: string, example: any, depth: number, meta?: NodeMeta) {
+  const node: any = expr({ src, d: depth, meta }, example)
+
+  if (undefined === example || null == node || !node.$?.shape$) {
+    return node
+  }
+
+  const bare: any = expr({ src, d: depth, meta })
+
+  if (null == bare || !bare.$?.shape$ || !sameShapeNode(node, bare)) {
+    return node
+  }
+
+  const ex: any = nodize(example, depth, meta)
+
+  node.v = ex.v
+  node.f = ex.f
+  node.n = null != ex.v && S.object === typeof (ex.v) ? keys(ex.v).length : 0
+
+  return node
+}
+
+
+// Structural comparison of the parts of a node a key expression's example
+// could have influenced.
+function sameShapeNode(x: any, y: any): boolean {
+  return x.t === y.t &&
+    x.r === y.r &&
+    x.p === y.p &&
+    x.b.length === y.b.length &&
+    x.a.length === y.a.length &&
+    JSON.stringify(x.v) === JSON.stringify(y.v) &&
+    JSON.stringify(x.f) === JSON.stringify(y.f) &&
+    JSON.stringify(x.c) === JSON.stringify(y.c)
+}
+
+
 function build(v: any, opts: ShapeOptions = {}, top = true) {
   let out: any
   const t = Array.isArray(v) ? 'array' : null === v ? 'null' : typeof v
@@ -1783,6 +1834,12 @@ const Optional = function <V>(this: any, shape?: Node<V> | V): Node<V> {
 const Any = function <V>(this: any, shape?: Node<V> | V): Node<V> {
   let node = buildize(this, shape)
   node.t = (S.any as ValType)
+
+  // Any is a kind the spec asked for, not an absent one: a key expression's
+  // example value supplies the default but must not narrow it. (Type marks its
+  // own nodes; Any is a builder, so it never passes through Type.)
+  node.u.tset = true
+
   if (undefined !== shape) {
     node.v = shape
     node.f = shape
@@ -2457,6 +2514,10 @@ const Type = function <V extends
     // Optional(String) injects for an absent key.
     node.f = tnat.f
   }
+
+  // Record that the kind came from the spec rather than being left open, so a
+  // key expression's example value does not overwrite it.
+  node.u.tset = true
 
   return (node as any)
 }

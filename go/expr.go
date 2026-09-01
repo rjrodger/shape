@@ -533,7 +533,7 @@ func exprShapes(args []builderArg) []any {
 	out := make([]any, len(args))
 	for i, a := range args {
 		if a == nil {
-			out[i] = newNodeWrap(&node{kind: KindNull, kindSet: true})
+			out[i] = newNodeWrap(&node{kind: KindNull})
 			continue
 		}
 		out[i] = a

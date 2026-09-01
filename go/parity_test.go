@@ -456,3 +456,57 @@ func TestRegexpNodeWithoutPatternRenders(t *testing.T) {
 		t.Fatalf("patternless regexp render = %q", got)
 	}
 }
+
+func TestKeyExpressionExampleSurvives(t *testing.T) {
+	// The example value is the author's stated default. Where the builder had
+	// room for it as a shape it is consumed; where the builder's arity was
+	// already satisfied it is applied as the value instead — either way it
+	// survives, and either way the expression keeps the kind it declared.
+	for _, tc := range []struct {
+		spec map[string]any
+		want any
+	}{
+		{map[string]any{"a: Optional(Any)": 5.0}, 5.0},
+		{map[string]any{"a: Optional(Number)": 5.0}, 5.0},
+		{map[string]any{"a: Optional(String)": "z"}, "z"},
+		{map[string]any{"a: Any": 5.0}, 5.0},
+	} {
+		out := mustOK(t, MustShape(tc.spec), map[string]any{}).(map[string]any)
+		if out["a"] != tc.want {
+			t.Fatalf("%v injected %#v, want %#v", tc.spec, out["a"], tc.want)
+		}
+	}
+
+	// A builder that consumed the example as its shape uses the kind it implies.
+	child := MustShape(map[string]any{"a: Child(Number)": []any{}})
+	mustOK(t, child, map[string]any{"a": []any{1.0, 2.0}})
+	mustErr(t, child, map[string]any{"a": []any{1.0, "x"}}, `index "a.1"`)
+	mustErr(t, child, map[string]any{"a": map[string]any{}}, "is not of type array")
+
+	// Skip still means no injection at all.
+	skipped := mustOK(t, MustShape(map[string]any{"a: Skip(Number)": 5.0}),
+		map[string]any{}).(map[string]any)
+	if _, present := skipped["a"]; present {
+		t.Fatalf("Skip injected a value: %#v", skipped)
+	}
+}
+
+func TestKeyExpressionEdgeCases(t *testing.T) {
+	// No example at all: the expression stands alone.
+	noEx := MustShape(map[string]any{"a: String": nil})
+	mustErr(t, noEx, map[string]any{}, "is required")
+	mustOK(t, noEx, map[string]any{"a": "x"})
+
+	// A bare literal expression is not a builder chain, so there is nothing to
+	// hand the example to and the expression's own value stands.
+	lit := mustOK(t, MustShape(map[string]any{"a: 5": 3.0}), map[string]any{}).(map[string]any)
+	if lit["a"] != 5.0 {
+		t.Fatalf("bare literal expression injected %#v, want 5", lit["a"])
+	}
+	mustOK(t, MustShape(map[string]any{"a: 5": 3.0}), map[string]any{"a": 9.0})
+
+	// An example that cannot be normalized is reported, not swallowed.
+	if _, err := Shape(map[string]any{"a: Optional": make(chan int)}); err == nil {
+		t.Fatal("expected an error for an unnormalizable example value")
+	}
+}

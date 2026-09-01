@@ -546,18 +546,27 @@ func validateObject(n *node, in any, path []string, pathArr []any, parent any, c
 }
 
 func evaluateList(n *node, in any, path []string, pathArr []any, key string, parent any, ctx *Context, match bool, verr *ValidationError, absent bool) any {
+	// Branches must see the value as the parent saw it: an absent value stays
+	// absent, so a branch that does not require one can still match and supply
+	// its default. Passing a bare nil instead made every branch see a present
+	// null, which a typed branch rejects.
+	branchIn := in
+	if absent {
+		branchIn = undefinedVal
+	}
+
 	switch n.listMode {
 	case listOne:
 		passN := 0
 		var winner any = in
 		for _, sn := range n.list {
 			sub := &ValidationError{}
-			out := validateNode(sn, in, path, pathArr, key, parent, ctx, true, sub)
+			out := validateNode(sn, branchIn, path, pathArr, key, parent, ctx, true, sub)
 			if !sub.hasAny() {
 				passN++
 				if passN == 1 {
 					if !match {
-						out2 := validateNode(sn, in, path, pathArr, key, parent, ctx, false, &ValidationError{})
+						out2 := validateNode(sn, branchIn, path, pathArr, key, parent, ctx, false, &ValidationError{})
 						winner = out2
 					} else {
 						winner = out
@@ -584,10 +593,10 @@ func evaluateList(n *node, in any, path []string, pathArr []any, key string, par
 		var winner any = in
 		for _, sn := range n.list {
 			sub := &ValidationError{}
-			out := validateNode(sn, in, path, pathArr, key, parent, ctx, true, sub)
+			out := validateNode(sn, branchIn, path, pathArr, key, parent, ctx, true, sub)
 			if !sub.hasAny() {
 				matched = true
-				winner = validateNode(sn, in, path, pathArr, key, parent, ctx, match, &ValidationError{})
+				winner = validateNode(sn, branchIn, path, pathArr, key, parent, ctx, match, &ValidationError{})
 				_ = out
 			}
 		}
@@ -607,15 +616,19 @@ func evaluateList(n *node, in any, path []string, pathArr []any, key string, par
 	case listAll:
 		passAll := true
 		out := in
+		// All threads the value through its branches, so once a branch has
+		// produced one it is no longer absent.
+		branchOut := branchIn
 		for _, sn := range n.list {
 			sub := &ValidationError{}
-			res := validateNode(sn, out, path, pathArr, key, parent, ctx, match, sub)
+			res := validateNode(sn, branchOut, path, pathArr, key, parent, ctx, match, sub)
 			if sub.hasAny() {
 				// The branch errors are diagnostic only: TS collects them into a
 				// throwaway context and reports just the composite failure.
 				passAll = false
 			} else {
 				out = res
+				branchOut = res
 			}
 		}
 		if !passAll {

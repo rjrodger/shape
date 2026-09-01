@@ -113,6 +113,31 @@ message, `update.done` to stop further checks. See [Shape nodes](nodes.md).
 - Go has no `Symbol` token and no `.String()` chain shortcut — see the
   [parity page](../explanation/ts-go-parity.md#intentional-divergences).
 
+## Key expressions
+
+A key of the form `"name: <expression>"` compiles the expression and takes the
+value as an **example**. The example is appended as the innermost builder call's
+final argument, so a builder that takes a shape consumes it:
+
+```js
+{ 'a: Min(2)': 0 }          // a bounded number — the example gives the kind
+{ 'a: Child(Number)': [] }  // an array of numbers — the example gives the kind
+```
+
+A builder whose arity is already satisfied has no room for it — `Optional(Number)`
+already has its one argument — so there the example is applied as the value and
+default instead:
+
+```js
+{ 'a: Optional(Number)': 5 }   // an optional number defaulting to 5
+{ 'a: Optional(String)': 'z' } // an optional string defaulting to "z"
+{ 'a: Any': 5 }                // still accepts anything; defaults to 5
+```
+
+Either way the example survives, and the expression keeps whatever kind it
+declared. `Skip` still means no injection at all, and a bare literal expression
+(`{ 'a: 5': 3 }`) has no builder to hand the example to, so its own value stands.
+
 ## Ordering within a node
 
 A size bound (`Min`, `Max`, `Above`, `Below`, `Len`) stands aside when the node

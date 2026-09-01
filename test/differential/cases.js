@@ -174,11 +174,16 @@ function build() {
   // Key expressions.
   add('ke-1', { 'a: Min(2)': 0 }, OBJS)
   add('ke-2', { 'a: String': '' }, OBJS)
-  // Note: a builder-wrapped key expression (e.g. "a: Optional(Number)") is a
-  // known open divergence — TS appends the example value as the innermost
-  // builder's last argument, which a one-argument builder then discards, while
-  // Go injects it. See docs/explanation/ts-go-parity.md.
   add('ke-any', { 'a: Any': 0 }, OBJS)
+  // A builder-wrapped key expression: the example value is the author's stated
+  // default and survives whether or not the builder had room for it.
+  add('ke-optional-any', { 'a: Optional(Any)': 5 }, OBJS)
+  add('ke-optional-number', { 'a: Optional(Number)': 5 }, OBJS)
+  add('ke-optional-string', { 'a: Optional(String)': 'z' }, OBJS)
+  add('ke-skip-number', { 'a: Skip(Number)': 5 }, OBJS)
+  add('ke-child-array', { 'a: Child(Number)': [] }, OBJS)
+  add('ke-one-of', { 'a: One(String,Number)': 5 }, OBJS)
+  add('ke-bare-literal', { 'a: 5': 3 }, OBJS)
 
   // Func / Key.
   add('fn-1', E('Func'), SCALARS)

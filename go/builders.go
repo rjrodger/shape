@@ -275,7 +275,6 @@ func Type(kind any, spec ...any) *Node {
 	}
 
 	nb.n.kind = tn.kind
-	nb.n.kindSet = true
 	nb.n.required = tn.required
 	nb.n.requiredSet = tn.requiredSet
 	nb.n.skippable = tn.skippable
@@ -947,7 +946,6 @@ func Func(spec ...any) *Node {
 // Func (chained).
 func (n *Node) Func() *Node {
 	n.n.kind = KindFunction
-	n.n.kindSet = true
 	// Only assert requiredness if the chain has not already stated it: TS
 	// merges the receiver's flags over the builder's, so Optional().Func()
 	// stays optional.

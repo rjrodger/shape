@@ -73,7 +73,6 @@ func normalizeWith(spec any, opts ShapeOptions) (*node, error) {
 func regexpNode(re *regexp.Regexp) *node {
 	return &node{
 		kind:        KindRegexp,
-		kindSet:     true,
 		regexpVal:   re,
 		required:    true,
 		requiredSet: true,
@@ -82,8 +81,7 @@ func regexpNode(re *regexp.Regexp) *node {
 
 func typeTokenNode(k Kind) *node {
 	n := &node{
-		kind:    k,
-		kindSet: true,
+		kind: k,
 		// Any is the one token that does not require a value: TS Any() builds
 		// an unrequired node, so { a: Any } accepts an object without "a".
 		required:     k != KindAny,
@@ -271,40 +269,41 @@ func normalizeObject(v map[string]any, opts ShapeOptions) (*node, error) {
 // applies it to a literal default value. The resulting node validates the
 // literal-default by default but enforces the chained constraints.
 func buildExprWithDefault(src string, dflt any) (*Node, error) {
-	exprNode, err := Expr(src)
+	bare, err := Expr(src)
 	if err != nil {
 		return nil, err
 	}
-	// If the default is supplied, attach as default value while preserving the
-	// expression's kind and validators.
-	if dflt != nil {
-		exprNode.n.hasDefault = true
-		exprNode.n.defaultValue = dflt
-		exprNode.n.hasLiteral = true
-		exprNode.n.literal = dflt
 
-		// The literal is the carrier the expression applies to (TS applies the
-		// expression to the value node), so an untyped expression takes the
-		// literal's kind: "a: Min(2)" with 0 is a number with a lower bound,
-		// not an untyped value with one — and a non-number then fails the type
-		// check rather than the bound.
-		// Only a constraint-only carrier adopts it: an expression that declared
-		// Any meant Any, so "a: Any" with the example 0 still accepts a string.
-		if exprNode.n.kind == KindAny && !exprNode.n.kindSet {
-			if dn, nerr := normalize(dflt); nerr == nil {
-				exprNode.n.kind = dn.kind
-				exprNode.n.empty = exprNode.n.empty || dn.empty
-			}
-		}
-
-		// The default only makes the key optional when the expression has not
-		// already said otherwise. TS applies the expression to the value as a
-		// carrier, so an explicit type token in the key ("a: String") keeps its
-		// requiredness and the literal is just the fallback.
-		if !exprNode.n.requiredSet {
-			exprNode.n.required = false
-			exprNode.n.requiredSet = true
-		}
+	if dflt == nil {
+		return bare, nil
 	}
-	return exprNode, nil
+
+	ex, err := normalize(dflt)
+	if err != nil {
+		return nil, err
+	}
+
+	// The example value is appended as the innermost builder call's final
+	// argument, so a builder that takes a shape consumes it: "Child(Number)"
+	// with [] becomes an array of numbers, "Min(2)" with 0 a bounded number.
+	// A builder whose arity is already satisfied drops it — Optional(Number, 5)
+	// ignores the 5 — and the example is the author's stated default, so where
+	// it made no difference to the node it is applied as the value instead.
+	// (ts/src/shape.ts keyExprNode does the same, both ways round.)
+	node, applyErr := exprApply(src, newNodeWrap(ex))
+	if applyErr != nil {
+		// Not a builder chain at all — a bare literal such as "a: 5" — so there
+		// is nothing to hand the example to and the expression's own value
+		// stands, as it does in TS.
+		return bare, nil
+	}
+
+	if stringifyNode(node.n, false) == stringifyNode(bare.n, false) {
+		node.n.hasDefault = true
+		node.n.defaultValue = dflt
+		node.n.hasLiteral = true
+		node.n.literal = dflt
+	}
+
+	return node, nil
 }

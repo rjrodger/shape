@@ -4,3 +4,15 @@ keyexpr-min-fail	{"name: Min(2)":{"$type":"String"}}	{"name":"x"}		"Value \"x\" 
 keyexpr-explicit-any-string	{"a: Any":0}	{"a":"a"}	{"a":"a"}	
 keyexpr-explicit-any-absent	{"a: Any":0}	{}	{"a":0}	
 keyexpr-constraint-adopts-kind	{"a: Min(2)":0}	{"a":"x"}		"Validation failed for property \"a\" with string \"x\" because the string is not of type number."
+keyexpr-optional-any-default	{"a: Optional(Any)":5}	{}	{"a":5}	
+keyexpr-optional-number-default	{"a: Optional(Number)":5}	{}	{"a":5}	
+keyexpr-optional-string-default	{"a: Optional(String)":"z"}	{}	{"a":"z"}	
+keyexpr-optional-number-present	{"a: Optional(Number)":5}	{"a":9}	{"a":9}	
+keyexpr-optional-number-wrong-type	{"a: Optional(Number)":5}	{"a":"x"}		"Validation failed for property \"a\" with string \"x\" because the string is not of type number."
+keyexpr-skip-no-injection	{"a: Skip(Number)":5}	{}	{}	
+keyexpr-child-array	{"a: Child(Number)":[]}	{"a":[1,2]}	{"a":[1,2]}	
+keyexpr-child-array-bad	{"a: Child(Number)":[]}	{"a":[1,"x"]}		"Validation failed for index \"a.1\" with string \"x\" because the string is not of type number."
+keyexpr-child-array-not-array	{"a: Child(Number)":[]}	{"a":{}}		"Validation failed for property \"a\" with object \"{}\" because the object is not of type array."
+keyexpr-bare-literal	{"a: 5":3}	{}	{"a":5}	
+keyexpr-bare-literal-present	{"a: 5":3}	{"a":9}	{"a":9}	
+keyexpr-one-of-keeps-choice	{"a: One(String,Number)":5}	{"a":"q"}	{"a":"q"}	

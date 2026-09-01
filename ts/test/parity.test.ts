@@ -165,6 +165,38 @@ describe('parity', () => {
   })
 
 
+  test('a key expression keeps its example value', () => {
+    // The example is appended as the innermost builder call's final argument.
+    // Where the builder has room for it, it becomes the shape and supplies the
+    // kind; where the builder's arity is already satisfied it is applied as the
+    // value instead. Either way it survives.
+    assert.deepEqual(Shape({ 'a: Optional(Any)': 5 })({}), { a: 5 })
+    assert.deepEqual(Shape({ 'a: Optional(Number)': 5 })({}), { a: 5 })
+    assert.deepEqual(Shape({ 'a: Optional(String)': 'z' })({}), { a: 'z' })
+    assert.deepEqual(Shape({ 'a: Any': 5 })({}), { a: 5 })
+
+    // The expression keeps the kind it declared...
+    assert.deepEqual(Shape({ 'a: Any': 0 })({ a: 'x' }), { a: 'x' })
+    assert.deepEqual(Shape({ 'a: One(String,Number)': 5 })({ a: 'q' }), { a: 'q' })
+
+    // ...and a constraint-only expression takes the example's.
+    assert.match(
+      failure({ 'a: Min(2)': 0 }, { a: 'x' }),
+      /the string is not of type number/)
+
+    // A builder that consumed the example uses the kind it implies.
+    assert.deepEqual(Shape({ 'a: Child(Number)': [] })({ a: [1, 2] }), { a: [1, 2] })
+    assert.match(
+      failure({ 'a: Child(Number)': [] }, { a: [1, 'x'] }),
+      /is not of type number/)
+
+    // Skip still injects nothing, and a bare literal expression keeps its own
+    // value since there is no builder to hand the example to.
+    assert.deepEqual(Shape({ 'a: Skip(Number)': 5 })({}), {})
+    assert.deepEqual(Shape({ 'a: 5': 3 })({}), { a: 5 })
+  })
+
+
   test('Func is chainable', () => {
     const fn = () => 0
     const shape = Shape({ a: Shape.Optional().Func() })
