@@ -391,19 +391,19 @@ func validateArray(n *node, in any, path []string, pathArr []any, parent any, ct
 			return arr
 		}
 
-		p := produced{in: arr}
+		p := newProduced(arr, ctx, match)
 		for i, v := range arr {
 			if i < tupleLen {
-				p.set(i, validateElem(n.arrChildren[i], v, path, pathArr, i, arr, ctx, match, verr), match)
+				p.set(i, validateElem(n.arrChildren[i], v, path, pathArr, i, p.parent(), ctx, match, verr), match)
 			} else {
 				// len(arr) > tupleLen only reaches here when arrRest is set.
-				p.set(i, validateElem(n.arrRest, v, path, pathArr, i, arr, ctx, match, verr), match)
+				p.set(i, validateElem(n.arrRest, v, path, pathArr, i, p.parent(), ctx, match, verr), match)
 			}
 		}
 		// Missing tuple positions get their default.
 		for i := len(arr); i < tupleLen; i++ {
 			cn := n.arrChildren[i]
-			v := validateNode(cn, undefinedVal, append(path, strconv.Itoa(i)), append(pathArr, i), strconv.Itoa(i), arr, ctx, match, verr)
+			v := validateNode(cn, undefinedVal, append(path, strconv.Itoa(i)), append(pathArr, i), strconv.Itoa(i), p.parent(), ctx, match, verr)
 			if !match {
 				p.ensure()
 				p.out = append(p.out, v)
@@ -411,18 +411,18 @@ func validateArray(n *node, in any, path []string, pathArr []any, parent any, ct
 		}
 		return p.result(match)
 	case n.arrChild != nil:
-		p := produced{in: arr}
+		p := newProduced(arr, ctx, match)
 		for i, v := range arr {
-			p.set(i, validateElem(n.arrChild, v, path, pathArr, i, arr, ctx, match, verr), match)
+			p.set(i, validateElem(n.arrChild, v, path, pathArr, i, p.parent(), ctx, match, verr), match)
 		}
 		return p.result(match)
 	case n.arrRest != nil:
 		// Rest with no tuple positions in front of it: every element is a rest
 		// element. Without this case the node fell through to the default and
 		// nothing was validated at all.
-		p := produced{in: arr}
+		p := newProduced(arr, ctx, match)
 		for i, v := range arr {
-			p.set(i, validateElem(n.arrRest, v, path, pathArr, i, arr, ctx, match, verr), match)
+			p.set(i, validateElem(n.arrRest, v, path, pathArr, i, p.parent(), ctx, match, verr), match)
 		}
 		return p.result(match)
 	default:
@@ -432,11 +432,35 @@ func validateArray(n *node, in any, path []string, pathArr []any, parent any, ct
 
 // produced is the slice an array's elements are produced into, made on the
 // first element produced as a different value; until then the input is the
-// result, and a match never writes. Elements see the input as their parent,
-// as in TS, where the walk produces in place.
+// result, and a match never writes. Where the schema has validators the
+// slice is made up front and the elements see it as their parent, so a
+// validator writing through State.Parent never reaches the input.
 type produced struct {
 	in  []any
 	out []any
+}
+
+func newProduced(arr []any, ctx *Context, match bool) produced {
+	p := produced{in: arr}
+	if !match && !pureCall(ctx) {
+		p.ensure()
+	}
+	return p
+}
+
+// parent is what the elements see as their parent: the produced slice when
+// there is one, the input otherwise.
+func (p *produced) parent() any {
+	if p.out != nil {
+		return p.out
+	}
+	return p.in
+}
+
+// pureCall reports whether the call runs a schema with no validators, so
+// that nothing can observe the parent of a value.
+func pureCall(ctx *Context) bool {
+	return ctx != nil && ctx.pure
 }
 
 func (p *produced) ensure() {
@@ -490,7 +514,15 @@ func validateObject(n *node, in any, path []string, pathArr []any, parent any, c
 			}
 		}
 	}
+	// A validator may write through State.Parent, so where the schema has
+	// any, the producing walk copies up front and the children see the copy,
+	// with the values produced before them, as they always did. Only a
+	// schema with no validators produces into the input.
 	var parentOf any = obj
+	if !match && !pureCall(ctx) {
+		ensure()
+		parentOf = out
+	}
 
 	// Unknown keys are reported before descending into the declared ones,
 	// which is the order TS emits them in. When the input has no more keys
@@ -708,7 +740,7 @@ func sameValue(a, b any) bool {
 		return ok && reflect.ValueOf(x).Pointer() == reflect.ValueOf(y).Pointer()
 	case []any:
 		y, ok := b.([]any)
-		return ok && len(x) == len(y) && (len(x) == 0 || &x[0] == &y[0])
+		return ok && len(x) == len(y) && reflect.ValueOf(x).Pointer() == reflect.ValueOf(y).Pointer()
 	}
 	ta, tb := reflect.TypeOf(a), reflect.TypeOf(b)
 	return ta == tb && ta.Comparable() && a == b

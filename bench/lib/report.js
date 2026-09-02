@@ -23,15 +23,17 @@ const path = require('node:path')
 const crypto = require('node:crypto')
 const { execFileSync } = require('node:child_process')
 
-// caseHashes reads bench/cases.json as it was at a commit and hashes each
-// case's definition; the current file stands in for a commit git cannot
-// show (a shallow clone, a dirty run) when the run measured the current
-// file. A run whose file cannot be read has no case hashes, and its rows
-// are compared by the file hash alone.
+// caseHashes finds the bench/cases.json a run measured, by the hash the run
+// recorded, and hashes each case's definition in it: the file at the run's
+// commit when git can show it and it is the file measured (a dirty run may
+// have measured another), else the current file when that is the one. A
+// run whose file cannot be found has no case hashes, and its rows are
+// compared by the file hash alone. A case that borrows another's schema
+// ({"$ref": "#name"}) is hashed with the schema it borrows, so a change to
+// the schema changes the hash of every case that measures it.
 const caseHashCache = {}
 function caseHashes(resultsDir, commit, inputHash, currentHash) {
-  const key = commit || ''
-  if (key in caseHashCache) return caseHashCache[key]
+  if (inputHash in caseHashCache) return caseHashCache[inputHash]
   let raw = null
   if (commit) {
     try {
@@ -39,16 +41,22 @@ function caseHashes(resultsDir, commit, inputHash, currentHash) {
     } catch {
       raw = null
     }
+    if (null !== raw && fileHash(raw) !== inputHash) raw = null
   }
   if (null === raw && inputHash === currentHash) raw = currentCasesRaw(resultsDir)
   let hashes = null
   if (null !== raw) {
     hashes = {}
-    for (const c of JSON.parse(raw).cases) {
-      hashes[c.name] = crypto.createHash('sha256').update(JSON.stringify(c)).digest('hex').slice(0, 12)
+    const all = JSON.parse(raw).cases
+    const byName = {}
+    for (const c of all) byName[c.name] = c
+    for (const c of all) {
+      const ref = c.jsonSchema && typeof c.jsonSchema.$ref === 'string' && c.jsonSchema.$ref.startsWith('#') ? byName[c.jsonSchema.$ref.slice(1)] : null
+      const resolved = ref ? { ...c, jsonSchema: ref.jsonSchema } : c
+      hashes[c.name] = crypto.createHash('sha256').update(JSON.stringify(resolved)).digest('hex').slice(0, 12)
     }
   }
-  caseHashCache[key] = hashes
+  caseHashCache[inputHash] = hashes
   return hashes
 }
 function currentCasesRaw(resultsDir) {

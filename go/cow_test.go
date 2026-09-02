@@ -53,7 +53,8 @@ func TestProduceCopiesOnWrite(t *testing.T) {
 	if !plain.Valid(map[string]any{"a": 1.0, "b": []any{}}) || plain.Valid(map[string]any{"a": "x", "b": []any{}}) || !plain.Valid(map[string]any{"a": 2.0, "b": []any{}}) {
 		t.Fatal("pooled match")
 	}
-	if !sameValue(1, 1) || sameValue(1, 2) || sameValue(true, false) || sameValue("a", 1.0) || sameValue([]any{1.0}, []any{1.0}) || !sameValue([]any{}, []any{}) || sameValue(nil, 1) {
+	empty := []any{}
+	if !sameValue(1, 1) || sameValue(1, 2) || sameValue(true, false) || sameValue("a", 1.0) || sameValue([]any{1.0}, []any{1.0}) || sameValue(make([]any, 0, 1), make([]any, 0, 1)) || !sameValue(empty, empty) || sameValue(nil, 1) {
 		t.Fatal("sameValue")
 	}
 }

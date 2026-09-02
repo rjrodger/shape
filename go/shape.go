@@ -139,6 +139,7 @@ func (s *Schema) ValidateCtx(input any, ctx *Context) (any, error) {
 		c = newContext(ctx)
 		c.Match = false
 		c.defs = s.defs
+		c.pure = s.pure
 		path, pathArr = c.start()
 	}
 
@@ -153,7 +154,7 @@ func (s *Schema) ValidateCtx(input any, ctx *Context) (any, error) {
 	}
 
 	if cs != nil {
-		callPool.Put(cs)
+		cs.release()
 	}
 	if ctx != nil {
 		ctx.Err = append(ctx.Err, verr.Issues...)
@@ -176,12 +177,13 @@ func (s *Schema) Match(input any) bool {
 		verr := cs.matchErrors()
 		validateNode(s.root, rootInput(input), path, pathArr, "", nil, c, true, verr)
 		ok := !verr.hasAny()
-		callPool.Put(cs)
+		cs.release()
 		return ok
 	}
 	c := newContext(nil)
 	c.Match = true
 	c.defs = s.defs
+	c.pure = s.pure
 	path, pathArr := c.start()
 	verr := &ValidationError{}
 	validateNode(s.root, rootInput(input), path, pathArr, "", nil, c, true, verr)
@@ -204,11 +206,12 @@ func (s *Schema) Error(input any) []FieldError {
 		cs := callPool.Get().(*callScratch)
 		c, path, pathArr := cs.begin(s.defs, false)
 		validateNode(s.root, rootInput(input), path, pathArr, "", nil, c, false, verr)
-		callPool.Put(cs)
+		cs.release()
 		return verr.Issues
 	}
 	c := newContext(nil)
 	c.defs = s.defs
+	c.pure = s.pure
 	path, pathArr := c.start()
 	validateNode(s.root, rootInput(input), path, pathArr, "", nil, c, false, verr)
 	return verr.Issues

@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"reflect"
 	"regexp"
 	"runtime"
 	"runtime/debug"
@@ -58,15 +59,15 @@ type result struct {
 }
 
 type benchCase struct {
-	Name        string               `json:"name"`
-	Description string               `json:"description"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
 	Generate    *struct {
 		Items int `json:"items"`
 		Keys  int `json:"keys"`
 	} `json:"generate"`
-	Input       map[string]any       `json:"input"`
-	Valid       bool                 `json:"valid"`
-	JSONSchema  map[string]any       `json:"jsonSchema"`
+	Input      map[string]any `json:"input"`
+	Valid      bool           `json:"valid"`
+	JSONSchema map[string]any `json:"jsonSchema"`
 }
 
 func envInt(name string, def int) int {
@@ -352,8 +353,27 @@ type boundsIn struct {
 	Ratio float64 `json:"ratio" validate:"gte=0,lte=1"`
 }
 
+// largeIn is the struct of the large case, made by reflection as the keys
+// are generated: fifty fields cycling through string, int, bool and
+// float64, each tagged for json and, where the kind has one, validator.
+func largeIn() any {
+	fields := make([]reflect.StructField, 50)
+	for i := range fields {
+		k := largeKey(i)
+		typ := []reflect.Type{reflect.TypeOf(""), reflect.TypeOf(0), reflect.TypeOf(false), reflect.TypeOf(0.0)}[i%4]
+		tag := `json:"` + k + `"`
+		if i%4 == 0 {
+			tag += ` validate:"required"`
+		}
+		fields[i] = reflect.StructField{Name: "K" + k[1:], Type: typ, Tag: reflect.StructTag(tag)}
+	}
+	return reflect.New(reflect.StructOf(fields)).Interface()
+}
+
 func validatorTarget(name string) any {
 	switch name {
+	case "large":
+		return largeIn()
 	case "flat":
 		return &flatIn{}
 	case "nested":

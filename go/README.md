@@ -150,8 +150,9 @@ the result may share structure with the input; take a copy before
 changing either if both are kept. (Before v0.4.0 every object and array
 was copied whether it changed or not.)
 
-Validation returns a new value; the input map is not mutated. Injected defaults
-are deep-cloned, so two results never share state.
+Injected defaults are deep-cloned, so two results never share a default's
+state. A validator attached to a node after `Shape()` has compiled it is not
+seen by the compile, so attach validators before compiling.
 
 `*ValidationError` aggregates one or more `FieldError`s, joined by newline in
 `Error()`; each carries `Path`, `PathArr`, `Key`, `Type`, `Value`, `Why`,
