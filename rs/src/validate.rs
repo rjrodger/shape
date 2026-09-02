@@ -78,7 +78,8 @@ fn index_key(i: usize, buf: &mut [u8; 20]) -> &str {
             break;
         }
     }
-    std::str::from_utf8(&buf[pos..]).unwrap()
+    // SAFETY: the buffer holds ASCII digits only.
+    unsafe { std::str::from_utf8_unchecked(&buf[pos..]) }
 }
 
 pub(crate) fn required_mark_for(k: Kind) -> i64 {
@@ -556,6 +557,20 @@ fn validate_structure(
     true
 }
 
+/// Whether a present value passes a plain scalar node with nothing left to
+/// do: the structural check alone, with no error to make. Anything else
+/// takes the full walk, which reports it.
+#[inline]
+fn plain_scalar_passes(n: &Node, v: &Value) -> bool {
+    match (n.kind, v) {
+        (Kind::String, Value::Str(s)) => n.empty || !s.is_empty(),
+        (Kind::Number, Value::Num(x)) => !x.is_nan(),
+        (Kind::Integer, Value::Num(x)) => is_integer(*x),
+        (Kind::Boolean, Value::Bool(_)) => true,
+        _ => false,
+    }
+}
+
 /// The key of the child at `idx`, shared with the node once it is prepared;
 /// a node that never was allocates it.
 fn child_key(n: &Node, idx: usize, k: &str) -> Arc<str> {
@@ -631,6 +646,40 @@ fn validate_object(
     };
 
     for (idx, (k, cn)) in n.obj_children.iter().enumerate() {
+        // A plain child with a present value of its kind: a scalar is judged
+        // here, and a read-only walk descends into a container directly,
+        // without the general walk's bookkeeping.
+        if cn.plain {
+            let found = match &oc {
+                Cur::Ref(map) if aligned => map.get_index(idx).map(|(_, v)| v),
+                Cur::Ref(map) => map.get(k),
+                Cur::Mut(map) => map.get(k),
+            };
+            if let Some(v) = found {
+                if plain_scalar_passes(cn, v) {
+                    continue;
+                }
+                if let Cur::Ref(_) = &oc {
+                    let container = matches!(
+                        (cn.kind, v),
+                        (Kind::Object, Value::Obj(_)) | (Kind::Array, Value::Arr(_))
+                    );
+                    if container {
+                        if w.paths {
+                            w.push(PathPart::Key(child_key(n, idx, k)));
+                        }
+                        if cn.kind == Kind::Object {
+                            validate_object(cn, cn.silent, Cur::Ref(v), k, false, w, verr);
+                        } else {
+                            validate_array(cn, cn.silent, Cur::Ref(v), k, false, w, verr);
+                        }
+                        w.pop();
+                        continue;
+                    }
+                }
+            }
+        }
+
         // A rename's claim: the value is missing and a claimed source has
         // it, so it is picked up from there.
         let mut claimed: Option<&Value> = None;
@@ -827,6 +876,33 @@ fn validate_array(
     if let Some(child_shape) = n.arr_child.as_deref().or(n.arr_rest.as_deref()) {
         let mut drop_at: Vec<usize> = Vec::new();
         while i < len {
+            // A plain element shape on a read-only walk: a scalar element is
+            // judged here, an object descended into directly.
+            if child_shape.plain {
+                if let Cur::Ref(a) = &ac {
+                    let v = &a[i];
+                    if plain_scalar_passes(child_shape, v) {
+                        i += 1;
+                        continue;
+                    }
+                    if child_shape.kind == Kind::Object && matches!(v, Value::Obj(_)) {
+                        let k = if w.paths { index_key(i, &mut buf) } else { "" };
+                        w.push(PathPart::Index(i));
+                        validate_object(
+                            child_shape,
+                            child_shape.silent,
+                            Cur::Ref(v),
+                            k,
+                            true,
+                            w,
+                            verr,
+                        );
+                        w.pop();
+                        i += 1;
+                        continue;
+                    }
+                }
+            }
             let k = index_key(i, &mut buf);
             w.push(PathPart::Index(i));
             let child = match &mut ac {
@@ -1118,6 +1194,36 @@ mod tests {
         assert_eq!(index_key(0, &mut buf), "0");
         assert_eq!(index_key(7, &mut buf), "7");
         assert_eq!(index_key(1234567890123, &mut buf), "1234567890123");
+    }
+
+    #[test]
+    fn plain_nodes_take_the_direct_path() {
+        // Scalars, nested objects and arrays of objects with no validators
+        // are judged in place on a read-only walk, with the paths intact.
+        let s = Schema::new(obj([
+            ("a", obj([("b", Spec::from(Token::Number))])),
+            ("c", arr([obj([("d", Spec::from(Token::String))])])),
+            ("e", arr([Spec::from(Token::Integer)])),
+            ("f", Spec::from(Token::Boolean)),
+        ]));
+        assert!(s.valid(&j(
+            r#"{"a":{"b":1},"c":[{"d":"x"},{"d":"y"}],"e":[1,2],"f":true}"#
+        )));
+        let bad = j(r#"{"a":{"b":"x"},"c":[{"d":"x"},{"d":2}],"e":[1,2.5],"f":1}"#);
+        assert!(!s.valid(&bad));
+        let paths: Vec<String> = s.error(&bad).iter().map(|e| e.path.clone()).collect();
+        assert_eq!(paths, vec!["a.b", "c.1.d", "e.1", "f"]);
+        // A produced walk takes the same shortcut for a passing scalar.
+        assert_eq!(
+            run(&s, r#"{"a":{"b":1},"c":[],"e":[],"f":false}"#),
+            r#"{"a":{"b":1},"c":[],"e":[],"f":false}"#
+        );
+        // An empty string is judged by the node's Empty flag.
+        let e = Schema::new(obj([("s", Spec::from(Token::String))]));
+        assert!(!e.valid(&j(r#"{"s":""}"#)));
+        assert!(
+            Schema::new(obj([("s", Spec::from(empty(Token::String)))])).valid(&j(r#"{"s":""}"#))
+        );
     }
 
     #[test]

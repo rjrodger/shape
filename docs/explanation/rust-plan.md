@@ -311,6 +311,35 @@ any error text (the corpus and the differential harness gate it):
 walk: the first spends its time in the bound validators, and the second
 renders an error message, both of which the pass left alone.
 
+#### A second pass
+
+A callgrind profile of `valid()` on the `array` case, taken the same day,
+put half of the instructions in the general walk's bookkeeping for leaves
+that had nothing to do but a type check: `validate_node_with`, the
+structural check's preamble, and the drop of the scratch values they keep.
+So the tree is prepared with a `plain` flag, true of a node with no
+validator, rename, regexp or silence, and a read-only walk judges a plain
+scalar child in place and descends into a plain object or array child
+directly. The index key of an element is written without a UTF-8 check,
+since the buffer holds digits only. Same host and budget; before is the
+end of the first pass.
+
+| case | before | after | gain | jsonschema crate |
+| ---- | -----: | ----: | ---: | ---------------: |
+| `flat` | 135 ns | 70 ns | 1.9× | 122 ns |
+| `nested` | 282 ns | 118 ns | 2.4× | 275 ns |
+| `array` | 3.8 µs | 1.15 µs | 3.3× | 3.5 µs |
+| `bounds` | 306 ns | 248 ns | 1.2× | 145 ns |
+| `large` | 885 ns | 279 ns | 3.2× | 1.34 µs |
+| `invalid` | 2.25 µs | 1.69 µs | 1.3× | 96 ns |
+
+Against the end of phase 6 the walk is now 5 to 16 times faster, and
+ahead of the jsonschema crate on every case but the two it never
+targeted: `bounds`, where the validators run through the general path
+with a `State` each, and `invalid`, where the message is rendered
+eagerly. The typed validators (garde, validator) remain an order of
+magnitude ahead, as they are of the typed Go and TypeScript validators.
+
 ## Order of work
 
 | # | pull request | gate at the end |

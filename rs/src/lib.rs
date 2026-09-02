@@ -193,6 +193,13 @@ pub(crate) fn prepare_node(n: &mut Node) {
 /// is collected by name. Reports whether the tree has no validator at all.
 fn prepare(n: &mut Node, defs: &mut HashMap<String, Arc<Node>>) -> bool {
     let mut pure = n.befores.is_empty() && n.afters.is_empty();
+    n.plain = pure
+        && !n.silent
+        && n.rename_to.is_none()
+        && n.rename_claim.is_empty()
+        && n.regexp.is_none()
+        && n.list_mode == ListMode::None
+        && n.disc.is_none();
     if n.kind == Kind::Object {
         n.obj_keys = n
             .obj_children

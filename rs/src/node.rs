@@ -186,6 +186,10 @@ pub struct Node {
     /// The declared keys in order, shared with the paths that name them.
     /// Set when the tree is prepared.
     pub obj_keys: Vec<Arc<str>>,
+    /// Nothing but the structural check applies to a present value: no
+    /// validator, rename, regexp or silence. Set when the tree is prepared,
+    /// and lets a walk judge such a value in place.
+    pub plain: bool,
 
     /// The fixed positions of a tuple.
     pub arr_children: Vec<Node>,
