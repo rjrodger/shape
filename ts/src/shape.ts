@@ -114,6 +114,7 @@ type ValType =
 // A node in the validation tree structure.
 type Node<V> = {
   $: typeof SHAPE         // Special marker to indicate normalized.
+  readonly __v?: V        // The spec type, for inference only; never set.
   // o: any
   t: ValType             // Value type name.
   d: number              // Depth.
@@ -151,22 +152,81 @@ type Validate =
   ((val: any, update: Update, state: State) => boolean) &
   {
     s?: (n: Node<any>) => string, // stringify validator of builder
-    a?: any[] // args to the builder
+    a?: readonly any[] // args to the builder
     n?: string // name of builder
   }
 
 
+// The value a spec produces, by type. A builder's node carries the spec it
+// was given (or the type it stands for), so the result is read through it;
+// a type marker is its primitive; a literal is itself; a one-element array
+// is an array of that element and a longer one a tuple; an object maps its
+// properties, with a key expression ("a: Min(2)") reduced to its name.
+type IsAny<T> = 0 extends (1 & T) ? true : false
+
+type KeyName<K> =
+  K extends `${infer N}: ${string}` ? (N extends `"${infer Q}"` ? Q : N) : K
+
+type Produced<V, R> =
+  IsAny<V> extends true ? R :
+  R extends readonly any[] ? R :
+  R extends object ? V & R :
+  R
+
+// A builder used bare (`{ n: Integer }`) carries the type it stands for.
+type Bare<R> = { readonly bare$: R }
+
+// An Exact value list: its literals are the result, not their widened kinds.
+type Literal<L> = { readonly literal$: L }
+
 type ShapeResult<T> =
-  T extends Node<any> ? any :
+  IsAny<T> extends true ? any :
+  T extends Literal<infer L> ? L :
+  T extends Node<infer V> ? ShapeResult<V> :
   T extends StringConstructor ? string :
   T extends NumberConstructor ? number :
   T extends BooleanConstructor ? boolean :
+  T extends DateConstructor ? Date :
   T extends ArrayConstructor ? any[] :
   T extends ObjectConstructor ? any :
   T extends FunctionConstructor ? Function :
   T extends SymbolConstructor ? symbol :
-  T extends { [key: string]: any } ? { [K in keyof T]: ShapeResult<T[K]> } :
+  T extends 'String' | 'string' ? string :
+  T extends 'Number' | 'number' | 'Integer' | 'integer' ? number :
+  T extends 'Boolean' | 'boolean' ? boolean :
+  T extends 'Date' | 'date' ? Date :
+  T extends 'Array' | 'array' ? any[] :
+  T extends 'Object' | 'object' | 'Function' | 'function' | 'Symbol' | 'symbol' ? any :
+  T extends RegExp ? string :
+  T extends Date ? Date :
+  T extends readonly [] ? any[] :
+  T extends readonly [infer E] ? ShapeResult<E>[] :
+  T extends readonly any[] ? { -readonly [K in keyof T]: ShapeResult<T[K]> } :
+  T extends Bare<infer R> ? R :
+  T extends (this: any, ...args: any[]) => Node<any> ? any :
+  T extends (...args: any[]) => any ? T :
+  T extends { [key: string]: any } ? { -readonly [K in keyof T as KeyName<K>]: ShapeResult<T[K]> } :
+  T extends string ? string :
+  T extends number ? number :
+  T extends boolean ? boolean :
   T
+
+
+// Brand a builder with the type it stands for when used bare.
+function bare<R>() {
+  return <F>(f: F): F & Bare<R> => f as F & Bare<R>
+}
+
+
+// The result type an algebra builder produces from a spec type.
+type Names<N> = N extends string ? N : N extends readonly (infer S)[] ? S : never
+
+type PickResult<V, N> = { [K in keyof V as KeyName<K> extends Names<N> ? K : never]: V[K] }
+
+type OmitResult<V, N> = { [K in keyof V as KeyName<K> extends Names<N> ? never : K]: V[K] }
+
+type ExtendResult<V, E> =
+  { [K in keyof V as KeyName<K> extends KeyName<keyof E> ? never : K]: V[K] } & E
 
 
 // TODO: make this work
@@ -838,7 +898,7 @@ function nodizeDeep(root: any, depth: number) {
 
 
 // Create a ShapeShape from a shape specification.
-function shapify<S>(intop?: S | Node<S>, inopts?: ShapeOptions) {
+function shapify<const S>(intop?: S, inopts?: ShapeOptions) {
   const opts: ShapeOptions = null == inopts ? {} : inopts
 
   // TODO: move to prepopts utility function
@@ -1307,13 +1367,14 @@ function shapify<S>(intop?: S | Node<S>, inopts?: ShapeOptions) {
   }
 
 
+  // The produced value: the spec's result, keeping the input's own extra
+  // properties when both are objects.
   const shape =
-    <V>(root?: V, ctx?: Context):
-      V & ShapeResult<S> => {
+    <V>(root?: V, ctx?: Context): Produced<V, ShapeResult<S>> => {
       return (exec(root, ctx, false))
     }
 
-  function valid<V>(root?: V, ctx?: Context): root is (V & S) {
+  function valid<V>(root?: V, ctx?: Context): root is (V & ShapeResult<S>) {
     let actx: any = ctx || {}
     actx.err = actx.err || []
     exec(root, actx, false)
@@ -1850,7 +1911,7 @@ function truncate(str?: string, len?: number): string {
 
 
 // Value is required.
-const Required = function <V>(this: any, shape?: Node<V> | V): Node<V> {
+const Required = function <V = any>(this: any, shape?: Node<V> | V): Node<V> {
   let node = buildize(this, shape)
 
   node.r = true
@@ -1878,7 +1939,7 @@ const Required = function <V>(this: any, shape?: Node<V> | V): Node<V> {
 
 
 // Value can contain additional undeclared properties.
-const Open = function <V>(this: any, shape?: Node<V> | V): Node<V> {
+const Open = function <V = any>(this: any, shape?: Node<V> | V): Node<V> {
   let node = buildize(this, shape)
   node.c = Any()
   return node
@@ -1886,7 +1947,7 @@ const Open = function <V>(this: any, shape?: Node<V> | V): Node<V> {
 
 
 // Value is optional.
-const Optional = function <V>(this: any, shape?: Node<V> | V): Node<V> {
+const Optional = function <V = any>(this: any, shape?: Node<V> | V): Node<V> {
   let node = buildize(this, shape)
   node.r = false
 
@@ -1985,7 +2046,7 @@ function coerceTo(t: string, val: any): any {
 // before the type check: a decimal string to a number, "true"/"false"/"1"/"0"
 // to a boolean, a number or boolean to a string, an ISO 8601 string or a time
 // value to a Date. Anything else is left alone, so the usual type error speaks.
-const Coerce = function <V>(this: any, shape?: Node<V> | V): Node<V> {
+const Coerce = function <V = any>(this: any, shape?: Node<V> | V): Node<V> {
   let node = buildize(this, shape)
 
   const coercer: any = function Coerce(val: any, update: Update, state: State) {
@@ -2115,36 +2176,36 @@ function makeFormatBuilder(
 }
 
 
-const Email = function <V>(this: any, shape?: Node<V> | V): Node<V> {
+const Email = bare<string>()(function Email <V = string>(this: any, shape?: Node<V> | V): Node<V> {
   return makeFormatBuilder(this, shape, S.Email, 'email address', isEmail)
-}
+})
 
-const Url = function <V>(this: any, shape?: Node<V> | V): Node<V> {
+const Url = bare<string>()(function Url <V = string>(this: any, shape?: Node<V> | V): Node<V> {
   return makeFormatBuilder(this, shape, S.Url, 'URL', (s) => URL_RE.test(s))
-}
+})
 
-const Uuid = function <V>(this: any, shape?: Node<V> | V): Node<V> {
+const Uuid = bare<string>()(function Uuid <V = string>(this: any, shape?: Node<V> | V): Node<V> {
   return makeFormatBuilder(this, shape, S.Uuid, 'UUID', (s) => UUID_RE.test(s))
-}
+})
 
 // The string form of a date-time; the value stays a string. Coerce(Date) is
 // the one that produces a Date.
-const DateTime = function <V>(this: any, shape?: Node<V> | V): Node<V> {
+const DateTime = bare<string>()(function DateTime <V = string>(this: any, shape?: Node<V> | V): Node<V> {
   return makeFormatBuilder(this, shape, S.DateTime, 'ISO 8601 date-time', isoDateTime)
-}
+})
 
-const Ip = function <V>(this: any, shape?: Node<V> | V): Node<V> {
+const Ip = bare<string>()(function Ip <V = string>(this: any, shape?: Node<V> | V): Node<V> {
   return makeFormatBuilder(this, shape, S.Ip, 'IP address',
     (s) => IPV4_RE.test(s) || isIpv6(s))
-}
+})
 
-const Ipv4 = function <V>(this: any, shape?: Node<V> | V): Node<V> {
+const Ipv4 = bare<string>()(function Ipv4 <V = string>(this: any, shape?: Node<V> | V): Node<V> {
   return makeFormatBuilder(this, shape, S.Ipv4, 'IPv4 address', (s) => IPV4_RE.test(s))
-}
+})
 
-const Ipv6 = function <V>(this: any, shape?: Node<V> | V): Node<V> {
+const Ipv6 = bare<string>()(function Ipv6 <V = string>(this: any, shape?: Node<V> | V): Node<V> {
   return makeFormatBuilder(this, shape, S.Ipv6, 'IPv6 address', isIpv6)
-}
+})
 
 
 // Isolated Validation: Catch, Transform, Ignore
@@ -2211,7 +2272,7 @@ function jsonText(val: any): string {
 
 
 // Whatever fails inside is replaced by the fallback, and raises nothing.
-const Catch = function <V>(this: any, fallback: any, shape?: Node<V> | V): Node<V> {
+const Catch = function <F, V = any>(this: any, fallback: F, shape?: Node<V> | V): Node<V | F> {
   let node = buildize(this, shape)
   const inner = takeInner(node)
 
@@ -2234,11 +2295,11 @@ const Catch = function <V>(this: any, fallback: any, shape?: Node<V> | V): Node<
 
 // Replace a valid value with a function of it. An invalid one fails as it
 // would have, with the same errors.
-const Transform = function <V>(
+const Transform = function <V = any, R = any>(
   this: any,
-  transform: (val: any, state: State) => any,
+  transform: (val: ShapeResult<V>, state: State) => R,
   shape?: Node<V> | V
-): Node<V> {
+): Node<R> {
   let node = buildize(this, shape)
   const inner = takeInner(node)
 
@@ -2263,7 +2324,7 @@ const Transform = function <V>(
 
 
 // Attach a description to the node, read back as node.m.description.
-const Describe = function <V>(this: any, description: string, shape?: Node<V> | V): Node<V> {
+const Describe = function <V = any>(this: any, description: string, shape?: Node<V> | V): Node<V> {
   let node = buildize(this, shape)
   node.m = node.m || {}
   node.m.description = '' + description
@@ -2278,7 +2339,9 @@ const Describe = function <V>(this: any, description: string, shape?: Node<V> | 
 // branch alone, so the errors are its own rather than a list of every
 // alternative. An object-shaped branch without the tag property has it added,
 // as the literal it is keyed by.
-const Discriminated = function(this: any, tag: string, branches: Record<string, any>) {
+const Discriminated = function <T extends string, B extends Record<string, any>>(
+  this: any, tag: T, branches: B
+): Node<{ [K in keyof B]: B[K] & { [P in T]: Literal<K> } }[keyof B]> {
   if (S.string !== typeof tag || '' === tag || null == branches ||
     S.object !== typeof branches || isarr(branches) || 0 === keys(branches).length) {
     throw new Error('Shape: Discriminated needs a tag property name and at least one branch')
@@ -2436,7 +2499,9 @@ function keyList(names: any, name: string): string[] {
 
 // Keep only the named properties. Naming one the shape does not declare is
 // an error: there is nothing there to pick.
-const Pick = function <V>(this: any, names: string | string[], shape?: Node<V> | V): Node<V> {
+const Pick = function <const N extends string | readonly string[], V = any>(
+  this: any, names: N, shape?: Node<V> | V
+): Node<PickResult<V, N>> {
   const base = objectBase(this, shape, S.Pick)
   const want = keyList(names, S.Pick)
   const entries = objectEntries(base)
@@ -2451,7 +2516,9 @@ const Pick = function <V>(this: any, names: string | string[], shape?: Node<V> |
 
 // Drop the named properties. A name the shape does not declare is simply not
 // there to drop.
-const Omit = function <V>(this: any, names: string | string[], shape?: Node<V> | V): Node<V> {
+const Omit = function <const N extends string | readonly string[], V = any>(
+  this: any, names: N, shape?: Node<V> | V
+): Node<OmitResult<V, N>> {
   const base = objectBase(this, shape, S.Omit)
   const want = keyList(names, S.Omit)
   return objectNode(base, objectEntries(base).filter((e) => !want.includes(e.key)))
@@ -2461,7 +2528,7 @@ const Omit = function <V>(this: any, names: string | string[], shape?: Node<V> |
 // Every declared property becomes optional, as Optional would make it: a
 // type token then injects its empty value, a literal its own. Shallow: a
 // nested object's own properties are as they were.
-const Partial = function <V>(this: any, shape?: Node<V> | V): Node<V> {
+const Partial = function <V = any>(this: any, shape?: Node<V> | V): Node<V> {
   const base = objectBase(this, shape, S.Partial)
   return objectNode(base, objectEntries(base).map((e) => ({
     key: e.key,
@@ -2473,7 +2540,7 @@ const Partial = function <V>(this: any, shape?: Node<V> | V): Node<V> {
 // Add the properties of another object shape; a property both declare takes
 // the extension's. Only its properties are taken: the result stays open or
 // closed as the base was.
-const Extend = function <V>(this: any, extra: any, shape?: Node<V> | V): Node<V> {
+const Extend = function <E, V = any>(this: any, extra: E, shape?: Node<V> | V): Node<ExtendResult<V, E>> {
   const base = objectBase(this, shape, S.Extend)
   const ext = nodize(extra)
   if (S.object !== ext.t) {
@@ -2495,7 +2562,7 @@ const Extend = function <V>(this: any, extra: any, shape?: Node<V> | V): Node<V>
 
 
 // Value may also be null. Absent is still governed by required/optional.
-const Nullable = function <V>(this: any, shape?: Node<V> | V): Node<V> {
+const Nullable = function <V = any>(this: any, shape?: Node<V> | V): Node<V | null> {
   let node = buildize(this, shape)
   node.u.nullable = true
   return node
@@ -2504,7 +2571,7 @@ const Nullable = function <V>(this: any, shape?: Node<V> | V): Node<V> {
 
 // A number with no fractional part. Behaves as a type token: required, with
 // the default 0, so Optional(Integer) injects 0 and Integer alone demands one.
-const Integer = function <V>(this: any, shape?: Node<V> | V): Node<V> {
+const Integer = bare<number>()(function Integer <V = number>(this: any, shape?: Node<V> | V): Node<V> {
   let node = buildize(this, shape)
   node.t = (S.integer as ValType)
   node.r = true
@@ -2512,11 +2579,11 @@ const Integer = function <V>(this: any, shape?: Node<V> | V): Node<V> {
   node.v = 0
   node.f = 0
   return node
-}
+})
 
 
 // Value can be anything.
-const Any = function <V>(this: any, shape?: Node<V> | V): Node<V> {
+const Any = bare<any>()(function Any <V = any>(this: any, shape?: Node<V> | V): Node<V> {
   let node = buildize(this, shape)
   node.t = (S.any as ValType)
 
@@ -2530,11 +2597,11 @@ const Any = function <V>(this: any, shape?: Node<V> | V): Node<V> {
     node.f = shape
   }
   return node
-}
+})
 
 
 // Custom error message.
-const Fault = function <V>(this: any, msg: string, shape?: Node<V> | V): Node<V> {
+const Fault = function <V = any>(this: any, msg: string, shape?: Node<V> | V): Node<V> {
   let node = buildize(this, shape)
   node.z = msg
   return node
@@ -2542,7 +2609,7 @@ const Fault = function <V>(this: any, msg: string, shape?: Node<V> | V): Node<V>
 
 
 // Value is skipped if not present (optional, but no default).
-const Skip = function <V>(this: any, shape?: Node<V> | V): Node<V> {
+const Skip = function <V = any>(this: any, shape?: Node<V> | V): Node<V | undefined> {
   let node = buildize(this, shape)
   node.r = false
 
@@ -2555,7 +2622,7 @@ const Skip = function <V>(this: any, shape?: Node<V> | V): Node<V> {
 
 // Errors for this value are ignored, and the value is undefined. The whole
 // subtree is probed, so a failing descendant is swallowed too.
-const Ignore = function <V>(this: any, shape?: Node<V> | V): Node<V> {
+const Ignore = function <V = any>(this: any, shape?: Node<V> | V): Node<V | undefined> {
   let node = buildize(this, shape)
   node.r = false
 
@@ -2583,17 +2650,17 @@ const Ignore = function <V>(this: any, shape?: Node<V> | V): Node<V> {
 
 
 // Value must be a function.
-const Func = function <V>(this: any, shape?: Node<V> | V): Node<V> {
+const Func = bare<Function>()(function Func <V = Function>(this: any, shape?: Node<V> | V): Node<V> {
   let node = buildize(this)
   node.t = (S.function as ValType)
   node.v = shape
   node.f = shape
   return node
-}
+})
 
 
 // Specify default value.
-const Default = function <V>(this: any, dval?: any, shape?: Node<V> | V): Node<V> {
+const Default = function <D = any, V = D>(this: any, dval?: D, shape?: Node<V> | V): Node<V> {
   let node = buildize(this, dval)
 
   if (undefined !== shape) {
@@ -2605,8 +2672,8 @@ const Default = function <V>(this: any, dval?: any, shape?: Node<V> | V): Node<V
 
   if (undefined === shape) {
     let t = typeof dval
-    if (S.function === t && IS_TYPE[dval.name]) {
-      node.t = (dval.name.toLowerCase() as ValType)
+    if (S.function === t && IS_TYPE[(dval as any).name]) {
+      node.t = ((dval as any).name.toLowerCase() as ValType)
       node.f = clone(EMPTY_VAL[node.t])
     }
   }
@@ -2623,7 +2690,7 @@ const Default = function <V>(this: any, dval?: any, shape?: Node<V> | V): Node<V
 
 
 // String can be empty.
-const Empty = function <V>(this: any, shape?: Node<V> | V): Node<V> {
+const Empty = function <V = any>(this: any, shape?: Node<V> | V): Node<V> {
   let node = buildize(this, shape)
   node.u.empty = true
   return node
@@ -2631,16 +2698,16 @@ const Empty = function <V>(this: any, shape?: Node<V> | V): Node<V> {
 
 
 // Value will never match anything.
-const Never = function <V>(this: any, shape?: Node<V> | V): Node<V> {
+const Never = bare<never>()(function Never <V = never>(this: any, shape?: Node<V> | V): Node<never> {
   let node = buildize(this, shape)
   node.t = (S.never as ValType)
-  return node
-}
+  return node as Node<never>
+})
 
 
 // Inject the key path of the value.
 // OR: provide validation of Key - depth could also be a RegExp
-const Key = function(this: any, depth?: number | Function, join?: string) {
+const Key = bare<string>()(function Key(this: any, depth?: number | Function, join?: string): Node<string> {
   let node = buildize(this)
 
   let ascend = S.number === typeof depth
@@ -2679,11 +2746,11 @@ const Key = function(this: any, depth?: number | Function, join?: string) {
   })
 
   return node
-}
+})
 
 
 // Pass only if all match. Does not short circuit (as defaults may be missed).
-const All = function(this: any, ...inshapes: any[]) {
+const All = function <const S extends readonly any[]>(this: any, ...inshapes: S): Node<S[number]> {
   const node = buildize(this)
   node.t = (S.list as ValType)
   node.r = true
@@ -2727,7 +2794,7 @@ const All = function(this: any, ...inshapes: any[]) {
 
 // Pass if some match. Note: all are evaluated, does not short circuit. This ensures
 // defaults are not missed.
-const Some = function(this: any, ...inshapes: any[]) {
+const Some = function <const S extends readonly any[]>(this: any, ...inshapes: S): Node<S[number]> {
   let node = buildize(this)
   node.t = (S.list as ValType)
   node.r = true
@@ -2773,7 +2840,7 @@ const Some = function(this: any, ...inshapes: any[]) {
 
 
 // Pass if exactly one matches. Does not short circuit (as defaults may be missed).
-const One = function(this: any, ...inshapes: any[]) {
+const One = function <const S extends readonly any[]>(this: any, ...inshapes: S): Node<S[number]> {
   let node = buildize(this)
   node.t = (S.list as ValType)
   node.r = true
@@ -2818,7 +2885,7 @@ const One = function(this: any, ...inshapes: any[]) {
 
 
 // Value must match excatly one of the literal values provided.
-const Exact = function(this: any, ...vals: any[]) {
+const Exact = function <const T extends readonly any[]>(this: any, ...vals: T): Node<Literal<T[number]>> {
   const node = buildize(this)
 
   const validator = function Exact(val: any, update: Update, state: State) {
@@ -2861,7 +2928,7 @@ const Exact = function(this: any, ...vals: any[]) {
 
 
 // Define a custom operation to run before standard matching.
-const Before = function <V>(
+const Before = function <V = any>(
   this: any,
   validate: Validate,
   shape?: Node<V> | V
@@ -2873,7 +2940,7 @@ const Before = function <V>(
 
 
 // Define a custom operation to run after standard matching.
-const After = function <V>(
+const After = function <V = any>(
   this: any,
   validate: Validate,
   shape?: Node<V> | V
@@ -2885,7 +2952,7 @@ const After = function <V>(
 
 
 // Define a customer validation function.
-const Check = function <V>(
+const Check = function <V = any>(
   this: any,
   check: Validate | RegExp | string,
   shape?: Node<V> | V
@@ -2936,7 +3003,7 @@ const Check = function <V>(
 
 
 // Value cannot contain undeclared properties or elements.
-const Closed = function <V>(this: any, shape?: Node<V> | V): Node<V> {
+const Closed = function <V = any>(this: any, shape?: Node<V> | V): Node<V> {
   let node = buildize(this, shape)
 
   // Makes one element array fixed.
@@ -2950,7 +3017,7 @@ const Closed = function <V>(this: any, shape?: Node<V> | V): Node<V> {
 
 
 // Define a named reference to this value. See Refer.
-const Define = function <V>(this: any, inopts: any, shape?: Node<V> | V): Node<V> {
+const Define = function <V = any>(this: any, inopts: any, shape?: Node<V> | V): Node<V> {
   let node = buildize(this, shape)
 
   let opts = S.object === typeof inopts ? inopts || {} : {}
@@ -2974,7 +3041,7 @@ const Define = function <V>(this: any, inopts: any, shape?: Node<V> | V): Node<V
 
 // TODO: copy option to copy value instead of node - need index of value in stack
 // Inject a referenced value. See Define.
-const Refer = function <V>(this: any, inopts: any, shape?: Node<V> | V): Node<V> {
+const Refer = function <V = any>(this: any, inopts: any, shape?: Node<V> | V): Node<V> {
   let node = buildize(this, shape)
 
   let opts = S.object === typeof inopts ? inopts || {} : {}
@@ -3012,7 +3079,7 @@ const Refer = function <V>(this: any, inopts: any, shape?: Node<V> | V): Node<V>
 
 // TODO: no mutate is State.match
 // Rename a property.
-const Rename = function <V>(this: any, inopts: any, shape?: Node<V> | V): Node<V> {
+const Rename = function <V = any>(this: any, inopts: any, shape?: Node<V> | V): Node<V> {
   let node = buildize(this, shape)
 
   let opts = S.object === typeof inopts ? inopts || {} : {}
@@ -3130,11 +3197,11 @@ const Rename = function <V>(this: any, inopts: any, shape?: Node<V> | V): Node<V
 
 
 // Children must have a specified shape.
-const Child = function <V>(
+const Child = function <C = any, V = unknown>(
   this: any,
-  child?: any,
+  child?: C,
   shape?: Node<V> | V
-): Node<V> {
+): Node<unknown extends V ? { [key: string]: C } : V> {
   // Child provides implicit open object if no shape defined.
   let node = buildize(this, shape)
   node.c = nodize(child)
@@ -3152,11 +3219,11 @@ const Child = function <V>(
 
 
 
-const Rest = function <V>(
+const Rest = function <C = any, V = unknown>(
   this: any,
-  child?: any,
+  child?: C,
   shape?: Node<V> | V
-): Node<V> {
+): Node<unknown extends V ? C[] : V> {
   let node = buildize(this, shape || [])
   node.t = 'array'
   node.c = nodize(child)
@@ -3166,41 +3233,18 @@ const Rest = function <V>(
 }
 
 
-const Type = function <V extends
-  'Number' |
-  'String' |
-  'Boolean' |
-  'Object' |
-  'Array' |
-  'Function' |
-  'Symbol' |
-  'Integer' |
-  'Date' |
-  DateConstructor |
-  StringConstructor |
-  NumberConstructor |
-  BooleanConstructor |
-  ArrayConstructor |
-  ObjectConstructor |
-  FunctionConstructor |
-  SymbolConstructor | Symbol |
-  Record<any, any> |
-  null | undefined | typeof NaN
->(
+type TypeRef =
+  'Number' | 'String' | 'Boolean' | 'Object' | 'Array' | 'Function' | 'Symbol' |
+  'Integer' | 'Date' |
+  DateConstructor | StringConstructor | NumberConstructor | BooleanConstructor |
+  ArrayConstructor | ObjectConstructor | FunctionConstructor |
+  SymbolConstructor | Symbol | Record<any, any> | null | undefined | typeof NaN
+
+const Type = function <K extends TypeRef, V = K>(
   this: any,
-  tref: V,
-  shape?: any
-): (
-    V extends 'Number' | NumberConstructor ? number :
-    V extends 'Boolean' | BooleanConstructor ? boolean :
-    V extends 'String' | StringConstructor ? string :
-    V extends 'Array' | ArrayConstructor ? any[] :
-    V extends 'Object' | ObjectConstructor ? any :
-    V extends 'Function' | FunctionConstructor ? Function :
-    V extends 'Symbol' | SymbolConstructor ? Symbol :
-    V extends null ? null :
-    V extends undefined ? undefined :
-    V) {
+  tref: K,
+  shape?: Node<V> | V
+): Node<V> {
   let tnat = nodize(TNAT[tref as string] || (S.Integer === tref ? Integer : tref))
 
   let node = buildize(this, shape)
@@ -3285,7 +3329,7 @@ function makeSizeBuilder(
 
 
 // Specific a minimum value or length.
-const Min = function <V>(
+const Min = function <V = any>(
   this: any,
   min: number | string,
   shape?: Node<V> | V
@@ -3308,7 +3352,7 @@ const Min = function <V>(
 
 
 // Specific a maximum value or length.
-const Max = function <V>(
+const Max = function <V = any>(
   this: any,
   max: number | string,
   shape?: Node<V> | V
@@ -3330,7 +3374,7 @@ const Max = function <V>(
 
 
 // Specify a lower bound value or length.
-const Above = function <V>(
+const Above = function <V = any>(
   this: any,
   above: number | string,
   shape?: Node<V> | V
@@ -3352,7 +3396,7 @@ const Above = function <V>(
 
 
 // Specify an upper bound value or length.
-const Below = function <V>(
+const Below = function <V = any>(
   this: any,
   below: number | string,
   shape?: Node<V> | V
@@ -3374,7 +3418,7 @@ const Below = function <V>(
 
 
 // Value must have a specific length.
-const Len = function <V>(
+const Len = function <V = any>(
   this: any,
   len: number,
   shape?: Node<V> | V
@@ -3397,7 +3441,7 @@ const Len = function <V>(
 
 
 // Make a Node chainable with Builder methods.
-function buildize<V>(self?: any, shape?: any): Node<V> {
+function buildize<V = any>(self?: any, shape?: any): Node<V> {
   // Detect chaining. If not chained, ignore `this` if it is the global context.
 
   let globalNode = null != self && (self.window === self || self.global === self)
@@ -3410,7 +3454,7 @@ function buildize<V>(self?: any, shape?: any): Node<V> {
     // Merge self into shape, retaining previous chained builders.
     if (undefined !== shape) {
       node = nodize(shape)
-      let selfNode = nodize(self)
+      let selfNode: Node<any> = nodize(self)
 
       // TODO: need a more robust way to prevent Builders breaking each other.
       if (undefined === node.v && 'list' !== node.t) {
@@ -3493,7 +3537,7 @@ function buildize<V>(self?: any, shape?: any): Node<V> {
       Function: () => Type.call(node, Function),
       Symbol: () => Type.call(node, Symbol),
       Date: () => Type.call(node, Date),
-    })
+    } as any)
 }
 
 
@@ -4351,7 +4395,7 @@ function MakeArgu(name: string): Argu {
     args: args | string,
     whence: string | Record<string, any>,
     argSpec?: Record<string, any>
-  ) {
+  ): any {
     let partial = false
     if (S.string === typeof args) {
       partial = true

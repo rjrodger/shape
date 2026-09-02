@@ -136,10 +136,12 @@ and [the string DSL](../docs/how-to/use-the-string-dsl.md).
 
 ## TypeScript
 
-`Shape(spec)` infers the produced type from the spec: `String` becomes
-`string`, `[Number]` becomes `number[]`, a literal its own type, a nested
-object recursively. The exported types are `Node`, `Context`, `Update`,
-`State`, `Validate`, `Builder`, `ShapeShape` and `StandardSchemaV1`. See
+`Shape(spec)` infers the produced type from the spec, through every builder:
+`Min(1, String)` is `string`, `Exact('a', 'b')` is `'a' | 'b'`, `Skip(Number)`
+is `number | undefined`, a discriminated union is a union of its branches, and
+a key expression `'port: Max(9)'` is the property `port`. The exported types
+are `Node`, `Context`, `Update`, `State`, `Validate`, `Builder`, `ShapeShape`
+and `StandardSchemaV1`. See
 [TypeScript types](../docs/reference/typescript-types.md).
 
 ## Development

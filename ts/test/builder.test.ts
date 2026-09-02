@@ -1137,7 +1137,7 @@ Validation failed for index "1" with number "1" because the number is not of typ
   test('builder-min-example', () => {
     const { Min } = Shape
 
-    let shape = Shape({
+    let shape: any = Shape({
       size: Min(2, 4)  // Minimum is 2, default is 4, type is Number, optional
     })
 
@@ -1538,7 +1538,7 @@ Value "5" for property "d.1" must be below 4 (was 5).`)
 
     // Type inference
 
-    let x = {
+    let x: any = {
       S: Type('String'),
       N: Type('Number'),
       B: Type('Boolean'),

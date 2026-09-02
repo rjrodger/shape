@@ -324,7 +324,7 @@ describe('shape', () => {
 
 
   test('readme-object', () => {
-    let shape = Shape({
+    let shape: any = Shape({
       foo: {
         bar: {
           zed: String,
@@ -357,7 +357,7 @@ describe('shape', () => {
 
 
   test('readme-regexp', () => {
-    let shape = Shape({ countryCode: Check(/^[A-Z][A-Z]$/) })
+    let shape: any = Shape({ countryCode: Check(/^[A-Z][A-Z]$/) })
     deepEqual(shape({ countryCode: 'IE' }), { countryCode: 'IE' })
     throws(() => shape({ countryCode: 'BAD' }), 'Validation failed for property "countryCode" with string "BAD" because check "/^[A-Z][A-Z]$/" failed.')
     throws(() => shape({}), 'Validation failed for property "countryCode" with value "undefined" because the value is required.')
@@ -1245,7 +1245,7 @@ Validation failed for property "q.b" with string "x" because the string is not o
     throws(() => obj11({}), 'Validation failed for property "people" with value "undefined" because the value is required.')
 
 
-    let shape = Shape({
+    let shape: any = Shape({
       foo: Number,
       bar: Required({
         zed: Boolean
@@ -1415,7 +1415,7 @@ Validation failed for property "q.b" with string "x" because the string is not o
     let f0 = () => true
     let f1 = () => false
     let { G$ } = Shape
-    let shape = Shape({ fn: G$({ v: f0, f: f0 }) })
+    let shape: any = Shape({ fn: G$({ v: f0, f: f0 }) })
 
     deepEqual(shape({}), { fn: f0 })
     deepEqual(shape({ fn: f1 }), { fn: f1 })
@@ -1433,7 +1433,7 @@ Validation failed for property "q.b" with string "x" because the string is not o
 
 
   test('api-custom', () => {
-    let shape = Shape({ a: Check((v: any) => 10 < v) })
+    let shape: any = Shape({ a: Check((v: any) => 10 < v) })
     deepEqual(shape({ a: 11 }), { a: 11 }) // passes, as 10 < 11 is true
     throws(() => shape({ a: 9 }), 'Validation failed for property "a" with number "9" because check "(v) => 10 < v" failed.')  // fails, as 10 < 9 is false
 
@@ -2580,7 +2580,7 @@ Validation failed for index "1" with number "1" because the number is not of typ
     // * default value within One, Some, etc
 
     // 'happy'
-    let opter = Shape({
+    let opter: any = Shape({
       a: 1,
       b: { c: 2 },
       d: { e: { f: 3 } },
@@ -2662,7 +2662,7 @@ Validation failed for index "1" with number "1" because the number is not of typ
 
 
     // 'readme'
-    let optioner = Shape({
+    let optioner: any = Shape({
       color: 'red',
       // size: Joi.number().integer().max(5).min(1).default(3),
       size: Max(5, Min(1, 3)),
