@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -177,12 +178,12 @@ func defaultErrText(e FieldError) string {
 	// or a quote is not escaped again.
 	pathPart := ""
 	if e.Path != "" {
-		pathPart = fmt.Sprintf("%s \"%s\" with ", propkind, e.Path)
+		pathPart = propkind + " \"" + e.Path + "\" with "
 	}
 	switch e.Why {
 	case WhyType:
-		return fmt.Sprintf("Validation failed for %s%s \"%s\" because the %s is not of type %s.",
-			pathPart, valkind, valstr, valkind, e.Type)
+		return "Validation failed for " + pathPart + valkind + " \"" + valstr +
+			"\" because the " + valkind + " is not of type " + string(e.Type) + "."
 	case WhyRequired:
 		if e.Value == "" || e.Value == nil {
 			emptyTxt := "the value is required"
@@ -190,14 +191,12 @@ func defaultErrText(e FieldError) string {
 				emptyTxt = "an empty string is not allowed"
 			}
 			if e.Path == "" {
-				return fmt.Sprintf("Validation failed for %s \"%s\" because %s.",
-					valkind, valstr, emptyTxt)
+				return "Validation failed for " + valkind + " \"" + valstr + "\" because " + emptyTxt + "."
 			}
-			return fmt.Sprintf("Validation failed for %s%s \"%s\" because %s.",
-				pathPart, valkind, valstr, emptyTxt)
+			return "Validation failed for " + pathPart + valkind + " \"" + valstr + "\" because " + emptyTxt + "."
 		}
-		return fmt.Sprintf("Validation failed for %s%s \"%s\" because the %s is required.",
-			pathPart, valkind, valstr, valkind)
+		return "Validation failed for " + pathPart + valkind + " \"" + valstr +
+			"\" because the " + valkind + " is required."
 	case WhyClosed:
 		// TS pattern: parent is mentioned only if path != "". The offending key is
 		// an "index" under an array parent, else a "property"; more than one is
@@ -209,25 +208,24 @@ func defaultErrText(e FieldError) string {
 			noun, verb = "properties", "are"
 		}
 		if e.Path == "" {
-			return fmt.Sprintf("Validation failed for %s \"%s\" because the %s \"%s\" %s not allowed.",
-				valkind, valstr, noun, e.Key, verb)
+			return "Validation failed for " + valkind + " \"" + valstr + "\" because the " +
+				noun + " \"" + e.Key + "\" " + verb + " not allowed."
 		}
-		return fmt.Sprintf("Validation failed for %s%s \"%s\" because the %s \"%s\" %s not allowed.",
-			pathPart, valkind, valstr, noun, e.Key, verb)
+		return "Validation failed for " + pathPart + valkind + " \"" + valstr + "\" because the " +
+			noun + " \"" + e.Key + "\" " + verb + " not allowed."
 	case WhyNever:
-		return fmt.Sprintf("Validation failed for %s%s \"%s\" because no value is allowed.",
-			pathPart, valkind, valstr)
+		return "Validation failed for " + pathPart + valkind + " \"" + valstr + "\" because no value is allowed."
 	case WhyRegexp:
-		return fmt.Sprintf("Validation failed for %s%s \"%s\" because the %s did not match %s.",
-			pathPart, valkind, valstr, valkind, e.regexpSrc)
+		return "Validation failed for " + pathPart + valkind + " \"" + valstr +
+			"\" because the " + valkind + " did not match " + e.regexpSrc + "."
 	default:
 		// TS: check "<fname or why>" failed — prefer the check name.
 		name := e.Check
 		if name == "" {
 			name = e.Why
 		}
-		return fmt.Sprintf("Validation failed for %s%s \"%s\" because check \"%s\" failed.",
-			pathPart, valkind, valstr, name)
+		return "Validation failed for " + pathPart + valkind + " \"" + valstr +
+			"\" because check \"" + name + "\" failed."
 	}
 }
 
@@ -238,8 +236,17 @@ func valueToString(v any) string {
 	switch x := v.(type) {
 	case string:
 		// As TS renders it: JSON-escaped, with the quotes stripped, so that a
-		// backslash reads as \\ and a quote as \ — then truncated.
+		// backslash reads as \\ and a quote as \ — then truncated. A string
+		// the encoder would pass through unchanged skips the encoder.
+		if plainText(x) {
+			return truncateText(x, errValueLimit)
+		}
 		return truncateText(strings.ReplaceAll(jsonText(x), `"`, ""), errValueLimit)
+	case int:
+		return strconv.Itoa(x)
+	case float64:
+		// What %v prints for a float64.
+		return strconv.FormatFloat(x, 'g', -1, 64)
 	case bool:
 		if x {
 			return "true"
@@ -294,6 +301,18 @@ func jsonRender(v any) string {
 		return string(b)
 	}
 	return fmt.Sprintf("%v", v)
+}
+
+// plainText reports whether the JSON encoder would emit s as it is, between
+// its quotes: printable ASCII with no quote or backslash.
+func plainText(s string) bool {
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c < 0x20 || c > 0x7e || c == '"' || c == '\\' {
+			return false
+		}
+	}
+	return true
 }
 
 func truncateText(s string, limit int) string {
