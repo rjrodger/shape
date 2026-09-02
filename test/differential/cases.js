@@ -90,6 +90,21 @@ function build() {
   add('expr-fault-nested', E('Open(Define(""))'), SCALARS)
   // A deliberate Fault on a Never node is a valid expression.
   add('expr-fault-deliberate', E('Never.Fault("f")'), SCALARS)
+  // The shared regexp subset refuses the same patterns with the same text.
+  for (const [name, src] of [
+    ['flags', '/^a$/i'], ['lookahead', '/(?=a)/'], ['backref', '/(a)\\1/'], ['empty-class', '/[^]/'],
+    ['u-escape', '/\\u00e9/'], ['inline-flag', '/(?i)a/'], ['posix', '/[[:alpha:]]/'], ['p-class', '/\\p{L}/'],
+    ['set-op', '/[a&&b]/'], ['repeat', '/a**/'], ['unterminated', '/[/'], ['empty', '//'], ['brace', '/a{/'],
+    ['unknown-escape', '/\\q/'], ['shorthand-range', '/[\\d-z]/'], ['dash-escape', '/\\-/'],
+    ['unbalanced', '/(a/'], ['stray-paren', '/a)/'], ['stray-bracket', '/a]/'], ['class-bracket', '/[a[b]/'],
+    ['class-negated-shorthand', '/[\\D]/'], ['class-boundary', '/[\\b]/'], ['bad-hex', '/\\x4/'],
+    ['trailing-backslash', '/a\\/'],
+  ]) add('re-reject-' + name, E(src), ['a'])
+  // What the subset does accept, on the inputs the engines used to differ on.
+  add('re-digit', E('/^\\d+$/'), ['12', '\u0661\u0662', 'a'])
+  add('re-word', E('/^\\w+$/'), ['ab_1', 'é'])
+  add('re-space', E('/^\\s+$/'), [' \t', '\u00a0'])
+  add('re-dot', E('/^a.b$/'), ['a\nb', 'a\rb', 'a\u{1F600}b', 'ab'])
   // Some: an object threads through its matching branches, a scalar does not.
   // Passing inputs only: the message for a failing one lists object branches,
   // whose rendering the ports do not yet share (see the parity page).

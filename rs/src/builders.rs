@@ -199,13 +199,18 @@ where
 /// A regexp check: the value must be a string matching it. A failure reads
 /// `check "/re/" failed`.
 pub fn check_re(re: Regex, spec: impl Into<Spec>) -> Node {
+    check_re_src(re.as_str(), spec)
+}
+
+/// `check_re` from a pattern text.
+pub(crate) fn check_re_src(src: &str, spec: impl Into<Spec>) -> Node {
     let mut n = buildize(spec);
     if n.kind == Kind::Any {
         n.kind = Kind::Check;
     }
     n.required = true;
     n.required_set = true;
-    n.check_re(re)
+    n.check_re_src(src)
 }
 
 /// A custom validator run before the structural check.
@@ -972,8 +977,17 @@ impl Node {
         self
     }
 
-    pub fn check_re(mut self, re: Regex) -> Node {
-        let name = format!("/{}/", re.as_str());
+    pub fn check_re(self, re: Regex) -> Node {
+        self.check_re_src(re.as_str())
+    }
+
+    pub(crate) fn check_re_src(mut self, src: &str) -> Node {
+        let src = src.to_string();
+        let re = match crate::regexp::compile_regexp(&src) {
+            Ok(engine) => engine,
+            Err(msg) => return self.adopt(fault_node(msg)),
+        };
+        let name = format!("/{}/", src);
         let suffix = format!("Check({})", name);
         self.befores.push(validator(
             &name,

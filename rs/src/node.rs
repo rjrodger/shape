@@ -203,6 +203,8 @@ pub struct Node {
 
     /// The pattern of a `Regexp` node.
     pub regexp: Option<Regex>,
+    /// The pattern as written, in the shared subset: what renders and exports.
+    pub regexp_src: String,
     /// A `Fault` message overriding the structural text.
     pub fault_msg: Option<String>,
     /// Made by a builder given a wrong argument, as against a deliberate

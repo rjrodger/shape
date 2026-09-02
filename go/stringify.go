@@ -54,7 +54,7 @@ func stringifyNode(n *node, inline bool) string {
 		return suffix("Never", n)
 	case KindRegexp:
 		if n.regexpVal != nil {
-			return suffix("/"+n.regexpVal.String()+"/", n)
+			return suffix("/"+n.regexpSrc+"/", n)
 		}
 		return suffix("Regexp", n)
 	case KindCheck:

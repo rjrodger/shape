@@ -202,14 +202,17 @@ func (p *exprParser) parseTerm(top bool) (*Node, error) {
 		nb.n.hasDefault = true
 		return nb, nil
 	}
-	if strings.HasPrefix(head, "/") && strings.HasSuffix(head, "/") && len(head) >= 2 {
-		re, err := regexp.Compile(head[1 : len(head)-1])
-		if err != nil {
-			return nil, fmt.Errorf("Shape: invalid regexp %q: %w", head, err)
+	if body, flagged, ok := regexpHead(head); ok {
+		if flagged {
+			return nil, regexpFault(body, "flags are not supported")
 		}
 		// A bare /re/ is a type, not a check: a non-string fails as a type
 		// error. Check(/re/) is the explicit-check form and reports as one.
-		return newNodeWrap(regexpNode(re)), nil
+		n, err := regexpNode(body)
+		if err != nil {
+			return nil, err
+		}
+		return newNodeWrap(n), nil
 	}
 	// JSON literal
 	var lit any
@@ -329,12 +332,14 @@ func (p *exprParser) parseArg() (any, error) {
 	if head == "undefined" || head == "null" {
 		return nil, nil
 	}
-	if strings.HasPrefix(head, "/") && strings.HasSuffix(head, "/") && len(head) >= 2 {
-		re, err := regexp.Compile(head[1 : len(head)-1])
-		if err != nil {
-			return nil, fmt.Errorf("Shape: invalid regexp %q: %w", head, err)
+	if body, flagged, ok := regexpHead(head); ok {
+		if flagged {
+			return nil, regexpFault(body, "flags are not supported")
 		}
-		return re, nil
+		if _, err := canonicalRegexp(body); err != nil {
+			return nil, err
+		}
+		return regexp.MustCompile(body), nil
 	}
 	// JSON literal
 	var lit any
@@ -395,6 +400,17 @@ func callExprBuilder(fn exprBuilderFn, args []builderArg) (*Node, error) {
 		return nil, fmt.Errorf("%s", n.n.faultMsg)
 	}
 	return n, err
+}
+
+// regexpHead reads a /re/ token: its body, and whether a flag letter follows.
+func regexpHead(head string) (body string, flagged bool, ok bool) {
+	if len(head) >= 3 && strings.HasPrefix(head, "/") && 'a' <= head[len(head)-1] && head[len(head)-1] <= 'z' && head[len(head)-2] == '/' {
+		return head[1 : len(head)-2], true, true
+	}
+	if len(head) >= 2 && strings.HasPrefix(head, "/") && strings.HasSuffix(head, "/") {
+		return head[1 : len(head)-1], false, true
+	}
+	return "", false, false
 }
 
 func buildExprBuilders() map[string]exprBuilderFn {

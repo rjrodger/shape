@@ -76,8 +76,7 @@ fn node_schema(n: &Node, defs: &mut Map) -> Map {
             s.insert("format".to_string(), Value::from("date-time"));
         }
         Kind::Regexp => {
-            let src = n.regexp.as_ref().map(|r| r.as_str()).unwrap_or("");
-            s.insert("pattern".to_string(), Value::from(src));
+            s.insert("pattern".to_string(), Value::from(n.regexp_src.as_str()));
         }
         Kind::Never => {
             s.insert("not".to_string(), Value::Obj(Map::new()));

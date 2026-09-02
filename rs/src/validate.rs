@@ -269,7 +269,7 @@ pub(crate) fn at_of<'a>(
         parent_arr: parent_is_array,
         absent: value.is_undefined(),
         check,
-        regexp_src: n.regexp.as_ref().map(|r| format!("/{}/", r.as_str())),
+        regexp_src: n.regexp.as_ref().map(|_| format!("/{}/", n.regexp_src)),
         terse: w.ctx.terse,
     }
 }

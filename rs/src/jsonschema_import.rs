@@ -549,10 +549,10 @@ fn import_string(m: &Map, path: &str) -> Res<Spec> {
     let mut spec = Spec::from(Token::String);
     let mut plain = true;
     if let Some(p) = as_str(m.get("pattern")) {
-        match Regex::new(p) {
-            Ok(re) => spec = Spec::Regex(re),
-            Err(_) => return fault(format!("bad pattern {:?}", p), path),
+        if crate::regexp::canonical_regexp(p).is_err() {
+            return fault(format!("bad pattern {:?}", p), path);
         }
+        spec = Spec::Regexp(p.to_string());
         plain = false;
     }
     let min_length = as_f64(m.get("minLength"));

@@ -36,7 +36,7 @@ func normalizeWith(spec any, opts ShapeOptions) (*node, error) {
 	case *regexp.Regexp:
 		// A regexp anywhere in a spec is a string-shaped node, as in TS. Without
 		// this, One(/re/, Number) and a raw regexp spec both failed to build.
-		return regexpNode(v), nil
+		return regexpNode(v.String())
 	case time.Time:
 		// A date value in a spec is a date default, as a number literal is a
 		// number default.
@@ -90,14 +90,20 @@ func nanNode() *node {
 // Optional (mirrors TS, where wrapper constructors set both r=true and an
 // EMPTY_VAL default; requiredness gates whether the default is used).
 // regexpNode builds the node a regexp stands for: a required string that must
-// match the pattern.
-func regexpNode(re *regexp.Regexp) *node {
+// match the pattern. The pattern is held to the shared subset and compiled
+// for this engine; the text given is what renders.
+func regexpNode(src string) (*node, error) {
+	re, err := compileRegexp(src)
+	if err != nil {
+		return nil, err
+	}
 	return &node{
 		kind:        KindRegexp,
 		regexpVal:   re,
+		regexpSrc:   src,
 		required:    true,
 		requiredSet: true,
-	}
+	}, nil
 }
 
 func typeTokenNode(k Kind) *node {

@@ -392,6 +392,35 @@ const files = {
     ['js-any-empty', { $jsonschema: {} }, { anything: [1] }],
     ['js-ip', { $jsonschema: { type: 'string', anyOf: [{ format: 'ipv4' }, { format: 'ipv6' }] } }, 'x'],
   ],
+  // The shared regexp subset (docs/reference/regexp.md): the same pattern
+  // matches the same strings in every engine. \d, \w and \s are ASCII, .
+  // stops at a newline only, and a whole character is one unit.
+  regexp: [
+    ['re-digit-ascii-ok', { a: { $expr: '/^\\d+$/' } }, { a: '12' }],
+    ['re-digit-ascii-arabic', { a: { $expr: '/^\\d+$/' } }, { a: '\u0661\u0662' }],
+    ['re-word-ascii-ok', { a: { $expr: '/^\\w+$/' } }, { a: 'ab_1' }],
+    ['re-word-ascii-accent', { a: { $expr: '/^\\w+$/' } }, { a: 'é' }],
+    ['re-space-ascii-ok', { a: { $expr: '/^\\s+$/' } }, { a: ' \t' }],
+    ['re-space-ascii-nbsp', { a: { $expr: '/^\\s+$/' } }, { a: '\u00a0' }],
+    ['re-negated-shorthand-ok', { a: { $expr: '/^\\D+$/' } }, { a: 'ab' }],
+    ['re-negated-shorthand-fail', { a: { $expr: '/^\\D+$/' } }, { a: 'a1' }],
+    ['re-class-shorthands', { a: { $expr: '/^[\\s\\d]+$/' } }, { a: ' 1' }],
+    ['re-dot-newline', { a: { $expr: '/^a.b$/' } }, { a: 'a\nb' }],
+    ['re-dot-return', { a: { $expr: '/^a.b$/' } }, { a: 'a\rb' }],
+    ['re-dot-astral', { a: { $expr: '/^a.b$/' } }, { a: 'a\u{1F600}b' }],
+    ['re-anchor-trailing-newline', { a: { $expr: '/^a$/' } }, { a: 'a\n' }],
+    ['re-boundary-ok', { a: { $expr: '/\\bx\\b/' } }, { a: 'a x b' }],
+    ['re-boundary-fail', { a: { $expr: '/\\bx\\b/' } }, { a: 'axb' }],
+    ['re-lazy-brace', { a: { $expr: '/^x{2,3}?$/' } }, { a: 'xx' }],
+    ['re-noncapturing', { a: { $expr: '/^(?:a|b)+$/' } }, { a: 'abab' }],
+    ['re-escaped-slash', { a: { $expr: '/^\\/$/' } }, { a: '/' }],
+    ['re-hex-escape', { a: { $expr: '/^\\x41$/' } }, { a: 'A' }],
+    ['re-class-trailing-dash', { a: { $expr: '/^[a-c-]+$/' } }, { a: 'a-c' }],
+    ['re-literal-unicode', { a: { $expr: '/^é+$/' } }, { a: 'éé' }],
+    ['re-check-form-arabic', { a: { $expr: 'Check(/^\\d+$/)' } }, { a: '\u0661' }],
+    ['re-jsonschema-pattern-arabic', { $jsonschema: { type: 'object', properties: { a: { type: 'string', pattern: '^\\d+$' } } } }, { a: '\u0661\u0662' }],
+    ['re-jsonschema-pattern-ok', { $jsonschema: { type: 'object', properties: { a: { type: 'string', pattern: '^\\d+$' } } } }, { a: '12' }],
+  ],
   misc: [
     // Refer: a name that no Define supplies does nothing, unless strict.
     ['refer-defined', { a: { $expr: 'Define("d",Number)' }, b: { $expr: 'Refer("d")' } }, { a: 1, b: 2 }],

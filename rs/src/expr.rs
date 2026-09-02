@@ -5,7 +5,7 @@
 use crate::algebra::{extend_node, omit_node, partial_node, pick_node, Names};
 use crate::builders::*;
 use crate::node::{Node, Token};
-use crate::normalize::{literal_node, nan_node, normalize, regexp_node};
+use crate::normalize::{literal_node, nan_node, normalize, regexp_node_src};
 use crate::spec::Spec;
 use crate::value::Value;
 use regex::Regex;
@@ -166,11 +166,29 @@ fn type_node(tok: Token, args: Vec<Spec>) -> Node {
     type_(tok, spec)
 }
 
-fn regexp_token(head: &str) -> Option<Result<Regex, ExprError>> {
+/// A `/re/` token: held to the shared subset here, so that a pattern
+/// outside it is a parse error, as in TypeScript. A flag letter after the
+/// closing slash is refused the same way. The body is carried as text; the
+/// node compiles the engine form.
+fn regexp_token(head: &str) -> Option<Result<String, ExprError>> {
+    let bytes = head.as_bytes();
+    if head.len() >= 3
+        && head.starts_with('/')
+        && bytes[head.len() - 1].is_ascii_lowercase()
+        && bytes[head.len() - 2] == b'/'
+    {
+        let body = &head[1..head.len() - 2];
+        return Some(Err(ExprError(crate::regexp::regexp_fault(
+            body,
+            "flags are not supported",
+        ))));
+    }
     if head.len() >= 2 && head.starts_with('/') && head.ends_with('/') {
+        let body = &head[1..head.len() - 1];
         Some(
-            Regex::new(&head[1..head.len() - 1])
-                .map_err(|e| ExprError(format!("Shape: invalid regexp {:?}: {}", head, e))),
+            crate::regexp::canonical_regexp(body)
+                .map(|_| body.to_string())
+                .map_err(ExprError),
         )
     } else {
         None
@@ -243,7 +261,7 @@ impl<'s> Parser<'s> {
         if let Some(re) = regexp_token(&head) {
             // A bare /re/ is a type, not a check: a non-string fails as a
             // type error. Check(/re/) is the explicit-check form.
-            return Ok(regexp_node(re?));
+            return Ok(regexp_node_src(&re?));
         }
         if let Some(lit) = json_literal(&head) {
             return Ok(default_of(lit));
@@ -314,7 +332,7 @@ impl<'s> Parser<'s> {
             return Ok(Spec::Value(Value::Null));
         }
         if let Some(re) = regexp_token(&head) {
-            return Ok(Spec::Regex(re?));
+            return Ok(Spec::Regexp(re?));
         }
         if let Some(lit) = json_literal(&head) {
             return Ok(Spec::Value(lit));
@@ -474,7 +492,7 @@ fn build_call(name: &str, mut args: Vec<Spec>) -> Result<Node, ExprError> {
             let checker = args.remove(0);
             let spec = shape_at(&mut args, 0, any_spec());
             Ok(match checker {
-                Spec::Regex(re) => check_re(re, spec),
+                Spec::Regexp(src) => check_re_src(&src, spec),
                 // Not a check the string form can express: the shape alone.
                 _ => normalize(spec),
             })
@@ -829,10 +847,7 @@ mod tests {
                 "Min(",
                 "Shape: unclosed argument list in expression \"Min(\"",
             ),
-            (
-                "/a/i",
-                "Shape: unexpected token /a/i in builder expression /a/i",
-            ),
+            ("/a/i", "Shape: invalid regexp /a/: flags are not supported"),
             ("Min()", "Min: missing limit"),
             ("Max()", "Max: missing limit"),
             ("Above()", "Above: missing limit"),
@@ -874,8 +889,14 @@ mod tests {
         for (src, want) in cases {
             assert_eq!(fails(src), want, "{}", src);
         }
-        assert!(fails("/[/").starts_with("Shape: invalid regexp \"/[/\":"));
-        assert!(fails("Min(2, /[/)").starts_with("Shape: invalid regexp \"/[/\":"));
+        assert_eq!(
+            fails("/[/"),
+            "Shape: invalid regexp /[/: unterminated character class"
+        );
+        assert_eq!(
+            fails("Min(2, /[/)"),
+            "Shape: invalid regexp /[/: unterminated character class"
+        );
     }
 
     #[test]

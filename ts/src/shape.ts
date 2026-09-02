@@ -883,6 +883,8 @@ function nodize<S>(shape?: any, depth?: number, meta?: NodeMeta): Node<S> {
       if ('[object RegExp]' === strdesc) {
         t = (S.regexp as ValType)
         r = true
+        // The engine regexp of the shared subset; v keeps the original.
+        u.re = engineRegexp(v)
       }
       else if ('[object Date]' === strdesc) {
         t = (S.date as ValType)
@@ -1436,7 +1438,7 @@ function shapify<const S>(intop?: S, inopts?: ShapeOptions) {
             s.ignoreVal = true
             s.curerr.push(makeErrImpl(S.type, s, 1045))
           }
-          else if (!s.val.match(n.v)) {
+          else if (!(n.u.re || n.v).test(s.val)) {
             s.ignoreVal = true
             s.curerr.push(makeErrImpl(S.regexp, s, 1045))
           }
@@ -1781,8 +1783,14 @@ function expr(
       else if ('NaN' === head) {
         return NaN
       }
-      else if (head.match(/^\/.+\/$/)) {
-        return new RegExp(head.substring(1, head.length - 1))
+      else if (head.match(/^\/.*\/[a-z]$/)) {
+        throw regexpFault(head.substring(1, head.length - 2), 'flags are not supported')
+      }
+      else if (2 <= head.length && head.match(/^\/.*\/$/)) {
+        const body = head.substring(1, head.length - 1)
+        // Held to the shared subset here; the node compiles the engine form.
+        canonicalRegexp(body)
+        return new RegExp(body)
       }
       else if (m = head.match(/^\$\$([^$]+)$/)) {
         return spec.node ?
@@ -1801,6 +1809,9 @@ function expr(
       }
     }
     catch (je: any) {
+      if (S.string === typeof je?.message && je.message.startsWith('Shape: invalid regexp')) {
+        throw je
+      }
       throw new SyntaxError(
         `Shape: unexpected token ${head} in builder expression ${spec.src}`)
     }
@@ -1851,6 +1862,244 @@ function keyExprName(name: string): string {
     }
   }
   return name
+}
+
+
+// The shared regexp subset
+// ========================
+// A regexp in a shape is read by three engines (JavaScript, RE2 in Go, the
+// regex crate in Rust), which agree only on a subset of syntax and meaning.
+// A pattern is held to that subset here and rewritten for this engine, so
+// that the same pattern matches the same strings everywhere; the original
+// text is what renders and exports. The rules are the ones the reference
+// page docs/reference/regexp.md states, and the Go and Rust ports carry the
+// same scanner with the same error texts.
+//
+// In the subset: literals, \ escapes of the syntax characters and /, \t \n
+// \r \f \v and \xHH, character classes with ranges, \d \w \s (ASCII) and
+// their negations outside a class, . (anything but a newline), ^ $ \b \B,
+// groups ( ) and (?: ), alternation, and the quantifiers * + ? {n} {n,}
+// {n,m} with a lazy ?. Not in it: flags, lookaround, backreferences, named
+// groups, inline flags, POSIX and \p classes, \u escapes, class set
+// operators and lone braces.
+const RE_SYNTAX_ESCAPES = '\\^$.|?*+()[]{}/'
+const RE_ASCII_D = '0-9'
+const RE_ASCII_W = 'A-Za-z0-9_'
+const RE_ASCII_S = ' \\t\\n\\r\\f\\v'
+
+function regexpFault(src: string, reason: string): Error {
+  return new Error('Shape: invalid regexp /' + src + '/: ' + reason)
+}
+
+// Validate a pattern against the subset and return the pattern this engine
+// runs, or throw the shared error.
+function canonicalRegexp(src: string): string {
+  const fail = (reason: string) => { throw regexpFault(src, reason) }
+  if ('' === src) fail('empty pattern')
+  let out = ''
+  let inClass = false
+  let classItems = 0        // items so far in the open class
+  let shorthand = false     // the previous class item was \d \w or \s
+  let depth = 0
+  let atom = false          // an atom precedes, so a quantifier may follow
+  let quant = false         // a quantifier precedes, so a ? makes it lazy
+  const n = src.length
+  const HEX2 = /^[0-9A-Fa-f]{2}$/
+
+  for (let i = 0; i < n; i++) {
+    const c = src[i]
+
+    if (inClass) {
+      if (']' === c) {
+        if (0 === classItems) fail('empty character class')
+        out += ']'
+        inClass = false
+        atom = true
+        quant = false
+        continue
+      }
+      if ('[' === c) {
+        fail(':' === src[i + 1] ? 'POSIX classes are not in the subset' :
+          '[ must be escaped inside a character class')
+      }
+      if (('&' === c || '-' === c || '~' === c) && c === src[i + 1] && '-' !== c) {
+        fail('class set operators (&&, --, ~~) are not in the subset')
+      }
+      if ('-' === c && '-' === src[i + 1]) {
+        fail('class set operators (&&, --, ~~) are not in the subset')
+      }
+      if ('-' === c) {
+        // A range: neither end may be a shorthand class.
+        const ends = ']' === src[i + 1] || 0 === classItems
+        if (!ends && shorthand) fail('a range cannot start or end at a class shorthand')
+        if (!ends && '\\' === src[i + 1] && 'dwsDWS'.includes(src[i + 2])) {
+          fail('a range cannot start or end at a class shorthand')
+        }
+        out += '-'
+        continue
+      }
+      if ('\\' === c) {
+        i++
+        if (i >= n) fail('trailing backslash')
+        const e = src[i]
+        shorthand = false
+        if (RE_SYNTAX_ESCAPES.includes(e) || '-' === e) out += '\\' + e
+        else if ('tnrfv'.includes(e)) out += '\\' + e
+        else if ('x' === e) {
+          const h = src.substring(i + 1, i + 3)
+          if (!HEX2.test(h)) fail('\\x needs two hex digits')
+          out += '\\x' + h
+          i += 2
+        }
+        else if ('d' === e) { out += RE_ASCII_D; shorthand = true }
+        else if ('w' === e) { out += RE_ASCII_W; shorthand = true }
+        else if ('s' === e) { out += RE_ASCII_S; shorthand = true }
+        else if ('D' === e || 'W' === e || 'S' === e) {
+          fail('\\D, \\W and \\S are not allowed inside a character class')
+        }
+        else if ('b' === e || 'B' === e) {
+          fail('\\b and \\B are not allowed inside a character class')
+        }
+        else fail('escape \\' + e + ' is not in the subset')
+        classItems++
+        continue
+      }
+      shorthand = false
+      out += c
+      classItems++
+      continue
+    }
+
+    if ('\\' === c) {
+      i++
+      if (i >= n) fail('trailing backslash')
+      const e = src[i]
+      if (RE_SYNTAX_ESCAPES.includes(e)) out += '\\' + e
+      else if ('tnrfv'.includes(e)) out += '\\' + e
+      else if ('x' === e) {
+        const h = src.substring(i + 1, i + 3)
+        if (!HEX2.test(h)) fail('\\x needs two hex digits')
+        out += '\\x' + h
+        i += 2
+      }
+      else if ('d' === e) out += '[' + RE_ASCII_D + ']'
+      else if ('D' === e) out += '[^' + RE_ASCII_D + ']'
+      else if ('w' === e) out += '[' + RE_ASCII_W + ']'
+      else if ('W' === e) out += '[^' + RE_ASCII_W + ']'
+      else if ('s' === e) out += '[' + RE_ASCII_S + ']'
+      else if ('S' === e) out += '[^' + RE_ASCII_S + ']'
+      else if ('b' === e || 'B' === e) {
+        out += '\\' + e
+        atom = false
+        quant = false
+        continue
+      }
+      else if ('-' === e) fail('escape \\- is only allowed inside a character class')
+      else fail('escape \\' + e + ' is not in the subset')
+      atom = true
+      quant = false
+      continue
+    }
+
+    if ('[' === c) {
+      inClass = true
+      classItems = 0
+      shorthand = false
+      out += '['
+      if ('^' === src[i + 1]) {
+        out += '^'
+        i++
+      }
+      continue
+    }
+    if (']' === c) fail('unescaped ]')
+    if ('(' === c) {
+      if ('?' === src[i + 1]) {
+        if (':' !== src[i + 2]) fail('lookaround, named groups and inline flags are not in the subset')
+        out += '(?:'
+        i += 2
+      }
+      else {
+        out += '('
+      }
+      depth++
+      atom = false
+      quant = false
+      continue
+    }
+    if (')' === c) {
+      depth--
+      if (depth < 0) fail('unbalanced parentheses')
+      out += ')'
+      atom = true
+      quant = false
+      continue
+    }
+    if ('|' === c || '^' === c || '$' === c) {
+      out += c
+      atom = false
+      quant = false
+      continue
+    }
+    if ('*' === c || '+' === c || '?' === c) {
+      if ('?' === c && quant) {
+        // Lazy.
+        out += '?'
+        quant = false
+        atom = false
+        continue
+      }
+      if (!atom) fail('nothing to repeat')
+      out += c
+      atom = false
+      quant = true
+      continue
+    }
+    if ('{' === c) {
+      const m = src.substring(i).match(/^\{(\d+)(,(\d*))?\}/)
+      if (null == m) fail('lone quantifier brace')
+      if (!atom) fail('nothing to repeat')
+      out += m![0]
+      i += m![0].length - 1
+      atom = false
+      quant = true
+      continue
+    }
+    if ('}' === c) fail('lone quantifier brace')
+    if ('.' === c) {
+      out += '[^\\n]'
+      atom = true
+      quant = false
+      continue
+    }
+    out += c
+    atom = true
+    quant = false
+  }
+  if (inClass) fail('unterminated character class')
+  if (0 !== depth) fail('unbalanced parentheses')
+  return out
+}
+
+// The engine regexp for a pattern in the subset: the rewrite, with the u
+// flag so that . and classes see whole characters, as the RE2 engines do.
+function compileRegexp(src: string): RegExp {
+  const canon = canonicalRegexp(src)
+  try {
+    return new RegExp(canon, 'u')
+  }
+  /* node:coverage disable */
+  catch (_e: any) {
+    // The scanner admits nothing the JavaScript engine refuses.
+    throw regexpFault(src, 'not accepted by the engine')
+  }
+  /* node:coverage enable */
+}
+
+// A RegExp given to a shape: no flags, and its source in the subset.
+function engineRegexp(re: RegExp): RegExp {
+  if ('' !== re.flags) throw regexpFault(re.source, 'flags are not supported')
+  return compileRegexp(re.source)
 }
 
 
@@ -3187,8 +3436,10 @@ const Check = function <V = any>(
     if (dstr.includes('RegExp')) {
       // Only a string can match. Coercing first (String(1).match(/^[0-9]+$/))
       // let Check(/re/) accept values that a bare /re/ rejects outright.
+      // The engine regexp is the shared subset's; the name is the original.
+      const cre = engineRegexp(check as RegExp)
       let refn: any = (v: any) =>
-        (S.string === typeof v) && !!v.match(check as string)
+        (S.string === typeof v) && cre.test(v)
       defprop(refn, S.name, {
         value: String(check)
       })
@@ -4823,6 +5074,7 @@ function importString(s: any, path: string): any {
   let spec: any
   if (S.string === typeof s.pattern) {
     try {
+      canonicalRegexp(s.pattern)
       spec = new RegExp(s.pattern)
     }
     catch (e: any) {

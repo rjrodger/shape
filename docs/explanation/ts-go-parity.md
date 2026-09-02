@@ -81,9 +81,13 @@ Some differences are inherent to Go and are unlikely ever to close.
   structure with the input where nothing changed. The produced *value* is the
   same in both; what differs is which objects are the input's own.
 
-- **Regular expressions.** Go uses the RE2 engine (`regexp`); TypeScript uses
-  the JavaScript engine. Patterns relying on backtracking features differ.
-  Prefer portable patterns for schemas that must behave identically.
+- **Regular expressions.** Go uses the RE2 engine (`regexp`), Rust the
+  `regex` crate and TypeScript the JavaScript engine, which agree only on a
+  subset. Every pattern is held to that subset at build and rewritten for the
+  engine, so the same pattern matches the same strings in all three; what is
+  outside it (lookaround, backreferences, flags, `\p` classes) is refused with
+  the same text everywhere. The [regexp subset](../reference/regexp.md) page
+  states it, and `test/regexp.tsv` pins it.
 
 - **An explicit null at the root.** Go cannot tell a missing argument from a nil
   one, so `Validate(nil)` means "no value supplied" (JS `undefined`) and

@@ -84,7 +84,7 @@ func nodeSchema(n *node, defs map[string]any) map[string]any {
 	case KindDate:
 		s["format"] = "date-time"
 	case KindRegexp:
-		s["pattern"] = n.regexpVal.String()
+		s["pattern"] = n.regexpSrc
 	case KindNever:
 		s["not"] = map[string]any{}
 	case KindObject:

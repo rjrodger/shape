@@ -59,6 +59,7 @@ pub fn normalize_with(spec: Spec, opts: &Options) -> Node {
         Spec::Node(n) => *n,
         Spec::Token(t) => type_token_node(t.kind()),
         Spec::Regex(re) => regexp_node(re),
+        Spec::Regexp(src) => regexp_node_src(&src),
         Spec::Value(v) => literal_node_with(v, opts),
         Spec::Arr(items) => normalize_array_with(items, opts),
         Spec::Obj(pairs) => normalize_object_with(pairs, opts),
@@ -137,13 +138,24 @@ pub(crate) fn nan_node() -> Node {
     }
 }
 
-/// A regexp is a required string that must match it.
+/// A regexp is a required string that must match it. The pattern is held
+/// to the shared subset and compiled for this engine; one outside it makes
+/// a fault node, as a builder given a wrong argument does.
 pub(crate) fn regexp_node(re: Regex) -> Node {
-    Node {
-        regexp: Some(re),
-        required: true,
-        required_set: true,
-        ..Node::of(Kind::Regexp)
+    regexp_node_src(re.as_str())
+}
+
+/// The regexp node of a pattern text.
+pub(crate) fn regexp_node_src(src: &str) -> Node {
+    match crate::regexp::compile_regexp(src) {
+        Ok(engine) => Node {
+            regexp: Some(engine),
+            regexp_src: src.to_string(),
+            required: true,
+            required_set: true,
+            ..Node::of(Kind::Regexp)
+        },
+        Err(msg) => crate::builders::fault_node(msg),
     }
 }
 

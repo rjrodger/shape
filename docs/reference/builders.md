@@ -92,7 +92,9 @@ wrongly-typed value still gets the required or type error, and a bound on the
 same node (`Email(Min(10, String))`) is checked first. A format failure keeps its
 own message — `Value "nope" for property "a" is not a valid email address.` —
 under `Fault` too, which replaces structural text only. Every pattern is written
-for the RE2 and JavaScript engines alike; IPv6 is checked algorithmically.
+for the RE2 and JavaScript engines alike; IPv6 is checked algorithmically. A
+pattern of your own (`/re/`, `Check(/re/)`) is held to the shared
+[regexp subset](regexp.md), so it matches the same strings in every language.
 
 ## Bounds
 

@@ -764,13 +764,17 @@ func Check(check any, spec ...any) *Node {
 		nb.n.befores = append(nb.n.befores, v)
 		bumpValidatorGen()
 	case *regexp.Regexp:
-		re := c
+		src := c.String()
+		re, err := compileRegexp(src)
+		if err != nil {
+			return fault(err.Error())
+		}
 		nb.n.kind = KindCheck
 		nb.n.required = true
 		nb.n.requiredSet = true
 		// The check name is the /pattern/ form so failures read
 		// `check "/re/" failed`, mirroring TS Check(RegExp).
-		reName := "/" + re.String() + "/"
+		reName := "/" + src + "/"
 		v := validator{
 			name: reName,
 			fn: func(val any, update *Update, state *State) bool {
@@ -786,7 +790,7 @@ func Check(check any, spec ...any) *Node {
 				update.Mark = markCheckType
 				return false
 			},
-			stringify: func() string { return fmt.Sprintf("Check(/%s/)", re.String()) },
+			stringify: func() string { return fmt.Sprintf("Check(/%s/)", src) },
 		}
 		nb.n.befores = append(nb.n.befores, v)
 		bumpValidatorGen()

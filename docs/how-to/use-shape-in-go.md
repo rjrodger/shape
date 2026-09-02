@@ -119,8 +119,10 @@ reusable closure.
 ## Differences to keep in mind
 
 The full list is in [TypeScript ↔ Go parity](../explanation/ts-go-parity.md).
-The headline items are inherent to Go: alphabetical key ordering (Go maps are
-unordered) and the RE2 regexp engine.
+The headline item is inherent to Go: alphabetical key ordering (Go maps are
+unordered). Regular expressions are held to the shared
+[regexp subset](../reference/regexp.md), so a pattern reads the same here as
+in TypeScript and Rust.
 
 ## See also
 

@@ -47,6 +47,8 @@ type node struct {
 
 	// Compiled pattern for a KindRegexp node (a bare /re/ in the string DSL).
 	regexpVal *regexp.Regexp
+	// The pattern as written, in the shared subset: what renders and exports.
+	regexpSrc string
 
 	// Custom Fault message overrides default error text.
 	faultMsg string

@@ -28,6 +28,7 @@ pub mod jsonschema_import;
 mod macros;
 pub mod node;
 pub mod normalize;
+mod regexp;
 pub mod spec;
 pub mod standard;
 pub mod stringify;

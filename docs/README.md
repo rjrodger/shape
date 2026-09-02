@@ -55,6 +55,8 @@ Dry, complete, look-it-up material.
   and Go (the Rust forms are in the [Rust API](reference/rust-api.md)).
 - [Shape API](reference/shape-api.md) — compiling, validating, options.
 - [Errors](reference/errors.md) — error objects and message format.
+- [The regexp subset](reference/regexp.md) — what a pattern may use, and how
+  every engine is made to read it the same way.
 - [Shape nodes](reference/nodes.md) — the compiled node model.
 - [TypeScript types](reference/typescript-types.md)
 - [Go API](reference/go-api.md) — the Go surface and its idioms.

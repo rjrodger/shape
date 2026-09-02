@@ -391,11 +391,11 @@ func importString(m map[string]any, path string) (any, error) {
 	var spec any = String
 	plain := true
 	if p, ok := m["pattern"].(string); ok {
-		re, err := regexp.Compile(p)
+		n, err := regexpNode(p)
 		if err != nil {
 			return nil, jsonSchemaFault(fmt.Sprintf("bad pattern %q", p), path)
 		}
-		spec = re
+		spec = newNodeWrap(n)
 		plain = false
 	}
 

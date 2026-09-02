@@ -27,8 +27,10 @@ s := shape.MustShape(map[string]any{
 })
 ```
 
-> Go uses the RE2 engine; TypeScript uses the JavaScript engine. Stick to
-> portable patterns if a schema must behave identically in both.
+> A pattern is held to the shared [regexp subset](../reference/regexp.md):
+> what the JavaScript, RE2 and regex-crate engines all read the same way,
+> with `\d`, `\w` and `\s` ASCII and no flags, lookaround or backreferences.
+> Inside it a shape behaves identically in every language.
 
 ## A custom predicate
 

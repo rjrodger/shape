@@ -152,7 +152,7 @@ func makeErr(s *State, why string, mark int, text string) FieldError {
 	if s != nil {
 		err.node = s.Node
 		if s.Node != nil && s.Node.regexpVal != nil {
-			err.regexpSrc = "/" + s.Node.regexpVal.String() + "/"
+			err.regexpSrc = "/" + s.Node.regexpSrc + "/"
 		}
 	}
 	if text != "" {
