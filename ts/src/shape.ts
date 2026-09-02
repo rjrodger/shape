@@ -432,6 +432,10 @@ class State {
   check?: Function
   checkargs?: Record<string, any>
 
+  // The last parent object seen and whether it was frozen (see next).
+  lastParent: any = undefined
+  lastFrozen: boolean = false
+
   constructor(
     root: any,
     top: Node<any>,
@@ -457,14 +461,14 @@ class State {
     this.check = undefined
 
     // Dereference the back pointers to ancestor siblings.
-    // Only objects|arrays can be nodes, so a number is a back pointer.
-    // NOTE: terminates because (+{...} -> NaN, +[] -> 0) -> false (JS wat FTW!)
+    // Only objects|arrays can be nodes, so a number is a back pointer (a
+    // zero or the end of the stack stops the walk below).
     let nextNode = this.nodes[this.pI]
 
     // See note for path below.
     this.ancestors[this.dI] = this.node
 
-    while (+nextNode) {
+    while (S.number === typeof nextNode && 0 !== nextNode) {
       this.dI--
 
       this.ctx.log &&
@@ -491,9 +495,15 @@ class State {
     this.cI = this.pI
     this.sI = this.pI + 1
 
-    // TODO: remove and use ancestors?
-    if (Object.isFrozen(this.parents[this.pI])) {
-      this.parents[this.pI] = { ...this.parents[this.pI] }
+    // A frozen parent is copied so its children can be written; siblings
+    // share a parent, so the check runs once per parent object.
+    const parent = this.parents[this.pI]
+    if (parent !== this.lastParent) {
+      this.lastParent = parent
+      this.lastFrozen = Object.isFrozen(parent)
+    }
+    if (this.lastFrozen) {
+      this.parents[this.pI] = { ...parent }
     }
     this.parent = this.parents[this.pI]
 
@@ -508,7 +518,9 @@ class State {
 
     this.oval = this.val
 
-    this.curerr.length = 0
+    if (0 < this.curerr.length) {
+      this.curerr = []
+    }
   }
 
 
@@ -1425,7 +1437,7 @@ function shapify<const S>(intop?: S, inopts?: ShapeOptions) {
         s.pI = s.sI
       }
 
-      if (s.node.e || fatal) {
+      if (0 < s.curerr.length && (s.node.e || fatal)) {
         s.err.push(...s.curerr)
       }
     }
