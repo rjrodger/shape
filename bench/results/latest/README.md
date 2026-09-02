@@ -1,6 +1,6 @@
 # Latest measurements
 
-Generated 2026-09-02T15:10:24.173Z from 30 run(s). Times are median nanoseconds per operation; lower is better.
+Generated 2026-09-02T15:14:42.461Z from 33 run(s). Times are median nanoseconds per operation; lower is better.
 
 ## go on github:windows-x64
 
@@ -17,16 +17,16 @@ Host `1fee8adaf205`: AMD EPYC 9V74 80-Core Processor, 4 cores, win32/x64. Last r
 
 ## go on linux-xeon-sandbox
 
-Host `80bb4b189998`: Intel(R) Xeon(R) Processor @ 2.10GHz, 4 cores, linux/x64. Last run 2026-09-02 (cases `233e564a2bd4`).
+Host `80bb4b189998`: Intel(R) Xeon(R) Processor @ 2.10GHz, 4 cores, linux/x64. Last run 2026-09-02 (cases `233e564a2bd4`). Measured from a worktree with uncommitted changes.
 
 | case | shape | validator | jsonschema | gojsonschema | shape / fastest |
 |---|---:|---:|---:|---:|---:|
-| flat | 457 ns | 361 ns | 2.3 µs | 7.0 µs | 1.3× |
-| nested | 2.4 µs | 1.1 µs | 4.7 µs | 11.0 µs | 2.1× |
-| array | 38.4 µs | 14.2 µs | 65.9 µs | 203.5 µs | 2.7× |
-| bounds | 1.7 µs | 711 ns | 3.6 µs | 6.0 µs | 2.4× |
-| invalid | 3.5 µs | – | 3.7 µs | 12.6 µs | 1.0× |
-| large | 8.7 µs | – | 18.0 µs | 67.6 µs | 1.0× |
+| flat | 453 ns | 323 ns | 1.9 µs | 6.0 µs | 1.4× |
+| nested | 1.9 µs | 1.1 µs | 4.6 µs | 9.4 µs | 1.7× |
+| array | 34.9 µs | 14.5 µs | 66.6 µs | 196.9 µs | 2.4× |
+| bounds | 2.1 µs | 682 ns | 3.4 µs | 6.1 µs | 3.1× |
+| invalid | 3.0 µs | – | 4.6 µs | 11.8 µs | 1.0× |
+| large | 5.5 µs | – | 17.3 µs | 68.9 µs | 1.0× |
 
 ## go on linux-xeon-sandbox
 
@@ -154,6 +154,9 @@ Shape's median per case on every run, with the 95th percentile after it, newest 
 | 2026-09-02 14:08 | `e67ecc6` (dirty) | 0.3.0 | 1.3 µs · 2.6 µs | 3.1 µs · 3.8 µs | 39.9 µs · 50.1 µs | 1.5 µs · 4.0 µs | 6.0 µs · 9.3 µs | – |
 | 2026-09-02 14:09 | `e67ecc6` (dirty) | 0.3.0 | 1.5 µs · 2.0 µs | 3.1 µs · 4.0 µs | 27.1 µs · 87.9 µs | 2.0 µs · 2.6 µs | 6.8 µs · 8.8 µs | – |
 | 2026-09-02 15:10 | `15de96a` | 0.3.0 | 457 ns · 619 ns | 2.4 µs · 4.7 µs | 38.4 µs · 48.9 µs | 1.7 µs · 4.5 µs | 3.5 µs · 5.8 µs | 8.7 µs · 11.5 µs |
+| 2026-09-02 15:13 | `424ec5a` | 0.3.0 | 451 ns · 677 ns | 1.7 µs · 2.9 µs | 39.2 µs · 50.7 µs | 1.3 µs · 5.6 µs | 3.0 µs · 6.7 µs | 5.8 µs · 20.7 µs |
+| 2026-09-02 15:13 | `424ec5a` (dirty) | 0.3.0 | 448 ns · 530 ns | 1.9 µs · 3.2 µs | 40.2 µs · 49.5 µs | 1.5 µs · 4.4 µs | 2.6 µs · 9.8 µs | 8.7 µs · 10.6 µs |
+| 2026-09-02 15:14 | `424ec5a` (dirty) | 0.3.0 | 453 ns · 544 ns | 1.9 µs · 3.2 µs | 34.9 µs · 61.4 µs | 2.1 µs · 3.0 µs | 3.0 µs · 6.1 µs | 5.5 µs · 23.0 µs |
 
 ## go on linux-xeon-sandbox
 

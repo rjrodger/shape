@@ -137,6 +137,72 @@ the invalid input from 12.0 µs and 46 allocations to 5.2 µs and 26.
 - The hosted runners record these commits when **Measure** is dispatched
   after merge, and the report's History table shows the step per host.
 
+## Results, second round
+
+The interpreter-level items from "What is left" were done on 2026-09-02
+(code generation and typed validation were declined). Same host and
+protocol as above; before is main at `ea07e43` (the first round's code)
+measured with this round's benchmark files, so the `large` case has a
+before column too; after is the clean tree at `424ec5a`. The host's spread
+at one commit is wider than the 10% floor for Go, so the Go after column
+is the median of four runs, and the in-process benchmarks in
+`go/bench_test.go` are given beside it.
+
+| case | TS before | TS after | gain | Go before | Go after | gain | Go in-process (`Valid`, before → after) |
+| ---- | --------: | -------: | ---: | --------: | -------: | ---: | ------------------------------------ |
+| `flat` | 0.92 µs | 0.64 µs | 1.4× | 1.09 µs | 0.45 µs | 2.4× | 1.15 µs → 0.41 µs, 3 → 0 allocations |
+| `nested` | 1.67 µs | 1.52 µs | 1.1× | 2.27 µs | 1.87 µs | 1.2× | 2.8 µs → 1.8 µs |
+| `array` | 29.1 µs | 25.1 µs | 1.2× | 43.9 µs | 38.8 µs | 1.1× | – |
+| `bounds` | 1.90 µs | 1.55 µs | 1.2× | 2.21 µs | 1.59 µs | 1.4× | – |
+| `large` | 8.83 µs | 7.64 µs | 1.2× | 7.35 µs | 7.24 µs | 1.0× | 8.6 µs → 7.1 µs |
+| `invalid` | 3.92 µs | 2.99 µs | 1.3× | 7.68 µs | 2.96 µs | 2.6× | `Error` 5.2 µs → 4.1 µs |
+
+`Validate` in Go, which the harness does not time, gains the most from
+copying on write: `nested` 4.7 µs → 1.9 µs and `large` 13.0 µs → 8.0 µs
+in-process.
+
+### What this round did
+
+- **TypeScript, inline leaves.** A `String`, `Number`, `Boolean` or
+  `Integer` child with no befores or afters is checked in its parent's
+  loop and gets a frame only when it fails; the check is the kind's whole
+  check, empty-string, `NaN` and fraction rules included. An object takes
+  this for all of its children or none, because a custom validator on one
+  child may read its siblings' frames (the argument parser does), and a
+  validator attached after the compile keeps its frame. The elements of an
+  array with a child shape take it too. The closed-object extra-key list
+  is made only when there is an extra key, and an error's primitive value
+  is rendered as its JSON directly. A `--trace-deopt` run over the bench
+  cases showed a handful of deoptimisations of `exec` during warm-up and
+  none recurring, so the walk is not fighting the optimiser.
+- **Go, copy on write.** The producing walk uses the input as its result
+  until the first write that changes something (a default or null literal
+  injected, a key renamed or dropped, a child produced as a different
+  value) and copies then. An unchanged input comes back as itself; a
+  changed one is never touched. This is the one behaviour change of the
+  round: `Validate`'s result may share structure with its input, which the
+  Go README and the parity page now say.
+- **Go, deferred scan.** A closed object with no more keys than the spec
+  declares scans for unknown keys only when a declared key turned out
+  missing; the error still goes in ahead of the children's.
+- **Go, pooled context.** A schema with no validators anywhere runs its
+  calls (without a caller's `Context`) on a pooled context and scratch
+  block; no user code runs, so nothing can retain them.
+- **Benchmarks.** A `large` case of fifty generated keys, p95 beside the
+  median in the History table, and per-case comparability across runs so
+  adding a case does not cut the others' history.
+
+### What is left now
+
+TypeScript `flat` stands at about 7× Zod and Go `flat` at about 1.5×
+go-playground/validator on this host. The interpretive walk is close to
+its floor in both: what remains in TypeScript is the frame push and pop
+per non-leaf node and the `keys()` of every object for the extra-key scan;
+in Go, a hash lookup and an interface box per key of a `map[string]any`.
+The two moves that would change the tier, compiling a shape to a function
+in TypeScript and a struct-specialised walk in Go, were considered and
+declined for now.
+
 ## The rules that do not move
 
 Every step keeps the [parity contract](ts-go-parity.md): the shared corpus
