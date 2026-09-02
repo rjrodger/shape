@@ -25,8 +25,9 @@ Literal values are **optional with a default**; the wrapper constructors
 **required** type markers. Objects and arrays fill out and validate to any
 depth. There are no dependencies.
 
-This package defines the behaviour; the [Go port](../go/README.md) matches it
-exactly, held there by a [shared conformance corpus](../test/README.md) and a
+This package defines the behaviour; the [Go port](../go/README.md) and the
+[Rust port](../rs/README.md) match it exactly, held there by a
+[shared conformance corpus](../test/README.md) and a
 [differential harness](../test/differential/README.md). The full documentation
 is in [`../docs`](../docs/README.md); this file is the TypeScript surface in
 one place.
@@ -42,7 +43,7 @@ const { Shape, Min, Optional } = require('shape')   // CommonJS
 import { Shape, Min, Optional } from 'shape'         // ESM / TypeScript
 ```
 
-Node 22+ (24 in CI). Type declarations ship with the package. Bundlers pick up
+Node 24+. Type declarations ship with the package. Bundlers pick up
 the CommonJS build, with Node's `util` swapped for a stub by the `browser`
 field; a minified standalone bundle, `dist/shape.min.js`, exposes a global
 `Shape` for a plain script tag. See
@@ -55,8 +56,8 @@ const shape = Shape(spec, options?)
 
 shape(value, ctx?)         // the produced value, with defaults injected; throws on failure
 shape.match(value)         // boolean, no mutation
-shape.valid(value)         // boolean
-shape.error(value)         // ShapeError[] (empty when valid)
+shape.valid(value)         // boolean (a type guard in TypeScript)
+shape.error(value)         // the issues, [{ path, why, text, … }] (empty when valid)
 shape.spec()               // a JSON-friendly description of the compiled shape
 shape.node()               // the compiled root node
 shape.stringify()          // the shape as DSL-ish text
@@ -77,7 +78,7 @@ Every builder is a named export, a property of `Shape`, and — except `One`,
 `G`-prefixed aliases (`GMin`, `GPick`, …) avoid clashes with local names.
 
 ```js
-const { Shape, Required, Optional, Min, Max, Email, Coerce, One, Pick } = require('shape')
+const { Shape, Required, Optional, Min, Max, Email, Exact, Coerce, One, Open } = require('shape')
 
 Shape({
   name:  Min(1, String),                 // required, at least one character
@@ -122,14 +123,14 @@ Shape({
 })
 ```
 
-`expr(source)` compiles one expression, and `build(value)` expands every string
-leaf of a JSON structure:
+`expr(source)` compiles one expression into a node, and `build(value)` compiles
+a JSON structure whose string leaves are expressions, returning the shape:
 
 ```js
-const { expr, build } = require('shape')
+const { Shape, expr, build } = require('shape')
 
 Shape(expr('String.Min(2).Max(10)'))
-build({ name: 'Min(1,String)', tags: ['String'] })
+build({ name: 'Min(1,String)', tags: ['String'] })   // a compiled shape
 ```
 
 See [key and value expressions](../docs/how-to/use-key-and-value-expressions.md)
@@ -163,11 +164,11 @@ from this build:
 
 ```sh
 npm run build && node ../test/gen-compat.js    # regenerate the corpus
-make -C .. test                                # both languages must pass it
+make -C .. test                                # all three languages must pass it
 make -C .. diff                                # the differential harness
 ```
 
-A behaviour change starts here and is then mirrored in Go — see
+A behaviour change starts here and is then mirrored in Go and Rust — see
 [`../AGENTS.md`](../AGENTS.md).
 
 ## License
