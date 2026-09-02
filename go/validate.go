@@ -521,12 +521,12 @@ func validateObject(n *node, in any, path []string, pathArr []any, parent any, c
 		}
 	}
 
-	for _, k := range n.objKeys {
+	for i, k := range n.objKeys {
 		cn := n.objChildren[k]
 		v, has := obj[k]
 		var produced any
 		kpath := append(path, k)
-		kpathArr := append(pathArr, k)
+		kpathArr := append(pathArr, n.objKeysAny[i])
 
 		// Rename.claim: if the value is missing and claim source has it, pick up.
 		if !has && cn.renameTo != "" && len(cn.renameClaim) > 0 {

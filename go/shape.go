@@ -33,6 +33,10 @@ func prepare(n *node, defs map[string]*node) {
 			}
 		}
 		n.consumed = consumed
+		n.objKeysAny = make([]any, len(n.objKeys))
+		for i, k := range n.objKeys {
+			n.objKeysAny[i] = k
+		}
 	}
 	for _, cn := range n.objChildren {
 		prepare(cn, defs)
@@ -97,6 +101,7 @@ func (s *Schema) ValidateCtx(input any, ctx *Context) (any, error) {
 	c := newContext(ctx)
 	c.Match = false
 	c.defs = s.defs
+	path, pathArr := c.start()
 	verr := &ValidationError{}
 
 	var out any
@@ -104,9 +109,9 @@ func (s *Schema) ValidateCtx(input any, ctx *Context) (any, error) {
 		// Ignore at the root drops a value that does not validate, exactly as
 		// it does for an object property. Without this the failing value was
 		// handed back unchanged.
-		out, _ = validateIgnored(s.root, rootInput(input), rootPath(), rootPathArr(), "", nil, c, false)
+		out, _ = validateIgnored(s.root, rootInput(input), path, pathArr, "", nil, c, false)
 	} else {
-		out = validateNode(s.root, rootInput(input), rootPath(), rootPathArr(), "", nil, c, false, verr)
+		out = validateNode(s.root, rootInput(input), path, pathArr, "", nil, c, false, verr)
 	}
 
 	if ctx != nil {
@@ -127,8 +132,9 @@ func (s *Schema) Match(input any) bool {
 	c := newContext(nil)
 	c.Match = true
 	c.defs = s.defs
+	path, pathArr := c.start()
 	verr := &ValidationError{}
-	validateNode(s.root, rootInput(input), rootPath(), rootPathArr(), "", nil, c, true, verr)
+	validateNode(s.root, rootInput(input), path, pathArr, "", nil, c, true, verr)
 	return !verr.hasAny()
 }
 
@@ -145,8 +151,9 @@ func (s *Schema) Error(input any) []FieldError {
 	}
 	c := newContext(nil)
 	c.defs = s.defs
+	path, pathArr := c.start()
 	verr := &ValidationError{}
-	validateNode(s.root, rootInput(input), rootPath(), rootPathArr(), "", nil, c, false, verr)
+	validateNode(s.root, rootInput(input), path, pathArr, "", nil, c, false, verr)
 	return verr.Issues
 }
 
@@ -179,9 +186,3 @@ func IsShape(v any) bool {
 	_, ok := v.(*Schema)
 	return ok
 }
-
-// The path stacks start with room for a typical tree, so the per-key appends
-// down the walk allocate nothing until that depth. An error copies the path
-// it reports (see makeErr), so the shared backing array is never retained.
-func rootPath() []string { return make([]string, 0, 8) }
-func rootPathArr() []any { return make([]any, 0, 8) }

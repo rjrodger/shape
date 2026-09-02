@@ -27,6 +27,23 @@ func (c *Context) newState() *State {
 	return &c.states[len(c.states)-1]
 }
 
+// scratch is one allocation per call holding what a walk over a typical
+// tree needs: the path stacks, with room for the per-key appends, and the
+// first chunk of states.
+type scratch struct {
+	path    [8]string
+	pathArr [8]any
+	states  [8]State
+}
+
+// start readies a context for a call: the scratch space is fresh, so no
+// State or path from an earlier call is reused.
+func (c *Context) start() (path []string, pathArr []any) {
+	sc := &scratch{}
+	c.states = sc.states[:0]
+	return sc.path[:0], sc.pathArr[:0]
+}
+
 type renameInfo struct {
 	fromDflt bool
 	key      string
@@ -35,17 +52,12 @@ type renameInfo struct {
 }
 
 func newContext(in *Context) *Context {
+	// Refs is made when a Define first needs it (see builders.go).
 	if in == nil {
-		return &Context{
-			Custom: map[string]any{},
-			Refs:   map[string]*node{},
-		}
+		return &Context{Custom: map[string]any{}}
 	}
 	if in.Custom == nil {
 		in.Custom = map[string]any{}
-	}
-	if in.Refs == nil {
-		in.Refs = map[string]*node{}
 	}
 	return in
 }

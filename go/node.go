@@ -61,8 +61,11 @@ type node struct {
 	hasExact  bool
 
 	// The keys an object node accepts (its declared keys, rename targets and
-	// claim sources), computed once when the schema is compiled.
-	consumed map[string]bool
+	// claim sources), computed once when the schema is compiled, and the
+	// declared keys boxed once for the path array (boxing a string
+	// allocates, and it happened per key per call).
+	consumed   map[string]bool
+	objKeysAny []any
 
 	// Define / Refer name (also stored on validator closures via befores).
 	defineName string
