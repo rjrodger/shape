@@ -70,6 +70,9 @@ Background and design discussion.
   its time in each language, and what would make it faster.
 - [Performance plan](explanation/performance-plan.md) — the phases, targets
   and measurement protocol for making it faster.
+- [Rust implementation plan](explanation/rust-plan.md) — a third port in
+  `rs/`: the value type, the crate layout, how it joins the gates, and the
+  phases.
 
 ## Decision records
 
