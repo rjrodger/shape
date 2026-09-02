@@ -37,6 +37,14 @@ for (const c of cases) {
     rec.schema = 'ERR: ' + e.message
   }
 
+  // And the export of what the import reads back from that schema.
+  try {
+    rec.reimport = JSON.parse(JSON.stringify(Shape(S.fromJsonSchema(rec.schema)).jsonSchema()))
+  }
+  catch (e) {
+    rec.reimport = 'ERR: ' + e.message
+  }
+
   try {
     const out = schema(structuredClone(c.input))
     rec.ok = true

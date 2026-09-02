@@ -275,6 +275,9 @@ func decodeSpec(v any) any {
 				return MustExpr(es)
 			}
 		}
+		if jv, ok := obj["$jsonschema"]; ok {
+			return MustFromJSONSchema(jv)
+		}
 		if cv, ok := obj["$call"]; ok {
 			arr := cv.([]any)
 			args := make([]any, len(arr)-1)

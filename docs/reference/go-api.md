@@ -29,6 +29,13 @@ func (s *Schema) ValidateInto(input any, out any) error     // fill a struct wit
 
 `(*Node).JSONSchema()` renders a built node the same way.
 
+```go
+func FromJSONSchema(schema any) (any, error)   // a spec built from a JSON Schema (as decoded by encoding/json)
+func MustFromJSONSchema(schema any) any
+```
+
+See [Export and import a JSON Schema](../how-to/export-json-schema.md).
+
 ## Structs
 
 The validator works on JSON-shaped values (`map[string]any`, `[]any`,

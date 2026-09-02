@@ -2661,10 +2661,19 @@ const Func = bare<Function>()(function Func <V = Function>(this: any, shape?: No
 
 // Specify default value.
 const Default = function <D = any, V = D>(this: any, dval?: D, shape?: Node<V> | V): Node<V> {
-  let node = buildize(this, dval)
-
-  if (undefined !== shape) {
-    node = buildize(node, shape)
+  // The node is the shape's when one is given, so an object or array shape
+  // keeps its children and child shape; the default is only the value. An
+  // untyped shape (Required(), Exact(1)) is built over the default instead,
+  // and so takes the default's kind.
+  let node: Node<any>
+  if (undefined === shape) {
+    node = buildize(this, dval)
+  }
+  else if (S.any === nodize(shape).t) {
+    node = buildize(buildize(this, dval), shape)
+  }
+  else {
+    node = buildize(this, shape)
   }
 
   node.r = false
@@ -2676,10 +2685,6 @@ const Default = function <D = any, V = D>(this: any, dval?: D, shape?: Node<V> |
       node.t = ((dval as any).name.toLowerCase() as ValType)
       node.f = clone(EMPTY_VAL[node.t])
     }
-  }
-  else {
-    const sn = nodize(shape)
-    node.t = sn.t
   }
 
   // Always insert default.
@@ -4073,9 +4078,16 @@ function objectSchema(n: Node<any>, s: any, defs: any) {
   if (undefined === n.c) {
     s.additionalProperties = false
   }
-  else if (S.any !== nodize(n.c).t) {
+  else if (!isAnySchema(n.c)) {
     s.additionalProperties = nodeSchema(n.c, defs)
   }
+}
+
+
+// A child shape of Any says nothing, unless it stands for a reference.
+function isAnySchema(child: any): boolean {
+  const cn = nodize(child)
+  return S.any === cn.t && undefined === cn.b.find((v: any) => S.Refer === v.n)
 }
 
 
@@ -4086,10 +4098,16 @@ function arraySchema(n: Node<any>, s: any, defs: any) {
     .map((k: string) => nodeSchema(n.v[k], defs))
   // An element shape of Any says nothing, as an Any rest shape does not for
   // an object.
-  const child = undefined === n.c || S.any === nodize(n.c).t ? undefined : n.c
+  const child = undefined === n.c || isAnySchema(n.c) ? undefined : n.c
   if (0 < fixed.length) {
     s.prefixItems = fixed
-    s.items = undefined === child ? false : nodeSchema(child, defs)
+    // Nothing may follow a closed tuple; an Any rest says nothing.
+    if (undefined === n.c) {
+      s.items = false
+    }
+    else if (undefined !== child) {
+      s.items = nodeSchema(child, defs)
+    }
   }
   else if (undefined !== child) {
     s.items = nodeSchema(child, defs)
@@ -4268,6 +4286,450 @@ if (S.undefined !== typeof (window)) {
 }
 
 
+// JSON Schema import
+// ==================
+// Build a spec from a JSON Schema (draft 2020-12, and the common keywords of
+// earlier drafts), the inverse of the export above: a type becomes a token,
+// bounds become size builders, formats and patterns their builders, enum and
+// const become Exact, properties and items become objects and arrays, the
+// compositions become One, All and Discriminated, and a definition is inlined
+// where it is referenced — Define and Refer only where a definition refers to
+// itself. A property that is not required and has no default is Skip. Unknown
+// keywords are ignored; an unknown type or reference is an error. The Go port
+// builds the same spec, and the differential harness compares the export of
+// what each imports.
+
+const JSON_SCHEMA_KIND: any = {
+  string: 1, number: 1, integer: 1, boolean: 1, null: 1, object: 1, array: 1,
+}
+
+const JSON_SCHEMA_FORMAT_BUILDER: any = {
+  email: 'Email',
+  uri: 'Url',
+  uuid: 'Uuid',
+  'date-time': 'DateTime',
+  ipv4: 'Ipv4',
+  ipv6: 'Ipv6',
+}
+
+
+function fromJsonSchema(schema: any): any {
+  if (null == schema || S.object !== typeof schema || Array.isArray(schema)) {
+    throw new Error('JSON Schema: the schema must be an object')
+  }
+  const ctx = {
+    root: schema,
+    defs: schema.$defs || schema.definitions || {},
+    stack: [] as string[],
+    recursive: {} as any,
+  }
+  return importSchema(schema, ctx, '')
+}
+
+
+function jsonSchemaFault(msg: string, path: string): Error {
+  return new Error('JSON Schema: ' + msg + ' at ' + ('' === path ? '/' : path))
+}
+
+
+function importSchema(s: any, ctx: any, path: string): any {
+  if (true === s) {
+    return Any()
+  }
+  if (false === s) {
+    return Never()
+  }
+  if (null == s || S.object !== typeof s || Array.isArray(s)) {
+    throw jsonSchemaFault('a schema must be an object or boolean', path)
+  }
+
+  let spec: any
+  if (S.string === typeof s.$ref) {
+    spec = importRef(s.$ref, ctx, path)
+  }
+  else {
+    spec = importKeywords(s, ctx, path)
+  }
+
+  if (S.string === typeof s.description) {
+    spec = Describe(s.description, spec)
+  }
+  return spec
+}
+
+
+// A definition is inlined at each reference, so validation order cannot
+// matter; a definition that refers to itself is Defined at its outermost
+// expansion and Referred within.
+function importRef(ref: string, ctx: any, path: string): any {
+  let name: string
+  let def: any
+  const m = ref.match(/^#\/(\$defs|definitions)\/([^/]+)$/)
+  if (null != m) {
+    name = decodeURIComponent(m[2])
+    def = ctx.defs[name]
+    if (undefined === def) {
+      throw jsonSchemaFault('unknown $ref "' + ref + '"', path)
+    }
+  }
+  else if ('#' === ref) {
+    name = ''
+    def = ctx.root
+  }
+  else {
+    throw jsonSchemaFault('unsupported $ref "' + ref + '"', path)
+  }
+
+  const refname = '' === name ? '$root' : name
+  if (ctx.stack.includes(name)) {
+    ctx.recursive[name] = true
+    return Refer(refname)
+  }
+
+  ctx.stack.push(name)
+  const wasRecursive = ctx.recursive[name]
+  ctx.recursive[name] = false
+  const spec = importSchema(def, ctx, path)
+  const recursive = ctx.recursive[name]
+  ctx.recursive[name] = wasRecursive
+  ctx.stack.pop()
+
+  return recursive ? Define(refname, spec) : spec
+}
+
+
+function importKeywords(s: any, ctx: any, path: string): any {
+  let spec: any
+
+  if (undefined !== s.enum) {
+    if (!Array.isArray(s.enum) || 0 === s.enum.length) {
+      throw jsonSchemaFault('enum must be a non-empty array', path)
+    }
+    spec = Exact(...s.enum)
+  }
+  else if (undefined !== s.const) {
+    spec = Exact(s.const)
+  }
+  else if (undefined !== s.allOf) {
+    spec = All(...importBranches(s.allOf, ctx, path + '/allOf'))
+  }
+  else if (undefined !== s.oneOf) {
+    spec = importDiscriminated(importBranchList(s.oneOf, path + '/oneOf'), ctx, path + '/oneOf') ||
+      One(...importBranches(s.oneOf, ctx, path + '/oneOf'))
+  }
+  else if (undefined !== s.anyOf && !isIpFormats(s.anyOf)) {
+    spec = One(...importBranches(s.anyOf, ctx, path + '/anyOf'))
+  }
+  else if (undefined !== s.not && isEmptyObject(s.not)) {
+    spec = Never()
+  }
+  else {
+    spec = importTyped(s, ctx, path)
+  }
+
+  if (undefined !== s.default) {
+    spec = Default(s.default, spec)
+  }
+  return spec
+}
+
+
+function importBranchList(list: any, path: string): any[] {
+  if (!Array.isArray(list)) {
+    throw jsonSchemaFault(path.slice(path.lastIndexOf('/') + 1) + ' must be an array', path)
+  }
+  return list
+}
+
+
+function importBranches(list: any, ctx: any, path: string): any[] {
+  return importBranchList(list, path).map((b: any, i: number) => importSchema(b, ctx, path + '/' + i))
+}
+
+
+function isPlainObject(v: any): boolean {
+  return null != v && S.object === typeof v && !Array.isArray(v)
+}
+
+
+function isEmptyObject(v: any): boolean {
+  return isPlainObject(v) && 0 === keys(v).length
+}
+
+
+// The export's rendering of Ip: an anyOf of the two address formats.
+function isIpFormats(anyOf: any): boolean {
+  return Array.isArray(anyOf) && 2 === anyOf.length &&
+    anyOf.every((b: any) => null != b && S.object === typeof b && 1 === keys(b).length) &&
+    'ipv4' === anyOf[0].format && 'ipv6' === anyOf[1].format
+}
+
+
+function importTyped(s: any, ctx: any, path: string): any {
+  let types: any[] = Array.isArray(s.type) ? s.type : (undefined === s.type ? [] : [s.type])
+  const nullable = types.includes('null') && 1 < types.length
+  types = nullable ? types.filter((t: any) => 'null' !== t) : types
+
+  for (const t of types) {
+    if (S.string !== typeof t || undefined === JSON_SCHEMA_KIND[t]) {
+      throw jsonSchemaFault('unknown type "' + t + '"', path)
+    }
+  }
+
+  if (0 === types.length) {
+    // No type: the shape the keywords imply, or anything.
+    if (undefined !== s.properties || undefined !== s.additionalProperties || undefined !== s.required) {
+      types = ['object']
+    }
+    else if (undefined !== s.items || undefined !== s.prefixItems) {
+      types = ['array']
+    }
+    else {
+      return importUntyped(s, path)
+    }
+  }
+
+  let spec: any = 1 === types.length ?
+    importKind(types[0], s, ctx, path) :
+    One(...types.map((t: any) => importKind(t, s, ctx, path)))
+
+  return nullable ? Nullable(spec) : spec
+}
+
+
+function importKind(t: string, s: any, ctx: any, path: string): any {
+  if ('string' === t) {
+    return importString(s, path)
+  }
+  if ('number' === t || 'integer' === t) {
+    return importNumber('integer' === t ? Integer() : Number, s)
+  }
+  if ('boolean' === t) {
+    return Boolean
+  }
+  if ('null' === t) {
+    return Required(null)
+  }
+  if ('object' === t) {
+    return importObject(s, ctx, path)
+  }
+  return importArray(s, ctx, path)
+}
+
+
+// Keywords without a type: a pattern or format reads as a string, a bound
+// applies to whatever kind the value turns out to be (as a bare Min does),
+// and anything else says nothing.
+function importUntyped(s: any, path: string): any {
+  if (S.string === typeof s.pattern || undefined !== JSON_SCHEMA_FORMAT_BUILDER[s.format] || isIpFormats(s.anyOf)) {
+    return importString(s, path)
+  }
+  const view = {
+    minimum: firstNumber(s.minimum, s.minLength, s.minItems, s.minProperties),
+    maximum: firstNumber(s.maximum, s.maxLength, s.maxItems, s.maxProperties),
+    exclusiveMinimum: s.exclusiveMinimum,
+    exclusiveMaximum: s.exclusiveMaximum,
+  }
+  // A bare bound (Min(1)) rather than one on an Any node, as a user writes.
+  const spec = importNumber(undefined, view)
+  return undefined === spec ? Any() : spec
+}
+
+
+function firstNumber(...vals: any[]): number | undefined {
+  return vals.find((v: any) => S.number === typeof v)
+}
+
+
+function importString(s: any, path: string): any {
+  let spec: any
+  if (S.string === typeof s.pattern) {
+    try {
+      spec = new RegExp(s.pattern)
+    }
+    catch (e: any) {
+      throw jsonSchemaFault('bad pattern "' + s.pattern + '"', path)
+    }
+  }
+  else {
+    spec = String
+  }
+
+  const format = JSON_SCHEMA_FORMAT_BUILDER[s.format]
+  if (undefined !== format) {
+    // Called bare: a builder invoked as a method takes its receiver as the
+    // shape to extend.
+    const build = (BuilderMap as any)[format]
+    spec = build(spec)
+  }
+  else if (Array.isArray(s.anyOf) && isIpFormats(s.anyOf)) {
+    spec = Ip(spec)
+  }
+  else if (String === spec && !(0 < s.minLength)) {
+    // A string with no lower bound is allowed to be empty; a pattern or
+    // format decides for itself.
+    spec = Empty(spec)
+  }
+
+  if (S.number === typeof s.minLength && 1 < s.minLength) {
+    spec = Min(s.minLength, spec)
+  }
+  if (S.number === typeof s.maxLength) {
+    spec = Max(s.maxLength, spec)
+  }
+  return spec
+}
+
+
+function importNumber(spec: any, s: any): any {
+  if (S.number === typeof s.exclusiveMinimum) {
+    spec = Above(s.exclusiveMinimum, spec)
+  }
+  else if (S.number === typeof s.minimum) {
+    spec = true === s.exclusiveMinimum ? Above(s.minimum, spec) : Min(s.minimum, spec)
+  }
+  if (S.number === typeof s.exclusiveMaximum) {
+    spec = Below(s.exclusiveMaximum, spec)
+  }
+  else if (S.number === typeof s.maximum) {
+    spec = true === s.exclusiveMaximum ? Below(s.maximum, spec) : Max(s.maximum, spec)
+  }
+  return spec
+}
+
+
+function importObject(s: any, ctx: any, path: string): any {
+  if (undefined !== s.properties && !isPlainObject(s.properties)) {
+    throw jsonSchemaFault('properties must be an object', path + '/properties')
+  }
+  const props: any = s.properties || {}
+  const required: string[] = Array.isArray(s.required) ? s.required : []
+  const obj: any = {}
+  for (const k of keys(props)) {
+    ownprop(obj, k, importProperty(props[k], required.includes(k), ctx, path + '/properties/' + k))
+  }
+  // A required name with no property schema must still be present.
+  for (const k of required) {
+    if (S.string === typeof k && undefined === obj[k]) {
+      ownprop(obj, k, Required())
+    }
+  }
+
+  let spec: any
+  if (false === s.additionalProperties) {
+    spec = 0 === keys(obj).length ? Closed(obj) : obj
+  }
+  else if (undefined === s.additionalProperties || true === s.additionalProperties) {
+    spec = Open(obj)
+  }
+  else {
+    spec = Child(importSchema(s.additionalProperties, ctx, path + '/additionalProperties'), obj)
+  }
+
+  if (S.number === typeof s.minProperties) {
+    spec = Min(s.minProperties, spec)
+  }
+  if (S.number === typeof s.maxProperties) {
+    spec = Max(s.maxProperties, spec)
+  }
+  return spec
+}
+
+
+// A property is required when listed, has its default when given, and is
+// otherwise Skip: absent stays absent.
+function importProperty(ps: any, required: boolean, ctx: any, path: string): any {
+  const spec = importSchema(ps, ctx, path)
+  if (null != ps && S.object === typeof ps && undefined !== ps.default) {
+    return spec
+  }
+  return required ? Required(spec) : Skip(spec)
+}
+
+
+function importArray(s: any, ctx: any, path: string): any {
+  if (undefined !== s.prefixItems && !Array.isArray(s.prefixItems)) {
+    throw jsonSchemaFault('prefixItems must be an array', path + '/prefixItems')
+  }
+  let spec: any
+  if (undefined !== s.prefixItems) {
+    // Closed makes a one-element list a tuple rather than an element shape;
+    // items says what may follow (anything, when it is absent or true).
+    const tuple = Closed(s.prefixItems.map((e: any, i: number) => importSchema(e, ctx, path + '/prefixItems/' + i)))
+    if (false === s.items) {
+      spec = tuple
+    }
+    else if (undefined === s.items || true === s.items) {
+      spec = Rest(Any(), tuple)
+    }
+    else {
+      spec = Rest(importSchema(s.items, ctx, path + '/items'), tuple)
+    }
+  }
+  else if (undefined === s.items || true === s.items) {
+    spec = []
+  }
+  else {
+    spec = [importSchema(s.items, ctx, path + '/items')]
+  }
+
+  if (S.number === typeof s.minItems) {
+    spec = Min(s.minItems, spec)
+  }
+  if (S.number === typeof s.maxItems) {
+    spec = Max(s.maxItems, spec)
+  }
+  return spec
+}
+
+
+// A oneOf of objects that each require one property with a distinct string
+// const is a discriminated union on that property.
+function importDiscriminated(branches: any[], ctx: any, path: string): any {
+  if (0 === branches.length) {
+    return undefined
+  }
+  let tag: string | undefined
+  const tags: string[] = []
+  for (const b of branches) {
+    if (null == b || S.object !== typeof b || null == b.properties || !Array.isArray(b.required)) {
+      return undefined
+    }
+    // Candidates in name order, so both implementations pick the same tag.
+    const found = keys(b.properties).sort().filter((k: string) =>
+      null != b.properties[k] && S.string === typeof b.properties[k].const && b.required.includes(k))
+    if (undefined === tag) {
+      tag = found.find((k: string) =>
+        branches.every((o: any) => null != o && null != o.properties && null != o.properties[k] &&
+          S.string === typeof o.properties[k].const))
+      if (undefined === tag) {
+        return undefined
+      }
+    }
+    const t = b.properties[tag].const
+    if (tags.includes(t)) {
+      return undefined
+    }
+    tags.push(t)
+  }
+
+  const out: any = {}
+  for (let bI = 0; bI < branches.length; bI++) {
+    const b = branches[bI]
+    const props: any = {}
+    for (const k of keys(b.properties)) {
+      if (k !== tag) {
+        ownprop(props, k, b.properties[k])
+      }
+    }
+    const required = b.required.filter((k: string) => k !== tag)
+    out[tags[bI]] = importObject({ ...b, properties: props, required }, ctx, path + '/' + bI)
+  }
+  return Discriminated(tag as string, out)
+}
+
+
+
 Object.assign(shapify, {
   Shape: shapify,
 
@@ -4285,6 +4747,7 @@ Object.assign(shapify, {
   makeErr,
   stringify,
   jsonSchema,
+  fromJsonSchema,
   truncate,
   nodize,
   expr,
@@ -4313,6 +4776,7 @@ type Shape = typeof shapify & typeof BuilderMap & {
   makeErr: typeof makeErr,
   stringify: typeof stringify,
   jsonSchema: typeof jsonSchema,
+  fromJsonSchema: typeof fromJsonSchema,
   truncate: typeof truncate,
   nodize: typeof nodize,
   expr: typeof expr,
@@ -4535,6 +4999,7 @@ export {
   expr,
   MakeArgu,
   build,
+  fromJsonSchema,
 
   Above,
   After,

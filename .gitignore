@@ -34,3 +34,6 @@ yarn.lock
 
 # differential harness scratch output
 test/differential/.out/
+
+# go test binaries (-cpuprofile and friends)
+go/*.test

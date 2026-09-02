@@ -23,12 +23,13 @@ type diffCase struct {
 }
 
 type diffResult struct {
-	Name   string `json:"name"`
-	Build  string `json:"build,omitempty"`
-	Schema any    `json:"schema,omitempty"`
-	OK     *bool  `json:"ok,omitempty"`
-	Out    any    `json:"out,omitempty"`
-	Err    string `json:"err,omitempty"`
+	Name     string `json:"name"`
+	Build    string `json:"build,omitempty"`
+	Schema   any    `json:"schema,omitempty"`
+	Reimport any    `json:"reimport,omitempty"`
+	OK       *bool  `json:"ok,omitempty"`
+	Out      any    `json:"out,omitempty"`
+	Err      string `json:"err,omitempty"`
 }
 
 func TestDifferential(t *testing.T) {
@@ -80,8 +81,10 @@ func runDiffCase(c diffCase) (res diffResult) {
 		return
 	}
 
-	// The JSON Schema export is compared too, once per case.
+	// The JSON Schema export is compared too, once per case, and the export
+	// of what the import reads back from it.
 	res.Schema = jsonNorm(s.JSONSchema())
+	res.Reimport = reimportSchema(res.Schema)
 
 	// A JSON null is a value that is present and null. Go reads a plain nil as
 	// "no value supplied", so hand the sentinel over instead.
@@ -100,4 +103,23 @@ func runDiffCase(c diffCase) (res diffResult) {
 	yes := true
 	res.OK, res.Out = &yes, jsonNorm(out)
 	return
+}
+
+// reimportSchema exports the shape the import builds from a schema, or the
+// import error.
+func reimportSchema(schema any) (out any) {
+	defer func() {
+		if r := recover(); r != nil {
+			out = "PANIC: " + fmt.Sprint(r)
+		}
+	}()
+	spec, err := FromJSONSchema(schema)
+	if err != nil {
+		return "ERR: " + err.Error()
+	}
+	s, err := Shape(spec)
+	if err != nil {
+		return "ERR: " + err.Error()
+	}
+	return jsonNorm(s.JSONSchema())
 }

@@ -137,6 +137,7 @@ issues   := s.Error(input)             // []FieldError, nil when valid
 spec     := s.Spec()                   // structural snapshot of the compiled schema
 str      := s.String()                 // debug rendering
 schema   := s.JSONSchema()             // a JSON Schema (draft 2020-12), as map[string]any
+spec, _  := shape.FromJSONSchema(doc)  // and back: a spec built from a JSON Schema
 err      := s.ValidateInto(input, &out) // validate, then decode the result into a struct
 ```
 

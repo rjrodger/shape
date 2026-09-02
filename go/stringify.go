@@ -37,14 +37,16 @@ func stringifyNode(n *node, inline bool) string {
 	case KindNaN:
 		return "NaN"
 	case KindAny:
+		// The Any token carries a nil default, which is no default at all:
+		// TS renders Any() as "Any".
 		base := "Any"
-		if n.hasDefault {
+		if n.hasDefault && n.defaultValue != nil {
 			base = fmt.Sprintf("Any(%v)", n.defaultValue)
 		}
 		out := suffix(base, n)
 		// A node with no asserted type exists only to carry its builders, and
 		// renders as that chain alone — TS shows "Min(2)", not "Any.Min(2)".
-		if !n.hasDefault && strings.HasPrefix(out, "Any.") {
+		if base == "Any" && strings.HasPrefix(out, "Any.") {
 			return out[len("Any."):]
 		}
 		return out

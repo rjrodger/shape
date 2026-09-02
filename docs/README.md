@@ -42,7 +42,7 @@ Goal-oriented recipes for a task you already have.
 - [Use key and value expressions](how-to/use-key-and-value-expressions.md)
 - [Use the string DSL (`expr` / `build`)](how-to/use-the-string-dsl.md)
 - [Use Shape as a Standard Schema](how-to/use-as-standard-schema.md)
-- [Export a JSON Schema](how-to/export-json-schema.md)
+- [Export and import a JSON Schema](how-to/export-json-schema.md)
 - [Use Shape in Go](how-to/use-shape-in-go.md)
 - [Use Shape in the browser](how-to/use-shape-in-the-browser.md)
 
@@ -66,6 +66,8 @@ Background and design discussion.
   mutation, traversal, required/optional semantics.
 - [TypeScript ↔ Go parity](explanation/ts-go-parity.md) — the parity contract,
   the shared conformance corpus, and known divergences.
+- [Performance review](explanation/performance.md) — where validation spends
+  its time in each language, and what would make it faster.
 
 ## Decision records
 
