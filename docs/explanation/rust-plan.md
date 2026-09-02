@@ -173,7 +173,7 @@ Nothing new is invented here; each gate grows a third runner.
 | ---- | ----- | --------- |
 | corpus | `ts/test/compat.test.ts`, `go/compat_tsv_test.go` | `rs/tests/compat_tsv.rs`, run by `cargo test` |
 | differential | `run-ts.js`, `go/difftool_test.go` (JSONL in, JSONL out) | `rs/tests/difftool.rs` with the same `DIFF_IN`/`DIFF_OUT` contract; `compare.js` diffs Go and Rust against TypeScript |
-| coverage | 100% lines (TS), 100% statements (Go) | 100% lines by `cargo llvm-cov --fail-under-lines 100` |
+| coverage | 100% lines (TS), 100% statements (Go) | 100% lines by `cargo llvm-cov`, read from its lcov export (`rs/cover.sh`), which merges the unit-test and corpus binaries |
 | style | `gofmt` | `cargo fmt --check`, `cargo clippy -- -D warnings` |
 | Makefile | `build-go`, `test-go`, `diff` | `build-rs`, `test-rs`, `diff-rs`; `build`, `test`, `diff` include them |
 | CI | `go-build-and-test` on three OSes, `parity` | `rust-build-and-test` on the same three, stable toolchain; `parity` runs `diff-rs` |

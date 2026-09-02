@@ -1,4 +1,4 @@
-.PHONY: all build test clean build-ts build-go test-ts test-go clean-ts clean-go diff diff-full bench bench-ts bench-go bench-smoke bench-report publish publish-npm publish-go publish-dry publish-npm-dry publish-go-dry tags-npm tags-go reset
+.PHONY: all build test clean build-ts build-go build-rs test-ts test-go test-rs lint-rs cover-rs clean-ts clean-go clean-rs diff diff-full bench bench-ts bench-go bench-smoke bench-report publish publish-npm publish-go publish-dry publish-npm-dry publish-go-dry tags-npm tags-go reset
 
 # Never run recipes concurrently: publish-npm and publish-go both mutate the
 # worktree and index (bump, commit, tag, push), so `make -j publish` must serialize.
@@ -6,11 +6,11 @@
 
 all: build test
 
-build: build-ts build-go
+build: build-ts build-go build-rs
 
-test: test-ts test-go
+test: test-ts test-go test-rs
 
-clean: clean-ts clean-go
+clean: clean-ts clean-go clean-rs
 
 # TypeScript (package lives in ts/)
 build-ts:
@@ -31,6 +31,25 @@ test-go:
 
 clean-go:
 	cd go && go clean
+
+# Rust (crate lives in rs/). `test-rs` runs the unit tests, the doc tests and
+# the shared corpus; `lint-rs` is what CI holds the crate to; `cover-rs` needs
+# cargo-llvm-cov (`cargo install cargo-llvm-cov`) and fails under 100% lines
+# (see rs/cover.sh for why it reads the lcov export).
+build-rs:
+	cd rs && cargo build --all-features
+
+test-rs:
+	cd rs && cargo test --all-features
+
+lint-rs:
+	cd rs && cargo fmt --check && cargo clippy --all-targets --all-features -- -D warnings
+
+cover-rs:
+	rs/cover.sh
+
+clean-rs:
+	cd rs && cargo clean
 
 # Differential parity harness: run a large generated case matrix through BOTH
 # implementations and diff verdict, produced value and EXACT error text. The

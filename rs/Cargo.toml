@@ -1,0 +1,27 @@
+[package]
+name = "shape"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.75"
+description = "Schema by example: validate and complete values against a spec written as an example of the value. The Rust port of shape."
+license = "MIT"
+repository = "https://github.com/rjrodger/shape"
+readme = "README.md"
+keywords = ["validation", "schema", "json", "shape"]
+categories = ["data-structures", "parsing"]
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+indexmap = "2"
+regex = "1"
+num-bigint = "0.4"
+serde_json = { version = "1", features = ["preserve_order"], optional = true }
+
+[dev-dependencies]
+serde_json = { version = "1", features = ["preserve_order"] }
+
+[features]
+default = ["serde"]
+serde = ["dep:serde_json"]
