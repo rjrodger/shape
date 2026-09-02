@@ -148,6 +148,26 @@ function markdown(summary) {
     }
     lines.push('')
   }
+
+  // The history per language and host: shape's median on every case, one
+  // row per run, so a before-and-after comparison reads off this file.
+  lines.push('# History', '', 'Shape\'s median per case on every run, newest last; only runs against the same cases as the latest run are listed.', '')
+  for (const k of Object.keys(byLangHost).sort()) {
+    const [lang, hostId] = k.split('/')
+    const hash = byLangHost[k][0].input_hash
+    const rows = summary.history.filter((h) => h.lang === lang && h.host === hostId && h.lib === 'shape' && h.input_hash === hash)
+    const runs = uniq(rows.map((r) => r.run))
+    if (runs.length < 1) continue
+    lines.push(`## ${lang} on ${summary.hosts[hostId].label || hostId}`, '')
+    lines.push('| run | commit | shape | ' + summary.cases.join(' | ') + ' |')
+    lines.push('|---|---|---|' + summary.cases.map(() => '---:').join('|') + '|')
+    for (const run of runs) {
+      const first = rows.find((r) => r.run === run)
+      const cells = summary.cases.map((c) => { const r = rows.find((x) => x.run === run && x.case === c); return r ? fmt(r.median_ns) : '–' })
+      lines.push(`| ${first.at.slice(0, 16).replace('T', ' ')} | \`${first.commit.slice(0, 7)}\`${first.dirty ? ' (dirty)' : ''} | ${first.version} | ${cells.join(' | ')} |`)
+    }
+    lines.push('')
+  }
   return lines.join('\n')
 }
 

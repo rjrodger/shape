@@ -41,11 +41,14 @@ the regexp, the `Set` and the `keys()` calls run every time. A closed object
 also builds an `extra` array of the value's keys not in the spec, whether or
 not there are any.
 
-Second, **`valid()` produces a value**. It runs the same walk as calling the
-shape, cloning the input into a fresh result with defaults injected, and then
-throws the result away; only `match()` runs in the cheaper mode that skips
-the copy. A caller asking a yes-or-no question pays for the answer's
-structure.
+Second, **every call pays the same setup**. `valid()`, `match()`, `error()`
+and the producing call cost the same within a few percent (3.5–3.7 µs on
+`flat`): the boolean calls run the producing walk on the input itself
+(`valid` injects defaults into it, by design), and match mode saves only the
+writes. What the profile attributes to `valid`'s inlined prologue, about
+20%, is the per-call construction of the `State` with its five stacks, the
+`ctx.skip` sets built whether or not `ctx.skip` is present, and the error
+array plumbing.
 
 Third, the walk carries **more state per node than it reads**: five parallel
 stacks indexed by the same counters, a path array rewritten at every depth,
@@ -63,26 +66,29 @@ and `ancestors`. Each `next()` touches all of them.
    rest, because a compiled node can carry whatever the walk needs. Expected:
    2–3× on `flat` and `nested`.
 
-2. **Make `valid()` and `error()` use match mode.** `valid` is `match`; the
-   produced value is never returned. `error()` needs the messages but not the
-   copy, so match mode with error collection on. Expected: the 20 % of
-   `valid` and the allocation of the result, so 1.3–1.5× on the boolean API
-   that most benchmarks (and most request handlers) call.
+2. **Trim the per-call setup.** Allocate the walk's frames lazily and reuse
+   the arrays across calls, build the `ctx.skip` sets only when `ctx.skip`
+   is given, and keep the error plumbing off the path until an error is
+   recorded. `valid()` keeps its contract of injecting defaults into the
+   input. Expected: about 1.2× on every call.
 
-3. **Skip the extra-key scan for open objects and short-circuit it for closed
-   ones.** With a compiled known-key set, a closed object needs one pass over
-   the value's keys that stops at the first unknown; an open object without
-   a child shape needs none.
+3. **Skip the extra-key scan for open objects.** A closed object must still
+   collect every unknown key, since the message names them all, but with a
+   compiled known-key lookup that is one pass; an open object without a
+   child shape needs no scan at all.
 
 4. **Collapse the parallel stacks into one array of frames** (node, value,
-   parent, key) pushed and popped together, and drop the `Object.isFrozen`
-   probe in favour of a single check at the root. Fewer loads per `next()`
-   and one allocation per level instead of five writes.
+   parent, key) pushed and popped together, with `state.path` built from the
+   frames on demand, since `Key` and custom validators read it on successful
+   walks. Keep the frozen-parent handling on the producing path (a frozen
+   nested object must still be copied before its children are written) but
+   check it once per object parent rather than at every node.
 
 5. **Specialise the leaf kinds.** A required `String`, `Number` or `Boolean`
    with no builders is the common case; a compiled node can carry a `fast`
-   flag so the walk checks `typeof` and moves on without entering the
-   generic before/after loop.
+   flag so the walk performs the leaf's whole check (`typeof`, and the
+   non-empty, non-`NaN` and integer rules the corpus pins) without entering
+   the generic before/after loop.
 
 Together these are the difference between the current numbers and the
 Zod/Valibot tier; Ajv's code generation is a further step (compile the tree
@@ -125,19 +131,25 @@ tree with no definitions at all.
    reference rather than rebuilding it, and the 4 % walk disappears.
 
 3. **Build paths lazily.** Pass the parent and key down and materialise the
-   `[]string` path only when an error is recorded, which is the rare case.
-   That is two allocations per property saved on every valid input.
+   `[]string` path from that chain when a validator or an error asks for it,
+   which keeps `State.Path` correct for custom validators and `Key` while
+   saving two allocations per property on every input that never asks.
 
 4. **Allocate `unknown` only on the first unknown key**, and skip the scan
    for open objects without a child shape, as in TypeScript.
 
-5. **Reuse the `Context` and `ValidationError`** across calls with a
-   `sync.Pool`, or let `Valid` keep a small stack-allocated error counter
-   instead of an issues slice.
+5. **Reuse the `Context` and scratch state** of `Match` and `Valid` across
+   calls with a `sync.Pool`, or let `Valid` keep a small stack-allocated
+   error counter instead of an issues slice. The `*ValidationError` that
+   `Validate` returns and the `Issues` that `Error` returns escape to the
+   caller and must never be pooled.
 
 6. **Pre-size `out`** (`make(map[string]any, len(obj)+defaults)`) on the
    producing path, where the copy is genuinely needed, so the map does not
    grow in steps.
+
+The [performance plan](performance-plan.md) turns these into phases with
+targets and a measurement protocol.
 
 ## Keeping parity while doing this
 
