@@ -56,5 +56,63 @@
    "sample_points": 128
   },
   "cases": 19
+ },
+ {
+  "id": "20260902T082434Z-e39798b4ebbc-ts",
+  "at": "2026-09-02T08:24:34.482Z",
+  "lang": "ts",
+  "host": "e39798b4ebbc",
+  "commit": "5085fc0eb60e1cd37af311043050180240e1bb49",
+  "dirty": false,
+  "ref": "claude/pr-13-handover-comment-or1izw",
+  "runtime": {
+   "node": "v22.22.2",
+   "v8": "12.4.254.21-node.39"
+  },
+  "versions": {
+   "shape": "11.1.0",
+   "zod": "4.5.4",
+   "ajv": "8.20.0",
+   "joi": "18.2.5",
+   "valibot": "1.4.2"
+  },
+  "input_hash": "64dd85eab212",
+  "policy": {
+   "warmup_ms": 300,
+   "time_ms": 2000,
+   "batch_ms": 1,
+   "min_batches": 10,
+   "sample_points": 128
+  },
+  "cases": 25
+ },
+ {
+  "id": "20260902T082521Z-e39798b4ebbc-go",
+  "at": "2026-09-02T08:25:21.312Z",
+  "lang": "go",
+  "host": "e39798b4ebbc",
+  "commit": "5085fc0eb60e1cd37af311043050180240e1bb49",
+  "dirty": false,
+  "ref": "claude/pr-13-handover-comment-or1izw",
+  "runtime": {
+   "go": "go1.25.0",
+   "goarch": "amd64",
+   "goos": "linux"
+  },
+  "versions": {
+   "gojsonschema": "1.2.0",
+   "jsonschema": "6.0.3",
+   "shape": "0.3.0",
+   "validator": "10.30.3"
+  },
+  "input_hash": "64dd85eab212",
+  "policy": {
+   "warmup_ms": 300,
+   "time_ms": 2000,
+   "batch_ms": 1,
+   "min_batches": 10,
+   "sample_points": 128
+  },
+  "cases": 19
  }
 ]

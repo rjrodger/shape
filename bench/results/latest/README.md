@@ -1,6 +1,6 @@
 # Latest measurements
 
-Generated 2026-09-02T08:06:39.697Z from 2 run(s). Times are median nanoseconds per operation; lower is better.
+Generated 2026-09-02T08:25:21.321Z from 4 run(s). Times are median nanoseconds per operation; lower is better.
 
 ## go on linux-xeon-sandbox
 
@@ -8,11 +8,11 @@ Host `e39798b4ebbc`: Intel(R) Xeon(R) Processor @ 2.80GHz, 4 cores, linux/x64. L
 
 | case | shape | validator | jsonschema | gojsonschema | shape / fastest |
 |---|---:|---:|---:|---:|---:|
-| flat | 3.0 µs | 470 ns | 2.8 µs | 8.8 µs | 6.4× |
-| nested | 8.6 µs | 1.5 µs | 6.2 µs | 13.5 µs | 5.7× |
-| array | 106.6 µs | 21.1 µs | 101.9 µs | 307.7 µs | 5.1× |
-| bounds | 4.3 µs | 946 ns | 4.7 µs | 9.1 µs | 4.5× |
-| invalid | 11.6 µs | – | 5.4 µs | 17.1 µs | 2.1× |
+| flat | 3.3 µs | 475 ns | 2.5 µs | 8.8 µs | 6.9× |
+| nested | 7.5 µs | 1.4 µs | 5.7 µs | 12.7 µs | 5.2× |
+| array | 112.2 µs | 20.7 µs | 92.7 µs | 263.4 µs | 5.4× |
+| bounds | 2.9 µs | 930 ns | 4.3 µs | 8.1 µs | 3.2× |
+| invalid | 11.4 µs | – | 4.6 µs | 16.6 µs | 2.5× |
 
 ## ts on linux-xeon-sandbox
 
@@ -20,8 +20,8 @@ Host `e39798b4ebbc`: Intel(R) Xeon(R) Processor @ 2.80GHz, 4 cores, linux/x64. L
 
 | case | shape | zod | ajv | joi | valibot | shape / fastest |
 |---|---:|---:|---:|---:|---:|---:|
-| flat | 3.5 µs | 146 ns | 43 ns | 2.6 µs | 835 ns | 79.6× |
-| nested | 6.4 µs | 429 ns | 102 ns | 8.4 µs | 1.8 µs | 63.3× |
-| array | 105.8 µs | 6.7 µs | 1.4 µs | 118.5 µs | 28.3 µs | 74.8× |
-| bounds | 4.0 µs | 1.1 µs | 117 ns | 3.8 µs | 1.1 µs | 34.1× |
-| invalid | 8.5 µs | 3.9 µs | 79 ns | 3.4 µs | 2.6 µs | 108.1× |
+| flat | 3.5 µs | 138 ns | 44 ns | 2.7 µs | 810 ns | 78.6× |
+| nested | 6.7 µs | 438 ns | 100 ns | 8.4 µs | 1.6 µs | 67.7× |
+| array | 110.0 µs | 6.6 µs | 1.4 µs | 148.1 µs | 36.4 µs | 77.1× |
+| bounds | 5.1 µs | 1.4 µs | 148 ns | 4.6 µs | 1.4 µs | 34.8× |
+| invalid | 10.9 µs | 4.7 µs | 93 ns | 4.0 µs | 3.3 µs | 117.3× |

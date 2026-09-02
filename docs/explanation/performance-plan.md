@@ -11,16 +11,17 @@ step is judged against it with the same harness.
 ## Where we start
 
 Median time per validation at the baseline, on the reference host (a 4-core
-Xeon, Linux) — the hosted runners record the same cases and the report shows
-them side by side:
+Xeon, Linux; runs `20260902T082434Z-e39798b4ebbc-ts` and
+`20260902T082521Z-e39798b4ebbc-go` under `bench/results/runs/`) — the hosted
+runners record the same cases and the report shows them side by side:
 
-| case     | shape TS | fastest TS (Ajv) | Zod    | shape Go | fastest Go (validator) |
-| -------- | -------: | ---------------: | -----: | -------: | ---------------------: |
-| `flat`   | 3.5 µs   | 44 ns            | 155 ns | 3.1 µs   | 460 ns                 |
-| `nested` | 7.0 µs   | 101 ns           | 436 ns | 7.1 µs   | 1.5 µs                 |
-| `array`  | 114 µs   | 1.4 µs           | 7.1 µs | 123 µs   | 20 µs                  |
-| `bounds` | 4.0 µs   | 120 ns           | 1.1 µs | 3.3 µs   | 920 ns                 |
-| `invalid`| 8.3 µs   | 81 ns            | 3.7 µs | 11.5 µs  | –                      |
+| case      | shape TS | fastest TS (Ajv) | Zod    | shape Go | fastest Go (validator) |
+| --------- | -------: | ---------------: | -----: | -------: | ---------------------: |
+| `flat`    | 3.5 µs   | 44 ns            | 138 ns | 3.3 µs   | 475 ns                 |
+| `nested`  | 6.7 µs   | 100 ns           | 438 ns | 7.5 µs   | 1.4 µs                 |
+| `array`   | 110 µs   | 1.4 µs           | 6.6 µs | 112 µs   | 20.7 µs                |
+| `bounds`  | 5.1 µs   | 148 ns           | 1.4 µs | 2.9 µs   | 930 ns                 |
+| `invalid` | 10.9 µs  | 93 ns            | 4.7 µs | 11.4 µs  | –                      |
 
 ## Targets
 
@@ -30,13 +31,13 @@ review measured at most of each call. That puts the realistic targets in the
 Valibot tier for TypeScript and within a small factor of go-playground/validator
 for Go:
 
-| case     | TS target | from    | Go target (`Valid`) | from    |
-| -------- | --------: | ------: | ------------------: | ------: |
-| `flat`   | ≤ 0.8 µs  | 3.5 µs  | ≤ 1.0 µs            | 3.1 µs  |
-| `nested` | ≤ 1.8 µs  | 7.0 µs  | ≤ 2.5 µs            | 7.1 µs  |
-| `array`  | ≤ 25 µs   | 114 µs  | ≤ 40 µs             | 123 µs  |
-| `bounds` | ≤ 1.2 µs  | 4.0 µs  | ≤ 1.2 µs            | 3.3 µs  |
-| `invalid`| ≤ 3.0 µs  | 8.3 µs  | ≤ 4.0 µs            | 11.5 µs |
+| case      | TS target | from    | Go target (`Valid`) | from    |
+| --------- | --------: | ------: | ------------------: | ------: |
+| `flat`    | ≤ 0.8 µs  | 3.5 µs  | ≤ 1.0 µs            | 3.3 µs  |
+| `nested`  | ≤ 1.8 µs  | 6.7 µs  | ≤ 2.5 µs            | 7.5 µs  |
+| `array`   | ≤ 25 µs   | 110 µs  | ≤ 40 µs             | 112 µs  |
+| `bounds`  | ≤ 1.2 µs  | 5.1 µs  | ≤ 1.2 µs            | 2.9 µs  |
+| `invalid` | ≤ 3.0 µs  | 10.9 µs | ≤ 4.0 µs            | 11.4 µs |
 
 That is a 4–5× improvement on the boolean path in both languages, and the
 producing path (the shape called for its value) should gain 2–3× from the
@@ -154,7 +155,7 @@ conclusion from them.
 | 1 | TS compile once | 3.5 → ~1.4 µs |
 | 2 | TS boolean path | ~1.4 → ~1.0 µs |
 | 3 | TS walk | ~1.0 → ~0.7 µs |
-| 4 | Go: no-copy match, defines once, lazy paths, pooling | 3.1 → ~1.0 µs |
+| 4 | Go: no-copy match, defines once, lazy paths, pooling | 3.3 → ~1.0 µs |
 | 5 | Decide on code generation with the numbers from 1–4 | – |
 
 Each is independent enough to ship and measure on its own, and each leaves
