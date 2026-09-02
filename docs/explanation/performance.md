@@ -139,6 +139,9 @@ tree with no definitions at all.
    producing path, where the copy is genuinely needed, so the map does not
    grow in steps.
 
+The [performance plan](performance-plan.md) turns these into phases with
+targets and a measurement protocol.
+
 ## Keeping parity while doing this
 
 Every item above changes how the walk is done, not what it accepts, produces

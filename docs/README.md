@@ -68,6 +68,8 @@ Background and design discussion.
   the shared conformance corpus, and known divergences.
 - [Performance review](explanation/performance.md) — where validation spends
   its time in each language, and what would make it faster.
+- [Performance plan](explanation/performance-plan.md) — the phases, targets
+  and measurement protocol for making it faster.
 
 ## Decision records
 
