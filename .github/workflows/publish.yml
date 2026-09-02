@@ -1,12 +1,13 @@
 name: Publish
 
-# Publishes the npm package and tags the Go module. Run by hand from the
-# Actions tab (or `gh workflow run publish.yml`).
+# Publishes the npm package, tags the Go module and publishes the Rust
+# crate. Run by hand from the Actions tab (or `gh workflow run publish.yml`).
 #
-# npm needs no token: the job publishes with OpenID Connect trusted
-# publishing, so npmjs.com must list this repository and workflow as a
-# trusted publisher of the `shape` package. The Go module is published by
-# pushing its tag; proxy.golang.org picks it up from there.
+# npm and crates.io need no token: the job publishes with OpenID Connect
+# trusted publishing, so npmjs.com must list this repository and workflow as
+# a trusted publisher of the `shape` package, and crates.io the same for the
+# `shape-schema` crate. The Go module is published by pushing its tag;
+# proxy.golang.org picks it up from there.
 #
 # Each input is a version bump (`patch`, `minor`, `major`), an explicit
 # `x.y.z`, `current` to publish the version already in the tree, or `skip`.
@@ -27,6 +28,10 @@ on:
         description: 'Go (const Version in go/shape.go): patch | minor | major | x.y.z | current | skip'
         required: true
         default: current
+      rust:
+        description: 'Rust (version in rs/Cargo.toml): patch | minor | major | x.y.z | current | skip'
+        required: true
+        default: current
 
 permissions:
   contents: write
@@ -43,6 +48,7 @@ jobs:
     env:
       NPM_INPUT: ${{ inputs.npm }}
       GO_INPUT: ${{ inputs.go }}
+      RUST_INPUT: ${{ inputs.rust }}
 
     steps:
       - name: Only main is released
@@ -65,10 +71,12 @@ jobs:
           go-version: 1.22.x
           cache: false
 
+      - uses: dtolnay/rust-toolchain@stable
+
       # Trusted publishing needs npm 11.5.1 or later.
       - run: npm install -g npm@latest && npm --version
 
-      - name: Build and test both languages
+      - name: Build and test every language
         run: |
           cd ts && npm install && cd ..
           make build test
@@ -143,3 +151,52 @@ jobs:
           GOPROXY=https://proxy.golang.org GOFLAGS=-mod=mod go list -m "github.com/rjrodger/shape/go@v$V" || true
         env:
           GH_TOKEN: ${{ github.token }}
+
+      # crates.io trusted publishing: the action exchanges the job's OIDC
+      # token for a short-lived registry token, so crates.io must list this
+      # repository and workflow for the crate.
+      - uses: rust-lang/crates-io-auth-action@v1
+        if: inputs.rust != 'skip'
+        id: crates-auth
+
+      - name: Publish Rust
+        if: inputs.rust != 'skip'
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.crates-auth.outputs.token }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          CUR=$(sed -n '0,/^version = "\(.*\)"/s//\1/p' rs/Cargo.toml)
+          CRATE=$(sed -n '0,/^name = "\(.*\)"/s//\1/p' rs/Cargo.toml)
+          case "$RUST_INPUT" in
+            current) V="$CUR" ;;
+            patch|minor|major)
+              V=$(node -e "
+                const v = '$CUR'.split('.').map(Number)
+                const i = { major: 0, minor: 1, patch: 2 }['$RUST_INPUT']
+                v[i]++; for (let j = i + 1; j < 3; j++) v[j] = 0
+                console.log(v.join('.'))") ;;
+            *) V="$RUST_INPUT" ;;
+          esac
+          if ! [[ "$V" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "rust: '$V' is not an x.y.z version" >&2; exit 1
+          fi
+          if git rev-parse -q --verify "refs/tags/rs/v$V" >/dev/null && [ "$CUR" != "$V" ]; then
+            echo "rs/v$V is already tagged, but rs/Cargo.toml says $CUR" >&2; exit 1
+          fi
+          echo "Publishing rs/v$V ($CRATE)"
+          sed -i "0,/^version = \".*\"/s//version = \"$V\"/" rs/Cargo.toml
+          (cd rs && cargo update -p "$CRATE" --offline >/dev/null 2>&1 || true)
+          git add rs/Cargo.toml rs/Cargo.lock
+          git diff --cached --quiet || git commit -m "rs: v$V"
+          git rev-parse -q --verify "refs/tags/rs/v$V" >/dev/null || git tag "rs/v$V"
+          # A version already on the registry is a run that failed after
+          # publishing: finish its push and release rather than publish again.
+          if cargo search "$CRATE" --limit 1 | grep -q "^$CRATE = \"$V\""; then
+            echo "$CRATE $V is already on crates.io; completing the release"
+          else
+            (cd rs && cargo publish --all-features)
+          fi
+          git push origin HEAD:main "rs/v$V"
+          gh release view "rs/v$V" >/dev/null 2>&1 ||
+            gh release create "rs/v$V" --title "rs/v$V" --notes "Rust crate release v$V ($CRATE)"

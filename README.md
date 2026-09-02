@@ -11,7 +11,7 @@
 A schema validator in the tradition of [Joi](https://joi.dev) or
 [JSON-Schema](https://json-schema.org/), but with a much nicer developer
 experience. It runs in JavaScript and TypeScript — in the browser and on the
-backend — and in [Go](go/README.md).
+backend — in [Go](go/README.md) and in [Rust](rs/README.md).
 
 > **The big idea: your schema looks (almost) exactly like your data.**
 
@@ -43,6 +43,21 @@ out, _ := s.Validate(map[string]any{"debug": true})
 // out == map[string]any{"port": 8080, "host": "localhost", "debug": true}
 ```
 
+And in Rust:
+
+```rust
+use shape::{shape, Schema, Value};
+
+let s = Schema::new(shape!({
+    "port": 8080,
+    "host": "localhost",
+    "debug": Boolean,
+}));
+
+let out = s.validate(Value::from(serde_json::json!({ "debug": true })))?;
+// out == { "debug": true, "port": 8080, "host": "localhost" }
+```
+
 Literal values are **optional with a default**; type markers (`String`,
 `Number`, `Boolean`, …) are **required**. Objects and arrays fill out and
 validate to any depth.
@@ -52,6 +67,7 @@ validate to any depth.
 ```sh
 npm install shape                       # JavaScript / TypeScript
 go get github.com/rjrodger/shape/go     # Go (1.22+)
+cargo add shape-schema                  # Rust (1.75+)
 ```
 
 ## Documentation
@@ -63,7 +79,7 @@ a [performance report](https://rjrodger.github.io/shape/perf/) comparing
 shape to other validators across hosts and versions:
 
 - **[Getting started](docs/tutorials/getting-started.md)** — build your first
-  shape, step by step (TS and Go).
+  shape, step by step (TS and Go; Rust in its [how-to](docs/how-to/use-shape-in-rust.md)).
 - **How-to guides** — [validate options](docs/how-to/validate-options-with-defaults.md),
   [require fields](docs/how-to/require-fields.md),
   [objects](docs/how-to/validate-objects.md),
@@ -79,10 +95,11 @@ shape to other validators across hosts and versions:
   [errors](docs/reference/errors.md),
   [nodes](docs/reference/nodes.md),
   [TypeScript types](docs/reference/typescript-types.md),
-  [Go API](docs/reference/go-api.md).
+  [Go API](docs/reference/go-api.md),
+  [Rust API](docs/reference/rust-api.md).
 - **Explanation** — [schema by example](docs/explanation/schema-by-example.md),
   [how validation works](docs/explanation/how-validation-works.md),
-  [TS ↔ Go parity](docs/explanation/ts-go-parity.md).
+  [TS ↔ Go ↔ Rust parity](docs/explanation/ts-go-parity.md).
 
 ## Highlights
 
@@ -100,13 +117,14 @@ shape to other validators across hosts and versions:
 - JSON Schema export and import (draft 2020-12) and Standard Schema V1 interop.
 - A compact string DSL (`expr` / `build`) and inline key expressions.
 - Detailed, path-aware error messages.
-- TypeScript and Go implementations kept at behavioural parity by a
-  [shared conformance corpus](test/README.md).
+- TypeScript, Go and Rust implementations kept at behavioural parity by a
+  [shared conformance corpus](test/README.md) and a differential harness.
 - Full TypeScript inference of the produced type through every builder, and
   Go structs accepted as values and as specs.
 - [Benchmarks](bench/README.md) against Zod, Ajv, Joi and Valibot
-  (TypeScript) and validator, jsonschema and gojsonschema (Go), recorded
-  from several hosts on the [performance report](https://rjrodger.github.io/shape/perf/).
+  (TypeScript), validator, jsonschema and gojsonschema (Go), and garde,
+  validator and jsonschema (Rust), recorded from several hosts on the
+  [performance report](https://rjrodger.github.io/shape/perf/).
 
 ## Repository layout
 
@@ -114,6 +132,7 @@ shape to other validators across hosts and versions:
 | ----------- | -------- |
 | `ts/`       | Canonical TypeScript implementation and tests. See [`ts/README.md`](ts/README.md). |
 | `go/`       | Go port and tests. See [`go/README.md`](go/README.md). |
+| `rs/`       | Rust port and tests. See [`rs/README.md`](rs/README.md). |
 | `docs/`     | Diátaxis documentation. |
 | `test/`     | Shared, language-neutral conformance corpus. |
 | `bench/`    | Benchmarks against other validators and the recorded runs. See [`bench/README.md`](bench/README.md). |
@@ -124,8 +143,9 @@ shape to other validators across hosts and versions:
 
 `make build` builds both languages; `make test` runs both test suites (including
 the shared corpus); `make diff` runs the differential parity harness, which puts
-thousands of generated cases through both and compares exact error text.
-TypeScript is canonical — behaviour changes start there and are mirrored in Go.
+thousands of generated cases through all three and compares exact error text.
+TypeScript is canonical — behaviour changes start there and are mirrored in Go
+and Rust.
 See **[AGENTS.md](AGENTS.md)**.
 
 ## Credits

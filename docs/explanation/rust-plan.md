@@ -178,7 +178,7 @@ Nothing new is invented here; each gate grows a third runner.
 | Makefile | `build-go`, `test-go`, `diff` | `build-rs`, `test-rs`, `diff-rs`; `build`, `test`, `diff` include them |
 | CI | `go-build-and-test` on three OSes, `parity` | `rust-build-and-test` on the same three, stable toolchain; `parity` runs `diff-rs` |
 | bench | `bench/go` (a binary printing the run document) | `bench/rs`, same protocol, against `garde`/`validator` and the `jsonschema` crate; the report and site take a third language |
-| publish | npm by OIDC, Go by tag | crates.io by trusted publishing (OIDC), version in `Cargo.toml`, tag `rs/vX.Y.Z`; a `rust` input on the Publish workflow |
+| publish | npm by OIDC, Go by tag | crates.io by trusted publishing (OIDC), version in `Cargo.toml`, tag `rs/vX.Y.Z`; a `rust` input on the Publish workflow. The package is `shape-schema` (crates.io already had a `shape`); the library is `shape` |
 | docs | `docs/reference/go-api.md`, `use-shape-in-go.md` | `rust-api.md`, `use-shape-in-rust.md`; the parity page becomes the ports page with a column per language |
 
 `compare.js` already compares error text exactly, for Go as for Rust, and

@@ -37,3 +37,7 @@ test/differential/.out/
 
 # go test binaries (-cpuprofile and friends)
 go/*.test
+
+# Rust build output
+rs/target/
+bench/rs/target/

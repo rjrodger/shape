@@ -21,7 +21,7 @@
     return
   }
 
-  const LANG = { ts: 'TypeScript', go: 'Go' }
+  const LANG = { ts: 'TypeScript', go: 'Go', rs: 'Rust' }
   const hosts = Object.values(data.hosts).sort((a, b) => (b.last < a.last ? -1 : 1))
   const state = { host: hosts[0].id, trend: data.cases[0] }
 

@@ -1,4 +1,4 @@
-.PHONY: all build test clean build-ts build-go build-rs test-ts test-go test-rs lint-rs cover-rs clean-ts clean-go clean-rs diff diff-full diff-rs diff-cases diff-run-go diff-run-rs bench bench-ts bench-go bench-smoke bench-report publish publish-npm publish-go publish-dry publish-npm-dry publish-go-dry tags-npm tags-go reset
+.PHONY: all build test clean build-ts build-go build-rs test-ts test-go test-rs lint-rs cover-rs clean-ts clean-go clean-rs diff diff-full diff-rs diff-cases diff-run-go diff-run-rs bench bench-ts bench-go bench-rs bench-smoke bench-report publish publish-npm publish-go publish-dry publish-npm-dry publish-go-dry publish-rs-dry tags-npm tags-go tags-rs reset
 
 # Never run recipes concurrently: publish-npm and publish-go both mutate the
 # worktree and index (bump, commit, tag, push), so `make -j publish` must serialize.
@@ -105,6 +105,9 @@ bench-ts: build-ts
 bench-go:
 	node bench/run.js go
 
+bench-rs:
+	node bench/run.js rs
+
 bench-smoke: build-ts
 	@test -d bench/ts/node_modules || (cd bench/ts && npm install --no-audit --no-fund)
 	BENCH_QUICK=1 node bench/run.js all --dry >/dev/null
@@ -117,6 +120,9 @@ tags-npm:
 
 tags-go:
 	git tag -l 'go/v*' --sort=-version:refname
+
+tags-rs:
+	git tag -l 'rs/v*' --sort=-version:refname
 
 # Publish both npm and Go with patch version bumps. Runs full build+test for
 # both languages first so a failure in either aborts before any release has
@@ -162,7 +168,7 @@ publish-go: test-go
 # Note: the build-ts / test-ts / test-go prerequisites may regenerate tracked
 # ts/dist artifacts if sources have changed since the last build — that is the
 # same rebuild publish itself would do.
-publish-dry: publish-npm-dry publish-go-dry
+publish-dry: publish-npm-dry publish-go-dry publish-rs-dry
 
 publish-npm-dry: build-ts test-ts
 	@V=$${V:-$$(node -p "const v=require('./ts/package.json').version.split('.'); v[2]=+v[2]+1; v.join('.')")}; \
@@ -189,3 +195,8 @@ reset:
 	cd go && go clean -cache
 	cd go && go build ./...
 	cd go && go test -v ./...
+
+# The crate is published by the Publish workflow with crates.io trusted
+# publishing; locally, only the packaging can be checked.
+publish-rs-dry: test-rs
+	cd rs && cargo publish --dry-run --all-features

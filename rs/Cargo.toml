@@ -1,17 +1,24 @@
 [package]
-name = "shape"
+# crates.io already has an unrelated `shape`; the package is shape-schema and
+# the library is still `shape`, so `use shape::…` reads as the docs say.
+name = "shape-schema"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.75"
-description = "Schema by example: validate and complete values against a spec written as an example of the value. The Rust port of shape."
+description = "Schema-by-example validation: your schema looks like your data. The Rust port of shape, held to the canonical TypeScript by a shared corpus."
 license = "MIT"
 repository = "https://github.com/rjrodger/shape"
+homepage = "https://rjrodger.github.io/shape/"
+documentation = "https://docs.rs/shape"
 readme = "README.md"
-keywords = ["validation", "schema", "json", "shape"]
-categories = ["data-structures", "parsing"]
+keywords = ["validation", "schema", "json", "validator", "json-schema"]
+categories = ["data-structures", "parsing", "encoding"]
+# The corpus and differential tests read ../test at run time; the package
+# carries only the crate.
+include = ["src/**", "Cargo.toml", "README.md", "cover.sh"]
 
 [lib]
-path = "src/lib.rs"
+name = "shape"
 
 [dependencies]
 indexmap = "2"

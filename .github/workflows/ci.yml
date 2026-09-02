@@ -146,5 +146,7 @@ jobs:
           go-version-file: bench/go/go.mod
           cache: false
 
+      - uses: dtolnay/rust-toolchain@stable
+
       - run: cd ts && npm install
       - run: make bench-smoke

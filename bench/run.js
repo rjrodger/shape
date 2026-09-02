@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 'use strict'
 
-// The benchmark driver: runs the TypeScript and Go benchmarks, wraps each
+// The benchmark driver: runs the TypeScript, Go and Rust benchmarks, wraps each
 // result with the host, source and timing metadata, and files it as an
 // immutable run under bench/results/runs/. Then rebuilds bench/results/latest.
 //
-//   node bench/run.js [ts|go|all] [--dry] [--out DIR]
+//   node bench/run.js [ts|go|rs|all] [--dry] [--out DIR]
 //
 // --dry prints the run documents instead of writing them. Timing is set by
 // BENCH_QUICK=1 (a smoke run), BENCH_WARMUP_MS and BENCH_TIME_MS; the host
@@ -18,13 +18,13 @@ const { ROOT, host, gitSource, runId } = require('./lib/harness.js')
 const report = require('./lib/report.js')
 
 function main(argv) {
-  let langs = ['ts', 'go']
+  let langs = ['ts', 'go', 'rs']
   let dry = false
   let out = path.join(ROOT, 'results')
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]
-    if (a === 'ts' || a === 'go') langs = [a]
-    else if (a === 'all') langs = ['ts', 'go']
+    if (a === 'ts' || a === 'go' || a === 'rs') langs = [a]
+    else if (a === 'all') langs = ['ts', 'go', 'rs']
     else if (a === '--dry') dry = true
     else if (a === '--out') out = path.resolve(argv[++i])
     else {
@@ -76,9 +76,15 @@ function run(lang) {
       throw new Error('bench/ts has no node_modules: run `npm install` in bench/ts (after building ts/)')
     }
     res = spawnSync(process.execPath, ['bench.js'], { cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'], maxBuffer: 64 << 20 })
-  } else {
+  } else if (lang === 'go') {
     const dir = path.join(ROOT, 'go')
     res = spawnSync('go', ['run', '.', '-cases', path.join(ROOT, 'cases.json')], { cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'], maxBuffer: 64 << 20 })
+  } else {
+    // A release build, quietly: cargo's own progress goes to stderr.
+    const dir = path.join(ROOT, 'rs')
+    const rustc = spawnSync('rustc', ['--version'], { encoding: 'utf8' })
+    const env = { ...process.env, SHAPE_BENCH_RUSTC: (rustc.stdout || '').trim() || 'unknown' }
+    res = spawnSync('cargo', ['run', '--release', '--quiet', '--', '--cases', path.join(ROOT, 'cases.json')], { cwd: dir, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'], maxBuffer: 64 << 20 })
   }
   if (res.error) throw res.error
   if (res.status !== 0) throw new Error(`${lang} benchmark exited with ${res.status}`)
