@@ -53,6 +53,30 @@ Validate `map[string]any`, `[]any`, `string`, `bool` and numeric values —
 typically the result of `json.Unmarshal`. Numbers compare as `float64`. Typed
 slices are accepted and coerced to `[]any`.
 
+## Structs
+
+A struct (or pointer to one) is accepted wherever an object is, read by its
+`json` tags as `encoding/json` would encode it: `json:"-"` hides a field,
+`omitempty` makes a zero value absent, embedded structs are promoted. The
+produced value is still a map; `ValidateInto` decodes it back into a struct.
+
+```go
+type User struct {
+    Name string `json:"name"`
+    Age  int    `json:"age,omitempty"`
+}
+s := shape.MustShape(map[string]any{"name": shape.String, "age": 42})
+
+var u User
+if err := s.ValidateInto(User{Name: "Ann"}, &u); err != nil { ... }
+// u == User{Name: "Ann", Age: 42}
+```
+
+A struct can also *be* the spec: each field's value is its default and a
+`shape` tag holds a key expression, so `Port int` tagged `shape:"Min(1).Max(65535)"`
+means what the map key `"Port: Min(1).Max(65535)"` means. See
+[Structs](../reference/go-api.md#structs) in the API reference.
+
 ## Numbers
 
 `shape.Number` accepts every numeric kind. There is no single "number" type in

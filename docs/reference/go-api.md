@@ -24,9 +24,60 @@ func (s *Schema) Spec() any                                 // JSON-friendly
 func (s *Schema) Node() *node                               // introspection
 func (s *Schema) String() string                            // debug render
 func (s *Schema) JSONSchema() map[string]any                // JSON Schema, draft 2020-12
+func (s *Schema) ValidateInto(input any, out any) error     // fill a struct with the result
 ```
 
 `(*Node).JSONSchema()` renders a built node the same way.
+
+## Structs
+
+The validator works on JSON-shaped values (`map[string]any`, `[]any`,
+strings, numbers, booleans); structs are read into that model on the way in
+and filled from the produced value on the way out. A struct and the map it
+reads as validate identically, so nothing here affects parity with
+TypeScript.
+
+**As a value.** Any struct, or pointer to one, is accepted where an object
+is. A field is named by its `json` tag or its own name; `json:"-"` hides it;
+`json:",omitempty"` makes a zero value *absent* (so a default fills it, or a
+required check fires) instead of present; an embedded struct's fields are
+promoted, as `encoding/json` promotes them; unexported fields are not read.
+Nested structs, pointers (a nil pointer is a present `null`), slices, arrays
+and string-keyed maps of any value type are converted recursively;
+`time.Time` is kept as a date. `ValidateInto` validates and then decodes the
+produced value into `out` (a pointer to a struct, or anything `encoding/json`
+can decode into) in one step.
+
+```go
+type User struct {
+    Name string `json:"name"`
+    Age  int    `json:"age,omitempty"`
+}
+s := shape.MustShape(map[string]any{"name": shape.String, "age": 42})
+
+out, err := s.Validate(User{Name: "Ann"})   // map[string]any{"name":"Ann","age":42}
+var u User
+err = s.ValidateInto(map[string]any{"name": "Ann"}, &u)   // u.Age == 42
+```
+
+**As a spec.** A struct value is also a spec by example, as a map is: each
+field's value is its default, and a `shape` tag holds a
+[key expression](../how-to/use-the-string-dsl.md) applied to it, exactly as
+`"Port: Min(1).Max(65535)"` would in a map key. Field names follow the same
+`json` tag rules (`omitempty` is ignored, since a spec field is a default
+whether or not it is zero).
+
+```go
+type Config struct {
+    Host  string `shape:"Min(1)"`            // non-empty string, default ""
+    Port  int    `shape:"Min(1).Max(65535)"` // default 0 — so set one below
+    Debug bool   `shape:"Boolean"`           // required
+    Name  string `json:"name" shape:"String"`
+}
+s := shape.MustShape(Config{Host: "localhost", Port: 8080})
+// reads as {"Host: Min(1)": "localhost", "Port: Min(1).Max(65535)": 8080,
+//           "Debug: Boolean": false, "name: String": ""}
+```
 
 ## Tokens
 

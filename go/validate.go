@@ -425,7 +425,9 @@ func validateArray(n *node, in any, path []string, pathArr []any, parent any, ct
 }
 
 func validateObject(n *node, in any, path []string, pathArr []any, parent any, ctx *Context, match bool, verr *ValidationError) any {
-	obj, ok := in.(map[string]any)
+	// A struct, or a map of some other value type, reads as the map it
+	// describes (see structs.go).
+	obj, ok := objectValue(in)
 	if !ok {
 		state := &State{Path: path, PathArr: pathArr, Value: in, Node: n, Parent: parent, Match: match, Ctx: ctx}
 		emitTypeErr(state, verr, n)

@@ -79,6 +79,27 @@ Go maps are unordered, so an object's keys are processed in **alphabetical**
 order: that fixes the order of multiple errors and how an object value is
 rendered inside a message. The produced value is unaffected.
 
+### Structs
+
+A struct, or pointer to one, is accepted wherever an object is: it is read by
+its `json` tags (`-` hides, `omitempty` makes a zero value absent, embedded
+structs are promoted) into the map model, so it validates exactly as the map
+it encodes to. `ValidateInto` decodes the produced value back into a struct.
+A struct is also a spec by example, its fields the defaults and its `shape`
+tags the key expressions:
+
+```go
+type Config struct {
+    Host  string `shape:"Min(1)"`
+    Port  int    `shape:"Min(1).Max(65535)"`
+    Debug bool   `shape:"Boolean"` // required
+}
+s := shape.MustShape(Config{Host: "localhost", Port: 8080})
+
+var c Config
+err := s.ValidateInto(map[string]any{"Debug": true}, &c) // c.Port == 8080
+```
+
 ### Arrays
 
 A single-element array is treated as "every element matches this shape":
@@ -116,6 +137,7 @@ issues   := s.Error(input)             // []FieldError, nil when valid
 spec     := s.Spec()                   // structural snapshot of the compiled schema
 str      := s.String()                 // debug rendering
 schema   := s.JSONSchema()             // a JSON Schema (draft 2020-12), as map[string]any
+err      := s.ValidateInto(input, &out) // validate, then decode the result into a struct
 ```
 
 Validation returns a new value; the input map is not mutated. Injected defaults

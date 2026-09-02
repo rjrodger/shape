@@ -72,6 +72,12 @@ func normalizeWith(spec any, opts ShapeOptions) (*node, error) {
 		return normalizeObject(v, opts)
 	}
 
+	// A struct is a spec by example, its fields the defaults and its `shape`
+	// tags the key expressions (see structs.go).
+	if m, ok := structSpec(spec); ok {
+		return normalizeObject(m, opts)
+	}
+
 	return nil, fmt.Errorf("unsupported schema value type %T", spec)
 }
 
