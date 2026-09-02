@@ -3815,9 +3815,13 @@ function makeErrImpl(
         propkey.join(', ')) :
       propkey
 
+    // A property that is not there is named, not rendered: nothing is
+    // there to render, and "the property is missing" says what happened.
+    const missing = S.required === why && undefined === s.val && 0 < err.path.length
+
     err.text = `Validation failed for ` +
-      (0 < err.path.length ? `${propkind} "${err.path}" with ` : '') +
-      `${valkind} "${valstr}" because ` +
+      (0 < err.path.length ? `${propkind} "${err.path}"` + (missing ? ' ' : ' with ') : '') +
+      (missing ? '' : `${valkind} "${valstr}" `) + `because ` +
 
       (
         S.type === why ?
@@ -3829,10 +3833,13 @@ function makeErrImpl(
           :
           S.required === why ?
             (
-              '' === s.val ?
-                'an empty string is not allowed'
+              missing ?
+                `the ${'index' === propkind ? 'element' : 'property'} is missing`
                 :
-                `the ${valkind} is required`
+                '' === s.val ?
+                  'an empty string is not allowed'
+                  :
+                  `the ${valkind} is required`
             )
             :
             'closed' === why ?

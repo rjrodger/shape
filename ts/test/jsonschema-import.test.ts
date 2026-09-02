@@ -112,7 +112,7 @@ describe('jsonschema-import', () => {
     throws(() => shape({ name: 'a', age: 1.5 }), /not of type integer/)
     throws(() => shape({ name: 'a', addr: { zip: '1' } }), /did not match/)
     throws(() => shape({ name: 'a', addr: { zip: '12345', x: 1 } }), /property "x" is not allowed/)
-    throws(() => shape({}), /property "name".*required/)
+    throws(() => shape({}), /property "name".*missing/)
     throws(() => shape({ name: 'a', tags: [1] }), /tags\.0/)
   })
 
@@ -129,7 +129,7 @@ describe('jsonschema-import', () => {
     deepEqual(v({ properties: { a: { type: 'number' } } }, { a: 1, b: 2 }), { a: 1, b: 2 })
     deepEqual(v({ items: { type: 'number' } }, [1]), [1])
     deepEqual(v({ required: ['a'] }, { a: 1 }), { a: 1 })
-    throws(() => v({ required: ['a'] }, {}), /required/)
+    throws(() => v({ required: ['a'] }, {}), /missing/)
 
     // Boolean schemas.
     deepEqual(v({ type: 'object', properties: { a: true } }, { a: 1 }), { a: 1 })

@@ -4,12 +4,12 @@ null-literal-default-injected	{"a":null}	{}	{"a":null}
 null-dsl-default-injected	{"a":{"$expr":"null"}}	{}	{"a":null}	
 null-under-bound-absent	{"a":{"$expr":"Min(2,null)"}}	{}	{"a":null}	
 null-skip-absent	{"a":{"$expr":"Skip(null)"}}	{}	{}	
-null-required-absent	{"a":{"$expr":"Required(null)"}}	{}		"Validation failed for property \"a\" with value \"undefined\" because the value is required."
+null-required-absent	{"a":{"$expr":"Required(null)"}}	{}		"Validation failed for property \"a\" because the property is missing."
 func-builder-is-optional	{"n":{"$expr":"Func"}}	{}	{}	
-func-token-is-required	{"n":{"$type":"Function"}}	{}		"Validation failed for property \"n\" with value \"undefined\" because the value is required."
+func-token-is-required	{"n":{"$type":"Function"}}	{}		"Validation failed for property \"n\" because the property is missing."
 nan-literal-default-injected	{"h":{"$expr":"NaN"}}	{}	{"h":null}	
 nan-under-bound-absent	{"h":{"$expr":"Min(2,NaN)"}}	{}	{"h":null}	
-nan-required-absent	{"h":{"$expr":"Required(NaN)"}}	{}		"Validation failed for property \"h\" with value \"undefined\" because the value is required."
+nan-required-absent	{"h":{"$expr":"Required(NaN)"}}	{}		"Validation failed for property \"h\" because the property is missing."
 nested-path	{"user":{"addr":{"zip":{"$type":"Number"}}}}	{"user":{"addr":{"zip":"x"}}}		"Validation failed for property \"user.addr.zip\" with string \"x\" because the string is not of type number."
 key-parent	{"a":{"b":{"$expr":"Key"}}}	{"a":{"b":"V"}}	{"a":{"b":"a"}}	
 key-depth-dsl	{"a":{"b":{"$expr":"Key(1)"}}}	{"a":{"b":"V"}}	{"a":{"b":["a"]}}	

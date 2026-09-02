@@ -199,6 +199,14 @@ func defaultErrText(e FieldError) string {
 		return "Validation failed for " + pathPart + valkind + " \"" + valstr +
 			"\" because the " + valkind + " is not of type " + string(e.Type) + "."
 	case WhyRequired:
+		// A property that is not there is named, not rendered.
+		if e.absent && e.Path != "" {
+			noun := "property"
+			if propkind == "index" {
+				noun = "element"
+			}
+			return "Validation failed for " + propkind + " \"" + e.Path + "\" because the " + noun + " is missing."
+		}
 		if e.Value == "" || e.Value == nil {
 			emptyTxt := "the value is required"
 			if e.Value == "" {

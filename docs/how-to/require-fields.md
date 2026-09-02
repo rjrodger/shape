@@ -31,7 +31,7 @@ shape.MustShape(map[string]any{
 })
 ```
 
-A missing required field fails with `… the value is required`.
+A missing required field fails with `… because the property is missing`.
 
 ## Require a shape that already has a builder
 

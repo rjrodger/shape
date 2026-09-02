@@ -292,13 +292,13 @@ func TestStructSpec(t *testing.T) {
 		"Empty": "",
 	})
 	mustErr(t, s, map[string]any{"name": "n"},
-		`Validation failed for property "Debug" with value "undefined" because the value is required.`)
+		`Validation failed for property "Debug" because the property is missing.`)
 	mustErr(t, s, map[string]any{"Debug": true, "name": "n", "Port": 70000},
 		`Value "70000" for property "Port" must be a maximum of 65535 (was 70000).`)
 	mustErr(t, s, map[string]any{"Debug": true, "name": "n", "Host": ""},
 		`Value "" for property "Host" must be a minimum length of 1 (was 0).`)
 	mustErr(t, s, map[string]any{"Debug": true},
-		`Validation failed for property "name" with value "undefined" because the value is required.`)
+		`Validation failed for property "name" because the property is missing.`)
 
 	// A struct spec validates a struct value of the same type.
 	got = mustOK(t, s, config{Host: "h", Port: 1, Debug: true, Name: "z"})

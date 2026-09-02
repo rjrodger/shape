@@ -33,7 +33,7 @@ func mustErr(t *testing.T, s *Schema, in any, want string) {
 
 func TestChainedMethods(t *testing.T) {
 	// Required / Optional
-	mustErr(t, MustShape(map[string]any{"a": buildize(Number).Required()}), map[string]any{}, "required")
+	mustErr(t, MustShape(map[string]any{"a": buildize(Number).Required()}), map[string]any{}, "is missing")
 	mustOK(t, MustShape(map[string]any{"a": buildize(String).Optional()}), map[string]any{})
 
 	// Open / Closed (chained)
@@ -96,9 +96,9 @@ func TestChainedMethods(t *testing.T) {
 
 func TestGAliasesFull(t *testing.T) {
 	// Token aliases.
-	mustErr(t, MustShape(map[string]any{"a": GString}), map[string]any{}, "required")
-	mustErr(t, MustShape(map[string]any{"a": GNumber}), map[string]any{}, "required")
-	mustErr(t, MustShape(map[string]any{"a": GBoolean}), map[string]any{}, "required")
+	mustErr(t, MustShape(map[string]any{"a": GString}), map[string]any{}, "is missing")
+	mustErr(t, MustShape(map[string]any{"a": GNumber}), map[string]any{}, "is missing")
+	mustErr(t, MustShape(map[string]any{"a": GBoolean}), map[string]any{}, "is missing")
 	mustOK(t, MustShape(map[string]any{"a": GAny}), map[string]any{"a": 1.0})
 	mustErr(t, MustShape(GObject), "notobj", "type")
 	mustErr(t, MustShape(GArray), "notarr", "type")

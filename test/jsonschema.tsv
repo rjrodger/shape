@@ -1,9 +1,9 @@
 name	spec	input	output	error
 js-object-required	{"$jsonschema":{"type":"object","properties":{"name":{"type":"string"},"age":{"type":"integer","minimum":0,"default":1}},"required":["name"]}}	{"name":"a","extra":1}	{"name":"a","extra":1,"age":1}	
-js-object-required-missing	{"$jsonschema":{"type":"object","properties":{"name":{"type":"string"}},"required":["name"]}}	{}		"Validation failed for property \"name\" with value \"undefined\" because the value is required."
+js-object-required-missing	{"$jsonschema":{"type":"object","properties":{"name":{"type":"string"}},"required":["name"]}}	{}		"Validation failed for property \"name\" because the property is missing."
 js-object-closed	{"$jsonschema":{"type":"object","properties":{"a":{"type":"number"}},"additionalProperties":false}}	{"a":1,"b":2}		"Validation failed for object \"{a:1,b:2}\" because the property \"b\" is not allowed."
 js-object-child	{"$jsonschema":{"type":"object","additionalProperties":{"type":"number"}}}	{"a":"x"}		"Validation failed for property \"a\" with string \"x\" because the string is not of type number."
-js-required-undeclared	{"$jsonschema":{"type":"object","required":["a"]}}	{}		"Validation failed for property \"a\" with value \"undefined\" because the value is required."
+js-required-undeclared	{"$jsonschema":{"type":"object","required":["a"]}}	{}		"Validation failed for property \"a\" because the property is missing."
 js-empty-string	{"$jsonschema":{"type":"string"}}	""	""	
 js-min-length	{"$jsonschema":{"type":"string","minLength":2}}	"a"		"Value \"a\" for property \"\" must be a minimum length of 2 (was 1)."
 js-pattern	{"$jsonschema":{"type":"string","pattern":"^[0-9]{3}$"}}	"12"		"Validation failed for string \"12\" because the string did not match /^[0-9]{3}$/."
@@ -29,7 +29,7 @@ js-bool-schema	{"$jsonschema":{"type":"object","properties":{"a":true,"b":false}
 js-discriminated	{"$jsonschema":{"oneOf":[{"type":"object","properties":{"k":{"const":"a"},"x":{"type":"number"}},"required":["k","x"]},{"type":"object","properties":{"k":{"const":"b"}},"required":["k"]}]}}	{"k":"a","x":"no"}		"Validation failed for property \"x\" with string \"no\" because the string is not of type number."
 js-discriminated-unknown	{"$jsonschema":{"oneOf":[{"type":"object","properties":{"k":{"const":"a"}},"required":["k"]},{"type":"object","properties":{"k":{"const":"b"}},"required":["k"]}]}}	{"k":"c"}		"Value \"{k:c}\" for property \"\" has unknown \"k\" \"c\", expected one of: a, b."
 js-one-of-plain	{"$jsonschema":{"oneOf":[{"type":"string"},{"type":"number"}]}}	true		"Value \"true\" for property \"\" does not satisfy one of: String, Number"
-js-ref	{"$jsonschema":{"$defs":{"p":{"type":"object","properties":{"n":{"type":"string"}},"required":["n"]}},"type":"object","properties":{"a":{"$ref":"#/$defs/p"},"b":{"$ref":"#/$defs/p"}},"required":["a","b"]}}	{"a":{"n":"x"},"b":{}}		"Validation failed for property \"b.n\" with value \"undefined\" because the value is required."
+js-ref	{"$jsonschema":{"$defs":{"p":{"type":"object","properties":{"n":{"type":"string"}},"required":["n"]}},"type":"object","properties":{"a":{"$ref":"#/$defs/p"},"b":{"$ref":"#/$defs/p"}},"required":["a","b"]}}	{"a":{"n":"x"},"b":{}}		"Validation failed for property \"b.n\" because the property is missing."
 js-ref-recursive	{"$jsonschema":{"$defs":{"n":{"type":"object","properties":{"v":{"type":"number"},"kids":{"type":"array","items":{"$ref":"#/$defs/n"}}},"required":["v"]}},"$ref":"#/$defs/n"}}	{"v":1,"kids":[{"v":2,"kids":[{"v":"x"}]}]}		"Validation failed for property \"kids.0.kids.0.v\" with string \"x\" because the string is not of type number."
 js-ref-root	{"$jsonschema":{"type":"object","properties":{"v":{"type":"number"},"next":{"$ref":"#"}}}}	{"v":1,"next":{"next":{"v":"x"}}}		"Validation failed for property \"next.next.v\" with string \"x\" because the string is not of type number."
 js-default-object	{"$jsonschema":{"type":"object","properties":{"a":{"type":"object","default":{"q":1},"additionalProperties":{"type":"number"}}}}}	{}	{"a":{"q":1}}	

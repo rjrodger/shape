@@ -18,7 +18,7 @@ keyexpr-bare-literal-present	{"a: 5":3}	{"a":9}	{"a":9}
 keyexpr-one-of-keeps-choice	{"a: One(String,Number)":5}	{"a":"q"}	{"a":"q"}	
 keyexpr-quoted-name	{"\"a b\": Min(1)":0}	{"a b":2}	{"a b":2}	
 keyexpr-quoted-name-fail	{"\"a b\": Min(1)":0}	{"a b":0}		"Value \"0\" for property \"a b\" must be a minimum of 1 (was 0)."
-keyexpr-quoted-name-absent	{"\"a b\": String":""}	{}		"Validation failed for property \"a b\" with value \"undefined\" because the value is required."
+keyexpr-quoted-name-absent	{"\"a b\": String":""}	{}		"Validation failed for property \"a b\" because the property is missing."
 keyexpr-empty-expression-is-a-literal-key	{"a:":1}	{"a:":2}	{"a:":2}	
 keyexpr-empty-expression-rejects-bare-name	{"a:":1}	{"a":2}		"Validation failed for object \"{a:2}\" because the property \"a\" is not allowed."
 keyexpr-escaped-quoted-name	{"\"a\\\"b\": Min(1)":0}	{"a\"b":2}	{"a\"b":2}	

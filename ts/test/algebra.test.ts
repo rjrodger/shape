@@ -39,7 +39,7 @@ describe('algebra', () => {
     deepEqual(Shape(Pick(['a', 'c'], base()))({ c: false }), { a: 1, c: false })
     deepEqual(Shape(Pick(['a', 'a'], base()))({}), { a: 1 })
     throws(() => Shape(Pick(['b'], base()))({}),
-      'Validation failed for property "b" with value "undefined" because the value is required.')
+      'Validation failed for property "b" because the property is missing.')
     throws(() => Shape(Pick(['a'], base()))({ a: 2, b: 'x' }),
       'Validation failed for object "{a:2,b:x}" because the property "b" is not allowed.')
     deepEqual(Shape(Pick('a', Open(base())))({ z: 1 }), { z: 1, a: 1 })
@@ -80,7 +80,7 @@ describe('algebra', () => {
 
     // Shallow: a nested object's own properties are as they were.
     throws(() => Shape(Partial({ a: { b: Number } }))({}),
-      'Validation failed for property "a.b" with value "undefined" because the value is required.')
+      'Validation failed for property "a.b" because the property is missing.')
 
     // Each kind of child value is copied.
     deepEqual(Shape(Partial({ a: [Number], b: { c: 1 }, d: 'x', e: Min(2, Number) }))({}),
@@ -98,7 +98,7 @@ describe('algebra', () => {
   test('extend', () => {
     deepEqual(Shape(Extend({ e: 2 }, base()))({ b: 'x' }), { b: 'x', a: 1, c: true, e: 2 })
     throws(() => Shape(Extend({ e: Number }, base()))({ b: 'x' }),
-      'Validation failed for property "e" with value "undefined" because the value is required.')
+      'Validation failed for property "e" because the property is missing.')
     deepEqual(Shape(Extend({ b: 5 }, base()))({}), { a: 1, b: 5, c: true })
     throws(() => Shape(Extend({ e: 2 }, base()))({ b: 'x', z: 1 }),
       'Validation failed for object "{b:x,z:1}" because the property "z" is not allowed.')
@@ -123,7 +123,7 @@ describe('algebra', () => {
     Omit('a', n)
     Partial(n)
     Extend({ e: 2 }, n)
-    throws(() => Shape(n)({}), 'because the value is required')
+    throws(() => Shape(n)({}), 'because the property is missing')
     throws(() => Shape(n)({ b: 'x', e: 2 }), 'the property "e" is not allowed')
     deepEqual(Object.keys(b), ['a', 'b', 'c'])
   })

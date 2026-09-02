@@ -41,7 +41,7 @@ describe('web-bundle', () => {
     const ctx: any = vm.createContext({})
     vm.runInContext(src, ctx)
     assert.deepEqual(ctx.result, [5, 1, 'function',
-      'Validation failed for property "a" with value "undefined" because the value is required.'])
+      'Validation failed for property "a" because the property is missing.'])
   })
 
 
@@ -65,7 +65,7 @@ describe('web-bundle', () => {
 
     // Names survive minification, so messages read as they do in Node.
     assert.equal(run('(() => { try { Shape({ a: Number })({}) } catch (e) { return e.message } })()'),
-      'Validation failed for property "a" with value "undefined" because the value is required.')
+      'Validation failed for property "a" because the property is missing.')
     assert.equal(run('(() => { try { Shape({ a: Shape.Min(2, Number) })({ a: 1 }) } catch (e) { return e.message } })()'),
       'Value "1" for property "a" must be a minimum of 2 (was 1).')
 
