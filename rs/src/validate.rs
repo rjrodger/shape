@@ -411,8 +411,8 @@ fn validate_structure(
                 );
             }
         } else {
-            if n.kind == Kind::Any {
-                // Nothing is injected for `Any`: the slot stays empty.
+            if n.default.is_undefined() {
+                // Nothing to inject: the slot stays empty.
                 return false;
             }
             cur.set(n.default.clone());

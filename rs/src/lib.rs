@@ -17,8 +17,10 @@ pub mod builders;
 pub mod coerce;
 pub mod context;
 pub mod error;
+pub mod expr;
 pub mod format;
 pub mod isolate;
+mod macros;
 pub mod node;
 pub mod normalize;
 pub mod spec;
@@ -29,8 +31,10 @@ pub mod value;
 pub use builders::*;
 pub use context::{Context, PathPart, State, Update, UpdateErr};
 pub use error::{FieldError, ValidationError};
+pub use expr::{expr, expr_apply, ExprError};
 pub use isolate::{Inner, TransformFn};
 pub use node::{Kind, ListMode, Node, Token, Validator, ValidatorFn};
+pub use normalize::Options;
 pub use spec::{arr, from_map, null, obj, Spec};
 pub use stringify::stringify_node;
 pub use value::{Map, Value};
@@ -57,13 +61,23 @@ pub fn shape(spec: impl Into<Spec>) -> Schema {
 
 impl Schema {
     pub fn new(spec: impl Into<Spec>) -> Schema {
-        let mut root = normalize::normalize(spec.into());
+        Schema::with_options(spec, &Options::default())
+    }
+
+    /// Compile a spec, reading it as the options say.
+    pub fn with_options(spec: impl Into<Spec>, opts: &Options) -> Schema {
+        let mut root = normalize::normalize_with(spec.into(), opts);
         let mut defs = HashMap::new();
         prepare(&mut root, &mut defs);
         Schema {
             root,
             defs: Arc::new(defs),
         }
+    }
+
+    /// Compile the string form of a spec: `Schema::parse("String.Min(2)")`.
+    pub fn parse(src: &str) -> Result<Schema, ExprError> {
+        Ok(Schema::new(expr(src)?))
     }
 
     /// The `define`d nodes of the schema, by name.

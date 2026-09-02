@@ -3,7 +3,18 @@
 //! row whose spec needs a sentinel the port cannot build yet is skipped by
 //! name; `SHAPE_RS_STRICT=1` makes a skip a failure.
 
-use shape::{Schema, Spec, Token, Value};
+use shape::{expr, stringify_node, ReferOptions, Schema, Spec, Token, Value};
+use std::cell::RefCell;
+
+thread_local! {
+    static EXPRS: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
+}
+
+const ALGEBRA: [&str; 4] = ["Pick", "Omit", "Partial", "Extend"];
+
+fn uses_algebra(src: &str) -> bool {
+    ALGEBRA.iter().any(|b| src.contains(b))
+}
 use std::fs;
 use std::path::Path;
 
@@ -107,15 +118,63 @@ fn decode_spec(v: &serde_json::Value) -> Result<Spec, Unsupported> {
                     "$closed" => return Ok(Spec::from(shape::closed(decode_spec(sv)?))),
                     "$required" => return Ok(Spec::from(shape::required(decode_spec(sv)?))),
                     "$optional" => return Ok(Spec::from(shape::optional(decode_spec(sv)?))),
-                    "$expr" | "$jsonschema" | "$call" | "$discriminated" => {
-                        return Err(Unsupported(k.clone()))
+                    "$expr" => {
+                        let src = sv.as_str().unwrap_or("");
+                        if uses_algebra(src) {
+                            return Err(Unsupported(format!("$expr {}", src)));
+                        }
+                        EXPRS.with(|e| e.borrow_mut().push(src.to_string()));
+                        let node = expr(src).unwrap_or_else(|e| panic!("{}: {}", src, e));
+                        return Ok(Spec::from(node));
                     }
+                    "$call" => {
+                        let arr = sv.as_array().unwrap();
+                        let name = arr[0].as_str().unwrap();
+                        let mut rest = Vec::new();
+                        for a in &arr[2..] {
+                            rest.push(decode_spec(a)?);
+                        }
+                        let spec = rest
+                            .into_iter()
+                            .next()
+                            .unwrap_or_else(|| Spec::from(shape::any()));
+                        return match name {
+                            "Define" => {
+                                Ok(Spec::from(shape::define(arr[1].as_str().unwrap(), spec)))
+                            }
+                            "Refer" => match &arr[1] {
+                                serde_json::Value::String(n) => {
+                                    Ok(Spec::from(shape::refer(n, spec)))
+                                }
+                                serde_json::Value::Object(o) => {
+                                    let opts = ReferOptions {
+                                        fill: o
+                                            .get("fill")
+                                            .and_then(|v| v.as_bool())
+                                            .unwrap_or(false),
+                                        strict: o
+                                            .get("strict")
+                                            .and_then(|v| v.as_bool())
+                                            .unwrap_or(false),
+                                    };
+                                    Ok(Spec::from(shape::refer_with(
+                                        o["name"].as_str().unwrap(),
+                                        opts,
+                                        spec,
+                                    )))
+                                }
+                                _ => Err(Unsupported("$call Refer".into())),
+                            },
+                            other => Err(Unsupported(format!("$call {}", other))),
+                        };
+                    }
+                    "$jsonschema" | "$discriminated" => return Err(Unsupported(k.clone())),
                     _ => {}
                 }
             }
             let mut pairs = Vec::with_capacity(m.len());
             for (k, sv) in m {
-                if is_key_expr(k) {
+                if is_key_expr(k) && uses_algebra(k) {
                     return Err(Unsupported(format!("key expression {:?}", k)));
                 }
                 pairs.push((k.clone(), decode_spec(sv)?));
@@ -244,4 +303,29 @@ fn corpus() {
     if strict && !skipped.is_empty() {
         panic!("{} corpus rows skipped", skipped.len());
     }
+
+    // Every expression of the corpus renders back to text that parses to
+    // the same rendering, where the string form can express it.
+    let exprs = EXPRS.with(|e| e.borrow().clone());
+    let mut round_trips = 0usize;
+    for src in &exprs {
+        let text = stringify_node(&expr(src).unwrap(), false);
+        assert!(!text.is_empty(), "{} renders as nothing", src);
+        if text.contains(['{', '[']) {
+            continue;
+        }
+        // A rendering the string form cannot read back (a dequoted string
+        // argument, as the canonical rendering writes it) is not held to it.
+        let Ok(again) = expr(&text) else {
+            continue;
+        };
+        assert_eq!(stringify_node(&again, false), text, "{}", src);
+        round_trips += 1;
+    }
+    eprintln!(
+        "expressions: {} parsed, {} round-tripped through stringify",
+        exprs.len(),
+        round_trips
+    );
+    assert!(round_trips > 0);
 }
