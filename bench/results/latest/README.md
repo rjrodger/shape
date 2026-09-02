@@ -1,6 +1,6 @@
 # Latest measurements
 
-Generated 2026-09-02T09:39:40.404Z from 10 run(s). Times are median nanoseconds per operation; lower is better.
+Generated 2026-09-02T09:55:26.732Z from 10 run(s). Times are median nanoseconds per operation; lower is better.
 
 ## go on github:windows-x64
 
@@ -9,10 +9,10 @@ Host `1fee8adaf205`: AMD EPYC 9V74 80-Core Processor, 4 cores, win32/x64. Last r
 | case | shape | validator | jsonschema | gojsonschema | shape / fastest |
 |---|---:|---:|---:|---:|---:|
 | flat | 3.1 µs | 349 ns | 2.7 µs | 7.7 µs | 8.8× |
-| nested | 7.5 µs | 1.3 µs | 5.4 µs | 0 ns | Infinity× |
+| nested | 7.5 µs | 1.3 µs | 5.4 µs | – | 5.8× |
 | array | 105.0 µs | 16.7 µs | 98.8 µs | 255.2 µs | 6.3× |
 | bounds | 3.4 µs | 814 ns | 4.7 µs | 8.2 µs | 4.2× |
-| invalid | 0 ns | – | 6.1 µs | 17.2 µs | NaN× |
+| invalid | – | – | 6.1 µs | 17.2 µs | – |
 
 ## go on linux-xeon-sandbox
 
@@ -106,7 +106,7 @@ Shape's median per case on every run, newest last; only runs against the same ca
 
 | run | commit | shape | flat | nested | array | bounds | invalid |
 |---|---|---|---:|---:|---:|---:|---:|
-| 2026-09-02 08:40 | `f325abd` | 0.3.0 | 3.1 µs | 7.5 µs | 105.0 µs | 3.4 µs | 0 ns |
+| 2026-09-02 08:40 | `f325abd` | 0.3.0 | 3.1 µs | 7.5 µs | 105.0 µs | 3.4 µs | – |
 
 ## go on linux-xeon-sandbox
 

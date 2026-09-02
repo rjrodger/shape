@@ -137,13 +137,16 @@ function markdown(summary) {
     lines.push('| case | ' + libs.join(' | ') + ' | shape / fastest |')
     lines.push('|---|' + libs.map(() => '---:').join('|') + '|---:|')
     for (const c of summary.cases) {
-      const cells = libs.map((lib) => rows.find((r) => r.case === c && r.lib === lib))
-      const fastest = Math.min(...cells.filter(Boolean).map((r) => r.median_ns))
+      // A median of zero is a run whose clock was too coarse for its batch;
+      // it reads as not measured.
+      const cells = libs.map((lib) => rows.find((r) => r.case === c && r.lib === lib && r.median_ns > 0))
+      const measured = cells.filter(Boolean)
+      const fastest = measured.length ? Math.min(...measured.map((r) => r.median_ns)) : 0
       const shape = cells[libs.indexOf('shape')]
       lines.push(
         `| ${c} | ` +
           cells.map((r) => (r ? fmt(r.median_ns) : '–')).join(' | ') +
-          ` | ${shape ? (shape.median_ns / fastest).toFixed(1) + '×' : '–'} |`,
+          ` | ${shape && fastest ? (shape.median_ns / fastest).toFixed(1) + '×' : '–'} |`,
       )
     }
     lines.push('')
@@ -172,6 +175,7 @@ function markdown(summary) {
 }
 
 function fmt(ns) {
+  if (!(ns > 0)) return '–'
   return ns >= 1e6 ? (ns / 1e6).toFixed(2) + ' ms' : ns >= 1e3 ? (ns / 1e3).toFixed(1) + ' µs' : ns.toFixed(0) + ' ns'
 }
 

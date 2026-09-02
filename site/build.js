@@ -27,6 +27,12 @@ const EXTRA = {
   'AGENTS.md': 'contributing/index.html',
 }
 
+// The sponsor box lives in the footer of every page; the README carries the
+// same table at its end, which the index page drops in favour of the footer.
+const SPONSOR_HTML = '<p class="sponsor"><a href="https://www.voxgig.com"><img src="https://www.voxgig.com/res/img/vgt01r.png" alt="Voxgig"></a> This open source module is sponsored and supported by <a href="https://www.voxgig.com">Voxgig</a>.</p>'
+// One table only: nothing between its tags may open another table.
+const SPONSOR_TABLE_RE = /<table>(?:(?!<table>)[\s\S])*?voxgig(?:(?!<table>)[\s\S])*?<\/table>\s*/i
+
 const NAV = [
   ['Docs', 'docs/index.html'],
   ['Getting started', 'docs/tutorials/getting-started.html'],
@@ -53,6 +59,9 @@ function main(argv) {
     let html = marked.parse(md, { gfm: true })
     html = headingIds(html)
     html = rewriteLinks(html, p, outputs, broken)
+    if ('README.md' === p.src) {
+      html = html.replace(SPONSOR_TABLE_RE, '')
+    }
     write(p.out, layout({ title, body: html, page: p, sidebar: sidebarFor(p, pages) }))
   }
 
@@ -196,7 +205,7 @@ function layout({ title, body, page, sidebar }) {
 ${sidebar}
 <main class="content">
 ${body}
-<footer class="foot"><a href="${source}">Edit this page on GitHub</a></footer>
+<footer class="foot">${SPONSOR_HTML}<a href="${source}">Edit this page on GitHub</a></footer>
 </main>
 </div>
 </body>

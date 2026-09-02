@@ -9,9 +9,6 @@
 [![DeepScan grade](https://deepscan.io/api/teams/5016/projects/19509/branches/508695/badge/grade.svg)](https://deepscan.io/dashboard#view=project&tid=5016&pid=19509&bid=508695)
 [![Maintainability](https://api.codeclimate.com/v1/badges/de19e425771fb65e98e2/maintainability)](https://codeclimate.com/github/rjrodger/shape/maintainability)
 
-| ![Voxgig](https://www.voxgig.com/res/img/vgt01r.png) | This open source module is sponsored and supported by [Voxgig](https://www.voxgig.com). |
-|---|---|
-
 A schema validator in the tradition of [Joi](https://joi.dev) or
 [JSON-Schema](https://json-schema.org/), but with a much nicer developer
 experience. It runs in JavaScript and TypeScript — in the browser and on the
@@ -151,3 +148,6 @@ better!). Also I like short names.
 
 Copyright (c) 2021-2024, Richard Rodger and other contributors.
 Licensed under [MIT](./LICENSE).
+
+| ![Voxgig](https://www.voxgig.com/res/img/vgt01r.png) | This open source module is sponsored and supported by [Voxgig](https://www.voxgig.com). |
+|---|---|

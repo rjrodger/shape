@@ -63,6 +63,8 @@ h1:hover .anchor, h2:hover .anchor, h3:hover .anchor, h4:hover .anchor { opacity
 .side li.current a, .side li a:hover { color: var(--fg); }
 .content { min-width: 0; }
 .foot { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--line); font-size: 0.85rem; color: var(--muted); }
+.foot .sponsor { display: flex; align-items: center; gap: 0.8rem; margin: 0 0 0.8rem; }
+.foot .sponsor img { height: 2rem; width: auto; }
 .muted { color: var(--muted); }
 @media (max-width: 52rem) {
   .wrap.with-side { grid-template-columns: 1fr; }

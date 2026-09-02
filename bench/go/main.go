@@ -90,20 +90,49 @@ func readPolicy() policy {
 	}
 }
 
+// clockResolution measures the smallest non-zero step time.Now can report.
+// Windows reports in steps of about half a millisecond, so a batch must run
+// well past one step or its samples are quantised to zero.
+func clockResolution() time.Duration {
+	best := time.Duration(0)
+	for i := 0; i < 32; i++ {
+		t0 := time.Now()
+		var d time.Duration
+		for d == 0 {
+			d = time.Since(t0)
+		}
+		if best == 0 || d < best {
+			best = d
+		}
+	}
+	return best
+}
+
 func measure(fn func(), pol policy) result {
 	warmEnd := time.Now().Add(time.Duration(pol.WarmupMS) * time.Millisecond)
 	for warm := 0; time.Now().Before(warmEnd) || warm < 10; warm++ {
 		fn()
 	}
-	t0 := time.Now()
-	for i := 0; i < 10; i++ {
-		fn()
+	// A batch takes at least BatchMS and at least 50 clock steps, so timer
+	// quantisation is under 2% of a sample; the calibration itself runs
+	// until it has spanned a few clock steps.
+	target := time.Duration(pol.BatchMS) * time.Millisecond
+	if step := 50 * clockResolution(); step > target {
+		target = step
 	}
-	per := time.Since(t0) / 10
+	calls := 0
+	t0 := time.Now()
+	var elapsed time.Duration
+	for elapsed < target/10 || calls < 10 {
+		fn()
+		calls++
+		elapsed = time.Since(t0)
+	}
+	per := elapsed / time.Duration(calls)
 	if per <= 0 {
 		per = 1
 	}
-	batch := int(time.Duration(pol.BatchMS) * time.Millisecond / per)
+	batch := int(target / per)
 	if batch < 1 {
 		batch = 1
 	}
