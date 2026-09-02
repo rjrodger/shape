@@ -121,9 +121,11 @@
   // trend draws the median of one case across every run on the host that
   // measured the same cases as the latest run.
   function trend(lang, libs) {
-    const current = data.matrix.find((m) => m.lang === lang && m.host === state.host)
-    const hash = current ? current.input_hash : undefined
-    const pts = data.history.filter((h) => h.lang === lang && h.host === state.host && h.case === state.trend && h.input_hash === hash && h.median_ns > 0)
+    // A run's point is drawn when it measured the case as it is defined now:
+    // the same case hash when both are known, else the same cases file.
+    const current = data.matrix.find((m) => m.lang === lang && m.host === state.host && m.case === state.trend)
+    const comparable = (h) => current && (h.case_hash && current.case_hash ? h.case_hash === current.case_hash : h.input_hash === current.input_hash)
+    const pts = data.history.filter((h) => h.lang === lang && h.host === state.host && h.case === state.trend && comparable(h) && h.median_ns > 0)
     const runs = [...new Set(pts.map((p) => p.run))].sort()
     if (runs.length < 2) return `<p class="muted">Trend for <code>${state.trend}</code>: one run so far on this host; a line appears once there are more.</p>`
     const W = 760, H = 220, left = 60, right = 20, top = 12, bottom = 28

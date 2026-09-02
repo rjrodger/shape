@@ -69,6 +69,14 @@ Some differences are inherent to Go and are unlikely ever to close.
   `c`, … to fix positions. The produced value itself is unaffected: it is the
   same object either way, and the differential harness compares it canonically.
 
+- **Sharing with the input.** TypeScript produces in place: `valid()`,
+  `error()` and the producing call write defaults into the input object
+  itself (the documented behaviour of the canonical implementation). Go never
+  changes its input; `Validate` copies an object or array on the first write
+  that changes it and otherwise returns it as it is, so its result may share
+  structure with the input where nothing changed. The produced *value* is the
+  same in both; what differs is which objects are the input's own.
+
 - **Regular expressions.** Go uses the RE2 engine (`regexp`); TypeScript uses
   the JavaScript engine. Patterns relying on backtracking features differ.
   Prefer portable patterns for schemas that must behave identically.

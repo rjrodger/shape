@@ -7,16 +7,65 @@
 //                 library), the hosts seen, and the median history of every
 //                 (language, host, case, library) across runs for trends
 //
-// Measurements are only comparable against the same cases: every row carries
-// the input hash, the matrix holds only rows measured against the hash of
-// the latest run per language and host, and a run from a dirty worktree is
-// marked so the report does not attribute it to its commit.
+// Measurements are only comparable against the same case: every row carries
+// the hash of the whole cases file its run measured and the hash of its own
+// case's definition in that file (read from the run's commit, so a case
+// added later leaves the others' history whole), the matrix holds only rows
+// measured against the file of the latest run per language and host, and a
+// run from a dirty worktree is marked so the report does not attribute it to
+// its commit.
 //
 // The site (site/) and `make bench-report` read these; nothing reads the
 // run files twice.
 
 const fs = require('node:fs')
 const path = require('node:path')
+const crypto = require('node:crypto')
+const { execFileSync } = require('node:child_process')
+
+// caseHashes finds the bench/cases.json a run measured, by the hash the run
+// recorded, and hashes each case's definition in it: the file at the run's
+// commit when git can show it and it is the file measured (a dirty run may
+// have measured another), else the current file when that is the one. A
+// run whose file cannot be found has no case hashes, and its rows are
+// compared by the file hash alone. A case that borrows another's schema
+// ({"$ref": "#name"}) is hashed with the schema it borrows, so a change to
+// the schema changes the hash of every case that measures it.
+const caseHashCache = {}
+function caseHashes(resultsDir, commit, inputHash, currentHash) {
+  if (inputHash in caseHashCache) return caseHashCache[inputHash]
+  let raw = null
+  if (commit) {
+    try {
+      raw = execFileSync('git', ['show', commit + ':bench/cases.json'], { cwd: resultsDir, stdio: ['ignore', 'pipe', 'ignore'] }).toString()
+    } catch {
+      raw = null
+    }
+    if (null !== raw && fileHash(raw) !== inputHash) raw = null
+  }
+  if (null === raw && inputHash === currentHash) raw = currentCasesRaw(resultsDir)
+  let hashes = null
+  if (null !== raw) {
+    hashes = {}
+    const all = JSON.parse(raw).cases
+    const byName = {}
+    for (const c of all) byName[c.name] = c
+    for (const c of all) {
+      const ref = c.jsonSchema && typeof c.jsonSchema.$ref === 'string' && c.jsonSchema.$ref.startsWith('#') ? byName[c.jsonSchema.$ref.slice(1)] : null
+      const resolved = ref ? { ...c, jsonSchema: ref.jsonSchema } : c
+      hashes[c.name] = crypto.createHash('sha256').update(JSON.stringify(resolved)).digest('hex').slice(0, 12)
+    }
+  }
+  caseHashCache[inputHash] = hashes
+  return hashes
+}
+function currentCasesRaw(resultsDir) {
+  const file = path.join(resultsDir, '..', 'cases.json')
+  return fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : ''
+}
+function fileHash(raw) {
+  return crypto.createHash('sha256').update(raw).digest('hex').slice(0, 12)
+}
 
 function readRuns(resultsDir) {
   const dir = path.join(resultsDir, 'runs')
@@ -38,9 +87,11 @@ function build(resultsDir) {
   // The input hash of the newest run per language and host: the matrix
   // holds measurements against those cases only.
   const newest = {}
+  const currentHash = fileHash(currentCasesRaw(resultsDir))
 
   for (const r of runs) {
     const h = r.host
+    const hashes = caseHashes(resultsDir, r.run.source.commit, r.input_hash, currentHash)
     hosts[h.id] = hosts[h.id] || { ...h, runs: 0, first: r.run.at, last: r.run.at }
     hosts[h.id].runs++
     hosts[h.id].last = r.run.at
@@ -66,6 +117,7 @@ function build(resultsDir) {
         lang: r.run.lang,
         host: h.id,
         input_hash: r.input_hash,
+        case_hash: hashes ? hashes[b.case] : undefined,
         case: b.case,
         lib: b.lib,
         version: b.version,
@@ -112,6 +164,16 @@ function build(resultsDir) {
   return summary
 }
 
+// comparable reports whether a history row measured its case as the latest
+// rows (of its language and host) define it: the same case hash when both
+// are known, else the same cases file.
+function comparable(h, latestRows) {
+  const cur = latestRows.find((m) => m.case === h.case)
+  if (!cur) return false
+  if (h.case_hash && cur.case_hash) return h.case_hash === cur.case_hash
+  return h.input_hash === cur.input_hash
+}
+
 function uniq(xs) {
   return xs.filter((x, i) => xs.indexOf(x) === i)
 }
@@ -154,11 +216,10 @@ function markdown(summary) {
 
   // The history per language and host: shape's median on every case, one
   // row per run, so a before-and-after comparison reads off this file.
-  lines.push('# History', '', 'Shape\'s median per case on every run, newest last; only runs against the same cases as the latest run are listed.', '')
+  lines.push('# History', '', 'Shape\'s median per case on every run, with the 95th percentile after it, newest last; a cell is filled only when the run measured the case as it is defined now.', '')
   for (const k of Object.keys(byLangHost).sort()) {
     const [lang, hostId] = k.split('/')
-    const hash = byLangHost[k][0].input_hash
-    const rows = summary.history.filter((h) => h.lang === lang && h.host === hostId && h.lib === 'shape' && h.input_hash === hash)
+    const rows = summary.history.filter((h) => h.lang === lang && h.host === hostId && h.lib === 'shape' && comparable(h, byLangHost[k]))
     const runs = uniq(rows.map((r) => r.run))
     if (runs.length < 1) continue
     lines.push(`## ${lang} on ${summary.hosts[hostId].label || hostId}`, '')
@@ -166,7 +227,7 @@ function markdown(summary) {
     lines.push('|---|---|---|' + summary.cases.map(() => '---:').join('|') + '|')
     for (const run of runs) {
       const first = rows.find((r) => r.run === run)
-      const cells = summary.cases.map((c) => { const r = rows.find((x) => x.run === run && x.case === c); return r ? fmt(r.median_ns) : '–' })
+      const cells = summary.cases.map((c) => { const r = rows.find((x) => x.run === run && x.case === c); return r ? `${fmt(r.median_ns)} · ${fmt(r.p95_ns)}` : '–' })
       lines.push(`| ${first.at.slice(0, 16).replace('T', ' ')} | \`${first.commit.slice(0, 7)}\`${first.dirty ? ' (dirty)' : ''} | ${first.version} | ${cells.join(' | ')} |`)
     }
     lines.push('')
@@ -186,4 +247,4 @@ if (require.main === module) {
   process.stderr.write(`${s.runs} run(s), ${s.matrix.length} latest measurements\n`)
 }
 
-module.exports = { build, readRuns, markdown }
+module.exports = { comparable, build, readRuns, markdown }

@@ -28,6 +28,20 @@ var benchInvalidIn = map[string]any{
 	"settings": map[string]any{"theme": "dark", "notifications": true},
 }
 
+// The large case: fifty keys cycling through the four primitive kinds, as
+// the benchmark suite generates it.
+var benchLarge, benchLargeIn = func() (map[string]any, map[string]any) {
+	spec := map[string]any{}
+	in := map[string]any{}
+	kinds := []any{String, Integer, Boolean, Number}
+	for i := 0; i < 50; i++ {
+		k := "k" + string(rune('0'+i/10)) + string(rune('0'+i%10))
+		spec[k] = kinds[i%4]
+		in[k] = []any{"v", float64(i), i%8 == 0, float64(i) * 0.5}[i%4]
+	}
+	return spec, in
+}()
+
 func benchValid(b *testing.B, spec, in any) {
 	s := MustShape(spec)
 	b.ReportAllocs()
@@ -50,6 +64,8 @@ func BenchmarkValidFlat(b *testing.B)      { benchValid(b, benchFlat, benchFlatI
 func BenchmarkValidNested(b *testing.B)    { benchValid(b, benchNested, benchNestedIn) }
 func BenchmarkValidateFlat(b *testing.B)   { benchValidate(b, benchFlat, benchFlatIn) }
 func BenchmarkValidateNested(b *testing.B) { benchValidate(b, benchNested, benchNestedIn) }
+func BenchmarkValidLarge(b *testing.B)     { benchValid(b, benchLarge, benchLargeIn) }
+func BenchmarkValidateLarge(b *testing.B)  { benchValidate(b, benchLarge, benchLargeIn) }
 
 func BenchmarkErrorInvalid(b *testing.B) {
 	s := MustShape(benchNested)

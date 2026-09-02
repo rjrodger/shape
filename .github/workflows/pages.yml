@@ -34,6 +34,10 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The whole history: the report reads bench/cases.json at each
+          # run's commit to tell which cases are still comparable.
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:

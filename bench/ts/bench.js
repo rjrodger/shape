@@ -5,7 +5,7 @@
 // Zod return a fresh value, Ajv, Joi and Valibot check in place (Valibot's
 // safeParse also copies). Prints a JSON document to stdout.
 
-const { policy, measure, cases } = require('../lib/harness.js')
+const { policy, measure, cases, largeKey } = require('../lib/harness.js')
 
 const Shape = require('shape')
 const { z } = require('zod')
@@ -41,6 +41,16 @@ const shapes = {
 }
 shapes.invalid = shapes.nested
 
+// The large case: fifty keys cycling through the four primitive kinds, built
+// for every library from one list.
+const LARGE = 50
+function large(kinds) {
+  const spec = {}
+  for (let i = 0; i < LARGE; i++) spec[largeKey(i)] = kinds[i % 4]
+  return spec
+}
+shapes.large = large([S, Integer, B, N])
+
 const zods = {
   flat: z.strictObject({ id: z.int(), name: z.string(), email: z.string(), active: z.boolean(), score: z.number() }),
   nested: z.strictObject({
@@ -59,6 +69,7 @@ const zods = {
   }),
 }
 zods.invalid = zods.nested
+zods.large = z.strictObject(large([z.string(), z.int(), z.boolean(), z.number()]))
 
 const jois = {
   flat: Joi.object({ id: Joi.number().integer().required(), name: Joi.string().required(), email: Joi.string().required(), active: Joi.boolean().required(), score: Joi.number().required() }),
@@ -78,6 +89,7 @@ const jois = {
   }),
 }
 jois.invalid = jois.nested
+jois.large = Joi.object(large([Joi.string().required(), Joi.number().integer().required(), Joi.boolean().required(), Joi.number().required()]))
 const joiOpts = { convert: false }
 
 const valibots = {
@@ -98,6 +110,7 @@ const valibots = {
   }),
 }
 valibots.invalid = valibots.nested
+valibots.large = v.strictObject(large([v.string(), v.pipe(v.number(), v.integer()), v.boolean(), v.number()]))
 
 function main() {
   const pol = policy()

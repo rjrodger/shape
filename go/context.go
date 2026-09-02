@@ -1,5 +1,7 @@
 package shape
 
+import "sync"
+
 // Context flows through validation. Custom validators may read/write Custom
 // for cross-property state, and Refs is used by Define/Refer.
 type Context struct {
@@ -14,6 +16,8 @@ type Context struct {
 	// The per-node validator states of the current call, allocated in
 	// chunks rather than one at a time (see newState).
 	states []State
+	// True when the schema of the call has no validators (see Schema.pure).
+	pure bool
 }
 
 // newState hands out the State for one node from a chunk, so a walk over
@@ -42,6 +46,51 @@ func (c *Context) start() (path []string, pathArr []any) {
 	sc := &scratch{}
 	c.states = sc.states[:0]
 	return sc.path[:0], sc.pathArr[:0]
+}
+
+// A call on a schema with no validators, made without a context of the
+// caller's, reuses its context and scratch from this pool: no user code
+// runs during such a call, so nothing can keep a reference to either past
+// it. The errors of a match are collected in the block too; those of a
+// producing call are returned to the caller, so they are always fresh.
+// The block still carries a Custom map, kept empty, so that a validator
+// attached to a node after the schema was compiled (which the compile
+// cannot see) finds the context it documents rather than a nil map.
+type callScratch struct {
+	ctx    Context
+	sc     scratch
+	verr   ValidationError
+	custom map[string]any
+}
+
+var callPool = sync.Pool{New: func() any { return &callScratch{custom: map[string]any{}} }}
+
+// begin readies a pooled context for one call: every per-call field is
+// reset, and the path stacks and states come from the block it holds.
+func (cs *callScratch) begin(defs map[string]*node, match bool) (c *Context, path []string, pathArr []any) {
+	c = &cs.ctx
+	*c = Context{Custom: cs.custom, Match: match, defs: defs, pure: true}
+	c.states = cs.sc.states[:0]
+	return c, cs.sc.path[:0], cs.sc.pathArr[:0]
+}
+
+// matchErrors is the error collector of a pooled match, emptied for it.
+func (cs *callScratch) matchErrors() *ValidationError {
+	cs.verr.Issues = nil
+	return &cs.verr
+}
+
+// release returns the block to the pool with nothing of the call's input
+// left in it: the states it used, the errors of a match and anything a
+// validator put in Custom are cleared.
+func (cs *callScratch) release() {
+	clear(cs.ctx.states)
+	cs.ctx.states = nil
+	cs.verr.Issues = nil
+	if len(cs.custom) > 0 {
+		clear(cs.custom)
+	}
+	callPool.Put(cs)
 }
 
 type renameInfo struct {

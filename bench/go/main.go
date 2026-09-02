@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"reflect"
 	"regexp"
 	"runtime"
 	"runtime/debug"
@@ -58,12 +59,15 @@ type result struct {
 }
 
 type benchCase struct {
-	Name        string               `json:"name"`
-	Description string               `json:"description"`
-	Generate    *struct{ Items int } `json:"generate"`
-	Input       map[string]any       `json:"input"`
-	Valid       bool                 `json:"valid"`
-	JSONSchema  map[string]any       `json:"jsonSchema"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Generate    *struct {
+		Items int `json:"items"`
+		Keys  int `json:"keys"`
+	} `json:"generate"`
+	Input      map[string]any `json:"input"`
+	Valid      bool           `json:"valid"`
+	JSONSchema map[string]any `json:"jsonSchema"`
 }
 
 func envInt(name string, def int) int {
@@ -231,12 +235,40 @@ func loadCases(file string) ([]benchCase, string) {
 			}
 			c.Input["items"] = items
 		}
+		if c.Generate != nil && c.Generate.Keys > 0 {
+			// As the harness generates it: the keys k00.. cycle through a
+			// string, an integer, a boolean and a number, and so does the schema.
+			properties := map[string]any{}
+			required := []any{}
+			for j := 0; j < c.Generate.Keys; j++ {
+				k := largeKey(j)
+				c.Input[k] = largeValue(j)
+				properties[k] = map[string]any{"type": []string{"string", "integer", "boolean", "number"}[j%4]}
+				required = append(required, k)
+			}
+			c.JSONSchema = map[string]any{"type": "object", "properties": properties, "required": required, "additionalProperties": false}
+		}
 		if ref, ok := c.JSONSchema["$ref"].(string); ok && strings.HasPrefix(ref, "#") {
 			c.JSONSchema = byName[ref[1:]].JSONSchema
 		}
 	}
 	sum := sha256.Sum256(raw)
 	return spec.Cases, hex.EncodeToString(sum[:])[:12]
+}
+
+// The key and value at index i of a generated large object.
+func largeKey(i int) string { return fmt.Sprintf("k%02d", i) }
+
+func largeValue(i int) any {
+	switch i % 4 {
+	case 0:
+		return fmt.Sprintf("v%d", i)
+	case 1:
+		return float64(i)
+	case 2:
+		return i%8 == 0
+	}
+	return float64(i) * 0.5
 }
 
 func fail(err error) {
@@ -259,6 +291,13 @@ func shapeSpec(name string) any {
 		}
 	case "array":
 		return map[string]any{"items": []any{map[string]any{"sku": shape.String, "qty": shape.Integer, "price": shape.Number}}}
+	case "large":
+		spec := map[string]any{}
+		kinds := []any{shape.String, shape.Integer, shape.Boolean, shape.Number}
+		for i := 0; i < 50; i++ {
+			spec[largeKey(i)] = kinds[i%4]
+		}
+		return spec
 	case "bounds":
 		return map[string]any{
 			"name":  shape.Max(40, shape.Min(3, shape.String)),
@@ -314,8 +353,27 @@ type boundsIn struct {
 	Ratio float64 `json:"ratio" validate:"gte=0,lte=1"`
 }
 
+// largeIn is the struct of the large case, made by reflection as the keys
+// are generated: fifty fields cycling through string, int, bool and
+// float64, each tagged for json and, where the kind has one, validator.
+func largeIn() any {
+	fields := make([]reflect.StructField, 50)
+	for i := range fields {
+		k := largeKey(i)
+		typ := []reflect.Type{reflect.TypeOf(""), reflect.TypeOf(0), reflect.TypeOf(false), reflect.TypeOf(0.0)}[i%4]
+		tag := `json:"` + k + `"`
+		if i%4 == 0 {
+			tag += ` validate:"required"`
+		}
+		fields[i] = reflect.StructField{Name: "K" + k[1:], Type: typ, Tag: reflect.StructTag(tag)}
+	}
+	return reflect.New(reflect.StructOf(fields)).Interface()
+}
+
 func validatorTarget(name string) any {
 	switch name {
+	case "large":
+		return largeIn()
 	case "flat":
 		return &flatIn{}
 	case "nested":
