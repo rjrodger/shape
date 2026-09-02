@@ -177,7 +177,15 @@ func validateStructure(n *node, state *State, absent bool, path []string, pathAr
 	// one is not put to the branches: TS drops the errors such a check would
 	// raise, so Optional(One(...)) given nothing is simply absent.
 	if n.kind == KindList && n.listMode != listNone && !(absent && !n.required) {
-		return evaluateList(n, state.Value, path, pathArr, key, parent, ctx, match, verr, absent)
+		before := verr.count()
+		out := evaluateList(n, state.Value, path, pathArr, key, parent, ctx, match, verr, absent)
+		// A required composition that passed but left an absent subject
+		// absent (All produces nothing from it) reports the missing value,
+		// as TypeScript's required check does after the validators.
+		if absent && n.required && out == nil && verr.count() == before {
+			addRequired(state, n, verr)
+		}
+		return out
 	}
 
 	// Nullable: an explicit null is accepted as the value. Absent is still
@@ -215,15 +223,7 @@ func validateStructure(n *node, state *State, absent bool, path []string, pathAr
 	// error (mirrors TS undefined-vs-null semantics).
 	if state.Value == nil && absent && n.kind != KindRegexp {
 		if n.required {
-			err := makeErr(state, WhyRequired, requiredMarkFor(n.kind), "")
-			if n.faultMsg != "" {
-				if !err.terse {
-					err.Text = expandErrText(n.faultMsg, err.Path, state.Value)
-				}
-			}
-			if !n.silent {
-				verr.add(err)
-			}
+			addRequired(state, n, verr)
 			return nil
 		}
 		if n.skippable {
@@ -762,6 +762,20 @@ func sameValue(a, b any) bool {
 	return ta == tb && ta.Comparable() && a == b
 }
 
+// addRequired reports a missing required value, with the node's fault text
+// if it has one.
+func addRequired(state *State, n *node, verr *ValidationError) {
+	err := makeErr(state, WhyRequired, requiredMarkFor(n.kind), "")
+	if n.faultMsg != "" {
+		if !err.terse {
+			err.Text = expandErrText(n.faultMsg, err.Path, state.Value)
+		}
+	}
+	if !n.silent {
+		verr.add(err)
+	}
+}
+
 func evaluateList(n *node, in any, path []string, pathArr []any, key string, parent any, ctx *Context, match bool, verr *ValidationError, absent bool) any {
 	// Branches must see the value as the parent saw it: an absent value stays
 	// absent, so a branch that does not require one can still match and supply
@@ -808,24 +822,18 @@ func evaluateList(n *node, in any, path []string, pathArr []any, key string, par
 		}
 		return winner
 	case listSome:
-		// TypeScript hands every branch the one value it was given and takes
-		// the last matching branch's result. A map or slice is produced in
-		// place there, so a later branch sees what earlier ones did; a branch
-		// that replaces the value (a scalar, a Catch) leaves later branches
-		// the value they would have seen. So the value handed on advances
-		// only while a branch's result is still a container of the same kind.
+		// Every branch sees the value as it was given, never one another
+		// branch changed: each matching branch produces from the original
+		// (copy-on-write, so the original stays as it was), and the last
+		// one's result stands.
 		matched := false
-		seen := branchIn
 		var winner any = branchIn
 		for _, sn := range n.list {
 			sub := &ValidationError{}
-			validateNode(sn, seen, path, pathArr, key, parent, ctx, true, sub)
+			validateNode(sn, branchIn, path, pathArr, key, parent, ctx, true, sub)
 			if !sub.hasAny() {
 				matched = true
-				winner = validateNode(sn, seen, path, pathArr, key, parent, ctx, match, &ValidationError{})
-				if sameContainer(winner, seen) {
-					seen = winner
-				}
+				winner = validateNode(sn, branchIn, path, pathArr, key, parent, ctx, match, &ValidationError{})
 			}
 		}
 		if !matched {
@@ -868,6 +876,11 @@ func evaluateList(n *node, in any, path []string, pathArr []any, key string, par
 			if !n.silent {
 				verr.add(err)
 			}
+			return in
+		}
+		// An absent subject stays absent, for the required check to see, as
+		// in TypeScript.
+		if absent {
 			return in
 		}
 		return out
@@ -1052,38 +1065,6 @@ func cloneSeen(v any, seen map[uintptr]any) any {
 	default:
 		return v
 	}
-}
-
-// isContainer reports whether a value is produced in place in TypeScript: a
-// map, slice, array or struct (or a pointer to one), as against a scalar
-// that a validator replaces.
-func isContainer(v any) bool {
-	if v == nil {
-		return false
-	}
-	rv := reflect.ValueOf(v)
-	if rv.Kind() == reflect.Pointer {
-		rv = rv.Elem()
-	}
-	switch rv.Kind() {
-	case reflect.Map, reflect.Slice, reflect.Array, reflect.Struct:
-		return true
-	}
-	return false
-}
-
-// sameContainer reports whether both values are containers of one kind, so
-// the first can stand for the second produced in place.
-func sameContainer(a, b any) bool {
-	return isContainer(a) && isContainer(b) && containerKind(a) == containerKind(b)
-}
-
-func containerKind(v any) reflect.Kind {
-	rv := reflect.ValueOf(v)
-	if rv.Kind() == reflect.Pointer {
-		rv = rv.Elem()
-	}
-	return rv.Kind()
 }
 
 func isNumber(v any) bool {

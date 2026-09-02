@@ -218,18 +218,33 @@ const files = {
     ['one-optional-absent', { a: { $expr: 'Optional(One(String,Number))' } }, {}],
   ],
   composition: [
-    // Some: an object is produced in place, so every matching branch sees what
-    // the ones before it did; a scalar is replaced, so each matching branch
-    // sees the original and the last one's result stands.
+    // One, Some and All never change the value they are given: every branch
+    // sees the original, and Some takes the last matching branch's result.
     ['some-open-defaults-first-wins', CALL('Some', { $open: { a: 1 } }, { $open: { a: 2 } }), {}],
     ['some-open-defaults-both', CALL('Some', { $open: { a: 1 } }, { $open: { b: 2 } }), {}],
     ['some-open-defaults-present', CALL('Some', { $open: { a: 1 } }, { $open: { a: 2 } }), { a: 5, q: 9 }],
     ['some-scalar-original', CALL('Some', { $expr: 'Coerce(Number)' }, { $expr: 'Max(2)' }), '12'],
     ['some-scalar-last-wins', CALL('Some', { $expr: 'Max(2)' }, { $expr: 'Coerce(Number)' }), '12'],
-    // A branch that replaces the object (Catch) leaves the next branch the object.
+    // A branch that replaces the value leaves the next branch the original.
     ['some-replace-then-open', CALL('Some', { $expr: 'Catch(1,Number)' }, { $open: { a: 1 } }), {}],
     ['some-replace-then-open-present', CALL('Some', { $expr: 'Catch(1,Number)' }, { $open: { a: 1 } }), { a: 5 }],
     ['some-replace-then-open-scalar', CALL('Some', { $expr: 'Catch(1,Number)' }, { $open: { a: 1 } }), 3],
+    // All threads the result from branch to branch; One takes its branch's.
+    ['all-open-defaults', CALL('All', { $open: { a: 1 } }, { $open: { b: 2 } }), {}],
+    ['all-coerce-then-min', { a: { $expr: 'All(Coerce(Number),Min(2))' } }, { a: '5' }],
+    ['all-coerce-then-min-fail', { a: { $expr: 'All(Coerce(Number),Min(2))' } }, { a: '1' }],
+    ['one-open-default', CALL('One', { $open: { a: 1 } }, { $expr: 'String' }), {}],
+    ['all-absent-required', { a: CALL('All', { $open: { x: 1 } }, { $open: { y: 'a' } }) }, {}],
+    ['some-absent-required', { a: CALL('Some', { $open: { x: 1 } }, { $expr: 'String' }) }, {}],
+    ['one-absent-no-match', { a: { $expr: 'One(String,Number)' } }, {}],
+    ['some-absent-no-match', { a: { $expr: 'Some(String,Number)' } }, {}],
+    ['all-absent-fail', { a: { $expr: 'All(String,Number)' } }, {}],
+    ['one-skip-branch-absent', { a: { $expr: 'One(Skip(Number))' } }, {}],
+    ['some-skip-branch-absent', { a: { $expr: 'Some(Skip(Number))' } }, {}],
+    ['all-skip-branch-absent', { a: { $expr: 'All(Skip(Number))' } }, {}],
+    ['one-skip-branch-present', { a: { $expr: 'One(Skip(Number))' } }, { a: 1 }],
+    ['one-absent-default-branch', { a: { $expr: 'One(String,Number)' }, b: CALL('One', { $expr: 'Number' }, { $open: { x: 1 } }) }, { a: 'x' }],
+    ['some-failing-branch-leaks-nothing', CALL('Some', { x: { $expr: 'Number' }, y: 1 }, { $open: { z: 3 } }), {}],
     // Default over an untyped shape takes the default's kind and keeps the
     // shape's builders, description and fault.
     ['default-untyped-kind', { a: { $expr: 'Default(2,Required())' } }, { a: 'x' }],

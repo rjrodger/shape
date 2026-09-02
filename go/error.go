@@ -90,6 +90,11 @@ type ValidationError struct {
 	n      int
 }
 
+// count is how many errors were added, counted or stored.
+func (e *ValidationError) count() int {
+	return len(e.Issues) + e.n
+}
+
 func (e *ValidationError) Error() string {
 	if e == nil || len(e.Issues) == 0 {
 		return ""

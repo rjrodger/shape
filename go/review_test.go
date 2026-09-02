@@ -88,13 +88,19 @@ func TestCheckSkipsAbsent(t *testing.T) {
 	}
 }
 
-// Some threads a map through its matching branches, as TypeScript produces
-// one object in place, and runs each branch on the original scalar.
-func TestSomeThreadsContainers(t *testing.T) {
+// Every Some branch sees the value as given, never one another branch
+// changed; the last matching branch's result stands, and the subject is
+// not changed.
+func TestSomeBranchesSeeTheOriginal(t *testing.T) {
 	s, _ := Shape(Some(Open(map[string]any{"a": 1}), Open(map[string]any{"a": 2})))
-	out := mustValid(t, s, map[string]any{}).(map[string]any)
-	if out["a"] != 1 {
-		t.Fatalf("got %v, want a: 1", out)
+	in := map[string]any{}
+	out := mustValid(t, s, in).(map[string]any)
+	if out["a"] != 2 || len(in) != 0 {
+		t.Fatalf("got %v, in %v, want a: 2 and an untouched input", out, in)
+	}
+	both, _ := Shape(Some(Open(map[string]any{"a": 1}), Open(map[string]any{"b": 2})))
+	if out := mustValid(t, both, map[string]any{}).(map[string]any); out["b"] != 2 || out["a"] != nil {
+		t.Fatalf("got %v, want b: 2 only", out)
 	}
 	sc, _ := Shape(Some(Coerce(Number), Max(2)))
 	if out := mustValid(t, sc, "12"); out != "12" {
@@ -104,7 +110,7 @@ func TestSomeThreadsContainers(t *testing.T) {
 	if out := mustValid(t, cs, "12"); out != 12.0 {
 		t.Fatalf("got %v (%T), want 12", out, out)
 	}
-	// A branch that replaces the map leaves the next branch the map.
+	// A branch that replaces the value leaves the next branch the original.
 	rp, _ := Shape(Some(Catch(1, Number), Open(map[string]any{"a": 1})))
 	if out := mustValid(t, rp, map[string]any{}).(map[string]any); out["a"] != 1 {
 		t.Fatalf("got %v, want a: 1", out)
@@ -112,11 +118,14 @@ func TestSomeThreadsContainers(t *testing.T) {
 	if out := mustValid(t, rp, 3); out != 3.0 && out != 3 {
 		t.Fatalf("got %v (%T), want 3", out, out)
 	}
-	if !isContainer(&struct{}{}) || isContainer(nil) || isContainer(3) {
-		t.Fatal("isContainer")
+	// All threads a copy; a failing composition leaves the input untouched.
+	all, _ := Shape(All(Open(map[string]any{"a": 1}), Open(map[string]any{"b": 2})))
+	if out := mustValid(t, all, map[string]any{}).(map[string]any); out["a"] != 1 || out["b"] != 2 {
+		t.Fatalf("got %v, want a: 1, b: 2", out)
 	}
-	m := map[string]any{}
-	if !sameContainer(&m, m) || sameContainer(m, []any{}) || sameContainer(m, 1) {
-		t.Fatal("sameContainer")
+	bad, _ := Shape(All(Open(map[string]any{"a": 1}), map[string]any{"z": String}))
+	in2 := map[string]any{}
+	if _, err := bad.Validate(in2); err == nil || len(in2) != 0 {
+		t.Fatalf("err %v, in %v", err, in2)
 	}
 }

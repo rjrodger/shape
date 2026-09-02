@@ -379,7 +379,33 @@ fn validate_structure(
     verr: &mut ValidationError,
 ) -> bool {
     if n.kind == Kind::List && n.list_mode != ListMode::None && (n.required || !absent) {
-        return evaluate_list(n, silent, cur, key, parent_is_array, absent, w, verr);
+        let before = verr.count();
+        let kept = evaluate_list(
+            n,
+            silent,
+            cur.reborrow(),
+            key,
+            parent_is_array,
+            absent,
+            w,
+            verr,
+        );
+        // A required composition that passed but left an absent subject
+        // absent (All produces nothing from it) reports the missing value,
+        // as TypeScript's required check does after the validators.
+        if absent && n.required && verr.count() == before && cur.get().is_undefined() {
+            let at = at_of(w, key, n, cur.get(), parent_is_array, "");
+            add_structural(
+                &at,
+                n,
+                silent,
+                WHY_REQUIRED,
+                required_mark_for(n.kind),
+                verr,
+            );
+            return false;
+        }
+        return kept;
     }
 
     // Nullable: an explicit null is the value.
@@ -853,15 +879,6 @@ pub(crate) fn validate_ignored(
 }
 
 /// Whether a branch accepts the value, without producing or rendering.
-/// Whether both values are containers of one kind, so the first can stand
-/// for the second produced in place.
-fn same_container(a: &Value, b: &Value) -> bool {
-    matches!(
-        (a, b),
-        (Value::Obj(_), Value::Obj(_)) | (Value::Arr(_), Value::Arr(_))
-    )
-}
-
 fn branch_passes(
     sn: &Node,
     value: &Value,
@@ -966,33 +983,20 @@ fn evaluate_list(
             }
         }
         ListMode::Some => {
-            // TypeScript hands every branch the one value it was given and
-            // takes the last matching branch's result. An object or array is
-            // produced in place there, so a later branch sees what earlier
-            // ones did; a branch that replaces the value (a scalar, a Catch)
-            // leaves later branches the value they would have seen. So the
-            // value handed on advances only while a branch's result is still
-            // a container of the same kind.
+            // Every branch sees the value as it was given, never one another
+            // branch changed: each matching branch produces from its own copy
+            // of the original, and the last one's result stands.
             let original = cur.get().clone();
-            let mut seen = original.clone();
-            let mut winner: Option<Value> = None;
             let mut matched = false;
             let mut kept = true;
             for sn in &n.list {
-                if !branch_passes(sn, &seen, key, parent_is_array, w) {
+                if !branch_passes(sn, &original, key, parent_is_array, w) {
                     continue;
                 }
                 matched = true;
-                let mut out = seen.clone();
+                cur.set(original.clone());
                 let mut sub = ValidationError::default();
-                kept = validate_node(sn, Cur::Mut(&mut out), key, parent_is_array, w, &mut sub);
-                if same_container(&out, &seen) {
-                    seen = out.clone();
-                }
-                winner = Some(out);
-            }
-            if let Some(v) = winner {
-                cur.set(v);
+                kept = validate_node(sn, cur.reborrow(), key, parent_is_array, w, &mut sub);
             }
             if !matched {
                 list_error(
@@ -1045,6 +1049,11 @@ fn evaluate_list(
                     false,
                 );
                 return true;
+            }
+            // An absent subject stays absent, for the required check to
+            // see, as in TypeScript.
+            if original.is_undefined() {
+                cur.set(original);
             }
             kept
         }

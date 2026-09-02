@@ -145,9 +145,14 @@ A bound outside the isolation still applies to what comes out:
 
 | Builder | Effect |
 | ------- | ------ |
-| `One(shapes…)` | Passes on the first matching branch (its output is used). |
-| `Some(shapes…)` | Passes if at least one branch matches; all branches are evaluated, and the last matching branch's result stands. An object or array is produced in place, so every matching branch sees what the ones before it did (`Some(Open({a:1}), Open({b:2}))` on `{}` gives `{a:1,b:2}`); a branch that replaces the value (a scalar, a `Catch`) leaves the later branches the value they would have seen (`Some(Catch(1, Number), Open({a:1}))` on `{}` gives `{a:1}`). |
-| `All(shapes…)` | Passes only if every branch matches; the value is threaded through each. |
+| `One(shapes…)` | Passes on the first matching branch, whose output is the result. |
+| `Some(shapes…)` | Passes if at least one branch matches; all branches are evaluated, and the last matching branch's result stands. Every branch sees the value as it was given, never one another branch changed (`Some(Open({a:1}), Open({b:2}))` on `{}` gives `{b:2}`). |
+| `All(shapes…)` | Passes only if every branch matches; the value is threaded through each, so later branches see what earlier ones produced (`All(Open({a:1}), Open({b:2}))` on `{}` gives `{a:1,b:2}`). |
+
+None of the three changes the value it was given: each branch matches and
+produces from a copy, and the composition's result replaces the value only
+when it passes, so a failing `One`, `Some` or `All` leaves the input as it
+was.
 | `Discriminated(tag, { name: shape, … })` | A tagged union: the branch is chosen by the string value of the `tag` property and the value validated against that branch **alone**, so the errors are its own rather than a list of every alternative. |
 
 `Discriminated` adds the tag property to an object-shaped branch that does not

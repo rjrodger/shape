@@ -2955,16 +2955,27 @@ const All = function <const S extends readonly any[]>(this: any, ...inshapes: S)
   const validator = function All(val: any, update: Update, state: State) {
     let pass = true
 
-    // let err: any = []
+    // The value is threaded through the branches, each producing from what
+    // the one before it made; the subject itself is never changed, so a
+    // failing composition leaves it as it was.
+    let out = clone(val)
     for (let shape of shapes) {
       let subctx = { ...state.ctx, err: [] }
-      shape(val, subctx)
+      const res = shape(out, subctx)
       if (0 < subctx.err.length) {
         pass = false
       }
+      else if (undefined !== res) {
+        // A branch that drops its value (Ignore) passes the previous one on.
+        out = res
+      }
     }
 
-    if (!pass) {
+    // An absent subject stays absent, for the required check to see.
+    if (pass && undefined !== val) {
+      update.val = out
+    }
+    else if (!pass) {
       update.why = S.All
       update.err = [
         makeErr(state,
@@ -3000,12 +3011,16 @@ const Some = function <const S extends readonly any[]>(this: any, ...inshapes: S
   const validator = function Some(val: any, update: Update, state: State) {
     let pass = false
 
+    // Every branch sees the value as it was given, never one another branch
+    // changed: each matches and produces from its own copy, and the last
+    // matching branch's result stands. The subject itself is never changed.
+
     for (let shape of shapes) {
       let subctx = { ...state.ctx, err: [] }
-      let match = shape.match(val, subctx)
+      let match = shape.match(clone(val), subctx)
 
       if (match) {
-        update.val = shape(val, subctx)
+        update.val = shape(clone(val), subctx)
       }
 
       pass ||= match
@@ -3046,11 +3061,14 @@ const One = function <const S extends readonly any[]>(this: any, ...inshapes: S)
   const validator = function One(val: any, update: Update, state: State) {
     let passN = 0
 
+    // The first matching branch produces from its own copy: the subject
+    // itself is never changed.
+
     for (let shape of shapes) {
       let subctx = { ...state.ctx, err: [] }
-      if (shape.match(val, subctx)) {
+      if (shape.match(clone(val), subctx)) {
         passN++
-        update.val = shape(val, subctx)
+        update.val = shape(clone(val), subctx)
         // TODO: update docs - short circuits!
         break
       }

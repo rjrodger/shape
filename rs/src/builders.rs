@@ -1512,18 +1512,20 @@ mod tests {
             run(&s, &a("\"5\"")),
             "ERR Value \"5\" for property \"a\" does not satisfy all of: Number, Min(9)"
         );
-        // A branch that produces nothing leaves the key out.
+        // A branch that produces nothing leaves a required composition with
+        // no value, so the missing property is reported.
+        let missing = "ERR Validation failed for property \"a\" because the property is missing.";
         assert_eq!(
             run(&at_a(one([Spec::from(skip(Token::Number))])), "{}"),
-            "{}"
+            missing
         );
         assert_eq!(
             run(&at_a(some([Spec::from(skip(Token::Number))])), "{}"),
-            "{}"
+            missing
         );
         assert_eq!(
             run(&at_a(all([Spec::from(skip(Token::Number))])), "{}"),
-            "{}"
+            missing
         );
         let mut quiet = one_ns();
         quiet.silent = true;
