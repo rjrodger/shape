@@ -39,7 +39,7 @@ shape.MustShape(shape.Open(map[string]any{"a": 1}))
 **TS**
 
 ```js
-const { Child, Number } = require('shape')
+const { Child } = require('shape')   // Number is the JS global, not an export
 const shape = Shape(Child(Number, {}))   // any keys, all values must be numbers
 shape({ x: 1, y: 2 })    // OK
 shape({ x: 'a' })        // throws: not of type number
@@ -69,7 +69,7 @@ Error paths use dot notation, e.g. `server.tls.enabled`.
 ## Force closed
 
 If a shape became open (e.g. via `Child`/`Open`) and you want it closed again,
-wrap it with [`Closed`](../reference/builders.md#closed).
+wrap it with [`Closed`](../reference/builders.md#objects--arrays).
 
 ## Reshape a declared object: `Pick`, `Omit`, `Partial`, `Extend`
 

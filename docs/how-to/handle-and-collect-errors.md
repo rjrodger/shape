@@ -13,7 +13,8 @@ list of every problem.
 try {
   Shape({ age: Number })({ age: 'old' })
 } catch (err) {
-  console.log(err.message)   // Validation failed for property "age" … not of type number.
+  console.log(err.message)
+  // Validation failed for property "age" with string "old" because the string is not of type number.
 }
 ```
 
@@ -84,7 +85,7 @@ err.text   // human message
 
 ## Customise messages
 
-- [`Fault`](../reference/builders.md#fault) overrides the structural message for
+- [`Fault`](../reference/builders.md#required--optional--defaults) overrides the structural message for
   one node.
 - A custom [`Check`](add-custom-validation.md) sets its own message via
   `update.err`.

@@ -46,22 +46,23 @@ Missing tuple positions are filled from their per-position defaults.
 
 ## A tuple with a variable tail: `Rest`
 
-`Rest(shape)` matches any number of trailing elements after the fixed tuple
-positions. Because it extends a *tuple*, build it on a node whose fixed
-positions are already set (`buildize` lifts a spec into a chainable node):
+`Rest(shape, tuple)` matches any number of trailing elements after the fixed
+tuple positions. Pass the tuple as the second argument:
 
 ```js
-const { Shape, buildize, String, Number } = require('shape')
+const { Shape, Rest } = require('shape')
 // [string, number, ...number]
-const shape = Shape(buildize([String, Number]).Rest(Number))
+const shape = Shape(Rest(Number, [String, Number]))
 shape(['a', 1, 2, 3])   // OK: 'a', 1, then any number of numbers
-shape(['a', 1, 'x'])    // throws: not of type number
+shape(['a', 1, 'x'])    // throws: index 2 is not of type number
 ```
+
+Without a tuple, `Rest(Number)` is a tail only — the same as `[Number]`.
 
 **Go**
 
 ```go
-s := shape.MustShape(shape.Rest(shape.Number)) // tail-only, over a tuple base
+s := shape.MustShape(shape.Rest(shape.Number, []any{shape.String, shape.Number}))
 ```
 
 ## Force a single-shape array to be closed

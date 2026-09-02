@@ -8,7 +8,7 @@ a fixed set of literal values.
 **TS**
 
 ```js
-const { Shape, One, Number, String } = require('shape')
+const { Shape, One } = require('shape')   // Number and String are the JS globals
 const id = Shape({ id: One(Number, String) })
 
 id({ id: 42 })     // OK
