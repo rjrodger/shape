@@ -83,7 +83,8 @@ survives without the file growing with the budget.
 - `host`: an anonymous id, the platform, architecture, CPU model, core
   count and memory, and whether it ran under GitHub Actions;
 - `runtime` and `versions`: Node or Go, and every library's version;
-- `input_hash`: the hash of `cases.json`. The report also hashes each
+- `input_hash`: the hash of `cases.json`, taken with LF line endings so a
+  Windows checkout (CRLF) hashes as everyone else. The report also hashes each
   case's definition as it was in the run's commit (`case_hash` on every
   row of `summary.json`), so a case added later leaves the others'
   history comparable, and a case changed later cuts its own history at

@@ -181,7 +181,9 @@ function cases() {
       c.jsonSchema = byName[c.jsonSchema.$ref.slice(1)].jsonSchema
     }
   }
-  const hash = crypto.createHash('sha256').update(raw).digest('hex').slice(0, 12)
+  // Hashed with LF line endings, so a Windows checkout (CRLF) measures the
+  // same cases as everyone else.
+  const hash = crypto.createHash('sha256').update(raw.replace(/\r\n/g, '\n')).digest('hex').slice(0, 12)
   return { cases: spec.cases, hash }
 }
 
