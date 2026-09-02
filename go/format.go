@@ -118,6 +118,7 @@ func (n *Node) withFormat(f format) *Node {
 		Type(String, n)
 	}
 	n.n.befores = append(n.n.befores, formatValidator(f))
+	bumpValidatorGen()
 	return n
 }
 

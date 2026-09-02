@@ -57,7 +57,9 @@ func copyNode(n *node) *node {
 	}
 	cp.objKeys = append([]string{}, n.objKeys...)
 	cp.befores = append([]validator{}, n.befores...)
+	bumpValidatorGen()
 	cp.afters = append([]validator{}, n.afters...)
+	bumpValidatorGen()
 	if n.meta != nil {
 		cp.meta = make(map[string]any, len(n.meta))
 		for k, v := range n.meta {

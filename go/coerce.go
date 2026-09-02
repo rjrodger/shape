@@ -150,11 +150,13 @@ func Coerce(spec ...any) *Node {
 		nb = buildize(spec[0])
 	}
 	nb.n.befores = append([]validator{coerceValidator()}, nb.n.befores...)
+	bumpValidatorGen()
 	return nb
 }
 
 // Coerce (chained).
 func (n *Node) Coerce() *Node {
 	n.n.befores = append([]validator{coerceValidator()}, n.n.befores...)
+	bumpValidatorGen()
 	return n
 }

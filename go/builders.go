@@ -218,7 +218,9 @@ func Default(dval any, spec ...any) *Node {
 		if nb.n.kind == KindAny && dval != nil {
 			if base, err := normalize(dval); err == nil {
 				base.befores = append(append([]validator{}, nb.n.befores...), base.befores...)
+				bumpValidatorGen()
 				base.afters = append(append([]validator{}, nb.n.afters...), base.afters...)
+				bumpValidatorGen()
 				base.hasExact, base.exactVals = nb.n.hasExact, nb.n.exactVals
 				base.empty, base.nullable, base.silent = nb.n.empty, nb.n.nullable, nb.n.silent
 				base.faultMsg = nb.n.faultMsg
@@ -390,6 +392,7 @@ func Exact(vals ...any) *Node {
 		},
 	}
 	nb.n.befores = append(nb.n.befores, v)
+	bumpValidatorGen()
 	return nb
 }
 
@@ -399,6 +402,7 @@ func (n *Node) Exact(vals ...any) *Node {
 	n.n.hasExact = true
 	n.n.exactVals = append([]any{}, vals...)
 	n.n.befores = append(n.n.befores, other.n.befores...)
+	bumpValidatorGen()
 	return n
 }
 
@@ -437,6 +441,7 @@ func Min(min any, spec ...any) *Node {
 		stringify: func() string { return "Min(" + numText(min) + ")" },
 	}
 	nb.n.befores = append(nb.n.befores, v)
+	bumpValidatorGen()
 	return nb
 }
 
@@ -444,6 +449,7 @@ func Min(min any, spec ...any) *Node {
 func (n *Node) Min(min any) *Node {
 	other := Min(min)
 	n.n.befores = append(n.n.befores, other.n.befores...)
+	bumpValidatorGen()
 	return n
 }
 
@@ -482,6 +488,7 @@ func Max(max any, spec ...any) *Node {
 		stringify: func() string { return "Max(" + numText(max) + ")" },
 	}
 	nb.n.befores = append(nb.n.befores, v)
+	bumpValidatorGen()
 	return nb
 }
 
@@ -489,6 +496,7 @@ func Max(max any, spec ...any) *Node {
 func (n *Node) Max(max any) *Node {
 	other := Max(max)
 	n.n.befores = append(n.n.befores, other.n.befores...)
+	bumpValidatorGen()
 	return n
 }
 
@@ -527,6 +535,7 @@ func Above(above any, spec ...any) *Node {
 		stringify: func() string { return "Above(" + numText(above) + ")" },
 	}
 	nb.n.befores = append(nb.n.befores, v)
+	bumpValidatorGen()
 	return nb
 }
 
@@ -534,6 +543,7 @@ func Above(above any, spec ...any) *Node {
 func (n *Node) Above(above any) *Node {
 	other := Above(above)
 	n.n.befores = append(n.n.befores, other.n.befores...)
+	bumpValidatorGen()
 	return n
 }
 
@@ -572,6 +582,7 @@ func Below(below any, spec ...any) *Node {
 		stringify: func() string { return "Below(" + numText(below) + ")" },
 	}
 	nb.n.befores = append(nb.n.befores, v)
+	bumpValidatorGen()
 	return nb
 }
 
@@ -579,6 +590,7 @@ func Below(below any, spec ...any) *Node {
 func (n *Node) Below(below any) *Node {
 	other := Below(below)
 	n.n.befores = append(n.n.befores, other.n.befores...)
+	bumpValidatorGen()
 	return n
 }
 
@@ -617,6 +629,7 @@ func Len(length int, spec ...any) *Node {
 		stringify: func() string { return fmt.Sprintf("Len(%d)", length) },
 	}
 	nb.n.befores = append(nb.n.befores, v)
+	bumpValidatorGen()
 	return nb
 }
 
@@ -624,6 +637,7 @@ func Len(length int, spec ...any) *Node {
 func (n *Node) Len(length int) *Node {
 	other := Len(length)
 	n.n.befores = append(n.n.befores, other.n.befores...)
+	bumpValidatorGen()
 	return n
 }
 
@@ -643,6 +657,7 @@ func Check(check any, spec ...any) *Node {
 		nb.n.requiredSet = true
 		v := validator{name: "Check", fn: c, stringify: func() string { return "Check()" }}
 		nb.n.befores = append(nb.n.befores, v)
+		bumpValidatorGen()
 	case *regexp.Regexp:
 		re := c
 		nb.n.kind = KindCheck
@@ -666,6 +681,7 @@ func Check(check any, spec ...any) *Node {
 			stringify: func() string { return fmt.Sprintf("Check(/%s/)", re.String()) },
 		}
 		nb.n.befores = append(nb.n.befores, v)
+		bumpValidatorGen()
 	}
 	if len(spec) > 0 {
 		// Narrow kind to the carrier shape kind.
@@ -681,6 +697,7 @@ func Check(check any, spec ...any) *Node {
 func (n *Node) Check(check any) *Node {
 	other := Check(check)
 	n.n.befores = append(n.n.befores, other.n.befores...)
+	bumpValidatorGen()
 	return n
 }
 
@@ -694,6 +711,7 @@ func Before(fn func(val any, update *Update, state *State) bool, spec ...any) *N
 	}
 	nb.n.befores = append(nb.n.befores,
 		validator{name: "Before", fn: fn, stringify: func() string { return "Before()" }})
+	bumpValidatorGen()
 	return nb
 }
 
@@ -701,6 +719,7 @@ func Before(fn func(val any, update *Update, state *State) bool, spec ...any) *N
 func (n *Node) Before(fn func(val any, update *Update, state *State) bool) *Node {
 	n.n.befores = append(n.n.befores,
 		validator{name: "Before", fn: fn, stringify: func() string { return "Before()" }})
+	bumpValidatorGen()
 	return n
 }
 
@@ -714,6 +733,7 @@ func After(fn func(val any, update *Update, state *State) bool, spec ...any) *No
 	}
 	nb.n.afters = append(nb.n.afters,
 		validator{name: "After", fn: fn, stringify: func() string { return "After()" }})
+	bumpValidatorGen()
 	return nb
 }
 
@@ -721,6 +741,7 @@ func After(fn func(val any, update *Update, state *State) bool, spec ...any) *No
 func (n *Node) After(fn func(val any, update *Update, state *State) bool) *Node {
 	n.n.afters = append(n.n.afters,
 		validator{name: "After", fn: fn, stringify: func() string { return "After()" }})
+	bumpValidatorGen()
 	return n
 }
 
@@ -915,6 +936,7 @@ func Define(name string, spec ...any) *Node {
 		stringify: func() string { return fmt.Sprintf("Define(%q)", name) },
 	}
 	nb.n.befores = append(nb.n.befores, v)
+	bumpValidatorGen()
 	return nb
 }
 
@@ -960,6 +982,7 @@ func ReferWith(name string, opts ReferOptions, spec ...any) *Node {
 		stringify: func() string { return fmt.Sprintf("Refer(%q)", name) },
 	}
 	nb.n.befores = append(nb.n.befores, v)
+	bumpValidatorGen()
 	return nb
 }
 
@@ -1092,6 +1115,7 @@ func Key(args ...any) *Node {
 		stringify: func() string { return "Key()" },
 	}
 	nb.n.befores = append(nb.n.befores, v)
+	bumpValidatorGen()
 	return nb
 }
 
