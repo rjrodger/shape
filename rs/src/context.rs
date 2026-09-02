@@ -11,15 +11,23 @@ use std::sync::Arc;
 /// A path element: an object key or an array index.
 #[derive(Clone, Debug, PartialEq)]
 pub enum PathPart {
-    Key(String),
+    /// A property key, shared with the node that declares it.
+    Key(Arc<str>),
     Index(usize),
 }
 
 impl PathPart {
     pub fn as_key(&self) -> String {
         match self {
-            PathPart::Key(k) => k.clone(),
+            PathPart::Key(k) => k.to_string(),
             PathPart::Index(i) => i.to_string(),
+        }
+    }
+
+    fn write_to(&self, out: &mut String) {
+        match self {
+            PathPart::Key(k) => out.push_str(k),
+            PathPart::Index(i) => out.push_str(&i.to_string()),
         }
     }
 }
@@ -61,9 +69,8 @@ impl Context {
 
 /// What a custom validator sees: where it is, what it is looking at.
 pub struct State<'a> {
-    /// The path from the root, the current key last.
-    pub path: &'a [String],
-    /// The path as parts: array indices as indices, keys as keys.
+    /// The path from the root, the current key last: array indices as
+    /// indices, keys as keys.
     pub path_arr: &'a [PathPart],
     /// The immediate key or index.
     pub key: &'a str,
@@ -85,21 +92,26 @@ pub struct State<'a> {
 impl<'a> State<'a> {
     /// The path as dotted text.
     pub fn path_str(&self) -> String {
-        join_path(self.path)
+        join_path(self.path_arr)
+    }
+
+    /// The path as keys, every index as its digits.
+    pub fn path_keys(&self) -> Vec<String> {
+        self.path_arr.iter().map(|p| p.as_key()).collect()
     }
 }
 
 /// The dotted form of a path, empty segments skipped.
-pub fn join_path(path: &[String]) -> String {
+pub fn join_path(path: &[PathPart]) -> String {
     let mut out = String::new();
     for p in path {
-        if p.is_empty() {
+        if matches!(p, PathPart::Key(k) if k.is_empty()) {
             continue;
         }
         if !out.is_empty() {
             out.push('.');
         }
-        out.push_str(p);
+        p.write_to(&mut out);
     }
     out
 }
@@ -148,16 +160,19 @@ mod tests {
 
     #[test]
     fn paths_join_and_render() {
-        assert_eq!(join_path(&["a".into(), "".into(), "b".into()]), "a.b");
+        let k = |s: &str| PathPart::Key(s.into());
+        assert_eq!(
+            join_path(&[k("a"), k(""), k("b"), PathPart::Index(1)]),
+            "a.b.1"
+        );
         assert_eq!(join_path(&[]), "");
         assert_eq!(PathPart::Key("k".into()).as_key(), "k");
         assert_eq!(PathPart::Index(2).as_key(), "2");
         let mut ctx = Context::new();
         let node = Node::default();
-        let path = vec!["a".to_string()];
+        let path = [k("a")];
         let s = State {
-            path: &path,
-            path_arr: &[],
+            path_arr: &path,
             key: "a",
             value: &Value::Null,
             node: &node,
@@ -168,6 +183,7 @@ mod tests {
             check_name: "",
         };
         assert_eq!(s.path_str(), "a");
+        assert_eq!(s.path_keys(), vec!["a".to_string()]);
         let u = Update::default();
         assert!(!u.done && u.val.is_none());
     }

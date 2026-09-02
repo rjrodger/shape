@@ -64,6 +64,8 @@ pub struct Schema {
     root: Node,
     /// The `define`d nodes by name, for `refer`.
     defs: Arc<HashMap<String, Arc<Node>>>,
+    /// No validator anywhere in the tree: a verdict needs no path.
+    pure: bool,
 }
 
 /// Compile a spec.
@@ -80,10 +82,11 @@ impl Schema {
     pub fn with_options(spec: impl Into<Spec>, opts: &Options) -> Schema {
         let mut root = normalize::normalize_with(spec.into(), opts);
         let mut defs = HashMap::new();
-        prepare(&mut root, &mut defs);
+        let pure = prepare(&mut root, &mut defs);
         Schema {
             root,
             defs: Arc::new(defs),
+            pure,
         }
     }
 
@@ -125,7 +128,7 @@ impl Schema {
                 ctx,
                 is_match: false,
                 path: Vec::new(),
-                path_arr: Vec::new(),
+                paths: true,
             };
             walk_root(&self.root, Cur::Mut(&mut value), &mut w, &mut verr)
         };
@@ -152,7 +155,7 @@ impl Schema {
             ctx: &mut ctx,
             is_match: true,
             path: Vec::new(),
-            path_arr: Vec::new(),
+            paths: !self.pure,
         };
         walk_root(&self.root, Cur::Ref(input), &mut w, &mut verr);
         !verr.has_any()
@@ -172,7 +175,7 @@ impl Schema {
             ctx: &mut ctx,
             is_match: true,
             path: Vec::new(),
-            path_arr: Vec::new(),
+            paths: true,
         };
         walk_root(&self.root, Cur::Ref(input), &mut w, &mut verr);
         verr.issues
@@ -186,9 +189,16 @@ pub(crate) fn prepare_node(n: &mut Node) {
 }
 
 /// Walk a compiled tree once: every object node gets the set of keys it
-/// accepts, and every `define`d node is collected by name.
-fn prepare(n: &mut Node, defs: &mut HashMap<String, Arc<Node>>) {
+/// accepts and its keys to share with the paths, and every `define`d node
+/// is collected by name. Reports whether the tree has no validator at all.
+fn prepare(n: &mut Node, defs: &mut HashMap<String, Arc<Node>>) -> bool {
+    let mut pure = n.befores.is_empty() && n.afters.is_empty();
     if n.kind == Kind::Object {
+        n.obj_keys = n
+            .obj_children
+            .keys()
+            .map(|k| Arc::from(k.as_str()))
+            .collect();
         let mut consumed = std::collections::HashSet::with_capacity(n.obj_children.len());
         for (k, cn) in &n.obj_children {
             consumed.insert(k.clone());
@@ -202,26 +212,27 @@ fn prepare(n: &mut Node, defs: &mut HashMap<String, Arc<Node>>) {
         n.consumed = consumed;
     }
     for cn in n.obj_children.values_mut() {
-        prepare(cn, defs);
+        pure &= prepare(cn, defs);
     }
     if let Some(r) = n.obj_rest.as_deref_mut() {
-        prepare(r, defs);
+        pure &= prepare(r, defs);
     }
     for cn in n.arr_children.iter_mut() {
-        prepare(cn, defs);
+        pure &= prepare(cn, defs);
     }
     if let Some(c) = n.arr_child.as_deref_mut() {
-        prepare(c, defs);
+        pure &= prepare(c, defs);
     }
     if let Some(r) = n.arr_rest.as_deref_mut() {
-        prepare(r, defs);
+        pure &= prepare(r, defs);
     }
     for sn in n.list.iter_mut() {
-        prepare(sn, defs);
+        pure &= prepare(sn, defs);
     }
     if let Some(name) = &n.define_name {
         defs.insert(name.clone(), Arc::new(n.clone()));
     }
+    pure
 }
 
 /// What `validate_into` can fail with: the validation, or the deserialization

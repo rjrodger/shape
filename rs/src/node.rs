@@ -183,6 +183,9 @@ pub struct Node {
     /// its renames and the sources they claim. Set when the tree is
     /// prepared.
     pub consumed: std::collections::HashSet<String>,
+    /// The declared keys in order, shared with the paths that name them.
+    /// Set when the tree is prepared.
+    pub obj_keys: Vec<Arc<str>>,
 
     /// The fixed positions of a tuple.
     pub arr_children: Vec<Node>,

@@ -106,13 +106,9 @@ fn run(n: &Node, val: Value, key: &str, is_match: bool) -> (Value, ValidationErr
         path: if key.is_empty() {
             Vec::new()
         } else {
-            vec![key.to_string()]
+            vec![crate::context::PathPart::Key(key.into())]
         },
-        path_arr: if key.is_empty() {
-            Vec::new()
-        } else {
-            vec![crate::context::PathPart::Key(key.to_string())]
-        },
+        paths: true,
     };
     let mut val = val;
     let kept = validate_node(n, Cur::Mut(&mut val), key, false, &mut w, &mut verr);

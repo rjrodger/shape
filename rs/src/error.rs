@@ -104,8 +104,7 @@ impl std::error::Error for ValidationError {}
 
 /// Where an error happened: what `make_err` needs of the state.
 pub(crate) struct At<'a> {
-    pub path: &'a [String],
-    pub path_arr: &'a [PathPart],
+    pub path: &'a [PathPart],
     pub key: &'a str,
     pub kind: Kind,
     pub value: &'a Value,
@@ -140,7 +139,7 @@ pub(crate) fn make_err(at: &At<'_>, why: &str, mark: i64, text: &str) -> FieldEr
     let path = join_path(at.path);
     let mut err = FieldError {
         path,
-        path_arr: at.path_arr.to_vec(),
+        path_arr: at.path.to_vec(),
         key: at.key.to_string(),
         kind: at.kind,
         value: at.value.clone(),
@@ -251,10 +250,9 @@ pub(crate) fn default_err_text(e: &FieldError) -> String {
 mod tests {
     use super::*;
 
-    fn at<'a>(path: &'a [String], value: &'a Value, absent: bool) -> At<'a> {
+    fn at<'a>(path: &'a [PathPart], value: &'a Value, absent: bool) -> At<'a> {
         At {
             path,
-            path_arr: &[],
             key: "k",
             kind: Kind::String,
             value,
@@ -268,7 +266,7 @@ mod tests {
 
     #[test]
     fn texts() {
-        let p = vec!["a".to_string()];
+        let p = vec![PathPart::Key("a".into())];
         let v = Value::from(1);
         let e = make_err(&at(&p, &v, false), WHY_TYPE, MARK_SCALAR_TYPE, "");
         assert_eq!(e.text, "Validation failed for property \"a\" with number \"1\" because the number is not of type string.");

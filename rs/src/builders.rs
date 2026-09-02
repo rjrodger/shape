@@ -329,10 +329,10 @@ pub fn key_args(args: &[Value]) -> Node {
         move |state, update| {
             // The canonical path is [root, k1, ..., kn]; the leading root
             // slot is kept so the index and slice arithmetic match.
-            let path = state.path;
+            let path = state.path_keys();
             let mut ts_path: Vec<Value> = Vec::with_capacity(path.len() + 1);
             ts_path.push(Value::Undefined);
-            ts_path.extend(path.iter().map(|k| Value::Str(k.clone())));
+            ts_path.extend(path.iter().cloned().map(Value::Str));
             let l = ts_path.len() as i64;
             match (depth, &sep) {
                 (None, None) => {

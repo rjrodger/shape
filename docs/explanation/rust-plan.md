@@ -262,6 +262,53 @@ measures in phase 6. The performance plan's lessons apply afterwards
 allocations are the whole list), and the [performance report](https://rjrodger.github.io/shape/perf/)
 shows the result beside the other two.
 
+#### Results of the pass
+
+The pass was made on 2026-09-02, after phase 6, on the sandbox host of the
+[performance plan](performance-plan.md)'s second round (a 2.10 GHz Xeon),
+with the quick budget (`BENCH_QUICK=1 node bench/run.js rs --dry`) so the
+figures are indicative to about a factor of 1.3, as that plan's are. Before
+is the clean tree at `2364bf7`, the end of phase 6; after is the tree that
+carries this section. Median per `valid()` call; the other three libraries
+are the same crates the report shows.
+
+| case | shape before | shape after | gain | jsonschema crate | validator | garde |
+| ---- | -----------: | ----------: | ---: | ---------------: | --------: | ----: |
+| `flat` | 532 ns | 135 ns | 3.9× | 151 ns | 22 ns | 12 ns |
+| `nested` | 1.17 µs | 282 ns | 4.1× | 317 ns | 108 ns | 45 ns |
+| `array` | 16.0 µs | 3.8 µs | 4.2× | 4.6 µs | 673 ns | 221 ns |
+| `bounds` | 574 ns | 306 ns | 1.9× | 174 ns | 31 ns | 30 ns |
+| `large` | 4.40 µs | 885 ns | 5.0× | 1.54 µs | 99 ns | 63 ns |
+| `invalid` | 3.12 µs | 2.25 µs | 1.4× | 113 ns | – | – |
+
+What it did, all in `validate.rs` and the walk's state, with no change to
+any error text (the corpus and the differential harness gate it):
+
+- **Paths as shared keys.** The walk kept two `String` paths per property
+  visit, one dotted and one as segments. It now keeps one `Vec<PathPart>`,
+  where a key is the `Arc<str>` the object node prepared once for each of
+  its children and an index is the number; the dotted form is rendered
+  only when an error is made. An array index is written into a stack
+  buffer for the element's key, so an element costs no allocation either.
+- **No path work on a pure verdict.** `Schema::prepare` records whether
+  the tree has any validator at all. `valid()` and `matches()` on such a
+  schema do not maintain the path, since nothing reads it: an error is a
+  terse verdict and no `Key` or custom validator can ask for it. The
+  shared key is not even taken (an atomic increment) unless the path is
+  kept.
+- **Aligned objects.** When the input's keys are the declared keys in
+  declaration order, or a prefix of them, which is the usual case for JSON
+  written from the same shape, no key is unknown and each child sits at
+  its own index: the unknown-key pass is skipped and a read-only walk
+  finds each child by position. That is one short string comparison per
+  key instead of two hash lookups. An input in any other order takes the
+  hashing path as before, and a producing walk always does, since the
+  map may change under it.
+
+`bounds` and `invalid` gain least because neither is dominated by the
+walk: the first spends its time in the bound validators, and the second
+renders an error message, both of which the pass left alone.
+
 ## Order of work
 
 | # | pull request | gate at the end |

@@ -42,8 +42,43 @@ impl<'a, T> Cur<'a, T> {
 pub(crate) struct Walk<'c> {
     pub ctx: &'c mut Context,
     pub is_match: bool,
-    pub path: Vec<String>,
-    pub path_arr: Vec<PathPart>,
+    /// The path from the root, the current key last.
+    pub path: Vec<PathPart>,
+    /// Whether the path is kept: a terse walk of a schema with no
+    /// validators has nothing that reads it.
+    pub paths: bool,
+}
+
+impl<'c> Walk<'c> {
+    #[inline]
+    fn push(&mut self, part: PathPart) {
+        if self.paths {
+            self.path.push(part);
+        }
+    }
+
+    #[inline]
+    fn pop(&mut self) {
+        if self.paths {
+            self.path.pop();
+        }
+    }
+}
+
+/// The digits of an index, written into a stack buffer: an element's key,
+/// without an allocation per element.
+fn index_key(i: usize, buf: &mut [u8; 20]) -> &str {
+    let mut n = i;
+    let mut pos = buf.len();
+    loop {
+        pos -= 1;
+        buf[pos] = b'0' + (n % 10) as u8;
+        n /= 10;
+        if n == 0 {
+            break;
+        }
+    }
+    std::str::from_utf8(&buf[pos..]).unwrap()
 }
 
 pub(crate) fn required_mark_for(k: Kind) -> i64 {
@@ -115,8 +150,7 @@ pub(crate) fn validate_node_with(
         let ok = {
             let value: &Value = over.as_ref().unwrap_or_else(|| cur.get());
             let mut state = State {
-                path: &w.path,
-                path_arr: &w.path_arr,
+                path_arr: &w.path,
                 key,
                 value,
                 node: cur_node,
@@ -177,8 +211,7 @@ pub(crate) fn validate_node_with(
         let ok = {
             let value: &Value = over.as_ref().unwrap_or_else(|| cur.get());
             let mut state = State {
-                path: &w.path,
-                path_arr: &w.path_arr,
+                path_arr: &w.path,
                 key,
                 value,
                 node: n,
@@ -229,7 +262,6 @@ pub(crate) fn at_of<'a>(
 ) -> At<'a> {
     At {
         path: &w.path,
-        path_arr: &w.path_arr,
         key,
         kind: n.kind,
         value,
@@ -498,6 +530,27 @@ fn validate_structure(
     true
 }
 
+/// The key of the child at `idx`, shared with the node once it is prepared;
+/// a node that never was allocates it.
+fn child_key(n: &Node, idx: usize, k: &str) -> Arc<str> {
+    match n.obj_keys.get(idx) {
+        Some(key) => Arc::clone(key),
+        None => Arc::from(k),
+    }
+}
+
+/// Whether the input's keys are the declared keys in declaration order, or
+/// a prefix of them: then none is unknown, and each child sits at its own
+/// index. The usual case for JSON written from the same shape, and a
+/// string comparison per key rather than a hash lookup.
+fn aligned(n: &Node, map: &Map) -> bool {
+    map.len() <= n.obj_keys.len()
+        && map
+            .keys()
+            .zip(&n.obj_keys)
+            .all(|(k, dk)| k.as_str() == &**dk)
+}
+
 /// The keys of a closed object it does not consume, in the input's order.
 fn unknown_keys(n: &Node, map: &Map) -> Vec<String> {
     map.iter()
@@ -517,8 +570,9 @@ fn validate_object(
 ) -> bool {
     // Unknown keys are reported before descending, in one message, in the
     // input's order.
+    let aligned = cur.get().as_obj().is_some_and(|map| aligned(n, map));
     if let Some(map) = cur.get().as_obj() {
-        if !n.is_open() {
+        if !n.is_open() && !aligned {
             let unknown = unknown_keys(n, map);
             if !unknown.is_empty() {
                 let value = cur.get();
@@ -550,7 +604,7 @@ fn validate_object(
         }
     };
 
-    for (k, cn) in &n.obj_children {
+    for (idx, (k, cn)) in n.obj_children.iter().enumerate() {
         // A rename's claim: the value is missing and a claimed source has
         // it, so it is picked up from there.
         let mut claimed: Option<&Value> = None;
@@ -578,8 +632,10 @@ fn validate_object(
             }
         }
 
-        w.path.push(k.clone());
-        w.path_arr.push(PathPart::Key(k.clone()));
+        // The shared key is only taken when the path is kept.
+        if w.paths {
+            w.push(PathPart::Key(child_key(n, idx, k)));
+        }
         let mut scratch = Value::Undefined;
         let (child, was_absent) = match &mut oc {
             Cur::Mut(map) => {
@@ -587,18 +643,26 @@ fn validate_object(
                 let slot = map.entry(k.clone()).or_insert(Value::Undefined);
                 (Cur::Mut(slot), was_absent)
             }
-            Cur::Ref(map) => match claimed.or_else(|| map.get(k)) {
-                Some(child) if !child.is_undefined() => (Cur::Ref(child), false),
-                _ => (Cur::Mut(&mut scratch), true),
-            },
+            Cur::Ref(map) => {
+                // A read-only walk of an aligned input finds the child by
+                // index; the map cannot have changed under it.
+                let found = if aligned {
+                    map.get_index(idx).map(|(_, v)| v)
+                } else {
+                    claimed.or_else(|| map.get(k))
+                };
+                match found {
+                    Some(child) if !child.is_undefined() => (Cur::Ref(child), false),
+                    _ => (Cur::Mut(&mut scratch), true),
+                }
+            }
         };
         let keep = if cn.is_ignore() {
             validate_ignored(cn, child, k, false, w, verr)
         } else {
             validate_node(cn, child, k, false, w, verr)
         };
-        w.path.pop();
-        w.path_arr.pop();
+        w.pop();
         if let Cur::Mut(m) = &mut oc {
             if !keep {
                 let empty = m.get(k).map(|x| x.is_undefined()).unwrap_or(false);
@@ -621,7 +685,9 @@ fn validate_object(
         }
     }
 
-    if let Some(rest) = &n.obj_rest {
+    // An aligned read-only walk has nothing left over.
+    let rest_keys = !(aligned && matches!(oc, Cur::Ref(_)));
+    if let Some(rest) = n.obj_rest.as_deref().filter(|_| rest_keys) {
         let extra: Vec<String> = oc
             .get()
             .iter()
@@ -629,8 +695,7 @@ fn validate_object(
             .map(|(k, _)| k.clone())
             .collect();
         for k in extra {
-            w.path.push(k.clone());
-            w.path_arr.push(PathPart::Key(k.clone()));
+            w.push(PathPart::Key(Arc::from(k.as_str())));
             let child = match &mut oc {
                 Cur::Mut(map) => Cur::Mut(map.get_mut(&k).unwrap()),
                 Cur::Ref(map) => Cur::Ref(map.get(&k).unwrap()),
@@ -640,8 +705,7 @@ fn validate_object(
             } else {
                 validate_node(rest, child, &k, false, w, verr)
             };
-            w.path.pop();
-            w.path_arr.pop();
+            w.pop();
             if !keep {
                 if let Cur::Mut(m) = &mut oc {
                     m.shift_remove(&k);
@@ -694,11 +758,11 @@ fn validate_array(
     };
     let len = ac.get().len();
 
+    let mut buf = [0u8; 20];
     let mut i = 0usize;
     for cn in &n.arr_children {
-        let k = i.to_string();
-        w.path.push(k.clone());
-        w.path_arr.push(PathPart::Index(i));
+        let k = index_key(i, &mut buf);
+        w.push(PathPart::Index(i));
         let mut scratch = Value::Undefined;
         let (child, appended) = match &mut ac {
             Cur::Mut(a) => {
@@ -714,12 +778,11 @@ fn validate_array(
             },
         };
         let keep = if cn.is_ignore() {
-            validate_ignored(cn, child, &k, true, w, verr)
+            validate_ignored(cn, child, k, true, w, verr)
         } else {
-            validate_node(cn, child, &k, true, w, verr)
+            validate_node(cn, child, k, true, w, verr)
         };
-        w.path.pop();
-        w.path_arr.pop();
+        w.pop();
         if !keep && !appended && cn.is_ignore() {
             if let Cur::Mut(a) = &mut ac {
                 a[i] = Value::Undefined;
@@ -738,20 +801,18 @@ fn validate_array(
     if let Some(child_shape) = n.arr_child.as_deref().or(n.arr_rest.as_deref()) {
         let mut drop_at: Vec<usize> = Vec::new();
         while i < len {
-            let k = i.to_string();
-            w.path.push(k.clone());
-            w.path_arr.push(PathPart::Index(i));
+            let k = index_key(i, &mut buf);
+            w.push(PathPart::Index(i));
             let child = match &mut ac {
                 Cur::Mut(a) => Cur::Mut(&mut a[i]),
                 Cur::Ref(a) => Cur::Ref(&a[i]),
             };
             let keep = if child_shape.is_ignore() {
-                validate_ignored(child_shape, child, &k, true, w, verr)
+                validate_ignored(child_shape, child, k, true, w, verr)
             } else {
-                validate_node(child_shape, child, &k, true, w, verr)
+                validate_node(child_shape, child, k, true, w, verr)
             };
-            w.path.pop();
-            w.path_arr.pop();
+            w.pop();
             if !keep && child_shape.is_ignore() {
                 drop_at.push(i);
             }
@@ -1017,6 +1078,38 @@ mod tests {
 
     fn fail() -> Validator {
         chk("Odd", |_, _| false)
+    }
+
+    #[test]
+    fn index_keys_need_no_allocation() {
+        let mut buf = [0u8; 20];
+        assert_eq!(index_key(0, &mut buf), "0");
+        assert_eq!(index_key(7, &mut buf), "7");
+        assert_eq!(index_key(1234567890123, &mut buf), "1234567890123");
+    }
+
+    #[test]
+    fn unprepared_object_keys_are_allocated() {
+        // A node that never went through prepare has no shared keys, so the
+        // walk allocates them; the path still renders.
+        let n = crate::normalize::normalize(obj([("a", Token::Number)]));
+        assert!(n.obj_keys.is_empty());
+        let mut ctx = crate::Context::new();
+        let mut w = Walk {
+            ctx: &mut ctx,
+            is_match: false,
+            path: Vec::new(),
+            paths: true,
+        };
+        let mut verr = ValidationError::default();
+        let mut val = j(r#"{"a":"x"}"#);
+        validate_node(&n, Cur::Mut(&mut val), "", false, &mut w, &mut verr);
+        // Nothing is consumed either, so the key is also reported unknown.
+        assert_eq!(
+            verr.to_string(),
+            "Validation failed for object \"{a:x}\" because the property \"a\" is not allowed.\n\
+             Validation failed for property \"a\" with string \"x\" because the string is not of type number."
+        );
     }
 
     #[test]
