@@ -69,14 +69,14 @@ describe('argu', () => {
 
     deepEqual(foo(2, 'X'), '2X')
     deepEqual(foo('X'), 'undefinedX')
-    throws(() => foo(), 'SKIP (foo): Validation failed for property "b" with value ' +
-        '"undefined" because the value is required.')
+    throws(() => foo(), 'SKIP (foo): Validation failed for property "b" ' +
+        'because the property is missing.')
     throws(() => foo('X', 'Y'), 'SKIP (foo): ' +
         'Too many arguments for type signature (was 2, expected 1)')
     throws(() => foo(3, 4), 'SKIP (foo): Validation failed for property "b" ' +
         'with number "4" because the number is not of type string.')
     throws(() => foo(3), 'SKIP (foo): Validation failed for property "b" ' +
-        'with value "undefined" because the value is required.')
+        'because the property is missing.')
 
 
     function bar(a: string | object, b?: object, c?: Function, d?: object) {

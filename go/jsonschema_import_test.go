@@ -200,7 +200,7 @@ func TestJSONSchemaImportKeywords(t *testing.T) {
 	ok(`{"properties":{"a":{"type":"number"}}}`, map[string]any{"a": 1.0, "b": 2.0})
 	ok(`{"items":{"type":"number"}}`, []any{1.0})
 	ok(`{"required":["a"]}`, map[string]any{"a": 1.0})
-	bad(`{"required":["a"]}`, map[string]any{}, "required")
+	bad(`{"required":["a"]}`, map[string]any{}, "is missing")
 	ok(`{"additionalProperties":true}`, map[string]any{"z": 1.0})
 
 	// Boolean schemas.

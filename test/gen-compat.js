@@ -353,6 +353,14 @@ const files = {
     ['js-ip', { $jsonschema: { type: 'string', anyOf: [{ format: 'ipv4' }, { format: 'ipv6' }] } }, 'x'],
   ],
   misc: [
+    // Refer: a name that no Define supplies does nothing, unless strict.
+    ['refer-defined', { a: { $expr: 'Define("d",Number)' }, b: { $expr: 'Refer("d")' } }, { a: 1, b: 2 }],
+    ['refer-defined-strict', { a: { $expr: 'Define("d",Number)' }, b: CALL('Refer', { name: 'd', strict: true }) }, { a: 1, b: 2 }],
+    ['refer-defined-strict-bad', { a: { $expr: 'Define("d",Number)' }, b: CALL('Refer', { name: 'd', strict: true }) }, { a: 1, b: 'x' }],
+    ['refer-undefined-lax', { b: { $expr: 'Refer("nope")' } }, { b: 2 }],
+    ['refer-undefined-strict', { b: CALL('Refer', { name: 'nope', strict: true }) }, { b: 2 }],
+    ['refer-undefined-strict-absent', { b: CALL('Refer', { name: 'nope', strict: true }) }, {}],
+    ['refer-undefined-strict-fill', { b: CALL('Refer', { name: 'nope', strict: true, fill: true }) }, {}],
     ['null-required', { a: { $expr: 'null' } }, { a: null }],
     ['null-literal-default-injected', { a: null }, {}],
     ['null-dsl-default-injected', { a: { $expr: 'null' } }, {}],

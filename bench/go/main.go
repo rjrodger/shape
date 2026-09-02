@@ -10,6 +10,7 @@
 package main
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -252,7 +253,9 @@ func loadCases(file string) ([]benchCase, string) {
 			c.JSONSchema = byName[ref[1:]].JSONSchema
 		}
 	}
-	sum := sha256.Sum256(raw)
+	// Hashed with LF line endings, as the TypeScript harness does, so a
+	// Windows checkout (CRLF) measures the same cases as everyone else.
+	sum := sha256.Sum256(bytes.ReplaceAll(raw, []byte("\r\n"), []byte("\n")))
 	return spec.Cases, hex.EncodeToString(sum[:])[:12]
 }
 

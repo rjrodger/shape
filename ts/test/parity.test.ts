@@ -139,7 +139,7 @@ describe('parity', () => {
     // A genuinely absent key inside a real object still reports as required.
     assert.match(
       failure({ a: String }, {}),
-      /property "a" with value "undefined" because the value is required/)
+      /property "a" because the property is missing/)
   })
 
 
@@ -219,7 +219,7 @@ describe('kinds: nullable, integer, date', () => {
 
     // Absent is still governed by required/optional.
     assert.deepEqual(Shape({ a: Nullable(String) })({ a: null }), { a: null })
-    assert.match(failure({ a: Nullable(Number) }, {}), /is required/)
+    assert.match(failure({ a: Nullable(Number) }, {}), /is missing/)
     assert.deepEqual(Shape({ a: Optional(Nullable(Number)) })({}), { a: 0 })
 
     // Containers, bare use, and the chain.
@@ -237,7 +237,7 @@ describe('kinds: nullable, integer, date', () => {
     assert.match(failure(Integer, NaN), /is not of type integer/)
 
     // A type token: required, default 0.
-    assert.match(failure({ a: Integer }, {}), /is required/)
+    assert.match(failure({ a: Integer }, {}), /is missing/)
     assert.deepEqual(Shape({ a: Optional(Integer) })({}), { a: 0 })
     assert.deepEqual(Shape({ a: Shape.Integer() })({ a: 3 }), { a: 3 })
 
@@ -255,7 +255,7 @@ describe('kinds: nullable, integer, date', () => {
     assert.equal(Shape(Date)(d), d)
     assert.match(failure(Date, 'x'), /the string is not of type date/)
     assert.match(failure(Date, new Date('nonsense')), /is not of type date/)
-    assert.match(failure({ a: Date }, {}), /is required/)
+    assert.match(failure({ a: Date }, {}), /is missing/)
 
     // No default to inject for an optional date — the slot is left undefined,
     // which is absent once serialized; a literal date is a default.
@@ -357,7 +357,7 @@ describe('coerce', () => {
     assert.equal(Shape(Coerce())('x'), 'x')
     assert.equal(Shape(Coerce(Shape.Any()))('x'), 'x')
     // An absent value is still absent: nothing is injected for it to convert.
-    assert.match(failure({ a: Coerce(Number) }, {}), /is required/)
+    assert.match(failure({ a: Coerce(Number) }, {}), /is missing/)
     assert.deepEqual(Shape({ a: Optional(Coerce(Number)) })({}), { a: 0 })
   })
 })
@@ -432,14 +432,14 @@ describe('formats', () => {
 
   test('placement, typing and rendering', () => {
     // A format is a shape of string: required by default, '' when optional.
-    assert.match(failure({ a: Email }, {}), /is required/)
+    assert.match(failure({ a: Email }, {}), /is missing/)
     assert.deepEqual(Shape({ a: Optional(Email) })({}), { a: '' })
     assert.deepEqual(Shape({ a: Email(Nullable(String)) })({ a: null }), { a: null })
     assert.match(failure({ a: Email }, { a: 1 }), /the number is not of type string/)
     assert.match(failure(Email(Any()), 1), /is not of type string/)
 
     // Like .String(), a chained format re-asserts the string type.
-    assert.match(failure({ a: Optional().Email() }, {}), /is required/)
+    assert.match(failure({ a: Optional().Email() }, {}), /is missing/)
     assert.equal(Shape(Optional().Uuid())('123e4567-e89b-12d3-a456-426614174000'),
       '123e4567-e89b-12d3-a456-426614174000')
 
@@ -497,7 +497,7 @@ describe('checks run in order', () => {
     assert.match(failure({ a: Before(() => false, Number) }, {}),
       /^Validation failed for property "a" with value "undefined" because check ".*" failed\.$/)
     assert.match(failure({ a: After(() => false, Number) }, {}),
-      /is required\.\nValidation failed for property "a" with value "undefined" because check ".*" failed\.$/)
+      /is missing\.\nValidation failed for property "a" with value "undefined" because check ".*" failed\.$/)
     // ...unless the check insists.
     assert.match(
       failure({ a: Before((_v: any, u: any) => (u.done = true, false), Optional(Number)) }, {}),
@@ -609,7 +609,7 @@ describe('discriminated union', () => {
     assert.equal(failure({ p: D }, { p: { fins: 'x', kind: 'fish' } }),
       'Validation failed for property "p.fins" with string "x" because the string is not of type number.')
     assert.equal(failure({ p: D }, { p: { kind: 'dog' } }),
-      'Validation failed for property "p.bark" with value "undefined" because the value is required.')
+      'Validation failed for property "p.bark" because the property is missing.')
   })
 
   test('the tag itself', () => {
@@ -633,7 +633,7 @@ describe('discriminated union', () => {
 
   test('required, optional, arrays, and the shape of a branch', () => {
     assert.equal(failure({ p: D }, {}),
-      'Validation failed for property "p" with value "undefined" because the value is required.')
+      'Validation failed for property "p" because the property is missing.')
     assert.deepEqual(json(Shape({ p: Optional(D) })({})), {})
     assert.equal(failure([D], [{ bark: true, kind: 'dog' }, { kind: 'cat' }]),
       'Value "{kind:cat}" for property "1" has unknown "kind" "cat", expected one of: dog, fish.')
@@ -684,7 +684,7 @@ describe('object algebra: Pick, Omit, Partial, Extend', () => {
 
   test('Omit drops the named properties, and what is kept stays as it was', () => {
     assert.deepEqual(Shape(Omit(['b'], BASE()))({ a: 1 }), { a: 1, c: false })
-    assert.match(failure(Omit(['b'], BASE()), {}), /property "a" .* is required/)
+    assert.match(failure(Omit(['b'], BASE()), {}), /property "a" .* is missing/)
     assert.match(failure(Omit(['b'], BASE()), { a: 1, b: 'x' }),
       /the property "b" is not allowed/)
   })
@@ -696,7 +696,7 @@ describe('object algebra: Pick, Omit, Partial, Extend', () => {
     // One level only: a required grandchild stays required.
     assert.match(
       failure({ o: Partial({ a: Number, b: { c: String } }) }, { o: { b: {} } }),
-      /property "o\.b\.c" .* is required/)
+      /property "o\.b\.c" .* is missing/)
   })
 
   test('Extend adds properties, and a name in both takes the new shape', () => {
@@ -705,7 +705,7 @@ describe('object algebra: Pick, Omit, Partial, Extend', () => {
     assert.deepEqual(Shape(Extend({ a: String }, BASE()))({ a: 'x', b: 'y' }),
       { a: 'x', b: 'y', c: false })
     assert.match(failure(Extend({ d: Number }, BASE()), { a: 1, b: 'x' }),
-      /property "d" .* is required/)
+      /property "d" .* is missing/)
     // Whether unknown properties are allowed is not changed by extending.
     assert.deepEqual(Shape(Extend({ d: Number }, Open(BASE())))({ a: 1, b: 'x', d: 2, z: 9 }),
       { a: 1, b: 'x', d: 2, z: 9, c: false })
@@ -717,7 +717,7 @@ describe('object algebra: Pick, Omit, Partial, Extend', () => {
     Omit(['a'], base)
     Partial(base)
     Extend({ d: Number }, base)
-    assert.match(failure(base, {}), /property "a" .* is required/)
+    assert.match(failure(base, {}), /property "a" .* is missing/)
     assert.deepEqual(Shape(base)({ a: 1, b: 'x' }), { a: 1, b: 'x', c: false })
   })
 

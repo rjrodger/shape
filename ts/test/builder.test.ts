@@ -88,16 +88,45 @@ type Zed = {
 
 describe('builder', () => {
 
+  test('builder-arguments', () => {
+    // A builder called with the wrong argument throws at build.
+    throws(() => Min('x' as any), 'Shape: Min needs a number')
+    throws(() => Max(NaN), 'Shape: Max needs a number')
+    throws(() => Above('nope' as any), 'Shape: Above needs a number')
+    throws(() => Below('q' as any), 'Shape: Below needs a number')
+    throws(() => Len(-1), 'Shape: Len needs a whole number of zero or more')
+    throws(() => Len(1.5), 'Shape: Len needs a whole number of zero or more')
+    // A value that coerces to a number is not a number.
+    throws(() => Above(true as any), 'Shape: Above needs a number')
+    throws(() => Min(null as any), 'Shape: Min needs a number')
+    throws(() => Below([] as any), 'Shape: Below needs a number')
+    throws(() => Max(Infinity), 'Shape: Max needs a number')
+    throws(() => Min('NaN' as any), 'Shape: Min needs a number')
+    throws(() => Min('' as any), 'Shape: Min needs a number')
+    throws(() => Len(false as any), 'Shape: Len needs a whole number of zero or more')
+    throws(() => Len(null as any), 'Shape: Len needs a whole number of zero or more')
+    throws(() => Len('' as any), 'Shape: Len needs a whole number of zero or more')
+    Min(new Date(0) as any)
+    throws(() => Define(''), 'Shape: Define needs a name')
+    throws(() => Define({} as any), 'Shape: Define needs a name')
+    throws(() => Refer(''), 'Shape: Refer needs a name')
+    throws(() => Rename({ keep: true }), 'Shape: Rename needs a name')
+    // A numeric string and a date are numbers for a bound, and no bound at
+    // all is the key-expression form, whose bound is the example.
+    deepEqual(Shape(Min('2' as any))(3), 3)
+    deepEqual(Shape({ 'a: Min()': 3 })({ a: 4 }), { a: 4 })
+  })
+
   test('builder-required', () => {
     let g0 = Shape({ a: Required({ x: 1 }) })
     deepEqual(g0({ a: { x: 1 } }), { a: { x: 1 } })
-    throws(() => g0({}), 'Validation failed for property "a" with value "undefined" because the value is required.')
-    throws(() => g0(), 'Validation failed for property "a" with value "undefined" because the value is required.')
+    throws(() => g0({}), 'Validation failed for property "a" because the property is missing.')
+    throws(() => g0(), 'Validation failed for property "a" because the property is missing.')
 
     let g1 = Shape({ a: Required([1]) })
     deepEqual(g1({ a: [11] }), { a: [11] })
-    throws(() => g1({}), 'Validation failed for property "a" with value "undefined" because the value is required.')
-    throws(() => g1(), 'Validation failed for property "a" with value "undefined" because the value is required.')
+    throws(() => g1({}), 'Validation failed for property "a" because the property is missing.')
+    throws(() => g1(), 'Validation failed for property "a" because the property is missing.')
 
     let g2 = Shape(Required(1))
     deepEqual(g2(1), 1)
@@ -105,15 +134,15 @@ describe('builder', () => {
 
     // TODO: note this in docs - deep child requires must be satisfied unless Skip
     let g3 = Shape({ a: { b: String } })
-    throws(() => g3(), /"a.b".*required/)
-    throws(() => g3({}), /"a.b".*required/)
-    throws(() => g3({ a: {} }), /"a.b".*required/)
+    throws(() => g3(), /"a.b".*missing/)
+    throws(() => g3({}), /"a.b".*missing/)
+    throws(() => g3({ a: {} }), /"a.b".*missing/)
 
     let g4 = Shape({ a: Skip({ b: String }) })
     deepEqual(g4(), {})
     deepEqual(g4({}), {})
     deepEqual(g4({ a: undefined }), {})
-    throws(() => g4({ a: {} }), /"a.b".*required/)
+    throws(() => g4({ a: {} }), /"a.b".*missing/)
 
     let g5 = Shape(Required({ x: 1 }))
     deepEqual(g5({ x: 2 }), { x: 2 })
@@ -263,8 +292,8 @@ describe('builder', () => {
     let g4 = Shape({ x: Check('number') })
     deepEqual(g4({ x: 1 }), { x: 1 })
     throws(() => g4({ x: 'a' }), 'number')
-    throws(() => g4({}), 'required')
-    throws(() => g4(), 'required')
+    throws(() => g4({}), 'is missing')
+    throws(() => g4(), 'is missing')
 
     let g5 = Shape(Check(/ul/i))
     deepEqual(g5('*UL*'), '*UL*')
@@ -350,9 +379,9 @@ describe('builder', () => {
 
     let g2 = Shape({ a: Closed([String]) })
     deepEqual(g2({ a: ['x'] }), { a: ['x'] })
-    throws(() => g2({}), 'required')
-    throws(() => g2({ a: undefined }), 'required')
-    throws(() => g2({ a: [] }), 'required')
+    throws(() => g2({}), 'is missing')
+    throws(() => g2({ a: undefined }), 'is missing')
+    throws(() => g2({ a: [] }), 'is missing')
     throws(() => g2({ a: ['x', 'y'] }), 'not allowed')
 
     let g4 = Shape(Closed({ x: 1 }))
@@ -690,7 +719,7 @@ Value "{x:green,z:Z}" for property "1" does not satisfy one of: {"x":"Exact(red)
     deepEqual('' + g1(['x', 22]), 'x,22')
     matchObject(g1(['x']), { 0: 'x', a: 'x', b: 2 })
     deepEqual('' + g1(['x']), 'x,2')
-    throws(() => g1([]), 'required')
+    throws(() => g1([]), 'is missing')
     matchObject(g1(['x', 22, false]), { 0: 'x', 1: 22, a: 'x', b: 22, c: false })
 
     let g2 = Shape({
@@ -906,18 +935,18 @@ Value "{x:green,z:Z}" for property "1" does not satisfy one of: {"x":"Exact(red)
     matchObject(a0([11, 22]), [11, 22])
 
     let a1 = Shape([Number, String])
-    throws(() => a1(), 'required')
-    throws(() => a1([]), 'required')
-    throws(() => a1([1]), 'required')
+    throws(() => a1(), 'is missing')
+    throws(() => a1([]), 'is missing')
+    throws(() => a1([1]), 'is missing')
     matchObject(a1([1, 'x']), [1, 'x'])
     throws(() => a1([1, 'x', 'y']), 'not allowed')
     throws(() => a1(['x', 'y']), 'Validation failed for index "0" with string "x" because the string is not of type number.')
     throws(() => a1([1, 2]), 'Validation failed for index "1" with number "2" because the number is not of type string.')
 
     let a2 = Shape([9, String])
-    throws(() => a2(), 'required')
-    throws(() => a2([]), 'required')
-    throws(() => a2([1]), 'required')
+    throws(() => a2(), 'is missing')
+    throws(() => a2([]), 'is missing')
+    throws(() => a2([1]), 'is missing')
     matchObject(a2([1, 'x']), [1, 'x'])
     throws(() => a2([1, 'x', 'y']), 'not allowed')
     throws(() => a2(['x', 1]), `Validation failed for index "0" with string "x" because the string is not of type number.
@@ -1765,7 +1794,7 @@ Value "5" for property "d.1" must be below 4 (was 5).`)
       })
     })
 
-    throws(() => userShape({}), 'Validation failed for property "person" with value "undefined" because the value is required.')
+    throws(() => userShape({}), 'Validation failed for property "person" because the property is missing.')
 
     deepEqual(userShape({
       person: {
@@ -1884,7 +1913,7 @@ Validation failed for string "x" because check "(v) => v > 10" failed.`)
     throws(() => shape_AfterB2({ x: 3 }), 'Validation failed for object "{x:3}" because check "(v) => v.x % 2 === 0" failed.')
 
     throws(() => shape_AfterB2({}), `Validation failed for object "{}" because check "(v) => v.x % 2 === 0" failed.
-Validation failed for property "x" with value "undefined" because the value is required.`)
+Validation failed for property "x" because the property is missing.`)
 
     throws(() => shape_AfterB2(), `Validation failed for value "undefined" because the value is required.`)
 
@@ -2041,7 +2070,7 @@ Validation failed for property "b" with string "B" because the string is not of 
 
     let shape_RenameB0 = Shape({ a: Rename('b', Number) })
     deepEqual(shape_RenameB0({ a: 10 }), { b: 10 })
-    throws(() => shape_RenameB0({}), 'Validation failed for property "a" with value "undefined" because the value is required.')
+    throws(() => shape_RenameB0({}), 'Validation failed for property "a" because the property is missing.')
 
     let shape_RenameB1 = Shape({ a: Rename({ name: 'b', keep: true }, 123) })
     deepEqual(shape_RenameB1({ a: 10 }), { a: 10, b: 10 })

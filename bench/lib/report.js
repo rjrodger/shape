@@ -64,7 +64,8 @@ function currentCasesRaw(resultsDir) {
   return fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : ''
 }
 function fileHash(raw) {
-  return crypto.createHash('sha256').update(raw).digest('hex').slice(0, 12)
+  // LF line endings, as the harnesses hash it (a Windows checkout is CRLF).
+  return crypto.createHash('sha256').update(raw.replace(/\r\n/g, '\n')).digest('hex').slice(0, 12)
 }
 
 function readRuns(resultsDir) {

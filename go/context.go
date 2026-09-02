@@ -18,6 +18,9 @@ type Context struct {
 	states []State
 	// True when the schema of the call has no validators (see Schema.pure).
 	pure bool
+	// True when the call wants a verdict only (Match, Valid): an error is
+	// recorded without its path, text or value rendering, and only counted.
+	terse bool
 }
 
 // newState hands out the State for one node from a chunk, so a walk over
@@ -69,14 +72,15 @@ var callPool = sync.Pool{New: func() any { return &callScratch{custom: map[strin
 // reset, and the path stacks and states come from the block it holds.
 func (cs *callScratch) begin(defs map[string]*node, match bool) (c *Context, path []string, pathArr []any) {
 	c = &cs.ctx
-	*c = Context{Custom: cs.custom, Match: match, defs: defs, pure: true}
+	*c = Context{Custom: cs.custom, Match: match, defs: defs, pure: true, terse: match}
 	c.states = cs.sc.states[:0]
 	return c, cs.sc.path[:0], cs.sc.pathArr[:0]
 }
 
-// matchErrors is the error collector of a pooled match, emptied for it.
+// matchErrors is the error collector of a pooled match, emptied for it: it
+// counts, since a match reads nothing but whether there was one.
 func (cs *callScratch) matchErrors() *ValidationError {
-	cs.verr.Issues = nil
+	cs.verr = ValidationError{terse: true}
 	return &cs.verr
 }
 

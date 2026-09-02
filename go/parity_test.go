@@ -405,8 +405,8 @@ func TestChainedFuncKeepsOptionality(t *testing.T) {
 	// token is the required form.
 	mustOK(t, MustShape(map[string]any{"a": buildize(nil).Func()}), map[string]any{})
 	mustOK(t, MustShape(map[string]any{"a": Func()}), map[string]any{})
-	mustErr(t, MustShape(map[string]any{"a": Function}), map[string]any{}, "is required")
-	mustErr(t, MustShape(map[string]any{"a": Required(Func())}), map[string]any{}, "is required")
+	mustErr(t, MustShape(map[string]any{"a": Function}), map[string]any{}, "is missing")
+	mustErr(t, MustShape(map[string]any{"a": Required(Func())}), map[string]any{}, "is missing")
 }
 
 func TestExplicitAnyInKeyExpression(t *testing.T) {
@@ -500,7 +500,7 @@ func TestKeyExpressionExampleSurvives(t *testing.T) {
 func TestKeyExpressionEdgeCases(t *testing.T) {
 	// No example at all: the expression stands alone.
 	noEx := MustShape(map[string]any{"a: String": nil})
-	mustErr(t, noEx, map[string]any{}, "is required")
+	mustErr(t, noEx, map[string]any{}, "is missing")
 	mustOK(t, noEx, map[string]any{"a": "x"})
 
 	// A bare literal expression is not a builder chain, so there is nothing to
@@ -534,7 +534,7 @@ func TestNullable(t *testing.T) {
 	if v, present := obj["a"]; !present || v != nil {
 		t.Fatalf("nullable property: %#v", obj)
 	}
-	mustErr(t, MustShape(map[string]any{"a": Nullable(Number)}), map[string]any{}, "is required")
+	mustErr(t, MustShape(map[string]any{"a": Nullable(Number)}), map[string]any{}, "is missing")
 	opt := mustOK(t, MustShape(map[string]any{"a": Optional(Nullable(Number))}), map[string]any{}).(map[string]any)
 	if opt["a"] != 0.0 {
 		t.Fatalf("Optional(Nullable(Number)) absent = %#v", opt)
@@ -573,7 +573,7 @@ func TestIntegerKind(t *testing.T) {
 	mustErr(t, s, math.Inf(1), "is not of type integer")
 
 	// A type token: required, default 0.
-	mustErr(t, MustShape(map[string]any{"a": Integer}), map[string]any{}, "is required")
+	mustErr(t, MustShape(map[string]any{"a": Integer}), map[string]any{}, "is missing")
 	out := mustOK(t, MustShape(map[string]any{"a": Optional(Integer)}), map[string]any{}).(map[string]any)
 	if out["a"] != 0.0 {
 		t.Fatalf("Optional(Integer) absent = %#v", out)
@@ -602,7 +602,7 @@ func TestDateKind(t *testing.T) {
 	}
 	mustErr(t, s, "x", "the string is not of type date")
 	mustErr(t, s, 1.0, "the number is not of type date")
-	mustErr(t, MustShape(map[string]any{"a": Date}), map[string]any{}, "is required")
+	mustErr(t, MustShape(map[string]any{"a": Date}), map[string]any{}, "is missing")
 
 	// No default to inject for an optional date; a literal date is a default.
 	if out := mustOK(t, MustShape(map[string]any{"a": Optional(Date)}), map[string]any{}).(map[string]any); len(out) != 0 {
@@ -663,12 +663,13 @@ func TestTypeTokenArgumentsInArgumentPosition(t *testing.T) {
 
 func TestBoundArgumentRendering(t *testing.T) {
 	// Large integral bounds print in full, as JS prints them, not in %v's
-	// exponent form; a non-numeric bound falls back to %v.
+	// exponent form; a numeric string bound prints as the string it was
+	// given (TS prints the number it read from it).
 	if got := stringifyNode(Min(1577836800000.0).n, true); got != "Min(1577836800000)" {
 		t.Fatalf("large bound render = %q", got)
 	}
-	if got := stringifyNode(Min("x").n, true); got != "Min(x)" {
-		t.Fatalf("non-numeric bound render = %q", got)
+	if got := stringifyNode(Min("2").n, true); got != "Min(2)" {
+		t.Fatalf("numeric string bound render = %q", got)
 	}
 	mustErr(t, MustShape(Min(1000000.0, Number)), 5.0, "must be a minimum of 1000000 (was 5)")
 }
@@ -740,7 +741,7 @@ func TestCoerce(t *testing.T) {
 	mustOK(t, MustShape(Coerce()), "x")
 	mustOK(t, MustShape(Coerce(Any)), "x")
 	// An absent value is still absent: nothing is injected for it to convert.
-	mustErr(t, MustShape(map[string]any{"a": Coerce(Number)}), map[string]any{}, "is required")
+	mustErr(t, MustShape(map[string]any{"a": Coerce(Number)}), map[string]any{}, "is missing")
 	out := mustOK(t, MustShape(map[string]any{"a": Optional(Coerce(Number))}), map[string]any{}).(map[string]any)
 	if out["a"] != 0.0 {
 		t.Fatalf("Optional(Coerce(Number)) absent = %#v", out)
@@ -821,7 +822,7 @@ func TestFormats(t *testing.T) {
 	}
 
 	// A format is a shape of string: required by default, "" when optional.
-	mustErr(t, MustShape(map[string]any{"a": Email()}), map[string]any{}, "is required")
+	mustErr(t, MustShape(map[string]any{"a": Email()}), map[string]any{}, "is missing")
 	if out := mustOK(t, MustShape(map[string]any{"a": Optional(Email())}), map[string]any{}).(map[string]any); out["a"] != "" {
 		t.Fatalf("Optional(Email) absent = %#v", out)
 	}
@@ -832,7 +833,7 @@ func TestFormats(t *testing.T) {
 	mustErr(t, MustShape(Email(Any)), 1.0, "is not of type string")
 
 	// Like .String(), a chained format re-asserts the string type.
-	mustErr(t, MustShape(map[string]any{"a": Optional().Email()}), map[string]any{}, "is required")
+	mustErr(t, MustShape(map[string]any{"a": Optional().Email()}), map[string]any{}, "is missing")
 	for _, chained := range []struct {
 		f   func(*Node) *Node
 		bad string
@@ -898,7 +899,7 @@ func TestChecksRunInOrder(t *testing.T) {
 	mustErr(t, MustShape(map[string]any{"a": Before(fail, Number)}), map[string]any{},
 		"Validation failed for property \"a\" with value \"undefined\" because check \"Before\" failed.")
 	mustErr(t, MustShape(map[string]any{"a": After(fail, Number)}), map[string]any{},
-		"is required.\nValidation failed for property \"a\" with value \"undefined\" because check \"After\" failed.")
+		"is missing.\nValidation failed for property \"a\" with value \"undefined\" because check \"After\" failed.")
 	// ...unless the check insists.
 	mustErr(t, MustShape(map[string]any{"a": Before(func(_ any, u *Update, _ *State) bool { u.Done = true; return false }, Optional(Number))}),
 		map[string]any{}, "check \"Before\" failed.")
@@ -1048,7 +1049,7 @@ func TestDiscriminated(t *testing.T) {
 	mustErr(t, P, o("p", o("fins", "x", "kind", "fish")),
 		"Validation failed for property \"p.fins\" with string \"x\" because the string is not of type number.")
 	mustErr(t, P, o("p", o("kind", "dog")),
-		"Validation failed for property \"p.bark\" with value \"undefined\" because the value is required.")
+		"Validation failed for property \"p.bark\" because the property is missing.")
 
 	// The tag itself.
 	mustErr(t, P, o("p", o("bark", true)), "Value \"{bark:true}\" for property \"p\" is not an object with a \"kind\" property.")
@@ -1060,7 +1061,7 @@ func TestDiscriminated(t *testing.T) {
 	mustErr(t, P, o("p", o("kind", nil)), "Value \"{kind:null}\" for property \"p\" has unknown \"kind\" null, expected one of: dog, fish.")
 
 	// Required, optional, arrays, and the shape of a branch.
-	mustErr(t, P, o(), "Validation failed for property \"p\" with value \"undefined\" because the value is required.")
+	mustErr(t, P, o(), "Validation failed for property \"p\" because the property is missing.")
 	want("optional absent", mustOK(t, MustShape(o("p", Optional(D))), o()), o())
 	mustErr(t, MustShape([]any{D}), []any{o("bark", true, "kind", "dog"), o("kind", "cat")},
 		"Value \"{kind:cat}\" for property \"1\" has unknown \"kind\" \"cat\", expected one of: dog, fish.")

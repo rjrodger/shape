@@ -61,7 +61,7 @@ Validation failed for <property|index> "<path>" with <kind> "<value>" because <r
 Examples:
 
 ```
-Validation failed for property "name" with value "undefined" because the value is required.
+Validation failed for property "name" because the property is missing.
 Validation failed for index "1" with string "x" because the string is not of type number.
 Validation failed for object "{a:2,b:true}" because the property "b" is not allowed.
 Validation failed for property "a" with object "{b:2,c:3,d:4}" because the properties "c, d" are not allowed.

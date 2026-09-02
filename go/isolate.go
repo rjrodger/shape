@@ -23,6 +23,7 @@ func takeInner(n *node) inner {
 	in := inner{n.befores, n.afters}
 	n.befores = nil
 	n.afters = nil
+	bumpValidatorGen()
 	return in
 }
 
@@ -43,6 +44,7 @@ func (in inner) desc() string {
 func (in inner) probe(state *State) (any, *ValidationError) {
 	n := *state.Node
 	n.befores, n.afters = in.befores, in.afters
+	bumpValidatorGen()
 	val := state.Value
 	if state.absent {
 		val = undefinedT{}
@@ -97,6 +99,7 @@ func (n *Node) Catch(fallback any) *Node {
 		},
 		stringify: func() string { return in.desc() + "Catch(" + argText(fallback) + ")" },
 	}}
+	bumpValidatorGen()
 	return n
 }
 
@@ -126,6 +129,7 @@ func (n *Node) Transform(fn func(val any, state *State) any) *Node {
 		},
 		stringify: func() string { return in.desc() + "Transform" },
 	}}
+	bumpValidatorGen()
 	return n
 }
 

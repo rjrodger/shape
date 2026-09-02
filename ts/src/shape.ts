@@ -9,12 +9,9 @@
 // FEATURE: merge shapes (allows extending given shape - e.g. adding object props)
 // FEATURE: Key validation by RegExp
 
-// TODO: Validation of Builder parameters
 // TODO: ShapeShape.d is damaged by composition
 // TODO: Better stringifys for builder shapes
-// TODO: Error messages should state property is missing, not `value ""`
 // TODO: node.s can be a lazy function to avoid unnecessary string building
-// TODO: Finish Default shape-builder
 // FIX: Shape(Shape(..)) should work
 
 // DOC: Skip also makes value optional - thus Skip() means any value, or nonexistent
@@ -49,7 +46,7 @@ const KEY_EXPR_RE = /^\s*("(\\.|[^"\\])*"|[^\s]+):\s*(.*?)\s*$/
 // Kept off the node itself so nothing leaks into its spec or its JSON.
 // A compiled child list: the keys, their nodes, and for each the leaf fast
 // path it may take (see fastKind; 0 when it may not).
-type Compiled = { keys: string[], nodes: Node<any>[], fast: number[] }
+type Compiled = { keys: string[], nodes: Node<any>[], fast: number[], vgen: number }
 const COMPILED = new WeakMap<object, Compiled>()
 
 // Child shapes (Child, Rest, a one-element array) normalized to their full
@@ -66,6 +63,26 @@ const DEEP = new WeakSet<object>()
 // checked against the child at each visit, since a retained node may be
 // re-chained to another kind, or given a validator, after its first
 // validation; such a child takes the general path.
+// The validator generation: bumped whenever a before or after is attached
+// to any node, so that a compiled list can tell that a validator may have
+// arrived since its kinds were compiled (a spec is read at compile time,
+// but a retained node can be given a validator afterwards) and recompile
+// them rather than trust what it saw.
+let VGEN = 0
+function attach(list: any[], v: any) {
+  VGEN++
+  list.push(v)
+}
+
+// The fast kinds of a compiled object's children: all zero when any child
+// has a validator, since a validator may read its siblings' frames.
+function fastKinds(nodes: Node<any>[]): number[] {
+  for (let i = 0; i < nodes.length; i++) {
+    if (0 < nodes[i].b.length || 0 < nodes[i].a.length) return nodes.map(() => 0)
+  }
+  return nodes.map(fastKind)
+}
+
 const FAST_STRING = 1
 const FAST_NUMBER = 2
 const FAST_BOOLEAN = 3
@@ -423,6 +440,11 @@ const JS = (a0: any, a1?: any) => JSON.stringify(a0, a1)
 class State {
   match: boolean = false
 
+  // The caller wants a verdict only (valid() or match() without a context
+  // of its own), so an error is recorded without its path, text or value
+  // rendering: nothing will read them.
+  terse: boolean = false
+
   dI: number = 0  // Node depth.
   nI: number = 2  // Next free slot in nodes.
   cI: number = -1 // Pointer to next node.
@@ -479,7 +501,8 @@ class State {
     root: any,
     top: Node<any>,
     ctx?: Context,
-    match?: boolean
+    match?: boolean,
+    terse?: boolean
   ) {
     this.root = root
     this.vals = [root, -1]
@@ -487,6 +510,7 @@ class State {
     this.nodes = [top, -1]
     this.ctx = ctx || {}
     this.match = !!match
+    this.terse = !!terse
   }
 
   next() {
@@ -1020,13 +1044,14 @@ function shapify<const S>(intop?: S, inopts?: ShapeOptions) {
   function exec(
     root: any,
     ctx?: Context,
-    match?: boolean // Suppress errors and return boolean result (true if match)
+    match?: boolean, // Suppress errors and return boolean result (true if match)
+    terse?: boolean, // The caller reads no error: record them without text
   ): any {
     const skipd = ctx?.skip?.depth
     const skipa = Array.isArray(ctx?.skip?.depth) ? new Set(ctx.skip.depth) : null
     const skipk = Array.isArray(ctx?.skip?.keys) ? new Set(ctx.skip.keys) : null
 
-    const s = new State(root, top, ctx, match)
+    const s = new State(root, top, ctx, match, terse)
 
     // A log callback is called for every node, so nothing is skipped for it.
     const fastOk = !s.ctx.log
@@ -1131,6 +1156,10 @@ function shapify<const S>(intop?: S, inopts?: ShapeOptions) {
                 // order, no key expressions or meta keys left to read.
                 const ckeys = compiled.keys
                 const cnodes = compiled.nodes
+                if (compiled.vgen !== VGEN) {
+                  compiled.fast = fastKinds(cnodes)
+                  compiled.vgen = VGEN
+                }
                 const cfast = compiled.fast
                 if (0 < ckeys.length) {
                   s.pI = start
@@ -1242,8 +1271,8 @@ function shapify<const S>(intop?: S, inopts?: ShapeOptions) {
                 COMPILED.set(n, {
                   keys: n.k.slice(),
                   nodes: n.k.map((k: string) => n.v[k]),
-                  fast: n.k.some((k: string) => 0 < n.v[k].b.length || 0 < n.v[k].a.length) ?
-                    n.k.map(() => 0) : n.k.map((k: string) => fastKind(n.v[k])),
+                  fast: fastKinds(n.k.map((k: string) => n.v[k])),
+                  vgen: VGEN,
                 })
               }
               }
@@ -1324,7 +1353,7 @@ function shapify<const S>(intop?: S, inopts?: ShapeOptions) {
               for (let ekI = 0; ekI < elementKeys.length; ekI++) {
                 elementNodes.push(n.v[ekI] = nodize(n.v[ekI], 1 + s.dI))
               }
-              compiled = { keys: elementKeys, nodes: elementNodes, fast: [] }
+              compiled = { keys: elementKeys, nodes: elementNodes, fast: [], vgen: VGEN }
               COMPILED.set(n, compiled)
             }
             const elementKeys = compiled.keys
@@ -1521,17 +1550,21 @@ function shapify<const S>(intop?: S, inopts?: ShapeOptions) {
     }
 
   function valid<V>(root?: V, ctx?: Context): root is (V & ShapeResult<S>) {
+    // Without a context of the caller's nothing can read the errors, so
+    // they are recorded without their text.
+    const terse = undefined === ctx
     let actx: any = ctx || {}
     actx.err = actx.err || []
-    exec(root, actx, false)
+    exec(root, actx, false, terse)
     return 0 === actx.err.length
   }
   shape.valid = valid
 
 
   shape.match = (root?: any, ctx?: Context): boolean => {
+    const terse = undefined === ctx
     ctx = ctx || {}
-    return (exec(root, ctx, true) as boolean)
+    return (exec(root, ctx, true, terse) as boolean)
   }
 
 
@@ -2316,7 +2349,7 @@ function makeFormatBuilder(
   validator[Symbol.for('nodejs.util.inspect.custom')] = name
   validator.toJSON = () => name
 
-  node.b.push(validator)
+  attach(node.b, validator)
 
   return node
 }
@@ -2432,8 +2465,8 @@ const Catch = function <F, V = any>(this: any, fallback: F, shape?: Node<V> | V)
   catcher.a = [fallback]
   catcher.s = (n: Node<any>) => innerDesc(inner, n) + S.Catch + '(' + jsonText(fallback) + ')'
   catcher.inner = inner
-  node.b.push(catcher)
-  node.a.push(release)
+  attach(node.b, catcher)
+  attach(node.a, release)
 
   return node
 }
@@ -2462,8 +2495,8 @@ const Transform = function <V = any, R = any>(
   transformer.n = S.Transform
   transformer.s = (n: Node<any>) => innerDesc(inner, n) + S.Transform
   transformer.inner = inner
-  node.b.push(transformer)
-  node.a.push(release)
+  attach(node.b, transformer)
+  attach(node.a, release)
 
   return node
 }
@@ -2547,7 +2580,7 @@ const Discriminated = function <T extends string, B extends Record<string, any>>
 
   validator.n = S.Discriminated
   validator.a = [tag, branches]
-  node.b.push(validator)
+  attach(node.b, validator)
 
   return node
 }
@@ -2788,8 +2821,8 @@ const Ignore = function <V = any>(this: any, shape?: Node<V> | V): Node<V | unde
   ignorer.n = S.Ignore
   ignorer.s = (n: Node<any>) => innerDesc(inner, n).replace(/\.$/, '')
   ignorer.inner = inner
-  node.b.push(ignorer)
-  node.a.push(release)
+  attach(node.b, ignorer)
+  attach(node.a, release)
 
   return node
 }
@@ -2883,7 +2916,7 @@ const Key = bare<string>()(function Key(this: any, depth?: number | Function, jo
     node = Any()
   }
 
-  node.b.push(function Key(_val: any, update: Update, state: State) {
+  attach(node.b, function Key(_val: any, update: Update, state: State) {
     if (custom) {
       update.val = custom(state.path, state)
     }
@@ -2946,7 +2979,7 @@ const All = function <const S extends readonly any[]>(this: any, ...inshapes: S)
   validator.n = S.All
   validator.a = inshapes
 
-  node.b.push(validator)
+  attach(node.b, validator)
 
   return node
 }
@@ -2993,7 +3026,7 @@ const Some = function <const S extends readonly any[]>(this: any, ...inshapes: S
   validator.n = S.Some
   validator.a = inshapes
 
-  node.b.push(validator)
+  attach(node.b, validator)
 
   return node
 }
@@ -3038,7 +3071,7 @@ const One = function <const S extends readonly any[]>(this: any, ...inshapes: S)
   validator.n = S.One
   validator.a = inshapes
 
-  node.b.push(validator)
+  attach(node.b, validator)
 
   return node
 }
@@ -3081,7 +3114,7 @@ const Exact = function <const T extends readonly any[]>(this: any, ...vals: T): 
   validator.s =
     () => S.Exact + '(' + vals.map((v: any) => stringify(v, true)).join(',') + ')'
 
-  node.b.push(validator)
+  attach(node.b, validator)
 
   return node
 }
@@ -3094,7 +3127,7 @@ const Before = function <V = any>(
   shape?: Node<V> | V
 ): Node<V> {
   let node = buildize(this, shape)
-  node.b.push(validate)
+  attach(node.b, validate)
   return node
 }
 
@@ -3106,7 +3139,7 @@ const After = function <V = any>(
   shape?: Node<V> | V
 ): Node<V> {
   let node = buildize(this, shape)
-  node.a.push(validate)
+  attach(node.a, validate)
   return node
 }
 
@@ -3126,7 +3159,7 @@ const Check = function <V = any>(
     c$.shape$ = c$.shape$ || {}
     c$.shape$.Check = true
     c$.s = () => S.Check + '(' + stringify(check, true) + ')'
-    node.b.push((check as Validate))
+    attach(node.b, (check as Validate))
 
     node.t = (S.check as ValType)
   }
@@ -3142,7 +3175,7 @@ const Check = function <V = any>(
       })
       defprop(refn, 'shape$', { value: { Check: true } })
       refn.s = () => S.Check + '(' + stringify(check, true) + ')'
-      node.b.push(refn)
+      attach(node.b, refn)
 
       node.t = (S.check as ValType)
     }
@@ -3176,6 +3209,24 @@ const Closed = function <V = any>(this: any, shape?: Node<V> | V): Node<V> {
 }
 
 
+// Whether a bound is a finite number, a string that reads as one, a date,
+// or absent (the key-expression form).
+function boundArg(size: any): boolean {
+  return undefined === size ? true :
+    S.number === typeof size ? Number.isFinite(size) :
+      S.string === typeof size ? ('' !== size.trim() && Number.isFinite(+size)) :
+        size instanceof Date && !isNaN(size.getTime())
+}
+
+
+// A builder that names something needs a name.
+function needsName(builder: string, name: any) {
+  if (S.string !== typeof name || '' === name) {
+    throw new Error('Shape: ' + builder + ' needs a name')
+  }
+}
+
+
 // Define a named reference to this value. See Refer.
 const Define = function <V = any>(this: any, inopts: any, shape?: Node<V> | V): Node<V> {
   let node = buildize(this, shape)
@@ -3183,8 +3234,9 @@ const Define = function <V = any>(this: any, inopts: any, shape?: Node<V> | V): 
   let opts = S.object === typeof inopts ? inopts || {} : {}
   let name = S.string === typeof inopts ? inopts : opts.name
 
+  needsName(S.Define, name)
 
-  if (null != name && '' != name) {
+  {
     const definer: any = function Define(_val: any, _update: Update, state: State) {
       let ref = state.ctx.ref = state.ctx.ref || {}
       ref[name] = state.node
@@ -3192,7 +3244,7 @@ const Define = function <V = any>(this: any, inopts: any, shape?: Node<V> | V): 
     }
     definer.n = S.Define
     definer.a = [name]
-    node.b.push(definer)
+    attach(node.b, definer)
   }
 
   return node
@@ -3210,7 +3262,13 @@ const Refer = function <V = any>(this: any, inopts: any, shape?: Node<V> | V): N
   // Fill should be false (the default) if used recursively, to prevent loops.
   let fill = !!opts.fill
 
-  if (null != name && '' != name) {
+  // Strict: a name with no Define is an error, rather than a Refer that
+  // does nothing.
+  let strict = !!opts.strict
+
+  needsName(S.Refer, name)
+
+  {
     const referrer: any = function Refer(val: any, update: Update, state: State) {
       if (undefined !== val || fill) {
         let ref = state.ctx.ref = state.ctx.ref || {}
@@ -3223,14 +3281,18 @@ const Refer = function <V = any>(this: any, inopts: any, shape?: Node<V> | V): N
           update.type = node.t
 
         }
+        else if (strict) {
+          update.err = 'Value "$VALUE" for property "$PATH" refers to "' + name +
+            '", which is not defined.'
+          return false
+        }
       }
 
-      // TODO: option to fail if ref not found?
       return true
     }
     referrer.n = S.Refer
     referrer.a = [name]
-    node.b.push(referrer)
+    attach(node.b, referrer)
   }
 
   return node
@@ -3249,7 +3311,9 @@ const Rename = function <V = any>(this: any, inopts: any, shape?: Node<V> | V): 
   // NOTE: Rename claims are experimental.
   let claim = isarr(opts.claim) ? opts.claim : []
 
-  if (null != name && '' != name) {
+  needsName(S.Rename, name)
+
+  {
 
     // If there is a claim, grab the value so that validations
     // can be applied to it.
@@ -3320,7 +3384,7 @@ const Rename = function <V = any>(this: any, inopts: any, shape?: Node<V> | V): 
       return true
     }
     defprop(before, S.name, { value: 'Rename:' + name })
-    node.b.push(before)
+    attach(node.b, before)
 
     let after = (val: any, update: Update, s: State) => {
       s.parent[name] = val
@@ -3348,7 +3412,7 @@ const Rename = function <V = any>(this: any, inopts: any, shape?: Node<V> | V): 
       return true
     }
     defprop(after, S.name, { value: 'Rename:' + name })
-    node.a.push(after)
+    attach(node.a, after)
   }
 
   return node
@@ -3465,6 +3529,13 @@ function makeSizeBuilder(
   valid: (vsize: number, size: number, val: any, update: Update, state: State) => boolean
 ) {
   let node = buildize(self, shape)
+
+  // A bound is a finite number, a string that reads as one, or a date; no
+  // bound at all is the key-expression form ("a: Min()": 3), whose bound
+  // is the example. Anything else is a mistake in the spec, not a value.
+  if (!boundArg(size)) {
+    throw new Error('Shape: ' + name + ' needs a number')
+  }
   size = +size
 
   let validator: any = function(val: any, update: Update, state: State) {
@@ -3483,7 +3554,7 @@ function makeSizeBuilder(
   validator[Symbol.for('nodejs.util.inspect.custom')] = validator.s()
   validator.toJSON = () => validator.s()
 
-  node.b.push(validator)
+  attach(node.b, validator)
 
   return node
 }
@@ -3584,6 +3655,9 @@ const Len = function <V = any>(
   len: number,
   shape?: Node<V> | V
 ): Node<V> {
+  if (!boundArg(len) || undefined === len || !Number.isInteger(+len) || +len < 0) {
+    throw new Error('Shape: Len needs a whole number of zero or more')
+  }
   return makeSizeBuilder(this, len, shape, S.Len,
     (vsize: number, len: number, val: any, update: Update, state: State) => {
       if (len === vsize) {
@@ -3723,6 +3797,14 @@ function makeErrImpl(
   user?: any,
   fname?: string,
 ): ErrDesc {
+  // A verdict-only call reads none of the path, the rendering or the text.
+  if (s.terse) {
+    return {
+      key: s.key, type: s.node.t, node: s.node, value: s.val, path: '', pathArr: [],
+      why, check: s.check?.name || 'none', args: s.checkargs || {}, mark, text: '', use: user || {},
+    }
+  }
+
   let err: ErrDesc = {
     key: s.key,
     type: s.node.t,
@@ -3771,9 +3853,13 @@ function makeErrImpl(
         propkey.join(', ')) :
       propkey
 
+    // A property that is not there is named, not rendered: nothing is
+    // there to render, and "the property is missing" says what happened.
+    const missing = S.required === why && undefined === s.val && 0 < err.path.length
+
     err.text = `Validation failed for ` +
-      (0 < err.path.length ? `${propkind} "${err.path}" with ` : '') +
-      `${valkind} "${valstr}" because ` +
+      (0 < err.path.length ? `${propkind} "${err.path}"` + (missing ? ' ' : ' with ') : '') +
+      (missing ? '' : `${valkind} "${valstr}" `) + `because ` +
 
       (
         S.type === why ?
@@ -3785,10 +3871,13 @@ function makeErrImpl(
           :
           S.required === why ?
             (
-              '' === s.val ?
-                'an empty string is not allowed'
+              missing ?
+                `the ${'index' === propkind ? 'element' : 'property'} is missing`
                 :
-                `the ${valkind} is required`
+                '' === s.val ?
+                  'an empty string is not allowed'
+                  :
+                  `the ${valkind} is required`
             )
             :
             'closed' === why ?

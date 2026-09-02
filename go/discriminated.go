@@ -47,6 +47,7 @@ func Discriminated(tag string, branches map[string]any) *Node {
 		n.list = append(n.list, bn)
 	}
 	n.befores = []validator{{name: "Discriminated", args: []any{tag}, fn: d.validate}}
+	bumpValidatorGen()
 	return newNodeWrap(n)
 }
 

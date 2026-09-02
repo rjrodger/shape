@@ -218,7 +218,9 @@ func Default(dval any, spec ...any) *Node {
 		if nb.n.kind == KindAny && dval != nil {
 			if base, err := normalize(dval); err == nil {
 				base.befores = append(append([]validator{}, nb.n.befores...), base.befores...)
+				bumpValidatorGen()
 				base.afters = append(append([]validator{}, nb.n.afters...), base.afters...)
+				bumpValidatorGen()
 				base.hasExact, base.exactVals = nb.n.hasExact, nb.n.exactVals
 				base.empty, base.nullable, base.silent = nb.n.empty, nb.n.nullable, nb.n.silent
 				base.faultMsg = nb.n.faultMsg
@@ -390,6 +392,7 @@ func Exact(vals ...any) *Node {
 		},
 	}
 	nb.n.befores = append(nb.n.befores, v)
+	bumpValidatorGen()
 	return nb
 }
 
@@ -399,11 +402,45 @@ func (n *Node) Exact(vals ...any) *Node {
 	n.n.hasExact = true
 	n.n.exactVals = append([]any{}, vals...)
 	n.n.befores = append(n.n.befores, other.n.befores...)
+	bumpValidatorGen()
 	return n
 }
 
 // Min specifies a minimum value or length.
+// fault is what a builder returns when called wrongly: a node that
+// accepts nothing and says why at validation, since a Go builder cannot
+// throw as the TypeScript one does (see the parity page).
+func fault(msg string) *Node {
+	return newNodeWrap(&node{kind: KindNever, faultMsg: msg})
+}
+
+// boundArg reports whether a bound is a finite number: a numeric value, a
+// time (for a Date), or a string that reads as a number, as TypeScript
+// reads it with +size and Number.isFinite.
+func boundArg(v any) bool {
+	var f float64
+	switch x := v.(type) {
+	case time.Time:
+		return true
+	case string:
+		parsed, err := strconv.ParseFloat(strings.TrimSpace(x), 64)
+		if err != nil {
+			return false
+		}
+		f = parsed
+	default:
+		if !isNumeric(v) {
+			return false
+		}
+		f = toFloat(v)
+	}
+	return !math.IsNaN(f) && !math.IsInf(f, 0)
+}
+
 func Min(min any, spec ...any) *Node {
+	if !boundArg(min) {
+		return fault("Shape: Min needs a number")
+	}
 	var nb *Node
 	if len(spec) == 0 {
 		nb = buildize(nil)
@@ -437,18 +474,28 @@ func Min(min any, spec ...any) *Node {
 		stringify: func() string { return "Min(" + numText(min) + ")" },
 	}
 	nb.n.befores = append(nb.n.befores, v)
+	bumpValidatorGen()
 	return nb
 }
 
 // Min (chained).
 func (n *Node) Min(min any) *Node {
 	other := Min(min)
+	if other.n.kind == KindNever && other.n.faultMsg != "" {
+		// The argument was wrong: this node becomes the fault.
+		n.n.kind, n.n.faultMsg = KindNever, other.n.faultMsg
+		return n
+	}
 	n.n.befores = append(n.n.befores, other.n.befores...)
+	bumpValidatorGen()
 	return n
 }
 
 // Max specifies a maximum value or length.
 func Max(max any, spec ...any) *Node {
+	if !boundArg(max) {
+		return fault("Shape: Max needs a number")
+	}
 	var nb *Node
 	if len(spec) == 0 {
 		nb = buildize(nil)
@@ -482,18 +529,28 @@ func Max(max any, spec ...any) *Node {
 		stringify: func() string { return "Max(" + numText(max) + ")" },
 	}
 	nb.n.befores = append(nb.n.befores, v)
+	bumpValidatorGen()
 	return nb
 }
 
 // Max (chained).
 func (n *Node) Max(max any) *Node {
 	other := Max(max)
+	if other.n.kind == KindNever && other.n.faultMsg != "" {
+		// The argument was wrong: this node becomes the fault.
+		n.n.kind, n.n.faultMsg = KindNever, other.n.faultMsg
+		return n
+	}
 	n.n.befores = append(n.n.befores, other.n.befores...)
+	bumpValidatorGen()
 	return n
 }
 
 // Above specifies a strict lower bound on value or length.
 func Above(above any, spec ...any) *Node {
+	if !boundArg(above) {
+		return fault("Shape: Above needs a number")
+	}
 	var nb *Node
 	if len(spec) == 0 {
 		nb = buildize(nil)
@@ -527,18 +584,28 @@ func Above(above any, spec ...any) *Node {
 		stringify: func() string { return "Above(" + numText(above) + ")" },
 	}
 	nb.n.befores = append(nb.n.befores, v)
+	bumpValidatorGen()
 	return nb
 }
 
 // Above (chained).
 func (n *Node) Above(above any) *Node {
 	other := Above(above)
+	if other.n.kind == KindNever && other.n.faultMsg != "" {
+		// The argument was wrong: this node becomes the fault.
+		n.n.kind, n.n.faultMsg = KindNever, other.n.faultMsg
+		return n
+	}
 	n.n.befores = append(n.n.befores, other.n.befores...)
+	bumpValidatorGen()
 	return n
 }
 
 // Below specifies a strict upper bound on value or length.
 func Below(below any, spec ...any) *Node {
+	if !boundArg(below) {
+		return fault("Shape: Below needs a number")
+	}
 	var nb *Node
 	if len(spec) == 0 {
 		nb = buildize(nil)
@@ -572,18 +639,28 @@ func Below(below any, spec ...any) *Node {
 		stringify: func() string { return "Below(" + numText(below) + ")" },
 	}
 	nb.n.befores = append(nb.n.befores, v)
+	bumpValidatorGen()
 	return nb
 }
 
 // Below (chained).
 func (n *Node) Below(below any) *Node {
 	other := Below(below)
+	if other.n.kind == KindNever && other.n.faultMsg != "" {
+		// The argument was wrong: this node becomes the fault.
+		n.n.kind, n.n.faultMsg = KindNever, other.n.faultMsg
+		return n
+	}
 	n.n.befores = append(n.n.befores, other.n.befores...)
+	bumpValidatorGen()
 	return n
 }
 
 // Len requires an exact value or collection length.
 func Len(length int, spec ...any) *Node {
+	if length < 0 {
+		return fault("Shape: Len needs a whole number of zero or more")
+	}
 	var nb *Node
 	if len(spec) == 0 {
 		nb = buildize(nil)
@@ -617,13 +694,20 @@ func Len(length int, spec ...any) *Node {
 		stringify: func() string { return fmt.Sprintf("Len(%d)", length) },
 	}
 	nb.n.befores = append(nb.n.befores, v)
+	bumpValidatorGen()
 	return nb
 }
 
 // Len (chained).
 func (n *Node) Len(length int) *Node {
 	other := Len(length)
+	if other.n.kind == KindNever && other.n.faultMsg != "" {
+		// The argument was wrong: this node becomes the fault.
+		n.n.kind, n.n.faultMsg = KindNever, other.n.faultMsg
+		return n
+	}
 	n.n.befores = append(n.n.befores, other.n.befores...)
+	bumpValidatorGen()
 	return n
 }
 
@@ -643,6 +727,7 @@ func Check(check any, spec ...any) *Node {
 		nb.n.requiredSet = true
 		v := validator{name: "Check", fn: c, stringify: func() string { return "Check()" }}
 		nb.n.befores = append(nb.n.befores, v)
+		bumpValidatorGen()
 	case *regexp.Regexp:
 		re := c
 		nb.n.kind = KindCheck
@@ -666,6 +751,7 @@ func Check(check any, spec ...any) *Node {
 			stringify: func() string { return fmt.Sprintf("Check(/%s/)", re.String()) },
 		}
 		nb.n.befores = append(nb.n.befores, v)
+		bumpValidatorGen()
 	}
 	if len(spec) > 0 {
 		// Narrow kind to the carrier shape kind.
@@ -681,6 +767,7 @@ func Check(check any, spec ...any) *Node {
 func (n *Node) Check(check any) *Node {
 	other := Check(check)
 	n.n.befores = append(n.n.befores, other.n.befores...)
+	bumpValidatorGen()
 	return n
 }
 
@@ -694,6 +781,7 @@ func Before(fn func(val any, update *Update, state *State) bool, spec ...any) *N
 	}
 	nb.n.befores = append(nb.n.befores,
 		validator{name: "Before", fn: fn, stringify: func() string { return "Before()" }})
+	bumpValidatorGen()
 	return nb
 }
 
@@ -701,6 +789,7 @@ func Before(fn func(val any, update *Update, state *State) bool, spec ...any) *N
 func (n *Node) Before(fn func(val any, update *Update, state *State) bool) *Node {
 	n.n.befores = append(n.n.befores,
 		validator{name: "Before", fn: fn, stringify: func() string { return "Before()" }})
+	bumpValidatorGen()
 	return n
 }
 
@@ -714,6 +803,7 @@ func After(fn func(val any, update *Update, state *State) bool, spec ...any) *No
 	}
 	nb.n.afters = append(nb.n.afters,
 		validator{name: "After", fn: fn, stringify: func() string { return "After()" }})
+	bumpValidatorGen()
 	return nb
 }
 
@@ -721,6 +811,7 @@ func After(fn func(val any, update *Update, state *State) bool, spec ...any) *No
 func (n *Node) After(fn func(val any, update *Update, state *State) bool) *Node {
 	n.n.afters = append(n.n.afters,
 		validator{name: "After", fn: fn, stringify: func() string { return "After()" }})
+	bumpValidatorGen()
 	return n
 }
 
@@ -892,6 +983,9 @@ func (n *Node) Rest(child any) *Node {
 
 // Define names the current node so a later Refer with the same name can clone it.
 func Define(name string, spec ...any) *Node {
+	if name == "" {
+		return fault("Shape: Define needs a name")
+	}
 	var nb *Node
 	if len(spec) == 0 {
 		nb = buildize(nil)
@@ -915,13 +1009,18 @@ func Define(name string, spec ...any) *Node {
 		stringify: func() string { return fmt.Sprintf("Define(%q)", name) },
 	}
 	nb.n.befores = append(nb.n.befores, v)
+	bumpValidatorGen()
 	return nb
 }
 
 // ReferOptions controls Refer behaviour. Fill substitutes the referenced node
 // even when the input value is missing/nil, allowing recursive structure.
 type ReferOptions struct {
+	// Fill substitutes even when the value is absent (not for self-recursion).
 	Fill bool
+	// Strict makes a name with no Define an error, rather than a Refer that
+	// does nothing.
+	Strict bool
 }
 
 // Refer substitutes the named node at validation time.
@@ -931,6 +1030,9 @@ func Refer(name string, spec ...any) *Node {
 
 // ReferWith is Refer with explicit options.
 func ReferWith(name string, opts ReferOptions, spec ...any) *Node {
+	if name == "" {
+		return fault("Shape: Refer needs a name")
+	}
 	var nb *Node
 	if len(spec) == 0 {
 		nb = buildize(nil)
@@ -945,7 +1047,9 @@ func ReferWith(name string, opts ReferOptions, spec ...any) *Node {
 			if state.Ctx == nil {
 				return true
 			}
-			if val == nil && !opts.Fill {
+			// An absent value is left alone unless Fill asks; a present null
+			// is a value, as in TS.
+			if state.absent && !opts.Fill {
 				return true
 			}
 			// A Define met on this call first, then the schema's own; both
@@ -954,12 +1058,16 @@ func ReferWith(name string, opts ReferOptions, spec ...any) *Node {
 				update.Node = rn
 			} else if rn, ok := state.Ctx.defs[name]; ok {
 				update.Node = rn
+			} else if opts.Strict {
+				update.Err = "Value \"$VALUE\" for property \"$PATH\" refers to \"" + name + "\", which is not defined."
+				return false
 			}
 			return true
 		},
 		stringify: func() string { return fmt.Sprintf("Refer(%q)", name) },
 	}
 	nb.n.befores = append(nb.n.befores, v)
+	bumpValidatorGen()
 	return nb
 }
 
@@ -980,6 +1088,9 @@ func Rename(name string, spec ...any) *Node {
 
 // RenameWith is Rename with explicit options (Keep, Claim).
 func RenameWith(name string, opts RenameOptions, spec ...any) *Node {
+	if name == "" {
+		return fault("Shape: Rename needs a name")
+	}
 	var nb *Node
 	if len(spec) == 0 {
 		nb = buildize(nil)
@@ -1092,6 +1203,7 @@ func Key(args ...any) *Node {
 		stringify: func() string { return "Key()" },
 	}
 	nb.n.befores = append(nb.n.befores, v)
+	bumpValidatorGen()
 	return nb
 }
 

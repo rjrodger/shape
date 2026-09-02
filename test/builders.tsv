@@ -47,17 +47,17 @@ len-array-chain-fail	{"a":{"$expr":"Len(2).Array"}}	{"a":[1]}		"Value \"[1]\" fo
 integer-ok	{"a":{"$type":"Integer"}}	{"a":5}	{"a":5}	
 integer-fraction-fails	{"a":{"$type":"Integer"}}	{"a":1.5}		"Validation failed for property \"a\" with number \"1.5\" because the number is not of type integer."
 integer-string-fails	{"a":{"$type":"Integer"}}	{"a":"5"}		"Validation failed for property \"a\" with string \"5\" because the string is not of type integer."
-integer-required	{"a":{"$type":"Integer"}}	{}		"Validation failed for property \"a\" with value \"undefined\" because the value is required."
+integer-required	{"a":{"$type":"Integer"}}	{}		"Validation failed for property \"a\" because the property is missing."
 integer-optional-default	{"a":{"$expr":"Optional(Integer)"}}	{}	{"a":0}	
 integer-min-type-first	{"a":{"$expr":"Min(2,Integer)"}}	{"a":1.5}		"Validation failed for property \"a\" with number \"1.5\" because the number is not of type integer."
 integer-min-bound	{"a":{"$expr":"Min(2,Integer)"}}	{"a":1}		"Value \"1\" for property \"a\" must be a minimum of 2 (was 1)."
 date-string-fails	{"a":{"$type":"Date"}}	{"a":"x"}		"Validation failed for property \"a\" with string \"x\" because the string is not of type date."
 date-number-fails	{"a":{"$type":"Date"}}	{"a":1}		"Validation failed for property \"a\" with number \"1\" because the number is not of type date."
-date-required	{"a":{"$type":"Date"}}	{}		"Validation failed for property \"a\" with value \"undefined\" because the value is required."
+date-required	{"a":{"$type":"Date"}}	{}		"Validation failed for property \"a\" because the property is missing."
 nullable-null-ok	{"a":{"$expr":"Nullable(Number)"}}	{"a":null}	{"a":null}	
 nullable-value-ok	{"a":{"$expr":"Nullable(Number)"}}	{"a":5}	{"a":5}	
 nullable-wrong-type	{"a":{"$expr":"Nullable(Number)"}}	{"a":"x"}		"Validation failed for property \"a\" with string \"x\" because the string is not of type number."
-nullable-still-required	{"a":{"$expr":"Nullable(Number)"}}	{}		"Validation failed for property \"a\" with value \"undefined\" because the value is required."
+nullable-still-required	{"a":{"$expr":"Nullable(Number)"}}	{}		"Validation failed for property \"a\" because the property is missing."
 nullable-optional-absent	{"a":{"$expr":"Optional(Nullable(Number))"}}	{}	{"a":0}	
 nullable-object-null	{"a":{"$expr":"Nullable(Closed({}))"}}	{"a":null}	{"a":null}	
 token-args-apply	{"a":{"$expr":"String(Min(2))"}}	{"a":"a"}		"Value \"a\" for property \"a\" must be a minimum length of 2 (was 1)."
@@ -80,7 +80,7 @@ coerce-before-bound	{"a":{"$expr":"Coerce(Min(2,Number))"}}	{"a":"1"}		"Value \"
 format-email-ok	{"a":{"$expr":"Email"}}	{"a":"a@b.co"}	{"a":"a@b.co"}	
 format-email-bad	{"a":{"$expr":"Email"}}	{"a":"nope"}		"Value \"nope\" for property \"a\" is not a valid email address."
 format-email-not-string	{"a":{"$expr":"Email"}}	{"a":1}		"Validation failed for property \"a\" with number \"1\" because the number is not of type string."
-format-email-required	{"a":{"$expr":"Email"}}	{}		"Validation failed for property \"a\" with value \"undefined\" because the value is required."
+format-email-required	{"a":{"$expr":"Email"}}	{}		"Validation failed for property \"a\" because the property is missing."
 format-email-optional-absent	{"a":{"$expr":"Optional(Email)"}}	{}	{"a":""}	
 format-url-ok	{"a":{"$expr":"Url"}}	{"a":"https://example.com/a?b=c#d"}	{"a":"https://example.com/a?b=c#d"}	
 format-url-bad	{"a":{"$expr":"Url"}}	{"a":"example.com"}		"Value \"example.com\" for property \"a\" is not a valid URL."
@@ -108,10 +108,10 @@ describe-keeps-validation	{"a":{"$expr":"Describe(\"a number\",Number)"}}	{"a":"
 ignore-inner-bound	{"a":{"$expr":"Ignore(Min(2,Number))"}}	{"a":1}	{}	
 disc-branch-ok	{"p":{"$discriminated":["kind",{"dog":{"bark":{"$type":"Boolean"}},"fish":{"fins":{"$type":"Number"}}}]}}	{"p":{"bark":true,"kind":"dog"}}	{"p":{"bark":true,"kind":"dog"}}	
 disc-branch-error	{"p":{"$discriminated":["kind",{"dog":{"bark":{"$type":"Boolean"}},"fish":{"fins":{"$type":"Number"}}}]}}	{"p":{"fins":"x","kind":"fish"}}		"Validation failed for property \"p.fins\" with string \"x\" because the string is not of type number."
-disc-branch-missing-key	{"p":{"$discriminated":["kind",{"dog":{"bark":{"$type":"Boolean"}},"fish":{"fins":{"$type":"Number"}}}]}}	{"p":{"kind":"dog"}}		"Validation failed for property \"p.bark\" with value \"undefined\" because the value is required."
+disc-branch-missing-key	{"p":{"$discriminated":["kind",{"dog":{"bark":{"$type":"Boolean"}},"fish":{"fins":{"$type":"Number"}}}]}}	{"p":{"kind":"dog"}}		"Validation failed for property \"p.bark\" because the property is missing."
 disc-missing-tag	{"p":{"$discriminated":["kind",{"dog":{"bark":{"$type":"Boolean"}},"fish":{"fins":{"$type":"Number"}}}]}}	{"p":{"bark":true}}		"Value \"{bark:true}\" for property \"p\" is not an object with a \"kind\" property."
 disc-unknown-tag	{"p":{"$discriminated":["kind",{"dog":{"bark":{"$type":"Boolean"}},"fish":{"fins":{"$type":"Number"}}}]}}	{"p":{"kind":"cat"}}		"Value \"{kind:cat}\" for property \"p\" has unknown \"kind\" \"cat\", expected one of: dog, fish."
 disc-not-object	{"p":{"$discriminated":["kind",{"dog":{"bark":{"$type":"Boolean"}},"fish":{"fins":{"$type":"Number"}}}]}}	{"p":1}		"Value \"1\" for property \"p\" is not an object with a \"kind\" property."
-disc-required-absent	{"p":{"$discriminated":["kind",{"dog":{"bark":{"$type":"Boolean"}},"fish":{"fins":{"$type":"Number"}}}]}}	{}		"Validation failed for property \"p\" with value \"undefined\" because the value is required."
+disc-required-absent	{"p":{"$discriminated":["kind",{"dog":{"bark":{"$type":"Boolean"}},"fish":{"fins":{"$type":"Number"}}}]}}	{}		"Validation failed for property \"p\" because the property is missing."
 disc-optional-absent	{"p":{"$optional":{"$discriminated":["kind",{"dog":{"bark":{"$type":"Boolean"}},"fish":{"fins":{"$type":"Number"}}}]}}}	{}	{}	
 one-optional-absent	{"a":{"$expr":"Optional(One(String,Number))"}}	{}	{}	

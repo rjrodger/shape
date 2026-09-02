@@ -317,6 +317,18 @@ func callBuilder(name string, args []any) any {
 		return Partial(args...)
 	case "Extend":
 		return Extend(args[0], args[1:]...)
+	case "Define":
+		return Define(args[0].(string), args[1:]...)
+	case "Refer":
+		// A name, or an options object as the TS form takes it.
+		if name, ok := args[0].(string); ok {
+			return Refer(name, args[1:]...)
+		}
+		o := args[0].(map[string]any)
+		opts := ReferOptions{}
+		opts.Fill, _ = o["fill"].(bool)
+		opts.Strict, _ = o["strict"].(bool)
+		return ReferWith(o["name"].(string), opts, args[1:]...)
 	}
 	panic("decodeSpec: unknown builder " + name)
 }

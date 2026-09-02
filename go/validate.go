@@ -193,7 +193,9 @@ func validateStructure(n *node, state *State, absent bool, path []string, pathAr
 	if n.kind == KindNever {
 		err := makeErr(state, WhyNever, markNever, "")
 		if n.faultMsg != "" {
-			err.Text = expandErrText(n.faultMsg, err.Path, state.Value)
+			if !err.terse {
+				err.Text = expandErrText(n.faultMsg, err.Path, state.Value)
+			}
 		}
 		if !n.silent {
 			verr.add(err)
@@ -215,7 +217,9 @@ func validateStructure(n *node, state *State, absent bool, path []string, pathAr
 		if n.required {
 			err := makeErr(state, WhyRequired, requiredMarkFor(n.kind), "")
 			if n.faultMsg != "" {
-				err.Text = expandErrText(n.faultMsg, err.Path, state.Value)
+				if !err.terse {
+					err.Text = expandErrText(n.faultMsg, err.Path, state.Value)
+				}
 			}
 			if !n.silent {
 				verr.add(err)
@@ -252,9 +256,13 @@ func validateStructure(n *node, state *State, absent bool, path []string, pathAr
 		if !ok {
 			err := makeErr(state, WhyType, markScalarType, "")
 			err.Type = KindString
-			err.Text = defaultErrText(err)
+			if !err.terse {
+				err.Text = defaultErrText(err)
+			}
 			if n.faultMsg != "" {
-				err.Text = expandErrText(n.faultMsg, err.Path, state.Value)
+				if !err.terse {
+					err.Text = expandErrText(n.faultMsg, err.Path, state.Value)
+				}
 			}
 			if !n.silent {
 				verr.add(err)
@@ -264,7 +272,9 @@ func validateStructure(n *node, state *State, absent bool, path []string, pathAr
 		if n.regexpVal != nil && !n.regexpVal.MatchString(sv) {
 			err := makeErr(state, WhyRegexp, markRegexp, "")
 			if n.faultMsg != "" {
-				err.Text = expandErrText(n.faultMsg, err.Path, state.Value)
+				if !err.terse {
+					err.Text = expandErrText(n.faultMsg, err.Path, state.Value)
+				}
 			}
 			if !n.silent {
 				verr.add(err)
@@ -280,7 +290,9 @@ func validateStructure(n *node, state *State, absent bool, path []string, pathAr
 		if s == "" && !n.empty {
 			err := makeErr(state, WhyRequired, markScalarRequired, "")
 			if n.faultMsg != "" {
-				err.Text = expandErrText(n.faultMsg, err.Path, state.Value)
+				if !err.terse {
+					err.Text = expandErrText(n.faultMsg, err.Path, state.Value)
+				}
 			}
 			if !n.silent {
 				verr.add(err)
@@ -346,7 +358,9 @@ func validateStructure(n *node, state *State, absent bool, path []string, pathAr
 func emitTypeErr(state *State, verr *ValidationError, n *node) {
 	err := makeErr(state, WhyType, typeMarkFor(n.kind), "")
 	if n.faultMsg != "" {
-		err.Text = expandErrText(n.faultMsg, err.Path, state.Value)
+		if !err.terse {
+			err.Text = expandErrText(n.faultMsg, err.Path, state.Value)
+		}
 	}
 	if !n.silent {
 		verr.add(err)
@@ -706,7 +720,9 @@ func reportUnknown(n *node, obj map[string]any, path []string, pathArr []any, ct
 		Value: obj, Node: n, Match: match, Ctx: ctx}
 	err := makeErr(state, WhyClosed, markObjectClosed, "")
 	err.plural = len(unknown) > 1
-	err.Text = defaultErrText(err)
+	if !err.terse {
+		err.Text = defaultErrText(err)
+	}
 	if at < 0 {
 		verr.add(err)
 		return
@@ -781,7 +797,9 @@ func evaluateList(n *node, in any, path []string, pathArr []any, key string, par
 			err := makeErr(state, WhyOne, 4030,
 				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" does not satisfy one of: %s", listShapeNames(n)))
 			if n.faultMsg != "" {
-				err.Text = expandErrText(n.faultMsg, err.Path, in)
+				if !err.terse {
+					err.Text = expandErrText(n.faultMsg, err.Path, in)
+				}
 			}
 			if !n.silent {
 				verr.add(err)
@@ -806,7 +824,9 @@ func evaluateList(n *node, in any, path []string, pathArr []any, key string, par
 			err := makeErr(state, WhySome, 4031,
 				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" does not satisfy any of: %s", listShapeNames(n)))
 			if n.faultMsg != "" {
-				err.Text = expandErrText(n.faultMsg, err.Path, in)
+				if !err.terse {
+					err.Text = expandErrText(n.faultMsg, err.Path, in)
+				}
 			}
 			if !n.silent {
 				verr.add(err)
@@ -875,7 +895,9 @@ func emitUpdateErrors(state *State, update *Update, verr *ValidationError) {
 		// structural error does; one that does keeps its own (TS: text || z).
 		err := makeErr(state, why, mark, "")
 		if state.Node.faultMsg != "" {
-			err.Text = expandErrText(state.Node.faultMsg, err.Path, state.Value)
+			if !err.terse {
+				err.Text = expandErrText(state.Node.faultMsg, err.Path, state.Value)
+			}
 		}
 		verr.add(err)
 	case string:

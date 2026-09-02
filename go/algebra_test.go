@@ -30,13 +30,13 @@ func TestAlgebraPick(t *testing.T) {
 	algWant(t, "single name", mustOK(t, MustShape(Pick("a", base)), algObj()), algObj("a", 1.0))
 	algWant(t, "two names", mustOK(t, MustShape(Pick([]any{"a", "c"}, base)), algObj("c", false)), algObj("a", 1.0, "c", false))
 	mustErr(t, MustShape(Pick([]string{"b"}, base)), algObj(),
-		"Validation failed for property \"b\" with value \"undefined\" because the value is required.")
+		"Validation failed for property \"b\" because the property is missing.")
 	mustErr(t, MustShape(Pick([]string{"a"}, base)), algObj("a", 2.0, "b", "x"),
 		"Validation failed for object \"{a:2,b:x}\" because the property \"b\" is not allowed.")
 	algWant(t, "open base", mustOK(t, MustShape(Pick("a", Open(base))), algObj("z", 1.0)), algObj("a", 1.0, "z", 1.0))
 
 	// The source is untouched.
-	mustErr(t, MustShape(base), algObj(), "because the value is required")
+	mustErr(t, MustShape(base), algObj(), "because the property is missing")
 
 	// Chained, and the G alias.
 	algWant(t, "chained", mustOK(t, MustShape(Closed(base).Pick("a")), algObj()), algObj("a", 1.0))
@@ -77,13 +77,13 @@ func TestAlgebraPartial(t *testing.T) {
 		"Validation failed for property \"b\" with number \"1\" because the number is not of type string.")
 	// Shallow: a nested object's own properties are as they were.
 	mustErr(t, MustShape(Partial(algObj("a", algObj("b", Number)))), algObj(),
-		"Validation failed for property \"a.b\" with value \"undefined\" because the value is required.")
+		"Validation failed for property \"a.b\" because the property is missing.")
 	algWant(t, "chained", mustOK(t, MustShape(Closed(base).Partial()), algObj()), algObj("a", 1.0, "b", "", "c", true))
 	algWant(t, "alias", mustOK(t, MustShape(GPartial(base)), algObj()), algObj("a", 1.0, "b", "", "c", true))
 	algWant(t, "object token", mustOK(t, MustShape(Partial(Object)), algObj("z", 1.0)), algObj("z", 1.0))
 
 	// The source's children are untouched.
-	mustErr(t, MustShape(base), algObj(), "because the value is required")
+	mustErr(t, MustShape(base), algObj(), "because the property is missing")
 
 	mustErr(t, MustShape(Partial(String)), "x", "Partial needs an object shape")
 	mustErr(t, MustShape(Partial()), algObj(), "Partial needs an object shape")
@@ -95,7 +95,7 @@ func TestAlgebraExtend(t *testing.T) {
 	algWant(t, "adds", mustOK(t, MustShape(Extend(algObj("e", 2.0), base)), algObj("b", "x")),
 		algObj("a", 1.0, "b", "x", "c", true, "e", 2.0))
 	mustErr(t, MustShape(Extend(algObj("e", Number), base)), algObj("b", "x"),
-		"Validation failed for property \"e\" with value \"undefined\" because the value is required.")
+		"Validation failed for property \"e\" because the property is missing.")
 	algWant(t, "overrides", mustOK(t, MustShape(Extend(algObj("b", 5.0), base)), algObj()),
 		algObj("a", 1.0, "b", 5.0, "c", true))
 	mustErr(t, MustShape(Extend(algObj("e", 2.0), base)), algObj("b", "x", "z", 1.0),
