@@ -14,8 +14,8 @@ Two gates, and they do different jobs.
 
 A language-neutral conformance corpus lives in [`test/`](../../test/README.md)
 as a set of `.tsv` files. Each row is a `(spec, input) → output | error` case
-whose expected column is computed from the canonical TypeScript build. **Both**
-implementations run every row:
+whose expected column is computed from the canonical TypeScript build. **All
+three** implementations run every row:
 
 - TypeScript — `ts/test/compat.test.ts`
 - Go — `go/compat_tsv_test.go`
@@ -122,8 +122,8 @@ Some differences are inherent to Go and are unlikely ever to close.
 
 ## Error metadata
 
-Both languages produce the same message *text*. The Go `FieldError` also exposes
-a `Check` field (the failing builder/check name) and `Mark` codes; the built-in
+All three languages produce the same message *text*. The Go `FieldError` also
+exposes a `Check` field (the failing builder/check name) and `Mark` codes; the built-in
 bounded checks report `why: "check"` with the builder name in `check`, matching
 TypeScript's `ErrDesc`.
 
@@ -133,13 +133,14 @@ Because TypeScript is canonical, a behaviour change starts there:
 
 1. Change `ts/src/shape.ts` and add/adjust a case in `test/gen-compat.js`.
 2. Regenerate the corpus: `node test/gen-compat.js`.
-3. Run `make test` — both languages must pass the regenerated corpus.
-4. Run `make diff` — both languages must agree on every generated case.
-5. If Go diverges, fix Go to match.
+3. Run `make test` — all three languages must pass the regenerated corpus.
+4. Run `make diff` — both ports must agree with TypeScript on every generated
+   case.
+5. If a port diverges, fix the port to match.
 
 A divergence caused by a TypeScript bug is fixed in TypeScript first: never
-"fix" it by changing Go to match, and never change TypeScript to match Go
-without deciding that the TypeScript behaviour is wrong.
+"fix" it by changing a port to match, and never change TypeScript to match a
+port without deciding that the TypeScript behaviour is wrong.
 
 See the [agent and contributor guide](../../AGENTS.md).
 
@@ -147,8 +148,9 @@ See the [agent and contributor guide](../../AGENTS.md).
 
 The Rust port ([`rs/`](../../rs/README.md), planned in
 [rust-plan.md](rust-plan.md)) is held to the same two gates: every corpus row
-(none skipped, `SHAPE_RS_STRICT=1` in `make test-rs`) and every differential
-case. Two of the Go divergences above do not apply to it:
+(none skipped; `SHAPE_RS_STRICT=1 cargo test` turns a skipped row into a
+failure) and every differential case. Two of the Go divergences above do not
+apply to it:
 
 - **Key order.** Its objects are insertion-ordered maps, so unknown keys and
   produced values keep the input's order, as TypeScript's do.

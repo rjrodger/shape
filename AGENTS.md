@@ -5,7 +5,7 @@ before making changes.
 
 ## What this repo is
 
-`shape` is a schema-by-example validator with **two implementations kept at
+`shape` is a schema-by-example validator with **three implementations kept at
 behavioural parity**:
 
 | Path      | Contents |
@@ -33,12 +33,13 @@ behavioural parity**:
 ## Build & test
 
 ```sh
-make build      # build ts + go
-make test       # test ts + go (includes the shared corpus)
+make build      # build ts + go + rs
+make test       # test ts + go + rs (includes the shared corpus)
 
 # or per-language:
 make build-ts && make test-ts
 make build-go  && make test-go
+make build-rs  && make test-rs
 ```
 
 Direct commands:
@@ -70,23 +71,24 @@ To add or change a parity case:
 ```sh
 make build-ts                # gen-compat.js needs ts/dist
 node test/gen-compat.js      # regenerate every test/*.tsv from canonical TS
-make test                    # both languages must pass the new corpus
+make test                    # all three languages must pass the new corpus
 ```
 
-Both `ts/test/compat.test.ts` and `go/compat_tsv_test.go` glob and run every
-`test/*.tsv`. See [`test/README.md`](test/README.md) for the cell/sentinel
-format (`$type`, `$open`, `$closed`, `$required`, `$optional`, `$expr`,
-`$discriminated`, `$call`).
+`ts/test/compat.test.ts`, `go/compat_tsv_test.go` and `rs/tests/compat_tsv.rs`
+glob and run every `test/*.tsv`. See [`test/README.md`](test/README.md) for the
+cell/sentinel format (`$type`, `$open`, `$closed`, `$required`, `$optional`,
+`$expr`, `$discriminated`, `$jsonschema`, `$call`).
 
 The `error` column holds the **complete** expected message and is compared
 **exactly**. A substring check cannot see a wrong separator, a wrong error order
-or an extra error — the ways the two implementations actually drift.
+or an extra error — the ways the implementations actually drift.
 
 ## The differential harness (the wider net)
 
 The corpus only covers rows someone wrote. `test/differential/` generates
-thousands of `(spec, input)` pairs, runs each through both implementations and
-diffs the JSON Schema export, verdict, produced value and exact error text:
+thousands of `(spec, input)` pairs, runs each through all three implementations
+and diffs the JSON Schema export, verdict, produced value and exact error text,
+each port against the canonical build:
 
 ```sh
 make diff        # sampled report, grouped by case family
@@ -100,7 +102,7 @@ the committed gate keeps it closed. See
 
 ## Coverage bar
 
-Aim for **100% line coverage** in both languages.
+Aim for **100% line coverage** in every language.
 
 ```sh
 # TypeScript — measure on the executed dist/shape.js (source maps mis-attribute
@@ -140,8 +142,9 @@ cd rs && ./cover.sh
 - **Do not edit** `ts/dist`, `ts/dist-test`, or generated `test/*.tsv` by hand —
   rebuild / regenerate instead.
 - **Version constants:** `ts/package.json` + the `VERSION` const in
-  `ts/src/shape.ts` (kept in sync by `npm run version`), and `const Version` in
-  `go/shape.go`. The Makefile `publish` targets bump these.
+  `ts/src/shape.ts` (kept in sync by `npm run version`), `const Version` in
+  `go/shape.go`, and `version` in `rs/Cargo.toml`. The Publish workflow bumps
+  all three; the Makefile `publish` targets bump the npm and Go ones.
 
 ## Publishing
 
@@ -154,11 +157,12 @@ then publishes npm with OpenID Connect trusted publishing (no token: npmjs.com
 lists this repository and workflow as the package's trusted publisher), commits
 and tags `ts/vX.Y.Z`, tags `go/vX.Y.Z` for the Go module, and publishes the
 crate to crates.io with trusted publishing too (crates.io lists this
-repository and workflow for the `shape` crate), committing and tagging
+repository and workflow for the `shape-schema` crate), committing and tagging
 `rs/vX.Y.Z`, pushing all to `main`. A run that failed after `npm publish` is re-run with the same inputs:
 a version already on the registry is not published again, and the tag, push and
 release are each done only if missing. The Makefile `publish` targets are the
-local equivalent and need npm credentials.
+local equivalent for npm and Go and need npm credentials; the crate is only
+published by the workflow (`make publish-rs-dry` checks its packaging).
 
 ## Docs
 
@@ -174,7 +178,7 @@ the performance report read from `bench/results/latest/`.
 
 ## Benchmarks
 
-`make bench` measures shape against other validators in both languages and
+`make bench` measures shape against other validators in every language and
 files a run per language under `bench/results/runs/` — never edit or delete
 a run file; `bench/results/latest/` is rebuilt from all of them. The
 `Measure` workflow records runs from the hosted runners; CI runs

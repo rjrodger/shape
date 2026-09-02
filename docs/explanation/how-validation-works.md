@@ -38,6 +38,7 @@ A **missing** value (JS `undefined`, or an absent Go map key) is distinct from a
 present **null**. Missing may be defaulted or flagged required; a present null is
 a value and fails a typed shape as a type error. Go, which has only `nil`,
 reproduces this: an absent key behaves as missing, an explicit `nil` as null.
+Rust has `Value::Undefined` and `Value::Null` as distinct values.
 
 ## Default injection and mutation
 
@@ -48,7 +49,12 @@ When an optional value is missing, its default is injected into the output.
   JavaScript values is [famously fiddly](https://www.digitalocean.com/community/tutorials/copying-objects-in-javascript),
   so Shape leaves that choice to you — pass a fresh object if you must preserve
   the original.
-- **Go** builds and returns a new value; it does not mutate the input map.
+- **Go** never changes its input: `Validate` returns the input's own object or
+  array where nothing changed and a copy where something did (a default
+  injected, a key renamed or dropped), so the result may share structure with
+  the input.
+- **Rust** takes the input by value (`validate(input: Value)`) and produces in
+  place, as TypeScript does; `valid` and `error` borrow it.
 
 Injected defaults are deep-cloned, so two validations never share mutable state.
 
@@ -58,7 +64,7 @@ Validation is a single depth-first pass. Because composition builders
 (`One`/`Some`/`All`) and defaults interact, the engine deliberately evaluates
 branches without early exit where a short-circuit would skip a default. All
 errors from one pass are collected; by default the first failure surfaces as a
-thrown error (TS) or a returned error (Go), but you can
+thrown error (TS) or a returned error (Go and Rust), but you can
 [collect them all](../how-to/handle-and-collect-errors.md).
 
 ## Empty strings
@@ -76,4 +82,4 @@ you opt into `fill`. This is what makes self-referential (tree) shapes safe.
 ## See also
 
 - [Builder reference](../reference/builders.md)
-- [TypeScript ↔ Go parity](ts-go-parity.md)
+- [TypeScript ↔ Go ↔ Rust parity](ts-go-parity.md)

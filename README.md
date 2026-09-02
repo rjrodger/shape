@@ -141,9 +141,10 @@ shape to other validators across hosts and versions:
 
 ## Contributing
 
-`make build` builds both languages; `make test` runs both test suites (including
-the shared corpus); `make diff` runs the differential parity harness, which puts
-thousands of generated cases through all three and compares exact error text.
+`make build` builds all three languages; `make test` runs all three test suites
+(including the shared corpus); `make diff` runs the differential parity
+harness, which puts thousands of generated cases through all three and
+compares exact error text.
 TypeScript is canonical — behaviour changes start there and are mirrored in Go
 and Rust.
 See **[AGENTS.md](AGENTS.md)**.
