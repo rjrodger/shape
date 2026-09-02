@@ -48,6 +48,7 @@ against the case before anything is timed.
 | `nested`  | a nested object, an array of strings, a settings object                      |
 | `array`   | an array of fifty small objects                                              |
 | `bounds`  | string length, integer range, a regular expression, a number range           |
+| `large`   | fifty primitive properties, generated, so the per-key cost shows             |
 | `invalid` | the `nested` input with two type errors, so the error path is measured       |
 
 What is measured is a verdict on an already-decoded value: shape's
@@ -82,8 +83,11 @@ survives without the file growing with the budget.
 - `host`: an anonymous id, the platform, architecture, CPU model, core
   count and memory, and whether it ran under GitHub Actions;
 - `runtime` and `versions`: Node or Go, and every library's version;
-- `input_hash`: the hash of `cases.json`, so runs against different cases
-  are never compared;
+- `input_hash`: the hash of `cases.json`. The report also hashes each
+  case's definition as it was in the run's commit (`case_hash` on every
+  row of `summary.json`), so a case added later leaves the others'
+  history comparable, and a case changed later cuts its own history at
+  the change;
 - `policy`: the timing policy used.
 
 The host id is the first twelve hex characters of a SHA-256 of the

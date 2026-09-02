@@ -141,6 +141,15 @@ spec, _  := shape.FromJSONSchema(doc)  // and back: a spec built from a JSON Sch
 err      := s.ValidateInto(input, &out) // validate, then decode the result into a struct
 ```
 
+`Validate` and `Error` never change their input. The value `Validate`
+returns is produced by copying on write: an object or array of the input
+that validates as it is comes back as itself, and one that changes (a
+default injected, a key renamed or dropped, a child produced as a
+different value) comes back as a copy, with the input left as it was. So
+the result may share structure with the input; take a copy before
+changing either if both are kept. (Before v0.4.0 every object and array
+was copied whether it changed or not.)
+
 Validation returns a new value; the input map is not mutated. Injected defaults
 are deep-cloned, so two results never share state.
 

@@ -164,12 +164,33 @@ function cases() {
         c.input.items.push({ sku: 'SKU-' + String(i).padStart(4, '0'), qty: i % 7, price: i * 1.25 })
       }
     }
+    if (c.generate && c.generate.keys) {
+      // The keys k00.. cycle through a string, an integer, a boolean and a
+      // number; the schema is generated with them.
+      const properties = {}
+      const required = []
+      for (let i = 0; i < c.generate.keys; i++) {
+        const k = largeKey(i)
+        c.input[k] = largeValue(i)
+        properties[k] = { type: ['string', 'integer', 'boolean', 'number'][i % 4] }
+        required.push(k)
+      }
+      c.jsonSchema = { type: 'object', properties, required, additionalProperties: false }
+    }
     if (c.jsonSchema && typeof c.jsonSchema.$ref === 'string' && c.jsonSchema.$ref.startsWith('#')) {
       c.jsonSchema = byName[c.jsonSchema.$ref.slice(1)].jsonSchema
     }
   }
   const hash = crypto.createHash('sha256').update(raw).digest('hex').slice(0, 12)
   return { cases: spec.cases, hash }
+}
+
+// The key and value at index i of a generated large object (see cases).
+function largeKey(i) {
+  return 'k' + String(i).padStart(2, '0')
+}
+function largeValue(i) {
+  return [() => 'v' + i, () => i, () => 0 === i % 8, () => i * 0.5][i % 4]()
 }
 
 // gitSource reads the commit being measured from the repository.
@@ -194,4 +215,4 @@ function runId(at, hostId, lang) {
   return at.replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z') + '-' + hostId + '-' + lang
 }
 
-module.exports = { ROOT, policy, measure, stats, host, cases, gitSource, runId }
+module.exports = { ROOT, policy, measure, stats, host, cases, gitSource, runId, largeKey }
