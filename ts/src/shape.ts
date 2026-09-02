@@ -3209,6 +3209,16 @@ const Closed = function <V = any>(this: any, shape?: Node<V> | V): Node<V> {
 }
 
 
+// Whether a bound is a finite number, a string that reads as one, a date,
+// or absent (the key-expression form).
+function boundArg(size: any): boolean {
+  return undefined === size ? true :
+    S.number === typeof size ? Number.isFinite(size) :
+      S.string === typeof size ? ('' !== size.trim() && Number.isFinite(+size)) :
+        size instanceof Date && !isNaN(size.getTime())
+}
+
+
 // A builder that names something needs a name.
 function needsName(builder: string, name: any) {
   if (S.string !== typeof name || '' === name) {
@@ -3520,10 +3530,10 @@ function makeSizeBuilder(
 ) {
   let node = buildize(self, shape)
 
-  // A bound that is not a number is a mistake in the spec, not a value. No
-  // bound at all is the key-expression form ("a: Min()": 3), whose bound is
-  // the example.
-  if (undefined !== size && !Number.isFinite(+size)) {
+  // A bound is a finite number, a string that reads as one, or a date; no
+  // bound at all is the key-expression form ("a: Min()": 3), whose bound
+  // is the example. Anything else is a mistake in the spec, not a value.
+  if (!boundArg(size)) {
     throw new Error('Shape: ' + name + ' needs a number')
   }
   size = +size
@@ -3645,7 +3655,7 @@ const Len = function <V = any>(
   len: number,
   shape?: Node<V> | V
 ): Node<V> {
-  if (!Number.isInteger(+len) || +len < 0) {
+  if (!boundArg(len) || undefined === len || !Number.isInteger(+len) || +len < 0) {
     throw new Error('Shape: Len needs a whole number of zero or more')
   }
   return makeSizeBuilder(this, len, shape, S.Len,

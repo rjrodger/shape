@@ -8,8 +8,9 @@ const Version = "0.4.0"
 type Schema struct {
 	root *node
 	// The Define'd nodes of the tree, collected once so a Refer can resolve
-	// them whatever the traversal order (see prepare).
-	defs map[string]*node
+	// them whatever the traversal order (see prepare), and collected again
+	// with pure when a validator (a Define is one) was attached late.
+	defs atomic.Pointer[defsTable]
 	// pure is true when no node of the tree has a validator, so a call can
 	// run on a pooled context and produce into its input (see callScratch).
 	// It is read through isPure, which recomputes it when a validator was
@@ -32,10 +33,29 @@ func bumpValidatorGen() { validatorGen.Add(1) }
 func (s *Schema) isPure() bool {
 	g := validatorGen.Load()
 	if s.gen.Load() != g {
-		s.pure.Store(!hasValidators(s.root))
-		s.gen.Store(g)
+		s.reread(g)
 	}
 	return s.pure.Load()
+}
+
+// reread reads the tree again at validator generation g: whether it has
+// validators, and its definitions, since a Define chained onto a node
+// after the compile is one of them.
+func (s *Schema) reread(g uint64) {
+	defs := map[string]*node{}
+	prepare(s.root, defs)
+	s.defs.Store(&defsTable{m: defs})
+	s.pure.Store(!hasValidators(s.root))
+	s.gen.Store(g)
+}
+
+// defsTable is the definition table of a Schema, swapped whole when it is
+// collected again.
+type defsTable struct{ m map[string]*node }
+
+// defsMap is the definition table as of the last reading.
+func (s *Schema) defsMap() map[string]*node {
+	return s.defs.Load().m
 }
 
 // prepare walks a compiled tree once: every object node gets the set of
@@ -118,11 +138,8 @@ func ShapeWith(spec any, opts ShapeOptions) (*Schema, error) {
 	if err != nil {
 		return nil, err
 	}
-	defs := map[string]*node{}
-	prepare(n, defs)
-	s := &Schema{root: n, defs: defs}
-	s.pure.Store(!hasValidators(n))
-	s.gen.Store(validatorGen.Load())
+	s := &Schema{root: n}
+	s.reread(validatorGen.Load())
 	return s, nil
 }
 
@@ -162,11 +179,11 @@ func (s *Schema) ValidateCtx(input any, ctx *Context) (any, error) {
 	var cs *callScratch
 	if ctx == nil && s.isPure() {
 		cs = callPool.Get().(*callScratch)
-		c, path, pathArr = cs.begin(s.defs, false)
+		c, path, pathArr = cs.begin(s.defsMap(), false)
 	} else {
 		c = newContext(ctx)
 		c.Match = false
-		c.defs = s.defs
+		c.defs = s.defsMap()
 		c.pure = s.isPure()
 		path, pathArr = c.start()
 	}
@@ -201,7 +218,7 @@ func (s *Schema) Match(input any) bool {
 	}
 	if s.isPure() {
 		cs := callPool.Get().(*callScratch)
-		c, path, pathArr := cs.begin(s.defs, true)
+		c, path, pathArr := cs.begin(s.defsMap(), true)
 		verr := cs.matchErrors()
 		validateNode(s.root, rootInput(input), path, pathArr, "", nil, c, true, verr)
 		ok := !verr.hasAny()
@@ -211,7 +228,7 @@ func (s *Schema) Match(input any) bool {
 	c := newContext(nil)
 	c.Match = true
 	c.terse = true
-	c.defs = s.defs
+	c.defs = s.defsMap()
 	c.pure = s.isPure()
 	path, pathArr := c.start()
 	verr := &ValidationError{terse: true}
@@ -233,13 +250,13 @@ func (s *Schema) Error(input any) []FieldError {
 	verr := &ValidationError{}
 	if s.isPure() {
 		cs := callPool.Get().(*callScratch)
-		c, path, pathArr := cs.begin(s.defs, false)
+		c, path, pathArr := cs.begin(s.defsMap(), false)
 		validateNode(s.root, rootInput(input), path, pathArr, "", nil, c, false, verr)
 		cs.release()
 		return verr.Issues
 	}
 	c := newContext(nil)
-	c.defs = s.defs
+	c.defs = s.defsMap()
 	c.pure = s.isPure()
 	path, pathArr := c.start()
 	validateNode(s.root, rootInput(input), path, pathArr, "", nil, c, false, verr)

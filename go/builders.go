@@ -414,18 +414,27 @@ func fault(msg string) *Node {
 	return newNodeWrap(&node{kind: KindNever, faultMsg: msg})
 }
 
-// boundArg reports whether a bound is a number: a numeric value, a time
-// (for a Date), or a string that reads as a number, as +size takes it in
-// TypeScript.
+// boundArg reports whether a bound is a finite number: a numeric value, a
+// time (for a Date), or a string that reads as a number, as TypeScript
+// reads it with +size and Number.isFinite.
 func boundArg(v any) bool {
+	var f float64
 	switch x := v.(type) {
 	case time.Time:
 		return true
 	case string:
-		_, err := strconv.ParseFloat(strings.TrimSpace(x), 64)
-		return err == nil
+		parsed, err := strconv.ParseFloat(strings.TrimSpace(x), 64)
+		if err != nil {
+			return false
+		}
+		f = parsed
+	default:
+		if !isNumeric(v) {
+			return false
+		}
+		f = toFloat(v)
 	}
-	return isNumeric(v)
+	return !math.IsNaN(f) && !math.IsInf(f, 0)
 }
 
 func Min(min any, spec ...any) *Node {
@@ -472,6 +481,11 @@ func Min(min any, spec ...any) *Node {
 // Min (chained).
 func (n *Node) Min(min any) *Node {
 	other := Min(min)
+	if other.n.kind == KindNever && other.n.faultMsg != "" {
+		// The argument was wrong: this node becomes the fault.
+		n.n.kind, n.n.faultMsg = KindNever, other.n.faultMsg
+		return n
+	}
 	n.n.befores = append(n.n.befores, other.n.befores...)
 	bumpValidatorGen()
 	return n
@@ -522,6 +536,11 @@ func Max(max any, spec ...any) *Node {
 // Max (chained).
 func (n *Node) Max(max any) *Node {
 	other := Max(max)
+	if other.n.kind == KindNever && other.n.faultMsg != "" {
+		// The argument was wrong: this node becomes the fault.
+		n.n.kind, n.n.faultMsg = KindNever, other.n.faultMsg
+		return n
+	}
 	n.n.befores = append(n.n.befores, other.n.befores...)
 	bumpValidatorGen()
 	return n
@@ -572,6 +591,11 @@ func Above(above any, spec ...any) *Node {
 // Above (chained).
 func (n *Node) Above(above any) *Node {
 	other := Above(above)
+	if other.n.kind == KindNever && other.n.faultMsg != "" {
+		// The argument was wrong: this node becomes the fault.
+		n.n.kind, n.n.faultMsg = KindNever, other.n.faultMsg
+		return n
+	}
 	n.n.befores = append(n.n.befores, other.n.befores...)
 	bumpValidatorGen()
 	return n
@@ -622,6 +646,11 @@ func Below(below any, spec ...any) *Node {
 // Below (chained).
 func (n *Node) Below(below any) *Node {
 	other := Below(below)
+	if other.n.kind == KindNever && other.n.faultMsg != "" {
+		// The argument was wrong: this node becomes the fault.
+		n.n.kind, n.n.faultMsg = KindNever, other.n.faultMsg
+		return n
+	}
 	n.n.befores = append(n.n.befores, other.n.befores...)
 	bumpValidatorGen()
 	return n
@@ -672,6 +701,11 @@ func Len(length int, spec ...any) *Node {
 // Len (chained).
 func (n *Node) Len(length int) *Node {
 	other := Len(length)
+	if other.n.kind == KindNever && other.n.faultMsg != "" {
+		// The argument was wrong: this node becomes the fault.
+		n.n.kind, n.n.faultMsg = KindNever, other.n.faultMsg
+		return n
+	}
 	n.n.befores = append(n.n.befores, other.n.befores...)
 	bumpValidatorGen()
 	return n
