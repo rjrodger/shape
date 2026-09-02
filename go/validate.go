@@ -808,23 +808,24 @@ func evaluateList(n *node, in any, path []string, pathArr []any, key string, par
 		}
 		return winner
 	case listSome:
-		// TypeScript runs every branch against the one value it was given:
-		// a map or slice is produced in place, so each matching branch sees
-		// what the ones before it did, while a scalar is replaced, so each
-		// matching branch sees the original and the last one's result stands.
+		// TypeScript hands every branch the one value it was given and takes
+		// the last matching branch's result. A map or slice is produced in
+		// place there, so a later branch sees what earlier ones did; a branch
+		// that replaces the value (a scalar, a Catch) leaves later branches
+		// the value they would have seen. So the value handed on advances
+		// only while a branch's result is still a container of the same kind.
 		matched := false
-		threads := isContainer(branchIn)
+		seen := branchIn
 		var winner any = branchIn
 		for _, sn := range n.list {
-			seen := branchIn
-			if threads {
-				seen = winner
-			}
 			sub := &ValidationError{}
 			validateNode(sn, seen, path, pathArr, key, parent, ctx, true, sub)
 			if !sub.hasAny() {
 				matched = true
 				winner = validateNode(sn, seen, path, pathArr, key, parent, ctx, match, &ValidationError{})
+				if sameContainer(winner, seen) {
+					seen = winner
+				}
 			}
 		}
 		if !matched {
@@ -1069,6 +1070,20 @@ func isContainer(v any) bool {
 		return true
 	}
 	return false
+}
+
+// sameContainer reports whether both values are containers of one kind, so
+// the first can stand for the second produced in place.
+func sameContainer(a, b any) bool {
+	return isContainer(a) && isContainer(b) && containerKind(a) == containerKind(b)
+}
+
+func containerKind(v any) reflect.Kind {
+	rv := reflect.ValueOf(v)
+	if rv.Kind() == reflect.Pointer {
+		rv = rv.Elem()
+	}
+	return rv.Kind()
 }
 
 func isNumber(v any) bool {

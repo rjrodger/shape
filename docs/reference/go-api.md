@@ -279,10 +279,14 @@ type ValidationError struct{ Issues []FieldError }
 func (e *ValidationError) Error() string // the issues' Text, joined by newline
 ```
 
-`Why` codes are exported as constants, `WhyType`, `WhyRequired`, `WhyClosed`,
-`WhyCheck`, `WhyNever`, `WhyRegexp`, `WhyEmpty` (the lower-case codes) and one
-per builder that fails on its own (`WhyMin`, `WhyExact`, `WhyEmail`,
-`WhyDiscriminated`, …), each equal to the TypeScript `why` string.
+`Why` codes are exported as constants: `WhyType`, `WhyRequired`, `WhyClosed`,
+`WhyCheck`, `WhyNever`, `WhyRegexp`, `WhyEmpty` (the lower-case codes, equal
+to the TypeScript `why` strings) and one per builder that fails on its own
+(`WhyMin`, `WhyExact`, `WhyEmail`, `WhyDiscriminated`, …). The builder codes
+are a deliberate divergence: where Go reports `WhyMin` with mark 4011,
+TypeScript reports `why: "check"` with the builder name in `check` and mark
+4000, so code that branches on a why code must not expect the same string in
+both (see the [parity page](../explanation/ts-go-parity.md#error-metadata)).
 
 ## Standard Schema
 

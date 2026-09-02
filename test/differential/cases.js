@@ -88,6 +88,8 @@ function build() {
   // A builder called wrongly in the string form is a build error.
   add('expr-fault-arg', E('String.Min("x")'), SCALARS)
   add('expr-fault-nested', E('Open(Define(""))'), SCALARS)
+  // A deliberate Fault on a Never node is a valid expression.
+  add('expr-fault-deliberate', E('Never.Fault("f")'), SCALARS)
   // Some: an object threads through its matching branches, a scalar does not.
   // Passing inputs only: the message for a failing one lists object branches,
   // whose rendering the ports do not yet share (see the parity page).

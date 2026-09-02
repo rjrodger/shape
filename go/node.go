@@ -50,6 +50,9 @@ type node struct {
 
 	// Custom Fault message overrides default error text.
 	faultMsg string
+	// argFault marks a node a builder made when its argument was wrong, as
+	// against a deliberate Fault: the string form refuses the former.
+	argFault bool
 
 	// Composition: if listMode != listNone, branches define alternate shapes.
 	listMode listMode

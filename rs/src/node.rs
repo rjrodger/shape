@@ -201,6 +201,9 @@ pub struct Node {
     pub regexp: Option<Regex>,
     /// A `Fault` message overriding the structural text.
     pub fault_msg: Option<String>,
+    /// Made by a builder given a wrong argument, as against a deliberate
+    /// `fault`: the string form refuses such a node.
+    pub arg_fault: bool,
 
     pub list_mode: ListMode,
     pub list: Vec<Node>,

@@ -35,11 +35,12 @@ pub fn any() -> Node {
 pub(crate) fn fault_node(msg: impl Into<String>) -> Node {
     let mut n = Node::of(Kind::Never);
     n.fault_msg = Some(msg.into());
+    n.arg_fault = true;
     n
 }
 
 pub(crate) fn is_fault(n: &Node) -> bool {
-    n.kind == Kind::Never && n.fault_msg.is_some()
+    n.arg_fault
 }
 
 fn validator(
@@ -722,6 +723,7 @@ impl Node {
         if is_fault(&other) {
             self.kind = Kind::Never;
             self.fault_msg = other.fault_msg;
+            self.arg_fault = true;
             return self;
         }
         self.befores.extend(other.befores);
@@ -760,6 +762,7 @@ impl Node {
             base.nullable = self.nullable;
             base.silent = self.silent;
             base.fault_msg = self.fault_msg.take();
+            base.arg_fault = self.arg_fault;
             base.meta.extend(std::mem::take(&mut self.meta));
             self = base;
         }
@@ -963,7 +966,8 @@ impl Node {
             "Check",
             Some("Check()".to_string()),
             Vec::new(),
-            f,
+            // An absent value is left to the required check, as in TypeScript.
+            move |state: &mut State<'_>, update: &mut Update| state.absent || f(state, update),
         ));
         self
     }
@@ -976,6 +980,9 @@ impl Node {
             Some(suffix),
             Vec::new(),
             move |state, update| {
+                if state.absent {
+                    return true;
+                }
                 if let Value::Str(s) = state.value {
                     if re.is_match(s) {
                         return true;
@@ -1355,10 +1362,10 @@ mod tests {
             run(&s, &a("1")),
             "ERR Validation failed for property \"a\" with number \"1\" because check \"Check\" failed."
         );
-        // A required check sees the absent value.
+        // A check is not called for an absent value: the required check speaks.
         assert_eq!(
             run(&s, "{}"),
-            "ERR Validation failed for property \"a\" with value \"undefined\" because check \"Check\" failed."
+            "ERR Validation failed for property \"a\" because the property is missing."
         );
         let s = at_a(check(|_, _| true, Token::Number));
         assert_eq!(

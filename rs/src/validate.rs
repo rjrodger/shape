@@ -853,6 +853,15 @@ pub(crate) fn validate_ignored(
 }
 
 /// Whether a branch accepts the value, without producing or rendering.
+/// Whether both values are containers of one kind, so the first can stand
+/// for the second produced in place.
+fn same_container(a: &Value, b: &Value) -> bool {
+    matches!(
+        (a, b),
+        (Value::Obj(_), Value::Obj(_)) | (Value::Arr(_), Value::Arr(_))
+    )
+}
+
 fn branch_passes(
     sn: &Node,
     value: &Value,
@@ -957,26 +966,33 @@ fn evaluate_list(
             }
         }
         ListMode::Some => {
-            // TypeScript runs every branch against the one value it was
-            // given: an object or array is produced in place, so each
-            // matching branch sees what the ones before it did, while a
-            // scalar is replaced, so each matching branch sees the original
-            // and the last one's result stands.
+            // TypeScript hands every branch the one value it was given and
+            // takes the last matching branch's result. An object or array is
+            // produced in place there, so a later branch sees what earlier
+            // ones did; a branch that replaces the value (a scalar, a Catch)
+            // leaves later branches the value they would have seen. So the
+            // value handed on advances only while a branch's result is still
+            // a container of the same kind.
             let original = cur.get().clone();
-            let threads = matches!(original, Value::Obj(_) | Value::Arr(_));
+            let mut seen = original.clone();
+            let mut winner: Option<Value> = None;
             let mut matched = false;
             let mut kept = true;
             for sn in &n.list {
-                let seen = if threads { cur.get() } else { &original };
-                if !branch_passes(sn, seen, key, parent_is_array, w) {
+                if !branch_passes(sn, &seen, key, parent_is_array, w) {
                     continue;
                 }
                 matched = true;
-                if !threads {
-                    cur.set(original.clone());
-                }
+                let mut out = seen.clone();
                 let mut sub = ValidationError::default();
-                kept = validate_node(sn, cur.reborrow(), key, parent_is_array, w, &mut sub);
+                kept = validate_node(sn, Cur::Mut(&mut out), key, parent_is_array, w, &mut sub);
+                if same_container(&out, &seen) {
+                    seen = out.clone();
+                }
+                winner = Some(out);
+            }
+            if let Some(v) = winner {
+                cur.set(v);
             }
             if !matched {
                 list_error(

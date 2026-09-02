@@ -669,6 +669,9 @@ mod tests {
         );
         assert_eq!(fails("Open(Define(\"\"))"), "Shape: Define needs a name");
         assert_eq!(fails("Min(Number)"), "Shape: Min needs a number");
+        // A deliberate fault is not a wrong argument.
+        assert!(expr("Never.Fault(\"f\")").is_ok());
+        assert!(expr("Fault(\"f\", Never)").is_ok());
     }
 
     #[test]

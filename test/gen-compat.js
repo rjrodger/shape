@@ -226,6 +226,10 @@ const files = {
     ['some-open-defaults-present', CALL('Some', { $open: { a: 1 } }, { $open: { a: 2 } }), { a: 5, q: 9 }],
     ['some-scalar-original', CALL('Some', { $expr: 'Coerce(Number)' }, { $expr: 'Max(2)' }), '12'],
     ['some-scalar-last-wins', CALL('Some', { $expr: 'Max(2)' }, { $expr: 'Coerce(Number)' }), '12'],
+    // A branch that replaces the object (Catch) leaves the next branch the object.
+    ['some-replace-then-open', CALL('Some', { $expr: 'Catch(1,Number)' }, { $open: { a: 1 } }), {}],
+    ['some-replace-then-open-present', CALL('Some', { $expr: 'Catch(1,Number)' }, { $open: { a: 1 } }), { a: 5 }],
+    ['some-replace-then-open-scalar', CALL('Some', { $expr: 'Catch(1,Number)' }, { $open: { a: 1 } }), 3],
     // Default over an untyped shape takes the default's kind and keeps the
     // shape's builders, description and fault.
     ['default-untyped-kind', { a: { $expr: 'Default(2,Required())' } }, { a: 'x' }],
@@ -247,6 +251,8 @@ const files = {
     ['all-of-ignore-branch', { a: { $expr: 'All(Ignore(Min(2,Number)),Number)' } }, { a: 1 }],
   ],
   checks: [
+    // A Check is not called for an absent value; the required check speaks.
+    ['check-regexp-absent', { a: { $expr: 'Check(/^x/)' } }, {}],
     ['regexp-ok', { a: { $expr: 'Check(/^a.+/)' } }, { a: 'abc' }],
     ['regexp-fail', { a: { $expr: 'Check(/^a.+/)' } }, { a: 'zzz' }],
     ['regexp-check-nonstring', { a: { $expr: 'Check(/^a.+/)' } }, { a: 1 }],

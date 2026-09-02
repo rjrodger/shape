@@ -116,6 +116,13 @@ Some differences are inherent to Go and are unlikely ever to close.
   the same text. The differential harness compares the string form's
   refusals, and otherwise valid constructions only.
 
+- **A validator that throws.** TypeScript catches an exception thrown by a
+  `Check`, `Before` or `After` and fails the value with the exception's
+  message appended (`check "…" failed (threw: boom)`). A Go validator that
+  panics escapes `Validate` and `Standard().Validate` alike, and a Rust one
+  unwinds: neither port recovers at the callback boundary, so a validator
+  there must return `false` rather than panic.
+
 - **Composite messages render object and array branches differently.** The
   `does not satisfy one of` list of `One`/`Some`/`All` names each branch.
   TypeScript renders a node branch in its spec form (`{a:1,$$:Open}`,

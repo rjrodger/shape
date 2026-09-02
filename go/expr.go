@@ -391,7 +391,7 @@ func getExprBuilders() map[string]exprBuilderFn {
 // is a parse error, as the builder throws in TypeScript.
 func callExprBuilder(fn exprBuilderFn, args []builderArg) (*Node, error) {
 	n, err := fn(args)
-	if err == nil && n != nil && n.n.kind == KindNever && n.n.faultMsg != "" {
+	if err == nil && n != nil && n.n.argFault {
 		return nil, fmt.Errorf("%s", n.n.faultMsg)
 	}
 	return n, err

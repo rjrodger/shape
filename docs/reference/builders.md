@@ -118,8 +118,10 @@ For numbers these bound the **value**; for strings/arrays/objects they bound the
 Validator signature (all three): `(val, update, state) => boolean`. Return
 `true` to pass. Use `update.val` to replace the value, `update.err` to set a
 message (`$VALUE` and `$PATH` are expanded), `update.done` to skip the node's
-structural check. A validator that throws fails with the exception's message
-appended. See [Shape nodes](nodes.md).
+structural check. In TypeScript a validator that throws fails with the
+exception's message appended; in Go a panic and in Rust an unwinding panic
+escape the call (see the [parity page](../explanation/ts-go-parity.md)). See
+[Shape nodes](nodes.md).
 
 A bare regular expression in a spec (`{ a: /^a/ }`) is a **type**: a string that
 must match, so a non-string fails as a type error. `Check(/^a/)` is the explicit
@@ -144,7 +146,7 @@ A bound outside the isolation still applies to what comes out:
 | Builder | Effect |
 | ------- | ------ |
 | `One(shapes…)` | Passes on the first matching branch (its output is used). |
-| `Some(shapes…)` | Passes if at least one branch matches; all branches are evaluated. An object or array is produced in place, so every matching branch sees what the ones before it did (`Some(Open({a:1}), Open({b:2}))` on `{}` gives `{a:1,b:2}`); a scalar is replaced, so each matching branch sees the original and the last one's result stands. |
+| `Some(shapes…)` | Passes if at least one branch matches; all branches are evaluated, and the last matching branch's result stands. An object or array is produced in place, so every matching branch sees what the ones before it did (`Some(Open({a:1}), Open({b:2}))` on `{}` gives `{a:1,b:2}`); a branch that replaces the value (a scalar, a `Catch`) leaves the later branches the value they would have seen (`Some(Catch(1, Number), Open({a:1}))` on `{}` gives `{a:1}`). |
 | `All(shapes…)` | Passes only if every branch matches; the value is threaded through each. |
 | `Discriminated(tag, { name: shape, … })` | A tagged union: the branch is chosen by the string value of the `tag` property and the value validated against that branch **alone**, so the errors are its own rather than a list of every alternative. |
 

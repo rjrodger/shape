@@ -3,6 +3,7 @@ package shape
 import (
 	"fmt"
 	"math"
+	"math/big"
 	"reflect"
 	"regexp"
 	"strconv"
@@ -412,16 +413,36 @@ func (n *Node) Exact(vals ...any) *Node {
 // throw as the TypeScript one does (see the parity page).
 // exactEqual is Exact's comparison: numbers by value whatever their kind, so
 // an int literal in the spec matches the float64 a JSON decoder produces, as
-// one JavaScript number type would; anything else structurally.
+// one JavaScript number type would; anything else structurally. Numbers are
+// compared as exact rationals, so large integers keep their precision.
 func exactEqual(val, want any) bool {
-	if isNumber(val) && isNumber(want) {
-		return toFloat(val) == toFloat(want)
+	if reflect.DeepEqual(val, want) {
+		return true
 	}
-	return reflect.DeepEqual(val, want)
+	if !isNumber(val) || !isNumber(want) {
+		return false
+	}
+	a, b := exactRat(val), exactRat(want)
+	return a != nil && b != nil && a.Cmp(b) == 0
+}
+
+// exactRat is a number as an exact rational; NaN and the infinities, which
+// equal nothing, are nil.
+func exactRat(v any) *big.Rat {
+	rv := reflect.ValueOf(v)
+	switch rv.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return new(big.Rat).SetInt64(rv.Int())
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		return new(big.Rat).SetUint64(rv.Uint())
+	case reflect.Float32, reflect.Float64:
+		return new(big.Rat).SetFloat64(rv.Float())
+	}
+	return nil
 }
 
 func fault(msg string) *Node {
-	return newNodeWrap(&node{kind: KindNever, faultMsg: msg})
+	return newNodeWrap(&node{kind: KindNever, faultMsg: msg, argFault: true})
 }
 
 // boundArg reports whether a bound is a finite number: a numeric value, a
@@ -493,7 +514,7 @@ func (n *Node) Min(min any) *Node {
 	other := Min(min)
 	if other.n.kind == KindNever && other.n.faultMsg != "" {
 		// The argument was wrong: this node becomes the fault.
-		n.n.kind, n.n.faultMsg = KindNever, other.n.faultMsg
+		n.n.kind, n.n.faultMsg, n.n.argFault = KindNever, other.n.faultMsg, other.n.argFault
 		return n
 	}
 	n.n.befores = append(n.n.befores, other.n.befores...)
@@ -548,7 +569,7 @@ func (n *Node) Max(max any) *Node {
 	other := Max(max)
 	if other.n.kind == KindNever && other.n.faultMsg != "" {
 		// The argument was wrong: this node becomes the fault.
-		n.n.kind, n.n.faultMsg = KindNever, other.n.faultMsg
+		n.n.kind, n.n.faultMsg, n.n.argFault = KindNever, other.n.faultMsg, other.n.argFault
 		return n
 	}
 	n.n.befores = append(n.n.befores, other.n.befores...)
@@ -603,7 +624,7 @@ func (n *Node) Above(above any) *Node {
 	other := Above(above)
 	if other.n.kind == KindNever && other.n.faultMsg != "" {
 		// The argument was wrong: this node becomes the fault.
-		n.n.kind, n.n.faultMsg = KindNever, other.n.faultMsg
+		n.n.kind, n.n.faultMsg, n.n.argFault = KindNever, other.n.faultMsg, other.n.argFault
 		return n
 	}
 	n.n.befores = append(n.n.befores, other.n.befores...)
@@ -658,7 +679,7 @@ func (n *Node) Below(below any) *Node {
 	other := Below(below)
 	if other.n.kind == KindNever && other.n.faultMsg != "" {
 		// The argument was wrong: this node becomes the fault.
-		n.n.kind, n.n.faultMsg = KindNever, other.n.faultMsg
+		n.n.kind, n.n.faultMsg, n.n.argFault = KindNever, other.n.faultMsg, other.n.argFault
 		return n
 	}
 	n.n.befores = append(n.n.befores, other.n.befores...)
@@ -713,7 +734,7 @@ func (n *Node) Len(length int) *Node {
 	other := Len(length)
 	if other.n.kind == KindNever && other.n.faultMsg != "" {
 		// The argument was wrong: this node becomes the fault.
-		n.n.kind, n.n.faultMsg = KindNever, other.n.faultMsg
+		n.n.kind, n.n.faultMsg, n.n.argFault = KindNever, other.n.faultMsg, other.n.argFault
 		return n
 	}
 	n.n.befores = append(n.n.befores, other.n.befores...)
@@ -735,7 +756,11 @@ func Check(check any, spec ...any) *Node {
 		nb.n.kind = KindCheck
 		nb.n.required = true
 		nb.n.requiredSet = true
-		v := validator{name: "Check", fn: c, stringify: func() string { return "Check()" }}
+		// An absent value is left to the required check, as in TypeScript.
+		fn := func(val any, update *Update, state *State) bool {
+			return state.absent || c(val, update, state)
+		}
+		v := validator{name: "Check", fn: fn, stringify: func() string { return "Check()" }}
 		nb.n.befores = append(nb.n.befores, v)
 		bumpValidatorGen()
 	case *regexp.Regexp:
@@ -749,6 +774,9 @@ func Check(check any, spec ...any) *Node {
 		v := validator{
 			name: reName,
 			fn: func(val any, update *Update, state *State) bool {
+				if state.absent {
+					return true
+				}
 				if s, ok := val.(string); ok && re.MatchString(s) {
 					return true
 				}
