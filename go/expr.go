@@ -176,7 +176,7 @@ func (p *exprParser) parseTerm(top bool) (*Node, error) {
 		if err != nil {
 			return nil, err
 		}
-		return fn(args)
+		return callExprBuilder(fn, args)
 	}
 	if tok, ok := exprTypeTokens[head]; ok {
 		args, err := p.parseArgs()
@@ -239,7 +239,7 @@ func (p *exprParser) parseChained(carrier any) (*Node, error) {
 		}
 		// Chain: append carrier as final arg unless explicitly provided as the last.
 		args = append(args, carrier)
-		return fn(args)
+		return callExprBuilder(fn, args)
 	}
 	// A type token in chain position sets the type on the carrier, mirroring TS
 	// (".Array" is Type('Array') applied to the current node).
@@ -309,7 +309,7 @@ func (p *exprParser) parseArg() (any, error) {
 		if err != nil {
 			return nil, err
 		}
-		node, err := fn(args)
+		node, err := callExprBuilder(fn, args)
 		if err != nil {
 			return nil, err
 		}
@@ -384,6 +384,17 @@ func getExprBuilders() map[string]exprBuilderFn {
 		exprBuilders = buildExprBuilders()
 	})
 	return exprBuilders
+}
+
+// callExprBuilder calls a builder from the string form. A builder given a
+// wrong argument returns a fault node that reports at validation; here that
+// is a parse error, as the builder throws in TypeScript.
+func callExprBuilder(fn exprBuilderFn, args []builderArg) (*Node, error) {
+	n, err := fn(args)
+	if err == nil && n != nil && n.n.kind == KindNever && n.n.faultMsg != "" {
+		return nil, fmt.Errorf("%s", n.n.faultMsg)
+	}
+	return n, err
 }
 
 func buildExprBuilders() map[string]exprBuilderFn {

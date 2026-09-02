@@ -97,6 +97,9 @@ const files = {
     ['array-ignore-bound', [{ $expr: 'Ignore(Min(2,Number))' }], [1, 3]],
   ],
   builders: [
+    // A bound on a missing required value stands aside for the missing error.
+    ['min-under-missing', { a: { $expr: 'Min(2,String)' } }, {}],
+    ['max-number-under-missing', { a: { $expr: 'Max(2,Number)' } }, {}],
     ['dsl-type-chain-fail', { a: { $expr: 'Min(2).Array' } }, { a: [1] }],
     ['dsl-type-chain-ok', { a: { $expr: 'Min(2).Array' } }, { a: [1, 2] }],
     ['min-number-ok', { a: { $expr: 'Min(3,Number)' } }, { a: 5 }],
@@ -215,6 +218,14 @@ const files = {
     ['one-optional-absent', { a: { $expr: 'Optional(One(String,Number))' } }, {}],
   ],
   composition: [
+    // Some: an object is produced in place, so every matching branch sees what
+    // the ones before it did; a scalar is replaced, so each matching branch
+    // sees the original and the last one's result stands.
+    ['some-open-defaults-first-wins', CALL('Some', { $open: { a: 1 } }, { $open: { a: 2 } }), {}],
+    ['some-open-defaults-both', CALL('Some', { $open: { a: 1 } }, { $open: { b: 2 } }), {}],
+    ['some-open-defaults-present', CALL('Some', { $open: { a: 1 } }, { $open: { a: 2 } }), { a: 5, q: 9 }],
+    ['some-scalar-original', CALL('Some', { $expr: 'Coerce(Number)' }, { $expr: 'Max(2)' }), '12'],
+    ['some-scalar-last-wins', CALL('Some', { $expr: 'Max(2)' }, { $expr: 'Coerce(Number)' }), '12'],
     // Default over an untyped shape takes the default's kind and keeps the
     // shape's builders, description and fault.
     ['default-untyped-kind', { a: { $expr: 'Default(2,Required())' } }, { a: 'x' }],
@@ -314,6 +325,14 @@ const files = {
   // Specs built from a JSON Schema, {"$jsonschema": …}: the import must read
   // the same shape in both languages.
   jsonschema: [
+    // A numeric exclusive bound and a plain bound both apply.
+    ['js-number-min-and-exclusive-ok', { $jsonschema: { type: 'number', minimum: 1, exclusiveMinimum: 0 } }, 1],
+    ['js-number-min-and-exclusive-low', { $jsonschema: { type: 'number', minimum: 1, exclusiveMinimum: 0 } }, 0.5],
+    ['js-number-max-and-exclusive-high', { $jsonschema: { type: 'number', maximum: 1, exclusiveMaximum: 2 } }, 1.5],
+    // Untyped, where the length keywords beside an exclusive bound are that bound.
+    ['js-untyped-min-and-exclusive-low', { $jsonschema: { minimum: 1, exclusiveMinimum: 0 } }, 0.5],
+    ['js-untyped-max-and-exclusive-high', { $jsonschema: { maximum: 1, exclusiveMaximum: 2 } }, 1.5],
+    ['js-untyped-exclusive-lengths', { $jsonschema: { exclusiveMinimum: 1, minLength: 2, minItems: 2, minProperties: 2 } }, 'ab'],
     ['js-object-required', { $jsonschema: { type: 'object', properties: { name: { type: 'string' }, age: { type: 'integer', minimum: 0, default: 1 } }, required: ['name'] } }, { name: 'a', extra: 1 }],
     ['js-object-required-missing', { $jsonschema: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] } }, {}],
     ['js-object-closed', { $jsonschema: { type: 'object', properties: { a: { type: 'number' } }, additionalProperties: false } }, { a: 1, b: 2 }],

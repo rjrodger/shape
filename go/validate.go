@@ -808,15 +808,23 @@ func evaluateList(n *node, in any, path []string, pathArr []any, key string, par
 		}
 		return winner
 	case listSome:
+		// TypeScript runs every branch against the one value it was given:
+		// a map or slice is produced in place, so each matching branch sees
+		// what the ones before it did, while a scalar is replaced, so each
+		// matching branch sees the original and the last one's result stands.
 		matched := false
-		var winner any = in
+		threads := isContainer(branchIn)
+		var winner any = branchIn
 		for _, sn := range n.list {
+			seen := branchIn
+			if threads {
+				seen = winner
+			}
 			sub := &ValidationError{}
-			out := validateNode(sn, branchIn, path, pathArr, key, parent, ctx, true, sub)
+			validateNode(sn, seen, path, pathArr, key, parent, ctx, true, sub)
 			if !sub.hasAny() {
 				matched = true
-				winner = validateNode(sn, branchIn, path, pathArr, key, parent, ctx, match, &ValidationError{})
-				_ = out
+				winner = validateNode(sn, seen, path, pathArr, key, parent, ctx, match, &ValidationError{})
 			}
 		}
 		if !matched {
@@ -1043,6 +1051,24 @@ func cloneSeen(v any, seen map[uintptr]any) any {
 	default:
 		return v
 	}
+}
+
+// isContainer reports whether a value is produced in place in TypeScript: a
+// map, slice, array or struct (or a pointer to one), as against a scalar
+// that a validator replaces.
+func isContainer(v any) bool {
+	if v == nil {
+		return false
+	}
+	rv := reflect.ValueOf(v)
+	if rv.Kind() == reflect.Pointer {
+		rv = rv.Elem()
+	}
+	switch rv.Kind() {
+	case reflect.Map, reflect.Slice, reflect.Array, reflect.Struct:
+		return true
+	}
+	return false
 }
 
 func isNumber(v any) bool {

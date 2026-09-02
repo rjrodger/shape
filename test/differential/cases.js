@@ -85,6 +85,14 @@ function build() {
   // Integer and Date kinds. No battery holds a Date instance, so every Date
   // case here is a failure and is comparable across the JSON boundary.
   add('token-Integer', I, SCALARS)
+  // A builder called wrongly in the string form is a build error.
+  add('expr-fault-arg', E('String.Min("x")'), SCALARS)
+  add('expr-fault-nested', E('Open(Define(""))'), SCALARS)
+  // Some: an object threads through its matching branches, a scalar does not.
+  // Passing inputs only: the message for a failing one lists object branches,
+  // whose rendering the ports do not yet share (see the parity page).
+  add('some-open-defaults', CALL('Some', { $open: { a: 1 } }, { $open: { a: 2 } }), [{}, { a: 5, q: 9 }, { a: 1 }])
+  add('some-scalar-coerce', CALL('Some', E('Coerce(Number)'), E('Max(2)')), ['12', 5, '7', 1, 99])
   add('token-obj-Integer', { a: I }, OBJS)
   add('int-optional', E('Optional(Integer)'), SCALARS)
   add('int-min', E('Min(2,Integer)'), SCALARS)

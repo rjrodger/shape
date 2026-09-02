@@ -1,4 +1,9 @@
 name	spec	input	output	error
+some-open-defaults-first-wins	{"$call":["Some",{"$open":{"a":1}},{"$open":{"a":2}}]}	{}	{"a":1}	
+some-open-defaults-both	{"$call":["Some",{"$open":{"a":1}},{"$open":{"b":2}}]}	{}	{"a":1,"b":2}	
+some-open-defaults-present	{"$call":["Some",{"$open":{"a":1}},{"$open":{"a":2}}]}	{"a":5,"q":9}	{"a":5,"q":9}	
+some-scalar-original	{"$call":["Some",{"$expr":"Coerce(Number)"},{"$expr":"Max(2)"}]}	"12"	"12"	
+some-scalar-last-wins	{"$call":["Some",{"$expr":"Max(2)"},{"$expr":"Coerce(Number)"}]}	"12"	12	
 default-untyped-kind	{"a":{"$expr":"Default(2,Required())"}}	{"a":"x"}		"Validation failed for property \"a\" with string \"x\" because the string is not of type number."
 default-untyped-absent	{"a":{"$expr":"Default(2,Required())"}}	{}	{"a":2}	
 default-untyped-describe	{"a":{"$expr":"Default(2,Describe(\"two\",Required()))"}}	{"a":3}	{"a":3}	

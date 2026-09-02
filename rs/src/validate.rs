@@ -957,17 +957,24 @@ fn evaluate_list(
             }
         }
         ListMode::Some => {
-            // Every matching branch produces from the original value; the
-            // last one's result stands.
+            // TypeScript runs every branch against the one value it was
+            // given: an object or array is produced in place, so each
+            // matching branch sees what the ones before it did, while a
+            // scalar is replaced, so each matching branch sees the original
+            // and the last one's result stands.
             let original = cur.get().clone();
+            let threads = matches!(original, Value::Obj(_) | Value::Arr(_));
             let mut matched = false;
             let mut kept = true;
             for sn in &n.list {
-                if !branch_passes(sn, &original, key, parent_is_array, w) {
+                let seen = if threads { cur.get() } else { &original };
+                if !branch_passes(sn, seen, key, parent_is_array, w) {
                     continue;
                 }
                 matched = true;
-                cur.set(original.clone());
+                if !threads {
+                    cur.set(original.clone());
+                }
                 let mut sub = ValidationError::default();
                 kept = validate_node(sn, cur.reborrow(), key, parent_is_array, w, &mut sub);
             }

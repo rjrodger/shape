@@ -38,7 +38,7 @@ pub(crate) fn fault_node(msg: impl Into<String>) -> Node {
     n
 }
 
-fn is_fault(n: &Node) -> bool {
+pub(crate) fn is_fault(n: &Node) -> bool {
     n.kind == Kind::Never && n.fault_msg.is_some()
 }
 

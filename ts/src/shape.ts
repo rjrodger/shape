@@ -1569,7 +1569,7 @@ function shapify<const S>(intop?: S, inopts?: ShapeOptions) {
 
 
   // List the errors from a given root value.
-  shape.error = (root?: any, ctx?: Context): ShapeError[] => {
+  shape.error = (root?: any, ctx?: Context): ErrDesc[] => {
     let actx: any = ctx || {}
     actx.err = actx.err || []
     exec(root, actx, false)
@@ -2052,7 +2052,8 @@ function patharr(s: State): (string | number)[] {
   for (let i = 1; i <= s.dI; i++) {
     const p = s.path[i]
     if (null != p) {
-      const parentNode = s.ancestors[i - 1]
+      // ancestors[i] is the node whose child path[i] names.
+      const parentNode = s.ancestors[i]
       out.push(parentNode && S.array === parentNode.t ? Number(p) : p)
     }
   }
@@ -3448,7 +3449,11 @@ const Rest = function <C = any, V = unknown>(
   child?: C,
   shape?: Node<V> | V
 ): Node<unknown extends V ? C[] : V> {
-  let node = buildize(this, shape || [])
+  // Chained on an array node with no shape, the node itself is the array,
+  // so a tuple keeps its positions: [String, Number].Rest(Number).
+  let self = this
+  let chainedArray = undefined === shape && null != self && S.array === self.t
+  let node = chainedArray ? buildize(self) : buildize(self, shape || [])
   node.t = 'array'
   node.c = nodize(child)
   node.m = node.m || {}
@@ -3506,7 +3511,8 @@ function typeWillFail(state: State): boolean {
   const t: string = n.t
   const val = state.val
 
-  if (undefined === val) return false
+  // An absent value has no type either, so a bound on a required value
+  // stands aside for the missing-property error.
   if (S.any === t || S.list === t || S.check === t || S.never === t) return false
 
   if (S.object === t) return null === val || S.object !== state.valType || isarr(val)
@@ -4773,9 +4779,14 @@ function importUntyped(s: any, path: string): any {
   if (S.string === typeof s.pattern || undefined !== JSON_SCHEMA_FORMAT_BUILDER[s.format] || isIpFormats(s.anyOf)) {
     return importString(s, path)
   }
+  // Beside a numeric exclusive bound the length keywords are that bound
+  // written for strings, arrays and objects (Above(1) exports minLength 2),
+  // so only a plain minimum or maximum is a second bound there.
   const view = {
-    minimum: firstNumber(s.minimum, s.minLength, s.minItems, s.minProperties),
-    maximum: firstNumber(s.maximum, s.maxLength, s.maxItems, s.maxProperties),
+    minimum: S.number === typeof s.exclusiveMinimum ? s.minimum :
+      firstNumber(s.minimum, s.minLength, s.minItems, s.minProperties),
+    maximum: S.number === typeof s.exclusiveMaximum ? s.maximum :
+      firstNumber(s.maximum, s.maxLength, s.maxItems, s.maxProperties),
     exclusiveMinimum: s.exclusiveMinimum,
     exclusiveMaximum: s.exclusiveMaximum,
   }
@@ -4831,16 +4842,19 @@ function importString(s: any, path: string): any {
 
 
 function importNumber(spec: any, s: any): any {
+  // A numeric exclusive bound (draft 6 and later) and a plain bound are
+  // independent keywords, so both apply; the boolean form (draft 4) makes
+  // the plain bound exclusive instead.
   if (S.number === typeof s.exclusiveMinimum) {
     spec = Above(s.exclusiveMinimum, spec)
   }
-  else if (S.number === typeof s.minimum) {
+  if (S.number === typeof s.minimum) {
     spec = true === s.exclusiveMinimum ? Above(s.minimum, spec) : Min(s.minimum, spec)
   }
   if (S.number === typeof s.exclusiveMaximum) {
     spec = Below(s.exclusiveMaximum, spec)
   }
-  else if (S.number === typeof s.maximum) {
+  if (S.number === typeof s.maximum) {
     spec = true === s.exclusiveMaximum ? Below(s.maximum, spec) : Max(s.maximum, spec)
   }
   return spec
@@ -5009,7 +5023,7 @@ type ShapeShape = ReturnType<typeof shapify> &
 {
   valid: <D, S>(root?: D, ctx?: any) => root is (D & S),
   match: (root?: any, ctx?: any) => boolean,
-  error: (root?: any, ctx?: Context) => ShapeError[],
+  error: (root?: any, ctx?: Context) => ErrDesc[],
   spec: () => any,
   node: () => Node<any>,
   jsonSchema: () => any,
@@ -5222,6 +5236,8 @@ export type {
   Validate,
   Update,
   Context,
+  ErrDesc,
+  ShapeOptions,
   Builder,
   Node,
   State,

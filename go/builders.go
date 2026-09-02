@@ -367,7 +367,7 @@ func Exact(vals ...any) *Node {
 		args: append([]any{}, vals...),
 		fn: func(val any, update *Update, state *State) bool {
 			for _, want := range vals {
-				if reflect.DeepEqual(val, want) {
+				if exactEqual(val, want) {
 					return true
 				}
 			}
@@ -375,7 +375,7 @@ func Exact(vals ...any) *Node {
 			// is a value in its own right (TS: undefined === val).
 			if state.absent && state.Node.hasDefault {
 				for _, want := range vals {
-					if reflect.DeepEqual(state.Node.defaultValue, want) {
+					if exactEqual(state.Node.defaultValue, want) {
 						return true
 					}
 				}
@@ -410,6 +410,16 @@ func (n *Node) Exact(vals ...any) *Node {
 // fault is what a builder returns when called wrongly: a node that
 // accepts nothing and says why at validation, since a Go builder cannot
 // throw as the TypeScript one does (see the parity page).
+// exactEqual is Exact's comparison: numbers by value whatever their kind, so
+// an int literal in the spec matches the float64 a JSON decoder produces, as
+// one JavaScript number type would; anything else structurally.
+func exactEqual(val, want any) bool {
+	if isNumber(val) && isNumber(want) {
+		return toFloat(val) == toFloat(want)
+	}
+	return reflect.DeepEqual(val, want)
+}
+
 func fault(msg string) *Node {
 	return newNodeWrap(&node{kind: KindNever, faultMsg: msg})
 }

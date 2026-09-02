@@ -356,7 +356,18 @@ fn string_at(name: &str, what: &str, args: &[Spec], i: usize) -> Result<String, 
 }
 
 /// A builder by name with its parsed arguments.
-fn call_builder(name: &str, mut args: Vec<Spec>) -> Result<Node, ExprError> {
+/// A builder call. A builder given a wrong argument makes a fault node that
+/// reports at validation; in the string form that is an error here, as the
+/// builder throws in TypeScript.
+fn call_builder(name: &str, args: Vec<Spec>) -> Result<Node, ExprError> {
+    let node = build_call(name, args)?;
+    if crate::builders::is_fault(&node) {
+        return err(node.fault_msg.clone().unwrap_or_default());
+    }
+    Ok(node)
+}
+
+fn build_call(name: &str, mut args: Vec<Spec>) -> Result<Node, ExprError> {
     let any_spec = || Spec::from(any());
     let unary =
         |args: &mut Vec<Spec>, f: fn(Spec) -> Node| Ok(f(shape_at(args, 0, Spec::from(any()))));
@@ -650,6 +661,17 @@ mod tests {
     }
 
     #[test]
+    fn a_wrong_builder_argument_is_a_parse_error() {
+        assert_eq!(fails("String.Min(\"x\")"), "Shape: Min needs a number");
+        assert_eq!(
+            fails("Len(-1)"),
+            "Shape: Len needs a whole number of zero or more"
+        );
+        assert_eq!(fails("Open(Define(\"\"))"), "Shape: Define needs a name");
+        assert_eq!(fails("Min(Number)"), "Shape: Min needs a number");
+    }
+
+    #[test]
     fn parses_terms_chains_and_arguments() {
         let cases = [
             ("String.Min(2).Max(10)", "String.Min(2).Max(10)"),
@@ -712,7 +734,6 @@ mod tests {
             ("Refer(\"d\")", "Refer(\"d\")"),
             ("Rename(\"b\")", "Any"),
             ("Min(\"2\")", "Min(2)"),
-            ("Min(Number)", "Never"),
             ("Above(1).Below(3)", "Above(1).Below(3)"),
             ("Max(3, Integer)", "Integer.Max(3)"),
             ("Object", "{}"),

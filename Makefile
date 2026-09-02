@@ -40,7 +40,7 @@ build-rs:
 	cd rs && cargo build --all-features
 
 test-rs:
-	cd rs && cargo test --all-features
+	cd rs && SHAPE_RS_STRICT=1 cargo test --all-features
 
 lint-rs:
 	cd rs && cargo fmt --check && cargo clippy --all-targets --all-features -- -D warnings

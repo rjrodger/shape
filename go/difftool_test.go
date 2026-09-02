@@ -71,7 +71,13 @@ func runDiffCase(c diffCase) (res diffResult) {
 
 	defer func() {
 		if r := recover(); r != nil {
-			res.Build = "PANIC: " + fmt.Sprint(r)
+			// A builder or the string form refusing a spec is a build error,
+			// as it is in TypeScript; anything else is a real panic.
+			if err, ok := r.(error); ok {
+				res.Build = "ERR: " + err.Error()
+			} else {
+				res.Build = "PANIC: " + fmt.Sprint(r)
+			}
 		}
 	}()
 

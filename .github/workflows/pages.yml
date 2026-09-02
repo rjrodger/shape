@@ -16,6 +16,7 @@ on:
       - 'AGENTS.md'
       - 'go/README.md'
       - 'ts/README.md'
+      - 'rs/README.md'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 
