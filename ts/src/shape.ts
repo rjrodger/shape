@@ -43,6 +43,27 @@ const UPPER_CASE_FIRST_RE = /^[A-Z]/
 // RegExp: key expression pattern (hoisted from inner loop for performance)
 const KEY_EXPR_RE = /^\s*("(\\.|[^"\\])*"|[^\s]+):\s*(.*?)\s*$/
 
+// The children of an object or array node, as the walk needs them, compiled
+// on the node's first visit and reused after: the object's keys in the order
+// they were first seen with their nodes, or the array's fixed element nodes.
+// Kept off the node itself so nothing leaks into its spec or its JSON.
+type Compiled = { keys: string[], nodes: Node<any>[] }
+const COMPILED = new WeakMap<object, Compiled>()
+
+// Child shapes (Child, Rest, a one-element array) normalized to their full
+// depth once; a later visit only refreshes the depth.
+const DEEP = new WeakSet<object>()
+
+function childNode(c: any, depth: number): Node<any> {
+  if (null != c && DEEP.has(c)) {
+    c.d = depth
+    return c
+  }
+  const node = nodizeDeep(c, depth)
+  DEEP.add(node)
+  return node
+}
+
 
 const { toString } = Object.prototype
 
@@ -1005,7 +1026,7 @@ function shapify<const S>(intop?: S, inopts?: ShapeOptions) {
           let val
 
           if (undefined !== n.c) {
-            n.c = nodizeDeep(n.c, 1 + s.dI)
+            n.c = childNode(n.c, 1 + s.dI)
           }
 
           if (n.r && valundef) {
@@ -1048,9 +1069,30 @@ function shapify<const S>(intop?: S, inopts?: ShapeOptions) {
               s.ctx.log && s.ctx.log('so', s)
 
               let hasKeys = false
+              let start = s.nI
+              const compiled = COMPILED.get(n)
+
+              if (undefined !== compiled) {
+                // Compiled on an earlier visit: the children in first-seen
+                // order, no key expressions or meta keys left to read.
+                const ckeys = compiled.keys
+                const cnodes = compiled.nodes
+                if (0 < ckeys.length) {
+                  hasKeys = true
+                  s.pI = start
+                  for (let kI = 0; kI < ckeys.length; kI++) {
+                    const rk = ckeys[kI]
+                    s.nodes[s.nI] = cnodes[kI]
+                    s.vals[s.nI] = val[rk]
+                    s.parents[s.nI] = val
+                    s.keys[s.nI] = rk
+                    s.nI++
+                  }
+                }
+              }
+              else {
               let vkeys = keys(n.v)
               let knownKeys = new Set(n.k)
-              let start = s.nI
 
               if (0 < vkeys.length) {
                 hasKeys = true
@@ -1133,6 +1175,14 @@ function shapify<const S>(intop?: S, inopts?: ShapeOptions) {
                 }
               }
 
+              // Every key is now a node under its final name, so later
+              // visits can take the compiled list. Value expressions read
+              // the ancestors at validation time, so they stay uncompiled.
+              if (!optsvalexpr.active) {
+                COMPILED.set(n, { keys: n.k.slice(), nodes: n.k.map((k: string) => n.v[k]) })
+              }
+              }
+
               let extra: string[] = []
               let valKeys = keys(val)
               for (let vkI = 0; vkI < valKeys.length; vkI++) {
@@ -1194,17 +1244,30 @@ function shapify<const S>(intop?: S, inopts?: ShapeOptions) {
             // n.c set by nodize for array with len=1
             let hasChildShape = undefined !== n.c
             let hasValueElements = 0 < s.val.length
-            let elementKeys: string[] = []
-            let nvKeys = keys(n.v)
-            for (let ekI = 0; ekI < nvKeys.length; ekI++) {
-              if (!isNaN(+nvKeys[ekI])) {
-                elementKeys.push(nvKeys[ekI])
+
+            // The fixed element shapes, compiled on the first visit.
+            let compiled = COMPILED.get(n)
+            if (undefined === compiled) {
+              let elementKeys: string[] = []
+              let nvKeys = keys(n.v)
+              for (let ekI = 0; ekI < nvKeys.length; ekI++) {
+                if (!isNaN(+nvKeys[ekI])) {
+                  elementKeys.push(nvKeys[ekI])
+                }
               }
+              const elementNodes: Node<any>[] = []
+              for (let ekI = 0; ekI < elementKeys.length; ekI++) {
+                elementNodes.push(n.v[ekI] = nodize(n.v[ekI], 1 + s.dI))
+              }
+              compiled = { keys: elementKeys, nodes: elementNodes }
+              COMPILED.set(n, compiled)
             }
+            const elementKeys = compiled.keys
+            const elementNodes = compiled.nodes
             let hasFixedElements = 0 < elementKeys.length
 
             if (hasChildShape) {
-              n.c = nodizeDeep(n.c, 1 + s.dI)
+              n.c = childNode(n.c, 1 + s.dI)
             }
 
             s.ctx.log && s.ctx.log('sa', s)
@@ -1223,9 +1286,7 @@ function shapify<const S>(intop?: S, inopts?: ShapeOptions) {
                 }
                 else {
                   for (; elementIndex < elementKeys.length; elementIndex++) {
-                    let elementShape =
-                      n.v[elementIndex] =
-                      nodize(n.v[elementIndex], 1 + s.dI)
+                    let elementShape = elementNodes[elementIndex]
                     s.nodes[s.nI] = elementShape
                     s.vals[s.nI] = s.val[elementIndex]
                     s.parents[s.nI] = s.val
