@@ -1,19 +1,19 @@
 # Latest measurements
 
-Generated 2026-09-02T15:14:42.461Z from 33 run(s). Times are median nanoseconds per operation; lower is better.
+Generated 2026-09-02T15:38:30.937Z from 39 run(s). Times are median nanoseconds per operation; lower is better.
 
 ## go on github:windows-x64
 
-Host `1fee8adaf205`: AMD EPYC 9V74 80-Core Processor, 4 cores, win32/x64. Last run 2026-09-02 (cases `c1a75d4a6878`).
+Host `1fee8adaf205`: AMD EPYC 9V74 80-Core Processor, 4 cores, win32/x64. Last run 2026-09-02 (cases `bfcb35a65df5`).
 
 | case | shape | validator | jsonschema | gojsonschema | shape / fastest |
 |---|---:|---:|---:|---:|---:|
-| flat | 1.7 µs | 367 ns | 2.9 µs | 8.2 µs | 4.7× |
-| nested | 3.8 µs | 1.3 µs | 5.9 µs | 13.2 µs | 3.0× |
-| array | 48.4 µs | 18.2 µs | 105.4 µs | 255.4 µs | 2.7× |
-| bounds | 2.3 µs | 849 ns | 4.9 µs | 8.2 µs | 2.7× |
-| invalid | 7.5 µs | – | 6.0 µs | 17.0 µs | 1.3× |
-| large | – | – | – | – | – |
+| flat | 503 ns | 321 ns | 2.6 µs | 7.9 µs | 1.6× |
+| nested | 3.2 µs | 1.2 µs | 5.2 µs | 11.9 µs | 2.6× |
+| array | 42.6 µs | 16.3 µs | 91.2 µs | 229.2 µs | 2.6× |
+| bounds | 1.8 µs | 768 ns | 4.5 µs | 7.2 µs | 2.3× |
+| invalid | 4.2 µs | – | 5.2 µs | 15.0 µs | 1.0× |
+| large | 10.9 µs | 2.4 µs | 24.0 µs | 77.7 µs | 4.5× |
 
 ## go on linux-xeon-sandbox
 
@@ -43,42 +43,42 @@ Host `e39798b4ebbc`: Intel(R) Xeon(R) Processor @ 2.80GHz, 4 cores, linux/x64. L
 
 ## go on github:macos-arm64
 
-Host `ea12b5414dd4`: Apple M1 (Virtual), 3 cores, darwin/arm64. Last run 2026-09-02 (cases `64dd85eab212`).
+Host `ea12b5414dd4`: Apple M1 (Virtual), 3 cores, darwin/arm64. Last run 2026-09-02 (cases `233e564a2bd4`).
 
 | case | shape | validator | jsonschema | gojsonschema | shape / fastest |
 |---|---:|---:|---:|---:|---:|
-| flat | 1.0 µs | 245 ns | 1.5 µs | 4.0 µs | 4.2× |
-| nested | 2.2 µs | 790 ns | 3.3 µs | 6.0 µs | 2.8× |
-| array | 17.2 µs | 10.2 µs | 41.3 µs | 132.8 µs | 1.7× |
-| bounds | 1.1 µs | 458 ns | 2.1 µs | 3.6 µs | 2.5× |
-| invalid | 3.3 µs | – | 2.8 µs | 7.9 µs | 1.2× |
-| large | – | – | – | – | – |
+| flat | 357 ns | 249 ns | 1.9 µs | 4.4 µs | 1.4× |
+| nested | 1.1 µs | 813 ns | 2.8 µs | 7.6 µs | 1.4× |
+| array | 29.6 µs | 10.5 µs | 60.1 µs | 208.8 µs | 2.8× |
+| bounds | 898 ns | 493 ns | 2.7 µs | 4.6 µs | 1.8× |
+| invalid | 2.0 µs | – | 3.6 µs | 8.3 µs | 1.0× |
+| large | 7.3 µs | 1.8 µs | 14.1 µs | 53.1 µs | 4.1× |
 
 ## go on github:linux-x64
 
-Host `f2c2ec319f42`: AMD EPYC 9V74 80-Core Processor, 4 cores, linux/x64. Last run 2026-09-02 (cases `64dd85eab212`).
+Host `f2c2ec319f42`: AMD EPYC 9V74 80-Core Processor, 4 cores, linux/x64. Last run 2026-09-02 (cases `233e564a2bd4`).
 
 | case | shape | validator | jsonschema | gojsonschema | shape / fastest |
 |---|---:|---:|---:|---:|---:|
-| flat | 1.1 µs | 336 ns | 1.8 µs | 6.0 µs | 3.3× |
-| nested | 1.9 µs | 1.0 µs | 3.6 µs | 9.6 µs | 1.9× |
-| array | 33.7 µs | 14.7 µs | 69.7 µs | 193.5 µs | 2.3× |
-| bounds | 1.1 µs | 797 ns | 3.4 µs | 5.9 µs | 1.4× |
-| invalid | 5.6 µs | – | 3.9 µs | 11.9 µs | 1.4× |
-| large | – | – | – | – | – |
+| flat | 413 ns | 288 ns | 1.5 µs | 5.3 µs | 1.4× |
+| nested | 1.5 µs | 916 ns | 3.2 µs | 8.3 µs | 1.6× |
+| array | 26.2 µs | 12.8 µs | 56.9 µs | 168.7 µs | 2.0× |
+| bounds | 1.4 µs | 607 ns | 2.9 µs | 5.2 µs | 2.3× |
+| invalid | 2.6 µs | – | 4.0 µs | 10.5 µs | 1.0× |
+| large | 6.6 µs | 1.9 µs | 15.3 µs | 57.8 µs | 3.5× |
 
 ## ts on github:windows-x64
 
-Host `1fee8adaf205`: AMD EPYC 9V74 80-Core Processor, 4 cores, win32/x64. Last run 2026-09-02 (cases `c1a75d4a6878`).
+Host `1fee8adaf205`: AMD EPYC 9V74 80-Core Processor, 4 cores, win32/x64. Last run 2026-09-02 (cases `bfcb35a65df5`).
 
 | case | shape | zod | ajv | joi | valibot | shape / fastest |
 |---|---:|---:|---:|---:|---:|---:|
-| flat | 903 ns | 103 ns | 26 ns | 1.9 µs | 518 ns | 34.6× |
-| nested | 1.8 µs | 287 ns | 52 ns | 6.3 µs | 1.0 µs | 34.4× |
-| array | 29.5 µs | 4.6 µs | 749 ns | 89.1 µs | 16.4 µs | 39.5× |
-| bounds | 1.5 µs | 642 ns | 68 ns | 2.8 µs | 677 ns | 22.0× |
-| invalid | 3.1 µs | 3.3 µs | 37 ns | 2.7 µs | 1.7 µs | 85.1× |
-| large | – | – | – | – | – | – |
+| flat | 674 ns | 100 ns | 26 ns | 1.9 µs | 461 ns | 25.7× |
+| nested | 1.6 µs | 264 ns | 53 ns | 6.0 µs | 965 ns | 30.8× |
+| array | 24.1 µs | 5.0 µs | 763 ns | 85.0 µs | 15.7 µs | 31.6× |
+| bounds | 1.5 µs | 671 ns | 64 ns | 2.8 µs | 652 ns | 23.2× |
+| invalid | 2.8 µs | 3.2 µs | 40 ns | 2.9 µs | 1.8 µs | 69.4× |
+| large | 7.3 µs | 4.8 µs | 3.0 µs | 32.1 µs | 8.9 µs | 2.4× |
 
 ## ts on linux-xeon-sandbox
 
@@ -108,29 +108,29 @@ Host `e39798b4ebbc`: Intel(R) Xeon(R) Processor @ 2.80GHz, 4 cores, linux/x64. L
 
 ## ts on github:macos-arm64
 
-Host `ea12b5414dd4`: Apple M1 (Virtual), 3 cores, darwin/arm64. Last run 2026-09-02 (cases `64dd85eab212`).
+Host `ea12b5414dd4`: Apple M1 (Virtual), 3 cores, darwin/arm64. Last run 2026-09-02 (cases `233e564a2bd4`).
 
 | case | shape | zod | ajv | joi | valibot | shape / fastest |
 |---|---:|---:|---:|---:|---:|---:|
-| flat | 747 ns | 97 ns | 25 ns | 1.2 µs | 408 ns | 29.9× |
-| nested | 1.2 µs | 233 ns | 56 ns | 4.2 µs | 845 ns | 22.0× |
-| array | 20.9 µs | 3.9 µs | 643 ns | 53.3 µs | 15.0 µs | 32.5× |
-| bounds | 1.2 µs | 540 ns | 69 ns | 1.8 µs | 644 ns | 17.2× |
-| invalid | 2.0 µs | 1.9 µs | 46 ns | 1.7 µs | 1.4 µs | 44.2× |
-| large | – | – | – | – | – | – |
+| flat | 571 ns | 110 ns | 28 ns | 1.5 µs | 501 ns | 20.7× |
+| nested | 1.4 µs | 291 ns | 64 ns | 6.0 µs | 985 ns | 21.3× |
+| array | 29.0 µs | 6.2 µs | 805 ns | 64.8 µs | 18.1 µs | 36.1× |
+| bounds | 1.3 µs | 558 ns | 73 ns | 2.0 µs | 670 ns | 18.5× |
+| invalid | 1.8 µs | 1.7 µs | 39 ns | 1.7 µs | 1.5 µs | 45.9× |
+| large | 5.8 µs | 4.1 µs | 2.4 µs | 27.9 µs | 8.8 µs | 2.4× |
 
 ## ts on github:linux-x64
 
-Host `f2c2ec319f42`: AMD EPYC 9V74 80-Core Processor, 4 cores, linux/x64. Last run 2026-09-02 (cases `64dd85eab212`).
+Host `f2c2ec319f42`: AMD EPYC 9V74 80-Core Processor, 4 cores, linux/x64. Last run 2026-09-02 (cases `233e564a2bd4`).
 
 | case | shape | zod | ajv | joi | valibot | shape / fastest |
 |---|---:|---:|---:|---:|---:|---:|
-| flat | 864 ns | 95 ns | 27 ns | 1.8 µs | 444 ns | 32.6× |
-| nested | 1.7 µs | 289 ns | 52 ns | 5.7 µs | 916 ns | 32.6× |
-| array | 29.4 µs | 4.4 µs | 746 ns | 81.3 µs | 15.3 µs | 39.3× |
-| bounds | 1.5 µs | 624 ns | 66 ns | 2.7 µs | 636 ns | 22.9× |
-| invalid | 3.0 µs | 2.6 µs | 38 ns | 2.4 µs | 1.5 µs | 79.4× |
-| large | – | – | – | – | – | – |
+| flat | 586 ns | 83 ns | 26 ns | 1.5 µs | 452 ns | 22.3× |
+| nested | 1.5 µs | 208 ns | 51 ns | 5.0 µs | 972 ns | 29.4× |
+| array | 22.1 µs | 3.8 µs | 746 ns | 73.8 µs | 15.6 µs | 29.6× |
+| bounds | 1.5 µs | 501 ns | 66 ns | 2.3 µs | 586 ns | 23.3× |
+| invalid | 2.4 µs | 2.4 µs | 42 ns | 2.3 µs | 1.7 µs | 57.6× |
+| large | 6.3 µs | 4.4 µs | 2.8 µs | 30.1 µs | 8.1 µs | 2.2× |
 
 # History
 
@@ -140,9 +140,7 @@ Shape's median per case on every run, with the 95th percentile after it, newest 
 
 | run | commit | shape | flat | nested | array | bounds | invalid | large |
 |---|---|---|---:|---:|---:|---:|---:|---:|
-| 2026-09-02 08:40 | `f325abd` | 0.3.0 | 3.1 µs · 3.1 µs | 7.5 µs · 8.1 µs | 105.0 µs · 173.6 µs | 3.4 µs · 3.7 µs | – · 41.2 µs | – |
-| 2026-09-02 13:40 | `ab6b663` | 0.3.0 | 3.2 µs · 3.7 µs | 7.7 µs · 8.9 µs | 112.9 µs · 134.5 µs | 3.4 µs · 3.9 µs | 13.7 µs · 16.2 µs | – |
-| 2026-09-02 14:21 | `8dc65e2` | 0.3.0 | 1.7 µs · 2.2 µs | 3.8 µs · 4.7 µs | 48.4 µs · 57.5 µs | 2.3 µs · 2.8 µs | 7.5 µs · 8.6 µs | – |
+| 2026-09-02 15:38 | `d1228fb` | 0.3.0 | 503 ns · 750 ns | 3.2 µs · 4.3 µs | 42.6 µs · 49.2 µs | 1.8 µs · 2.2 µs | 4.2 µs · 5.3 µs | 10.9 µs · 13.3 µs |
 
 ## go on linux-xeon-sandbox
 
@@ -172,6 +170,7 @@ Shape's median per case on every run, with the 95th percentile after it, newest 
 | 2026-09-02 08:25 | `f325abd` | 0.3.0 | 1.7 µs · 2.6 µs | 4.0 µs · 8.1 µs | 58.9 µs · 151.7 µs | 2.2 µs · 4.2 µs | 7.4 µs · 12.9 µs | – |
 | 2026-09-02 13:39 | `ab6b663` | 0.3.0 | 2.0 µs · 3.3 µs | 4.4 µs · 5.8 µs | 53.8 µs · 96.1 µs | 1.9 µs · 3.4 µs | 5.3 µs · 18.5 µs | – |
 | 2026-09-02 14:20 | `8dc65e2` | 0.3.0 | 1.0 µs · 2.2 µs | 2.2 µs · 4.0 µs | 17.2 µs · 59.4 µs | 1.1 µs · 1.9 µs | 3.3 µs · 5.3 µs | – |
+| 2026-09-02 15:37 | `d1228fb` | 0.3.0 | 357 ns · 964 ns | 1.1 µs · 4.2 µs | 29.6 µs · 78.1 µs | 898 ns · 6.2 µs | 2.0 µs · 5.8 µs | 7.3 µs · 12.9 µs |
 
 ## go on github:linux-x64
 
@@ -180,14 +179,13 @@ Shape's median per case on every run, with the 95th percentile after it, newest 
 | 2026-09-02 08:25 | `f325abd` | 0.3.0 | 1.9 µs · 2.7 µs | 4.7 µs · 6.8 µs | 61.6 µs · 112.5 µs | 2.0 µs · 5.5 µs | 7.0 µs · 10.2 µs | – |
 | 2026-09-02 13:39 | `ab6b663` | 0.3.0 | 1.8 µs · 2.6 µs | 5.2 µs · 6.5 µs | 59.3 µs · 105.3 µs | 2.0 µs · 2.8 µs | 7.1 µs · 9.4 µs | – |
 | 2026-09-02 14:20 | `8dc65e2` | 0.3.0 | 1.1 µs · 1.2 µs | 1.9 µs · 3.7 µs | 33.7 µs · 39.4 µs | 1.1 µs · 3.5 µs | 5.6 µs · 7.1 µs | – |
+| 2026-09-02 15:37 | `d1228fb` | 0.3.0 | 413 ns · 440 ns | 1.5 µs · 2.0 µs | 26.2 µs · 28.2 µs | 1.4 µs · 1.8 µs | 2.6 µs · 3.7 µs | 6.6 µs · 8.4 µs |
 
 ## ts on github:windows-x64
 
 | run | commit | shape | flat | nested | array | bounds | invalid | large |
 |---|---|---|---:|---:|---:|---:|---:|---:|
-| 2026-09-02 08:25 | `f325abd` | 11.1.0 | 3.0 µs · 3.4 µs | 5.6 µs · 9.7 µs | 94.6 µs · 183.6 µs | 3.6 µs · 7.1 µs | 7.2 µs · 13.1 µs | – |
-| 2026-09-02 13:39 | `ab6b663` | 11.1.0 | 3.3 µs · 5.7 µs | 5.7 µs · 8.9 µs | 97.6 µs · 111.6 µs | 3.5 µs · 3.9 µs | 7.2 µs · 9.5 µs | – |
-| 2026-09-02 14:20 | `8dc65e2` | 11.1.0 | 903 ns · 1.0 µs | 1.8 µs · 2.1 µs | 29.5 µs · 55.9 µs | 1.5 µs · 1.8 µs | 3.1 µs · 3.6 µs | – |
+| 2026-09-02 15:36 | `d1228fb` | 11.1.0 | 674 ns · 769 ns | 1.6 µs · 3.0 µs | 24.1 µs · 29.1 µs | 1.5 µs · 1.8 µs | 2.8 µs · 3.3 µs | 7.3 µs · 8.5 µs |
 
 ## ts on linux-xeon-sandbox
 
@@ -210,6 +208,7 @@ Shape's median per case on every run, with the 95th percentile after it, newest 
 | 2026-09-02 08:25 | `f325abd` | 11.1.0 | 2.3 µs · 5.9 µs | 3.7 µs · 5.4 µs | 59.3 µs · 90.1 µs | 2.2 µs · 4.2 µs | 4.6 µs · 12.1 µs | – |
 | 2026-09-02 13:38 | `ab6b663` | 11.1.0 | 2.0 µs · 5.7 µs | 3.3 µs · 4.0 µs | 54.3 µs · 66.7 µs | 2.0 µs · 2.5 µs | 4.0 µs · 5.3 µs | – |
 | 2026-09-02 14:19 | `8dc65e2` | 11.1.0 | 747 ns · 1.5 µs | 1.2 µs · 1.6 µs | 20.9 µs · 27.4 µs | 1.2 µs · 2.5 µs | 2.0 µs · 5.8 µs | – |
+| 2026-09-02 15:36 | `d1228fb` | 11.1.0 | 571 ns · 1.5 µs | 1.4 µs · 4.3 µs | 29.0 µs · 65.8 µs | 1.3 µs · 3.4 µs | 1.8 µs · 5.0 µs | 5.8 µs · 11.2 µs |
 
 ## ts on github:linux-x64
 
@@ -218,3 +217,4 @@ Shape's median per case on every run, with the 95th percentile after it, newest 
 | 2026-09-02 08:24 | `f325abd` | 11.1.0 | 2.5 µs · 2.9 µs | 4.9 µs · 5.4 µs | 82.2 µs · 88.5 µs | 3.2 µs · 3.3 µs | 6.4 µs · 7.0 µs | – |
 | 2026-09-02 13:38 | `ab6b663` | 11.1.0 | 2.0 µs · 2.2 µs | 4.0 µs · 4.3 µs | 71.8 µs · 78.9 µs | 2.8 µs · 3.0 µs | 5.6 µs · 5.9 µs | – |
 | 2026-09-02 14:19 | `8dc65e2` | 11.1.0 | 864 ns · 1.0 µs | 1.7 µs · 2.0 µs | 29.4 µs · 34.8 µs | 1.5 µs · 1.9 µs | 3.0 µs · 3.6 µs | – |
+| 2026-09-02 15:36 | `d1228fb` | 11.1.0 | 586 ns · 665 ns | 1.5 µs · 1.8 µs | 22.1 µs · 25.6 µs | 1.5 µs · 1.8 µs | 2.4 µs · 2.8 µs | 6.3 µs · 7.2 µs |
