@@ -64,8 +64,11 @@ is a decoding error, not a validation one).
 
 `lib/harness.js` and `go/main.go` implement the same policy so samples from
 the two languages are comparable: warm up for a fixed time, size a batch so
-it takes about a millisecond, then time batches for the budget and record
-each batch's mean duration per iteration as one sample. A run keeps the
+it takes about a millisecond and at least fifty steps of the clock (Windows
+reports time in half-millisecond steps, and a batch shorter than that reads
+as zero), then time batches for the budget and record each batch's mean
+duration per iteration as one sample. A run whose medians are zero is one
+recorded before that guard; the report shows its cells as not measured. A run keeps the
 sample count, mean, median, 5th and 95th percentiles, standard deviation,
 and 128 evenly spaced quantiles of the sorted samples, so the distribution
 survives without the file growing with the budget.

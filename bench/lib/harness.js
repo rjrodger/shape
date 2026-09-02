@@ -38,14 +38,25 @@ function measure(fn, pol) {
     warm++
   }
 
-  // Size the batch so it takes about batch_ms.
-  let per = 0n
+  // Size the batch so it takes about batch_ms, and at least 50 steps of the
+  // clock, so timer quantisation is under 2% of a sample (hrtime is fine
+  // everywhere Node runs; the Go runner needs this on Windows, and both
+  // follow the same policy).
+  let target = msToNs(pol.batch_ms)
+  const step = 50n * clockResolution()
+  if (step > target) target = step
+  let calls = 0
+  let elapsed = 0n
   {
     const t0 = now()
-    for (let i = 0; i < 10; i++) fn()
-    per = (now() - t0) / 10n
+    while (elapsed < target / 10n || calls < 10) {
+      fn()
+      calls++
+      elapsed = now() - t0
+    }
   }
-  const batch = Math.max(1, Number(msToNs(pol.batch_ms) / (per > 0n ? per : 1n)))
+  const per = elapsed / BigInt(calls)
+  const batch = Math.max(1, Number(target / (per > 0n ? per : 1n)))
 
   // Measure.
   const samples = []
@@ -59,6 +70,18 @@ function measure(fn, pol) {
     iterations += batch
   }
   return stats(samples, iterations, batch, pol)
+}
+
+// clockResolution is the smallest non-zero step hrtime reports.
+function clockResolution() {
+  let best = 0n
+  for (let i = 0; i < 32; i++) {
+    const t0 = process.hrtime.bigint()
+    let d = 0n
+    while (d === 0n) d = process.hrtime.bigint() - t0
+    if (best === 0n || d < best) best = d
+  }
+  return best
 }
 
 // stats summarises per-iteration samples in nanoseconds.

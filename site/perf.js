@@ -43,7 +43,7 @@
       const last = rows.find((r) => r.at === at)
       const dirty = rows.some((r) => r.dirty) ? ' <strong>Measured from a worktree with uncommitted changes, so the commit is approximate.</strong>' : ''
       html += `<h2 id="${lang}">${LANG[lang]}</h2>`
-      html += `<p class="muted">Latest run ${at.slice(0, 10)} at <a href="https://github.com/rjrodger/shape/commit/${last.commit}"><code>${last.commit.slice(0, 7)}</code></a> against cases <code>${last.input_hash}</code>: ` + libs.map((l) => `${l} ${versions[l] || ''}`).join(', ') + `.${dirty}</p>'
+      html += `<p class="muted">Latest run ${at.slice(0, 10)} at <a href="https://github.com/rjrodger/shape/commit/${last.commit}"><code>${last.commit.slice(0, 7)}</code></a> against cases <code>${last.input_hash}</code>: ` + libs.map((l) => `${l} ${versions[l] || ''}`).join(', ') + `.${dirty}</p>`
       html += legend(libs)
       html += barChart(rows, libs, data.cases)
       html += table(rows, libs, data.cases)
@@ -76,7 +76,10 @@
     const W = 760, left = 70, right = 70, barH = 14, gap = 3, groupGap = 14
     const groupH = libs.length * (barH + gap) + groupGap
     const H = cases.length * groupH + 30
-    const all = rows.map((r) => r.median_ns)
+    // A median of zero is a run whose clock was too coarse for its batch
+    // (older Windows runs); it is shown as not measured, never plotted.
+    const all = rows.map((r) => r.median_ns).filter((ns) => ns > 0)
+    if (!all.length) return '<p class="muted">No usable measurements for this host.</p>'
     const lo = Math.pow(10, Math.floor(Math.log10(Math.min(...all))))
     const hi = Math.pow(10, Math.ceil(Math.log10(Math.max(...all))))
     const x = (ns) => left + ((Math.log10(ns) - Math.log10(lo)) / (Math.log10(hi) - Math.log10(lo))) * (W - left - right)
@@ -90,7 +93,7 @@
       libs.forEach((lib, li) => {
         const r = rows.find((m) => m.case === c && m.lib === lib)
         const y = y0 + li * (barH + gap)
-        if (!r) {
+        if (!r || !(r.median_ns > 0)) {
           svg += `<text class="label" x="${left + 4}" y="${y + barH - 3}">${lib}: not measured</text>`
           return
         }
@@ -105,11 +108,12 @@
   function table(rows, libs, cases) {
     let html = '<table><thead><tr><th>case</th>' + libs.map((l) => `<th>${l}</th>`).join('') + '<th>shape / fastest</th></tr></thead><tbody>'
     for (const c of cases) {
-      const cells = libs.map((l) => rows.find((m) => m.case === c && m.lib === l))
-      const fastest = Math.min(...cells.filter(Boolean).map((r) => r.median_ns))
+      const cells = libs.map((l) => rows.find((m) => m.case === c && m.lib === l && m.median_ns > 0))
+      const measured = cells.filter(Boolean)
+      const fastest = measured.length ? Math.min(...measured.map((r) => r.median_ns)) : 0
       const shape = cells[libs.indexOf('shape')]
       html += `<tr><td>${c}</td>` + cells.map((r, i) => `<td class="num${libs[i] === 'shape' ? ' shape-cell' : ''}">${r ? `<span title="p05 ${fmt(r.p05_ns)}, p95 ${fmt(r.p95_ns)}">${fmt(r.median_ns)}</span>` : '–'}</td>`).join('')
-      html += `<td class="num">${shape ? (shape.median_ns / fastest).toFixed(1) + '×' : '–'}</td></tr>`
+      html += `<td class="num">${shape && fastest ? (shape.median_ns / fastest).toFixed(1) + '×' : '–'}</td></tr>`
     }
     return html + '</tbody></table>'
   }
@@ -119,7 +123,7 @@
   function trend(lang, libs) {
     const current = data.matrix.find((m) => m.lang === lang && m.host === state.host)
     const hash = current ? current.input_hash : undefined
-    const pts = data.history.filter((h) => h.lang === lang && h.host === state.host && h.case === state.trend && h.input_hash === hash)
+    const pts = data.history.filter((h) => h.lang === lang && h.host === state.host && h.case === state.trend && h.input_hash === hash && h.median_ns > 0)
     const runs = [...new Set(pts.map((p) => p.run))].sort()
     if (runs.length < 2) return `<p class="muted">Trend for <code>${state.trend}</code>: one run so far on this host; a line appears once there are more.</p>`
     const W = 760, H = 220, left = 60, right = 20, top = 12, bottom = 28
