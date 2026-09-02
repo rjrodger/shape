@@ -2,8 +2,10 @@
 
 use crate::context::{Context, PathPart, State, Update, UpdateErr};
 use crate::error::*;
-use crate::node::{Kind, ListMode, Node};
+use crate::node::{Kind, ListMode, Node, Validator};
+use crate::stringify::stringify_node;
 use crate::value::{is_integer, Map, Value};
+use std::sync::Arc;
 
 /// A cursor onto the value under validation: mutable when producing, shared
 /// when only a verdict is wanted. Writes through a shared cursor are dropped,
@@ -66,6 +68,34 @@ pub(crate) fn type_mark_for(k: Kind) -> i64 {
 /// produced container: nothing was there and nothing was injected.
 pub(crate) fn validate_node(
     n: &Node,
+    cur: Cur<'_>,
+    key: &str,
+    parent_is_array: bool,
+    w: &mut Walk<'_>,
+    verr: &mut ValidationError,
+) -> bool {
+    validate_node_with(
+        n,
+        &n.befores,
+        &n.afters,
+        n.silent,
+        cur,
+        key,
+        parent_is_array,
+        w,
+        verr,
+    )
+}
+
+/// `validate_node` with the checks and the silence given apart from the
+/// node: an Ignore lifts the silence of the node it probes, and a Catch or
+/// Transform runs the node with the checks it took inside.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn validate_node_with(
+    n: &Node,
+    befores: &[Validator],
+    afters: &[Validator],
+    silent: bool,
     mut cur: Cur<'_>,
     key: &str,
     parent_is_array: bool,
@@ -76,11 +106,11 @@ pub(crate) fn validate_node(
     // A before may replace the value or the node; a replacement value under a
     // shared cursor lives here.
     let mut over: Option<Value> = None;
-    let mut node_over: Option<Node> = None;
+    let mut node_over: Option<Arc<Node>> = None;
     let mut done = false;
 
-    for b in &n.befores {
-        let cur_node: &Node = node_over.as_ref().unwrap_or(n);
+    for b in befores {
+        let cur_node: &Node = node_over.as_deref().unwrap_or(n);
         let mut update = Update::default();
         let ok = {
             let value: &Value = over.as_ref().unwrap_or_else(|| cur.get());
@@ -107,32 +137,42 @@ pub(crate) fn validate_node(
         if let Some(nn) = update.node.take() {
             node_over = Some(nn);
         }
-        let cur_node: &Node = node_over.as_ref().unwrap_or(n);
+        let cur_node: &Node = node_over.as_deref().unwrap_or(n);
+        let cur_silent = if node_over.is_some() {
+            cur_node.silent
+        } else {
+            silent
+        };
         let value_now: &Value = over.as_ref().unwrap_or_else(|| cur.get());
         if !ok && absent_skips(cur_node, value_now, absent, &update) {
             continue;
         }
         if !ok {
             let at = at_of(w, key, cur_node, value_now, parent_is_array, &b.name);
-            emit_update_errors(&at, cur_node, &update, verr);
+            emit_update_errors(&at, cur_node, cur_silent, &update, verr);
         }
         if !ok || update.done {
             done = true;
         }
     }
 
-    let n: &Node = node_over.as_ref().unwrap_or(n);
+    let n: &Node = node_over.as_deref().unwrap_or(n);
+    let silent = if node_over.is_some() {
+        n.silent
+    } else {
+        silent
+    };
     let mut kept = true;
     if !done {
         let inner = match over.as_mut() {
             Some(v) => Cur::Mut(v),
             None => cur.reborrow(),
         };
-        kept = validate_structure(n, inner, key, parent_is_array, absent, w, verr);
+        kept = validate_structure(n, silent, inner, key, parent_is_array, absent, w, verr);
     }
 
     // Afters run whatever the structural check reported.
-    for a in &n.afters {
+    for a in afters {
         let mut update = Update::default();
         let ok = {
             let value: &Value = over.as_ref().unwrap_or_else(|| cur.get());
@@ -163,7 +203,7 @@ pub(crate) fn validate_node(
         }
         if !ok {
             let at = at_of(w, key, n, value_now, parent_is_array, &a.name);
-            emit_update_errors(&at, n, &update, verr);
+            emit_update_errors(&at, n, silent, &update, verr);
         }
     }
 
@@ -201,8 +241,14 @@ pub(crate) fn at_of<'a>(
     }
 }
 
-fn emit_update_errors(at: &At<'_>, n: &Node, update: &Update, verr: &mut ValidationError) {
-    if n.silent {
+fn emit_update_errors(
+    at: &At<'_>,
+    n: &Node,
+    silent: bool,
+    update: &Update,
+    verr: &mut ValidationError,
+) {
+    if silent {
         return;
     }
     let why = update.why.as_deref().unwrap_or("");
@@ -255,14 +301,21 @@ fn fill_field(e: &mut FieldError, at: &At<'_>) {
     }
 }
 
-fn add_structural(at: &At<'_>, n: &Node, why: &str, mark: i64, verr: &mut ValidationError) {
+fn add_structural(
+    at: &At<'_>,
+    n: &Node,
+    silent: bool,
+    why: &str,
+    mark: i64,
+    verr: &mut ValidationError,
+) {
     let mut err = make_err(at, why, mark, "");
     if let Some(f) = &n.fault_msg {
         if !err.terse {
             err.text = expand_err_text(f, &err.path, at.value, at.absent);
         }
     }
-    if !n.silent {
+    if !silent {
         verr.add(err);
     }
 }
@@ -271,18 +324,21 @@ pub(crate) fn emit_type_err(
     w: &Walk<'_>,
     key: &str,
     n: &Node,
+    silent: bool,
     value: &Value,
     parent_is_array: bool,
     verr: &mut ValidationError,
 ) {
     let at = at_of(w, key, n, value, parent_is_array, "");
-    add_structural(&at, n, WHY_TYPE, type_mark_for(n.kind), verr);
+    add_structural(&at, n, silent, WHY_TYPE, type_mark_for(n.kind), verr);
 }
 
 /// The structural checks: composition, nullable, never, the missing-value
 /// rules and the kind check.
+#[allow(clippy::too_many_arguments)]
 fn validate_structure(
     n: &Node,
+    silent: bool,
     mut cur: Cur<'_>,
     key: &str,
     parent_is_array: bool,
@@ -291,7 +347,7 @@ fn validate_structure(
     verr: &mut ValidationError,
 ) -> bool {
     if n.kind == Kind::List && n.list_mode != ListMode::None && (n.required || !absent) {
-        return evaluate_list(n, cur, key, parent_is_array, absent, w, verr);
+        return evaluate_list(n, silent, cur, key, parent_is_array, absent, w, verr);
     }
 
     // Nullable: an explicit null is the value.
@@ -302,7 +358,7 @@ fn validate_structure(
     // Never rejects a value present or absent.
     if n.kind == Kind::Never {
         let at = at_of(w, key, n, cur.get(), parent_is_array, "");
-        add_structural(&at, n, WHY_NEVER, MARK_NEVER, verr);
+        add_structural(&at, n, silent, WHY_NEVER, MARK_NEVER, verr);
         return !absent;
     }
 
@@ -316,7 +372,14 @@ fn validate_structure(
     if absent && n.kind != Kind::Regexp {
         if n.required {
             let at = at_of(w, key, n, cur.get(), parent_is_array, "");
-            add_structural(&at, n, WHY_REQUIRED, required_mark_for(n.kind), verr);
+            add_structural(
+                &at,
+                n,
+                silent,
+                WHY_REQUIRED,
+                required_mark_for(n.kind),
+                verr,
+            );
             return false;
         }
         if n.skippable {
@@ -338,6 +401,7 @@ fn validate_structure(
                 };
                 return validate_structure(
                     n,
+                    silent,
                     Cur::Mut(&mut scratch),
                     key,
                     parent_is_array,
@@ -370,7 +434,7 @@ fn validate_structure(
                         err.text = expand_err_text(f, &err.path, value, absent);
                     }
                 }
-                if !n.silent {
+                if !silent {
                     verr.add(err);
                 }
                 return true;
@@ -378,72 +442,73 @@ fn validate_structure(
             let matched = n.regexp.as_ref().is_some_and(|re| re.is_match(s));
             if !matched {
                 let at = at_of(w, key, n, value, parent_is_array, "");
-                add_structural(&at, n, WHY_REGEXP, MARK_REGEXP, verr);
+                add_structural(&at, n, silent, WHY_REGEXP, MARK_REGEXP, verr);
             }
         }
         Kind::String => match value {
             Value::Str(s) => {
                 if s.is_empty() && !n.empty {
                     let at = at_of(w, key, n, value, parent_is_array, "");
-                    add_structural(&at, n, WHY_REQUIRED, MARK_UNDEF_REQUIRED, verr);
+                    add_structural(&at, n, silent, WHY_REQUIRED, MARK_UNDEF_REQUIRED, verr);
                 }
             }
-            _ => emit_type_err(w, key, n, value, parent_is_array, verr),
+            _ => emit_type_err(w, key, n, silent, value, parent_is_array, verr),
         },
         Kind::Number => match value {
             Value::Num(x) if !x.is_nan() => {}
-            _ => emit_type_err(w, key, n, value, parent_is_array, verr),
+            _ => emit_type_err(w, key, n, silent, value, parent_is_array, verr),
         },
         Kind::Integer => match value {
             Value::Num(x) if is_integer(*x) => {}
-            _ => emit_type_err(w, key, n, value, parent_is_array, verr),
+            _ => emit_type_err(w, key, n, silent, value, parent_is_array, verr),
         },
         Kind::Boolean => {
             if !matches!(value, Value::Bool(_)) {
-                emit_type_err(w, key, n, value, parent_is_array, verr);
+                emit_type_err(w, key, n, silent, value, parent_is_array, verr);
             }
         }
         Kind::Date => {
             if !matches!(value, Value::Date(_)) {
-                emit_type_err(w, key, n, value, parent_is_array, verr);
+                emit_type_err(w, key, n, silent, value, parent_is_array, verr);
             }
         }
         Kind::BigInt => {
             if !matches!(value, Value::BigInt(_)) {
-                emit_type_err(w, key, n, value, parent_is_array, verr);
+                emit_type_err(w, key, n, silent, value, parent_is_array, verr);
             }
         }
         Kind::NaN => match value {
             Value::Num(x) if x.is_nan() => {}
-            _ => emit_type_err(w, key, n, value, parent_is_array, verr),
+            _ => emit_type_err(w, key, n, silent, value, parent_is_array, verr),
         },
         Kind::Null => {
             if !value.is_null() {
-                emit_type_err(w, key, n, value, parent_is_array, verr);
+                emit_type_err(w, key, n, silent, value, parent_is_array, verr);
             }
         }
         Kind::Function => {
             if !matches!(value, Value::Func(_)) {
-                emit_type_err(w, key, n, value, parent_is_array, verr);
+                emit_type_err(w, key, n, silent, value, parent_is_array, verr);
             }
         }
-        Kind::Array => return validate_array(n, cur, key, parent_is_array, w, verr),
-        Kind::Object => return validate_object(n, cur, key, parent_is_array, w, verr),
+        Kind::Array => return validate_array(n, silent, cur, key, parent_is_array, w, verr),
+        Kind::Object => return validate_object(n, silent, cur, key, parent_is_array, w, verr),
         Kind::Never | Kind::List => {}
     }
     true
 }
 
-/// The unknown keys of a closed object, in the input's order.
-fn unknown_keys(n: &Node, map: &crate::value::Map) -> Vec<String> {
+/// The keys of a closed object it does not consume, in the input's order.
+fn unknown_keys(n: &Node, map: &Map) -> Vec<String> {
     map.iter()
-        .filter(|(k, v)| !v.is_undefined() && !n.obj_children.contains_key(*k))
+        .filter(|(k, v)| !v.is_undefined() && !n.consumed.contains(*k))
         .map(|(k, _)| k.clone())
         .collect()
 }
 
 fn validate_object(
     n: &Node,
+    silent: bool,
     cur: Cur<'_>,
     key: &str,
     parent_is_array: bool,
@@ -467,7 +532,7 @@ fn validate_object(
                         err.text = expand_err_text(f, &err.path, value, false);
                     }
                 }
-                if !n.silent {
+                if !silent {
                     verr.add(err);
                 }
             }
@@ -480,12 +545,39 @@ fn validate_object(
         Cur::Mut(Value::Obj(m)) => Cur::Mut(m),
         Cur::Ref(Value::Obj(m)) => Cur::Ref(m),
         other => {
-            emit_type_err(w, key, n, other.get(), parent_is_array, verr);
+            emit_type_err(w, key, n, silent, other.get(), parent_is_array, verr);
             return true;
         }
     };
 
     for (k, cn) in &n.obj_children {
+        // A rename's claim: the value is missing and a claimed source has
+        // it, so it is picked up from there.
+        let mut claimed: Option<&Value> = None;
+        if cn.rename_to.is_some() && !cn.rename_claim.is_empty() {
+            let present = oc.get().get(k).map(|v| !v.is_undefined()).unwrap_or(false);
+            if !present {
+                let src = cn
+                    .rename_claim
+                    .iter()
+                    .find(|src| oc.get().contains_key(*src))
+                    .cloned();
+                if let Some(src) = src {
+                    match &mut oc {
+                        Cur::Mut(map) => {
+                            let v = if cn.rename_keep {
+                                map.get(&src).cloned().unwrap()
+                            } else {
+                                map.shift_remove(&src).unwrap()
+                            };
+                            map.insert(k.clone(), v);
+                        }
+                        Cur::Ref(map) => claimed = map.get(&src),
+                    }
+                }
+            }
+        }
+
         w.path.push(k.clone());
         w.path_arr.push(PathPart::Key(k.clone()));
         let mut scratch = Value::Undefined;
@@ -495,7 +587,7 @@ fn validate_object(
                 let slot = map.entry(k.clone()).or_insert(Value::Undefined);
                 (Cur::Mut(slot), was_absent)
             }
-            Cur::Ref(map) => match map.get(k) {
+            Cur::Ref(map) => match claimed.or_else(|| map.get(k)) {
                 Some(child) if !child.is_undefined() => (Cur::Ref(child), false),
                 _ => (Cur::Mut(&mut scratch), true),
             },
@@ -507,11 +599,23 @@ fn validate_object(
         };
         w.path.pop();
         w.path_arr.pop();
-        if !keep {
-            if let Cur::Mut(m) = &mut oc {
+        if let Cur::Mut(m) = &mut oc {
+            if !keep {
                 let empty = m.get(k).map(|x| x.is_undefined()).unwrap_or(false);
                 if was_absent || empty || cn.is_ignore() {
                     m.shift_remove(k);
+                }
+            } else if let Some(to) = &cn.rename_to {
+                // The produced value moves under the new name.
+                if to != k {
+                    let v = if cn.rename_keep {
+                        m.get(k).cloned()
+                    } else {
+                        m.shift_remove(k)
+                    };
+                    if let Some(v) = v {
+                        m.insert(to.clone(), v);
+                    }
                 }
             }
         }
@@ -550,6 +654,7 @@ fn validate_object(
 
 fn validate_array(
     n: &Node,
+    silent: bool,
     cur: Cur<'_>,
     key: &str,
     parent_is_array: bool,
@@ -572,7 +677,7 @@ fn validate_array(
                     err.text = expand_err_text(f, &err.path, value, false);
                 }
             }
-            if !n.silent {
+            if !silent {
                 verr.add(err);
             }
             return true;
@@ -583,7 +688,7 @@ fn validate_array(
         Cur::Mut(Value::Arr(a)) => Cur::Mut(a),
         Cur::Ref(Value::Arr(a)) => Cur::Ref(a),
         other => {
-            emit_type_err(w, key, n, other.get(), parent_is_array, verr);
+            emit_type_err(w, key, n, silent, other.get(), parent_is_array, verr);
             return true;
         }
     };
@@ -671,24 +776,195 @@ pub(crate) fn validate_ignored(
     w: &mut Walk<'_>,
     _verr: &mut ValidationError,
 ) -> bool {
-    let mut probe = n.clone();
-    probe.silent = false;
     let mut sub = ValidationError::default();
-    let kept = validate_node(&probe, cur, key, parent_is_array, w, &mut sub);
+    let kept = validate_node_with(
+        n,
+        &n.befores,
+        &n.afters,
+        false,
+        cur,
+        key,
+        parent_is_array,
+        w,
+        &mut sub,
+    );
     !sub.has_any() && kept
 }
 
-fn evaluate_list(
-    n: &Node,
-    cur: Cur<'_>,
+/// Whether a branch accepts the value, without producing or rendering.
+fn branch_passes(
+    sn: &Node,
+    value: &Value,
     key: &str,
     parent_is_array: bool,
-    absent: bool,
+    w: &mut Walk<'_>,
+) -> bool {
+    let saved = (w.is_match, w.ctx.terse);
+    w.is_match = true;
+    w.ctx.terse = true;
+    let mut sub = ValidationError {
+        terse: true,
+        ..Default::default()
+    };
+    validate_node(sn, Cur::Ref(value), key, parent_is_array, w, &mut sub);
+    w.is_match = saved.0;
+    w.ctx.terse = saved.1;
+    !sub.has_any()
+}
+
+#[allow(clippy::too_many_arguments)]
+fn list_error(
+    n: &Node,
+    silent: bool,
+    value: &Value,
+    key: &str,
+    parent_is_array: bool,
+    w: &Walk<'_>,
+    verr: &mut ValidationError,
+    why: &str,
+    mark: i64,
+    words: &str,
+    fault_applies: bool,
+) {
+    let names: Vec<String> = n.list.iter().map(|sn| stringify_node(sn, true)).collect();
+    let at = at_of(w, key, n, value, parent_is_array, "");
+    let text = format!(
+        "Value \"$VALUE\" for property \"$PATH\" does not satisfy {}: {}",
+        words,
+        names.join(", ")
+    );
+    let mut err = make_err(&at, why, mark, &text);
+    if fault_applies && !err.terse {
+        if let Some(f) = &n.fault_msg {
+            err.text = expand_err_text(f, &err.path, value, at.absent);
+        }
+    }
+    if !silent {
+        verr.add(err);
+    }
+}
+
+/// One, Some and All. The branches see the value as the parent saw it: an
+/// absent value stays absent, so a branch that does not require one can
+/// still match and supply its default.
+#[allow(clippy::too_many_arguments)]
+fn evaluate_list(
+    n: &Node,
+    silent: bool,
+    mut cur: Cur<'_>,
+    key: &str,
+    parent_is_array: bool,
+    _absent: bool,
     w: &mut Walk<'_>,
     verr: &mut ValidationError,
 ) -> bool {
-    let _ = (n, cur, key, parent_is_array, absent, w, verr);
-    true
+    match n.list_mode {
+        ListMode::One => {
+            let winner = n
+                .list
+                .iter()
+                .position(|sn| branch_passes(sn, cur.get(), key, parent_is_array, w));
+            match winner {
+                Some(i) => {
+                    // The value is produced by the branch that took it.
+                    let mut sub = ValidationError::default();
+                    validate_node(
+                        &n.list[i],
+                        cur.reborrow(),
+                        key,
+                        parent_is_array,
+                        w,
+                        &mut sub,
+                    )
+                }
+                None => {
+                    list_error(
+                        n,
+                        silent,
+                        cur.get(),
+                        key,
+                        parent_is_array,
+                        w,
+                        verr,
+                        "One",
+                        4030,
+                        "one of",
+                        true,
+                    );
+                    true
+                }
+            }
+        }
+        ListMode::Some => {
+            // Every matching branch produces from the original value; the
+            // last one's result stands.
+            let original = cur.get().clone();
+            let mut matched = false;
+            let mut kept = true;
+            for sn in &n.list {
+                if !branch_passes(sn, &original, key, parent_is_array, w) {
+                    continue;
+                }
+                matched = true;
+                cur.set(original.clone());
+                let mut sub = ValidationError::default();
+                kept = validate_node(sn, cur.reborrow(), key, parent_is_array, w, &mut sub);
+            }
+            if !matched {
+                list_error(
+                    n,
+                    silent,
+                    &original,
+                    key,
+                    parent_is_array,
+                    w,
+                    verr,
+                    "Some",
+                    4031,
+                    "any of",
+                    true,
+                );
+                return true;
+            }
+            kept
+        }
+        _ => {
+            // All threads the value through its branches; a branch that
+            // fails leaves the value as the one before it produced.
+            let original = cur.get().clone();
+            let mut pass_all = true;
+            let mut kept = true;
+            for sn in &n.list {
+                let before = cur.get().clone();
+                let mut sub = ValidationError::default();
+                let k = validate_node(sn, cur.reborrow(), key, parent_is_array, w, &mut sub);
+                if sub.has_any() {
+                    pass_all = false;
+                    cur.set(before);
+                } else {
+                    kept = k;
+                }
+            }
+            if !pass_all {
+                cur.set(original.clone());
+                list_error(
+                    n,
+                    silent,
+                    &original,
+                    key,
+                    parent_is_array,
+                    w,
+                    verr,
+                    "All",
+                    4032,
+                    "all of",
+                    false,
+                );
+                return true;
+            }
+            kept
+        }
+    }
 }
 
 #[cfg(test)]
@@ -710,6 +986,7 @@ mod tests {
             func: Arc::new(f),
             args: vec![],
             suffix: None,
+            inner: None,
         }
     }
 
@@ -857,7 +1134,7 @@ mod tests {
         assert!(!s.valid(&j(r#"{"a":2}"#)));
 
         let swap = chk("Swap", |_, u| {
-            u.node = Some(buildize(Token::String));
+            u.node = Some(Arc::new(buildize(Token::String)));
             true
         });
         let s = at_a(before(buildize(Token::Number), swap));
@@ -925,9 +1202,10 @@ mod tests {
 
     #[test]
     fn structural_rules() {
-        let mut list = Node::of(Kind::List);
-        list.list_mode = ListMode::One;
-        assert_eq!(run(&Schema::new(Spec::from(list)), "1"), "1");
+        assert_eq!(
+            run(&Schema::new(one([Spec::from(Token::Number)])), "1"),
+            "1"
+        );
         assert_eq!(
             run(&Schema::new(Spec::from(Node::of(Kind::List))), "1"),
             "1"

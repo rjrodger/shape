@@ -54,6 +54,36 @@ impl Kind {
     }
 }
 
+impl Kind {
+    /// The kind of a name, as `as_str` renders it, or as a type token is
+    /// written ("String").
+    pub fn from_name(name: &str) -> Option<Kind> {
+        ALL_KINDS
+            .iter()
+            .copied()
+            .find(|k| k.as_str() == name || k.as_str().eq_ignore_ascii_case(name))
+    }
+}
+
+const ALL_KINDS: [Kind; 16] = [
+    Kind::Any,
+    Kind::String,
+    Kind::Number,
+    Kind::Boolean,
+    Kind::Object,
+    Kind::Array,
+    Kind::Null,
+    Kind::NaN,
+    Kind::Function,
+    Kind::Never,
+    Kind::Check,
+    Kind::Regexp,
+    Kind::Integer,
+    Kind::Date,
+    Kind::BigInt,
+    Kind::List,
+];
+
 impl fmt::Display for Kind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.as_str())
@@ -115,6 +145,8 @@ pub struct Validator {
     pub args: Vec<Value>,
     /// The `.Name(args)` suffix the validator renders as in a spec text.
     pub suffix: Option<String>,
+    /// The checks a Catch or Transform took inside.
+    pub inner: Option<Arc<crate::isolate::Inner>>,
 }
 
 impl fmt::Debug for Validator {
@@ -147,6 +179,10 @@ pub struct Node {
     pub obj_children: IndexMap<String, Node>,
     /// The shape of an unknown key (an open object); none for a closed one.
     pub obj_rest: Option<Box<Node>>,
+    /// The keys a closed object accepts: its declared keys, the targets of
+    /// its renames and the sources they claim. Set when the tree is
+    /// prepared.
+    pub consumed: std::collections::HashSet<String>,
 
     /// The fixed positions of a tuple.
     pub arr_children: Vec<Node>,
@@ -263,6 +299,7 @@ mod tests {
             func: Arc::new(|_, _| true),
             args: vec![],
             suffix: None,
+            inner: None,
         };
         assert_eq!(format!("{:?}", v), "Validator(x)");
         assert_eq!(Node::zero_for(Kind::String), Value::Str(String::new()));

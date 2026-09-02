@@ -6,6 +6,7 @@ use crate::node::Node;
 use crate::value::Value;
 use std::any::Any;
 use std::collections::HashMap;
+use std::sync::Arc;
 
 /// A path element: an object key or an array index.
 #[derive(Clone, Debug, PartialEq)]
@@ -32,7 +33,9 @@ pub struct Context {
     /// a `map[string]any`.
     pub custom: HashMap<String, Box<dyn Any + Send + Sync>>,
     /// The nodes `Define` recorded during this call.
-    pub refs: HashMap<String, Node>,
+    pub refs: HashMap<String, Arc<Node>>,
+    /// The schema's own definitions, as of its compile.
+    pub(crate) defs: Arc<HashMap<String, Arc<Node>>>,
     /// The errors of the call, when the caller asked for them.
     pub err: Vec<FieldError>,
     /// The caller wants a verdict only, so an error is recorded without its
@@ -125,7 +128,7 @@ pub struct Update {
     /// A replacement value.
     pub val: Option<Value>,
     /// A replacement node (used by `Refer`).
-    pub node: Option<Node>,
+    pub node: Option<Arc<Node>>,
     /// The failure ends the whole walk's errors here.
     pub fatal: bool,
 }

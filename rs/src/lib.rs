@@ -14,21 +14,29 @@
 //! ```
 
 pub mod builders;
+pub mod coerce;
 pub mod context;
 pub mod error;
+pub mod format;
+pub mod isolate;
 pub mod node;
 pub mod normalize;
 pub mod spec;
+pub mod stringify;
 pub mod validate;
 pub mod value;
 
 pub use builders::*;
 pub use context::{Context, PathPart, State, Update, UpdateErr};
 pub use error::{FieldError, ValidationError};
-pub use node::{Kind, Node, Token, Validator};
+pub use isolate::{Inner, TransformFn};
+pub use node::{Kind, ListMode, Node, Token, Validator, ValidatorFn};
 pub use spec::{arr, from_map, null, obj, Spec};
+pub use stringify::stringify_node;
 pub use value::{Map, Value};
 
+use std::collections::HashMap;
+use std::sync::Arc;
 use validate::{validate_ignored, validate_node, Cur, Walk};
 
 /// The crate version.
@@ -38,6 +46,8 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 #[derive(Clone, Debug)]
 pub struct Schema {
     root: Node,
+    /// The `define`d nodes by name, for `refer`.
+    defs: Arc<HashMap<String, Arc<Node>>>,
 }
 
 /// Compile a spec.
@@ -47,9 +57,18 @@ pub fn shape(spec: impl Into<Spec>) -> Schema {
 
 impl Schema {
     pub fn new(spec: impl Into<Spec>) -> Schema {
+        let mut root = normalize::normalize(spec.into());
+        let mut defs = HashMap::new();
+        prepare(&mut root, &mut defs);
         Schema {
-            root: normalize::normalize(spec.into()),
+            root,
+            defs: Arc::new(defs),
         }
+    }
+
+    /// The `define`d nodes of the schema, by name.
+    pub fn defs(&self) -> &HashMap<String, Arc<Node>> {
+        &self.defs
     }
 
     /// The compiled tree.
@@ -69,6 +88,7 @@ impl Schema {
         let mut value = input;
         let mut verr = ValidationError::default();
         ctx.terse = false;
+        ctx.defs = Arc::clone(&self.defs);
         let kept = {
             let mut w = Walk {
                 ctx,
@@ -92,6 +112,7 @@ impl Schema {
     pub fn valid(&self, input: &Value) -> bool {
         let mut ctx = Context::new();
         ctx.terse = true;
+        ctx.defs = Arc::clone(&self.defs);
         let mut verr = ValidationError {
             terse: true,
             ..Default::default()
@@ -114,6 +135,7 @@ impl Schema {
     /// The errors of validating the value; empty when it validates.
     pub fn error(&self, input: &Value) -> Vec<FieldError> {
         let mut ctx = Context::new();
+        ctx.defs = Arc::clone(&self.defs);
         let mut verr = ValidationError::default();
         let mut w = Walk {
             ctx: &mut ctx,
@@ -123,6 +145,45 @@ impl Schema {
         };
         walk_root(&self.root, Cur::Ref(input), &mut w, &mut verr);
         verr.issues
+    }
+}
+
+/// Walk a compiled tree once: every object node gets the set of keys it
+/// accepts, and every `define`d node is collected by name.
+fn prepare(n: &mut Node, defs: &mut HashMap<String, Arc<Node>>) {
+    if n.kind == Kind::Object {
+        let mut consumed = std::collections::HashSet::with_capacity(n.obj_children.len());
+        for (k, cn) in &n.obj_children {
+            consumed.insert(k.clone());
+            if let Some(to) = &cn.rename_to {
+                consumed.insert(to.clone());
+            }
+            for src in &cn.rename_claim {
+                consumed.insert(src.clone());
+            }
+        }
+        n.consumed = consumed;
+    }
+    for cn in n.obj_children.values_mut() {
+        prepare(cn, defs);
+    }
+    if let Some(r) = n.obj_rest.as_deref_mut() {
+        prepare(r, defs);
+    }
+    for cn in n.arr_children.iter_mut() {
+        prepare(cn, defs);
+    }
+    if let Some(c) = n.arr_child.as_deref_mut() {
+        prepare(c, defs);
+    }
+    if let Some(r) = n.arr_rest.as_deref_mut() {
+        prepare(r, defs);
+    }
+    for sn in n.list.iter_mut() {
+        prepare(sn, defs);
+    }
+    if let Some(name) = &n.define_name {
+        defs.insert(name.clone(), Arc::new(n.clone()));
     }
 }
 
