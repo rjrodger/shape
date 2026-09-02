@@ -67,6 +67,9 @@ type FieldError struct {
 	// plural records that Key names more than one disallowed property, so the
 	// message reads "the properties ... are not allowed".
 	plural bool
+	// terse marks an error of a verdict-only call, which has no text and
+	// is given none.
+	terse bool
 }
 
 func (e FieldError) Error() string {
@@ -79,9 +82,12 @@ func (e FieldError) Error() string {
 	return e.Why
 }
 
-// ValidationError aggregates one or more FieldErrors.
+// ValidationError aggregates one or more FieldErrors. A terse one, the
+// collector of a Match, only counts them.
 type ValidationError struct {
 	Issues []FieldError
+	terse  bool
+	n      int
 }
 
 func (e *ValidationError) Error() string {
@@ -97,11 +103,15 @@ func (e *ValidationError) Error() string {
 }
 
 func (e *ValidationError) add(err FieldError) {
+	if e.terse {
+		e.n++
+		return
+	}
 	e.Issues = append(e.Issues, err)
 }
 
 func (e *ValidationError) hasAny() bool {
-	return e != nil && len(e.Issues) > 0
+	return e != nil && (e.n > 0 || len(e.Issues) > 0)
 }
 
 // makeErr builds a FieldError mirroring TS makeErrImpl text shape.
@@ -112,11 +122,15 @@ func makeErr(s *State, why string, mark int, text string) FieldError {
 	if mark == 0 {
 		mark = 4000
 	}
-	path := pathstr(s)
 	t := KindNever
 	if s != nil && s.Node != nil {
 		t = s.Node.kind
 	}
+	// A verdict-only call reads none of the path, the rendering or the text.
+	if s != nil && s.Ctx != nil && s.Ctx.terse {
+		return FieldError{Key: s.Key, Type: t, Value: s.Value, Why: why, Mark: mark, Check: s.checkName, terse: true}
+	}
+	path := pathstr(s)
 	err := FieldError{
 		Path:      path,
 		PathArr:   append([]any{}, s.PathArr...),

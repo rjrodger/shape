@@ -210,10 +210,11 @@ func (s *Schema) Match(input any) bool {
 	}
 	c := newContext(nil)
 	c.Match = true
+	c.terse = true
 	c.defs = s.defs
 	c.pure = s.isPure()
 	path, pathArr := c.start()
-	verr := &ValidationError{}
+	verr := &ValidationError{terse: true}
 	validateNode(s.root, rootInput(input), path, pathArr, "", nil, c, true, verr)
 	return !verr.hasAny()
 }

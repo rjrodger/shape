@@ -443,6 +443,11 @@ const JS = (a0: any, a1?: any) => JSON.stringify(a0, a1)
 class State {
   match: boolean = false
 
+  // The caller wants a verdict only (valid() or match() without a context
+  // of its own), so an error is recorded without its path, text or value
+  // rendering: nothing will read them.
+  terse: boolean = false
+
   dI: number = 0  // Node depth.
   nI: number = 2  // Next free slot in nodes.
   cI: number = -1 // Pointer to next node.
@@ -499,7 +504,8 @@ class State {
     root: any,
     top: Node<any>,
     ctx?: Context,
-    match?: boolean
+    match?: boolean,
+    terse?: boolean
   ) {
     this.root = root
     this.vals = [root, -1]
@@ -507,6 +513,7 @@ class State {
     this.nodes = [top, -1]
     this.ctx = ctx || {}
     this.match = !!match
+    this.terse = !!terse
   }
 
   next() {
@@ -1040,13 +1047,14 @@ function shapify<const S>(intop?: S, inopts?: ShapeOptions) {
   function exec(
     root: any,
     ctx?: Context,
-    match?: boolean // Suppress errors and return boolean result (true if match)
+    match?: boolean, // Suppress errors and return boolean result (true if match)
+    terse?: boolean, // The caller reads no error: record them without text
   ): any {
     const skipd = ctx?.skip?.depth
     const skipa = Array.isArray(ctx?.skip?.depth) ? new Set(ctx.skip.depth) : null
     const skipk = Array.isArray(ctx?.skip?.keys) ? new Set(ctx.skip.keys) : null
 
-    const s = new State(root, top, ctx, match)
+    const s = new State(root, top, ctx, match, terse)
 
     // A log callback is called for every node, so nothing is skipped for it.
     const fastOk = !s.ctx.log
@@ -1545,17 +1553,21 @@ function shapify<const S>(intop?: S, inopts?: ShapeOptions) {
     }
 
   function valid<V>(root?: V, ctx?: Context): root is (V & ShapeResult<S>) {
+    // Without a context of the caller's nothing can read the errors, so
+    // they are recorded without their text.
+    const terse = undefined === ctx
     let actx: any = ctx || {}
     actx.err = actx.err || []
-    exec(root, actx, false)
+    exec(root, actx, false, terse)
     return 0 === actx.err.length
   }
   shape.valid = valid
 
 
   shape.match = (root?: any, ctx?: Context): boolean => {
+    const terse = undefined === ctx
     ctx = ctx || {}
-    return (exec(root, ctx, true) as boolean)
+    return (exec(root, ctx, true, terse) as boolean)
   }
 
 
@@ -3747,6 +3759,14 @@ function makeErrImpl(
   user?: any,
   fname?: string,
 ): ErrDesc {
+  // A verdict-only call reads none of the path, the rendering or the text.
+  if (s.terse) {
+    return {
+      key: s.key, type: s.node.t, node: s.node, value: s.val, path: '', pathArr: [],
+      why, check: s.check?.name || 'none', args: s.checkargs || {}, mark, text: '', use: user || {},
+    }
+  }
+
   let err: ErrDesc = {
     key: s.key,
     type: s.node.t,

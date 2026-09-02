@@ -67,6 +67,8 @@ func BenchmarkValidateNested(b *testing.B) { benchValidate(b, benchNested, bench
 func BenchmarkValidLarge(b *testing.B)     { benchValid(b, benchLarge, benchLargeIn) }
 func BenchmarkValidateLarge(b *testing.B)  { benchValidate(b, benchLarge, benchLargeIn) }
 
+func BenchmarkValidInvalid(b *testing.B) { benchValid(b, benchNested, benchInvalidIn) }
+
 func BenchmarkErrorInvalid(b *testing.B) {
 	s := MustShape(benchNested)
 	b.ReportAllocs()
