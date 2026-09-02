@@ -209,7 +209,7 @@ detail; the tables here list the Go signatures.
 | Builder                          | Effect                                                             |
 | -------------------------------- | ------------------------------------------------------------------ |
 | `Type(kind, spec?)`              | force a `Kind`, `TypeToken`, kind name or node's type on the node  |
-| `Exact(values...)`               | require equality with one of the listed literals (`reflect.DeepEqual`, so `Exact(1)` does not match `1.0`) |
+| `Exact(values...)`               | require equality with one of the listed literals (numbers by value, so `Exact(1)` matches `1.0`; the rest by `reflect.DeepEqual`) |
 | `Never(spec?)`                   | always fails to match                                              |
 | `Func(spec?)`                    | a function-typed value; optional of itself (the `Function` token is required) |
 | `Coerce(spec?)`                  | convert a string/number/bool to the node's kind first, where unambiguous |

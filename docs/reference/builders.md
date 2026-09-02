@@ -144,7 +144,7 @@ A bound outside the isolation still applies to what comes out:
 | Builder | Effect |
 | ------- | ------ |
 | `One(shapes…)` | Passes on the first matching branch (its output is used). |
-| `Some(shapes…)` | Passes if at least one branch matches; all branches are evaluated, and the output is the last matching branch's. |
+| `Some(shapes…)` | Passes if at least one branch matches; all branches are evaluated. An object or array is produced in place, so every matching branch sees what the ones before it did (`Some(Open({a:1}), Open({b:2}))` on `{}` gives `{a:1,b:2}`); a scalar is replaced, so each matching branch sees the original and the last one's result stands. |
 | `All(shapes…)` | Passes only if every branch matches; the value is threaded through each. |
 | `Discriminated(tag, { name: shape, … })` | A tagged union: the branch is chosen by the string value of the `tag` property and the value validated against that branch **alone**, so the errors are its own rather than a list of every alternative. |
 

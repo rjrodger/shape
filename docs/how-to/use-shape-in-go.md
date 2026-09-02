@@ -84,10 +84,11 @@ means what the map key `"Port: Min(1).Max(65535)"` means. See
 
 `shape.Number` accepts every numeric kind. There is no single "number" type in
 Go, so a JSON number arrives as `float64`; native ints/uints/floats are also
-accepted. Type checks and bounds (`Min`, `Max`, …) compare numerically, but
-`Exact` compares with `reflect.DeepEqual`, so its literals must have the Go
-type the input will have: `Exact(1)` matches the `int` 1 and not the
-`float64` 1.0 that `json.Unmarshal` produces — write `Exact(1.0)` for that.
+accepted. Type checks, bounds (`Min`, `Max`, …) and `Exact` compare numbers
+by value whatever their kind, so `Exact(1)` matches the `float64` 1.0 that
+`json.Unmarshal` produces. Anything else `Exact` compares with
+`reflect.DeepEqual`, so a string, slice or map literal must have the Go type
+the input will have.
 
 ## `undefined` vs `null`
 

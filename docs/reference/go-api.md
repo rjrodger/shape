@@ -128,7 +128,7 @@ func Empty(spec ...any) *Node
 func Nullable(spec ...any) *Node
 func Fault(msg string, spec ...any) *Node
 func Type(kind any, spec ...any) *Node // Kind, TypeToken, kind name or *Node
-func Exact(vals ...any) *Node          // reflect.DeepEqual: Exact(1) does not match 1.0
+func Exact(vals ...any) *Node          // numbers by value (Exact(1) matches 1.0), the rest by reflect.DeepEqual
 func Never(spec ...any) *Node
 func Func(spec ...any) *Node
 func Coerce(spec ...any) *Node

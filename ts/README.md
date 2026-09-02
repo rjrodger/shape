@@ -13,7 +13,7 @@ const shape = Shape({
 })
 
 shape({ debug: true })
-// → { port: 8080, host: 'localhost', debug: true }
+// → { debug: true, port: 8080, host: 'localhost' }
 
 shape({ debug: 'yes' })
 // throws ShapeError: Validation failed for property "debug" with string "yes"

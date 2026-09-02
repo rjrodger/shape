@@ -130,12 +130,12 @@ a `Kind`, a `Token`, a kind's name or a `Node`; `check_re` takes a
 too) and `claim` (other keys to read from when the renamed one is missing).
 
 A builder called with a wrong argument (`min("x", ..)`, `len(-1, ..)`,
-`define("", ..)`, `pick("z", ..)`) cannot fail at the call, as it throws in
-TypeScript, and returns a node that accepts nothing and reports the same
-message at validation. The string form returns that node too: `expr` and
-`Schema::parse` are an `ExprError` only for a malformed expression (an
-unknown builder, an unclosed argument list, a `Pick` with nothing to apply
-to), where TypeScript's `expr` throws for a wrong argument as well.
+`define("", ..)`, `pick("z", ..)`) cannot fail as TypeScript's throwing
+builders do; it returns a fault node that accepts nothing and reports the
+message at validation. The string form refuses it instead: `expr` and
+`Schema::parse` return an `ExprError` for a wrong argument (`Shape: Min
+needs a number`) as for a malformed expression, which is what `expr` throws
+in TypeScript.
 
 ## Custom validators
 

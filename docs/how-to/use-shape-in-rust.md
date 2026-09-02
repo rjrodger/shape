@@ -70,9 +70,9 @@ exists as a chain method too (`buildize(Token::Number).min(2)`); pass
 you mean to reshape twice.
 
 A builder given a wrong argument returns a fault node that reports the
-message at validation, since a Rust function cannot throw as the TypeScript
-one does; `Schema::parse` returns the same node, and is an `ExprError` only
-for an expression that does not parse.
+message at validation, since a Rust builder cannot throw as a TypeScript
+one does; `Schema::parse` and `expr` return it as an `ExprError` instead,
+as `expr` throws in TypeScript.
 
 ## Custom validation
 
@@ -108,7 +108,7 @@ shared between threads.
 - No `Symbol` token; a function is an opaque `Value::Func(id)`.
 - `exact` compares object and array literals by value, where TypeScript
   compares them by identity.
-- A wrong builder argument is a fault node, not a panic.
+- A wrong builder argument is a fault node, not a panic; in the string form it is an `ExprError`.
 - String lengths are counted in UTF-16 units, as JavaScript counts them.
 
 See the [Rust API reference](../reference/rust-api.md) and the

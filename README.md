@@ -25,7 +25,7 @@ const shape = Shape({
 })
 
 shape({ debug: true })
-// → { port: 8080, host: 'localhost', debug: true }
+// → { debug: true, port: 8080, host: 'localhost' }
 ```
 
 The same schema in Go:
