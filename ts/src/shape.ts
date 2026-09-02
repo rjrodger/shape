@@ -47,9 +47,9 @@ const KEY_EXPR_RE = /^\s*("(\\.|[^"\\])*"|[^\s]+):\s*(.*?)\s*$/
 // on the node's first visit and reused after: the object's keys in the order
 // they were first seen with their nodes, or the array's fixed element nodes.
 // Kept off the node itself so nothing leaks into its spec or its JSON.
-// A compiled child list: the keys, their nodes, and whether the children
-// may take the leaf fast path (see fastKind).
-type Compiled = { keys: string[], nodes: Node<any>[], fast: boolean }
+// A compiled child list: the keys, their nodes, and for each the leaf fast
+// path it may take (see fastKind; 0 when it may not).
+type Compiled = { keys: string[], nodes: Node<any>[], fast: number[] }
 const COMPILED = new WeakMap<object, Compiled>()
 
 // Child shapes (Child, Rest, a one-element array) normalized to their full
@@ -62,9 +62,10 @@ const DEEP = new WeakSet<object>()
 // included) needs no frame; anything else takes the general path. An object
 // takes it for all of its children or none: a custom validator on one child
 // may read the frames of its siblings (the argument parser does), so a
-// sibling of a validator is always given a frame. The kind is read from the
-// child at each visit, since a retained node may be re-chained to another
-// kind after its first validation.
+// sibling of a validator is always given a frame. The compiled kind is
+// checked against the child at each visit, since a retained node may be
+// re-chained to another kind, or given a validator, after its first
+// validation; such a child takes the general path.
 const FAST_STRING = 1
 const FAST_NUMBER = 2
 const FAST_BOOLEAN = 3
@@ -75,6 +76,13 @@ function fastKind(cn: Node<any>): number {
     S.number === cn.t ? FAST_NUMBER :
       S.boolean === cn.t ? FAST_BOOLEAN :
         S.integer === cn.t ? FAST_INTEGER : 0
+}
+
+// Whether the child is still the leaf its compiled fast kind describes.
+function fastStill(f: number, cn: Node<any>): boolean {
+  return cn.t === (FAST_STRING === f ? S.string : FAST_NUMBER === f ? S.number :
+    FAST_BOOLEAN === f ? S.boolean : S.integer) &&
+    0 === cn.b.length && 0 === cn.a.length
 }
 
 function fastValid(f: number, cv: any): boolean {
@@ -1123,17 +1131,15 @@ function shapify<const S>(intop?: S, inopts?: ShapeOptions) {
                 // order, no key expressions or meta keys left to read.
                 const ckeys = compiled.keys
                 const cnodes = compiled.nodes
-                const cfast = fastOk && compiled.fast
+                const cfast = compiled.fast
                 if (0 < ckeys.length) {
                   s.pI = start
                   for (let kI = 0; kI < ckeys.length; kI++) {
                     const rk = ckeys[kI]
                     const cv = val[rk]
-                    if (cfast) {
-                      const f = fastKind(cnodes[kI])
-                      if (0 !== f && fastValid(f, cv)) {
-                        continue
-                      }
+                    const f = cfast[kI]
+                    if (fastOk && 0 !== f && fastValid(f, cv) && fastStill(f, cnodes[kI])) {
+                      continue
                     }
                     s.nodes[s.nI] = cnodes[kI]
                     s.vals[s.nI] = cv
@@ -1236,7 +1242,8 @@ function shapify<const S>(intop?: S, inopts?: ShapeOptions) {
                 COMPILED.set(n, {
                   keys: n.k.slice(),
                   nodes: n.k.map((k: string) => n.v[k]),
-                  fast: !n.k.some((k: string) => 0 < n.v[k].b.length || 0 < n.v[k].a.length),
+                  fast: n.k.some((k: string) => 0 < n.v[k].b.length || 0 < n.v[k].a.length) ?
+                    n.k.map(() => 0) : n.k.map((k: string) => fastKind(n.v[k])),
                 })
               }
               }
@@ -1317,7 +1324,7 @@ function shapify<const S>(intop?: S, inopts?: ShapeOptions) {
               for (let ekI = 0; ekI < elementKeys.length; ekI++) {
                 elementNodes.push(n.v[ekI] = nodize(n.v[ekI], 1 + s.dI))
               }
-              compiled = { keys: elementKeys, nodes: elementNodes, fast: false }
+              compiled = { keys: elementKeys, nodes: elementNodes, fast: [] }
               COMPILED.set(n, compiled)
             }
             const elementKeys = compiled.keys
