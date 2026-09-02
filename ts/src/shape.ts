@@ -47,12 +47,41 @@ const KEY_EXPR_RE = /^\s*("(\\.|[^"\\])*"|[^\s]+):\s*(.*?)\s*$/
 // on the node's first visit and reused after: the object's keys in the order
 // they were first seen with their nodes, or the array's fixed element nodes.
 // Kept off the node itself so nothing leaks into its spec or its JSON.
-type Compiled = { keys: string[], nodes: Node<any>[] }
+// A compiled child list: the keys, their nodes, and for each the leaf fast
+// path it may take (see fastKind; 0 when it may not).
+type Compiled = { keys: string[], nodes: Node<any>[], fast: number[] }
 const COMPILED = new WeakMap<object, Compiled>()
 
 // Child shapes (Child, Rest, a one-element array) normalized to their full
 // depth once; a later visit only refreshes the depth.
 const DEEP = new WeakSet<object>()
+
+// The inline check a child may take in place of a full visit: a String,
+// Number, Boolean or Integer with no befores or afters. A present value that
+// passes the kind's whole check (the empty string, NaN and fraction rules
+// included) needs no frame; anything else takes the general path. An object
+// takes it for all of its children or none: a custom validator on one child
+// may read the frames of its siblings (the argument parser does), so a
+// sibling of a validator is always given a frame.
+const FAST_STRING = 1
+const FAST_NUMBER = 2
+const FAST_BOOLEAN = 3
+const FAST_INTEGER = 4
+function fastKind(cn: Node<any>): number {
+  if (0 < cn.b.length || 0 < cn.a.length) return 0
+  return S.string === cn.t ? FAST_STRING :
+    S.number === cn.t ? FAST_NUMBER :
+      S.boolean === cn.t ? FAST_BOOLEAN :
+        S.integer === cn.t ? FAST_INTEGER : 0
+}
+
+function fastValid(f: number, cv: any): boolean {
+  const tv = typeof cv
+  return FAST_STRING === f ? (S.string === tv && '' !== cv) :
+    FAST_NUMBER === f ? (S.number === tv && cv === cv) :
+      FAST_BOOLEAN === f ? S.boolean === tv :
+        (S.number === tv && Number.isInteger(cv))
+}
 
 function childNode(c: any, depth: number): Node<any> {
   if (null != c && DEEP.has(c)) {
@@ -989,6 +1018,9 @@ function shapify<const S>(intop?: S, inopts?: ShapeOptions) {
 
     const s = new State(root, top, ctx, match)
 
+    // A log callback is called for every node, so nothing is skipped for it.
+    const fastOk = !s.ctx.log
+
     // Iterative depth-first traversal of the shape using append-only array stacks.
     // Stack entries are either sub-nodes to validate, or back pointers to
     // next depth-first sub-node index.
@@ -1089,17 +1121,26 @@ function shapify<const S>(intop?: S, inopts?: ShapeOptions) {
                 // order, no key expressions or meta keys left to read.
                 const ckeys = compiled.keys
                 const cnodes = compiled.nodes
+                const cfast = compiled.fast
                 if (0 < ckeys.length) {
-                  hasKeys = true
                   s.pI = start
                   for (let kI = 0; kI < ckeys.length; kI++) {
                     const rk = ckeys[kI]
+                    const cv = val[rk]
+                    if (fastOk && 0 !== cfast[kI] && fastValid(cfast[kI], cv)) {
+                      // A validator attached since the compile keeps its frame.
+                      const cn = cnodes[kI]
+                      if (0 === cn.b.length && 0 === cn.a.length) {
+                        continue
+                      }
+                    }
                     s.nodes[s.nI] = cnodes[kI]
-                    s.vals[s.nI] = val[rk]
+                    s.vals[s.nI] = cv
                     s.parents[s.nI] = val
                     s.keys[s.nI] = rk
                     s.nI++
                   }
+                  hasKeys = start < s.nI
                 }
               }
               else {
@@ -1191,19 +1232,24 @@ function shapify<const S>(intop?: S, inopts?: ShapeOptions) {
               // visits can take the compiled list. Value expressions read
               // the ancestors at validation time, so they stay uncompiled.
               if (!optsvalexpr.active) {
-                COMPILED.set(n, { keys: n.k.slice(), nodes: n.k.map((k: string) => n.v[k]) })
+                COMPILED.set(n, {
+                  keys: n.k.slice(),
+                  nodes: n.k.map((k: string) => n.v[k]),
+                  fast: n.k.some((k: string) => 0 < n.v[k].b.length || 0 < n.v[k].a.length) ?
+                    n.k.map(() => 0) : n.k.map((k: string) => fastKind(n.v[k])),
+                })
               }
               }
 
-              let extra: string[] = []
+              let extra: string[] | null = null
               let valKeys = keys(val)
               for (let vkI = 0; vkI < valKeys.length; vkI++) {
                 if (undefined === n.v[valKeys[vkI]]) {
-                  extra.push(valKeys[vkI])
+                  (extra ??= []).push(valKeys[vkI])
                 }
               }
 
-              if (0 < extra.length) {
+              if (null !== extra) {
                 if (undefined === n.c) {
                   s.ignoreVal = true
                   s.curerr.push(makeErrImpl(
@@ -1271,7 +1317,7 @@ function shapify<const S>(intop?: S, inopts?: ShapeOptions) {
               for (let ekI = 0; ekI < elementKeys.length; ekI++) {
                 elementNodes.push(n.v[ekI] = nodize(n.v[ekI], 1 + s.dI))
               }
-              compiled = { keys: elementKeys, nodes: elementNodes }
+              compiled = { keys: elementKeys, nodes: elementNodes, fast: [] }
               COMPILED.set(n, compiled)
             }
             const elementKeys = compiled.keys
@@ -1311,7 +1357,11 @@ function shapify<const S>(intop?: S, inopts?: ShapeOptions) {
               // Single element array shape means 0 or more elements of shape
               if (hasChildShape && hasValueElements) {
                 let elementShape: Node<S> = n.c // = nodize(n.c, 1 + s.dI)
+                const efast = fastOk ? fastKind(elementShape) : 0
                 for (; elementIndex < s.val.length; elementIndex++) {
+                  if (0 !== efast && fastValid(efast, s.val[elementIndex])) {
+                    continue
+                  }
                   s.nodes[s.nI] = elementShape
                   s.vals[s.nI] = s.val[elementIndex]
                   s.parents[s.nI] = s.val
@@ -1320,7 +1370,7 @@ function shapify<const S>(intop?: S, inopts?: ShapeOptions) {
                 }
               }
 
-              if (!s.ignoreVal) {
+              if (!s.ignoreVal && s.pI < s.nI) {
                 s.dI++
                 s.nodes[s.nI] = s.sI
                 s.parents[s.nI] = s.val
@@ -3682,9 +3732,13 @@ function makeErrImpl(
   }
 
   // TODO: truncate len, and ignore should be ShapeOptions
+  // A primitive renders as its JSON, as it would through the replacer.
+  const vt = typeof s.val
   let jstr = undefined === s.val ? S.undefined :
-    stringify(s.val, false, false, { key: [/\$$/] }
-    )
+    (S.string === vt || S.boolean === vt) ? JS(s.val) :
+      S.number === vt ? (s.val === s.val ? JS(s.val) : 'NaN') :
+        stringify(s.val, false, false, { key: [/\$$/] }
+        )
   let valstr = truncate(jstr.replace(/"/g, ''), 111)
 
   text = text || s.node.z
