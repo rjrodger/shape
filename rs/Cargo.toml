@@ -18,11 +18,14 @@ indexmap = "2"
 regex = "1"
 num-bigint = "0.4"
 serde = { version = "1", optional = true }
-serde_json = { version = "1", features = ["preserve_order"], optional = true }
+# preserve_order keeps object keys in insertion order, as a JavaScript object
+# does; float_roundtrip parses a long integer to the nearest double, as
+# JavaScript does (without it 123456789012345680000 reads one ulp low).
+serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"], optional = true }
 
 [dev-dependencies]
 serde = { version = "1", features = ["derive"] }
-serde_json = { version = "1", features = ["preserve_order"] }
+serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
 
 [features]
 default = ["serde"]

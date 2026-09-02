@@ -1,8 +1,10 @@
-# TypeScript ↔ Go parity
+# TypeScript ↔ Go ↔ Rust parity
 
-Shape has two implementations. **TypeScript is canonical** — it defines the
-behaviour. The Go port matches it exactly for validation outcomes, produced
-values and error message text.
+Shape has three implementations. **TypeScript is canonical** — it defines the
+behaviour. The Go and Rust ports match it exactly for validation outcomes,
+produced values and error message text. The page keeps its Go-centred shape,
+since the Go port came first and its divergences are the longer list; the
+Rust port's own section is at the end.
 
 ## How parity is enforced
 
@@ -17,6 +19,7 @@ implementations run every row:
 
 - TypeScript — `ts/test/compat.test.ts`
 - Go — `go/compat_tsv_test.go`
+- Rust — `rs/tests/compat_tsv.rs`
 
 A row's `output` is compared JSON-normalized (so numeric widths and absent
 properties don't cause spurious mismatches). Its `error` column holds the
@@ -31,13 +34,14 @@ had no negative case for `Type()` or `Rest()` — so a `Type()` that asserted
 nothing and a `Rest()` that validated nothing passed it.
 
 [`test/differential/`](../../test/differential/README.md) is the wider net. It
-generates thousands of `(spec, input)` pairs, runs every one through both
-implementations, and diffs the JSON Schema export, verdict, produced value and
-exact error text:
+generates thousands of `(spec, input)` pairs, runs every one through all
+three implementations, and diffs the JSON Schema export, verdict, produced
+value and exact error text, each port against the canonical build:
 
 ```sh
-make diff        # sampled report
+make diff        # sampled report, both ports
 make diff-full   # every mismatch
+make diff-rs     # the Rust port alone
 ```
 
 Run it after any behaviour change, and promote anything it finds into a corpus
@@ -138,3 +142,36 @@ A divergence caused by a TypeScript bug is fixed in TypeScript first: never
 without deciding that the TypeScript behaviour is wrong.
 
 See the [agent and contributor guide](../../AGENTS.md).
+
+## The Rust port
+
+The Rust port ([`rs/`](../../rs/README.md), planned in
+[rust-plan.md](rust-plan.md)) is held to the same two gates: every corpus row
+(none skipped, `SHAPE_RS_STRICT=1` in `make test-rs`) and every differential
+case. Two of the Go divergences above do not apply to it:
+
+- **Key order.** Its objects are insertion-ordered maps, so unknown keys and
+  produced values keep the input's order, as TypeScript's do.
+- **The root value.** `Value::Undefined` is a value of its own, so `validate`
+  needs no null sentinel to say "nothing was supplied".
+
+Its own divergences, each deliberate:
+
+- **Construction faults.** A builder called wrongly (`min("x", ..)`,
+  `define("", ..)`, `pick("z", ..)`) cannot throw, as in Go, and returns a
+  node that accepts nothing and reports the message at validation. In the
+  string form (`Schema::parse`, key expressions) the fault is an error at
+  parse time, as `expr` throws in TypeScript.
+- **`Exact` compares by value.** TypeScript compares object and array
+  literals by identity, so an `Exact` of an object matches nothing that was
+  not that very object; Rust compares structurally. Scalars behave alike.
+- **Error rendering of the value.** A failing after check reports the value
+  as it stands at that point, an injected default included, as TypeScript
+  does (`with number "0"`); Go renders the original absence.
+- **No `Symbol` token, no functions as values.** A function is an opaque
+  `Value::Func(id)` that only a spec written in Rust can carry, since JSON
+  cannot.
+- **String length** is measured in UTF-16 units for the size bounds, as
+  JavaScript's `length` is; Go measures bytes.
+- **`shape!`** is the spec-by-example form, in the `json!` style; the type
+  tokens are bare words in it and Rust expressions stand for everything else.

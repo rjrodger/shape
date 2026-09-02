@@ -1,4 +1,4 @@
-.PHONY: all build test clean build-ts build-go build-rs test-ts test-go test-rs lint-rs cover-rs clean-ts clean-go clean-rs diff diff-full bench bench-ts bench-go bench-smoke bench-report publish publish-npm publish-go publish-dry publish-npm-dry publish-go-dry tags-npm tags-go reset
+.PHONY: all build test clean build-ts build-go build-rs test-ts test-go test-rs lint-rs cover-rs clean-ts clean-go clean-rs diff diff-full diff-rs diff-cases diff-run-go diff-run-rs bench bench-ts bench-go bench-smoke bench-report publish publish-npm publish-go publish-dry publish-npm-dry publish-go-dry tags-npm tags-go reset
 
 # Never run recipes concurrently: publish-npm and publish-go both mutate the
 # worktree and index (bump, commit, tag, push), so `make -j publish` must serialize.
@@ -58,23 +58,37 @@ clean-rs:
 # instead of a sample.
 DIFF_OUT_DIR := test/differential/.out
 
-diff: build-ts
+# The three runners write one JSONL each; the ports are compared with the
+# canonical build one at a time.
+diff-cases: build-ts
 	@mkdir -p $(DIFF_OUT_DIR)
 	@node test/differential/gen.js $(DIFF_OUT_DIR)/cases.json
 	@node test/differential/run-ts.js $(DIFF_OUT_DIR)/cases.json $(DIFF_OUT_DIR)/ts.jsonl
+
+diff-run-go:
 	@cd go && DIFF_IN=../$(DIFF_OUT_DIR)/cases.json DIFF_OUT=../$(DIFF_OUT_DIR)/go.jsonl \
 		go test -run TestDifferential -count=1 . >/dev/null
+
+diff-run-rs:
+	@cd rs && DIFF_IN=../$(DIFF_OUT_DIR)/cases.json DIFF_OUT=../$(DIFF_OUT_DIR)/rs.jsonl \
+		cargo test --all-features --test difftool -q >/dev/null
+
+diff: diff-cases diff-run-go diff-run-rs
 	@node test/differential/compare.js \
 		$(DIFF_OUT_DIR)/cases.json $(DIFF_OUT_DIR)/ts.jsonl $(DIFF_OUT_DIR)/go.jsonl
+	@node test/differential/compare.js \
+		$(DIFF_OUT_DIR)/cases.json $(DIFF_OUT_DIR)/ts.jsonl $(DIFF_OUT_DIR)/rs.jsonl --port=rs
 
-diff-full: build-ts
-	@mkdir -p $(DIFF_OUT_DIR)
-	@node test/differential/gen.js $(DIFF_OUT_DIR)/cases.json
-	@node test/differential/run-ts.js $(DIFF_OUT_DIR)/cases.json $(DIFF_OUT_DIR)/ts.jsonl
-	@cd go && DIFF_IN=../$(DIFF_OUT_DIR)/cases.json DIFF_OUT=../$(DIFF_OUT_DIR)/go.jsonl \
-		go test -run TestDifferential -count=1 . >/dev/null
+diff-full: diff-cases diff-run-go diff-run-rs
 	@node test/differential/compare.js \
 		$(DIFF_OUT_DIR)/cases.json $(DIFF_OUT_DIR)/ts.jsonl $(DIFF_OUT_DIR)/go.jsonl --full
+	@node test/differential/compare.js \
+		$(DIFF_OUT_DIR)/cases.json $(DIFF_OUT_DIR)/ts.jsonl $(DIFF_OUT_DIR)/rs.jsonl --full --port=rs
+
+# The Rust port alone against the canonical build.
+diff-rs: diff-cases diff-run-rs
+	@node test/differential/compare.js \
+		$(DIFF_OUT_DIR)/cases.json $(DIFF_OUT_DIR)/ts.jsonl $(DIFF_OUT_DIR)/rs.jsonl --port=rs
 
 # Benchmarks (bench/): shape against other validators in each language. Each
 # run is filed as an immutable JSON document under bench/results/runs/ and

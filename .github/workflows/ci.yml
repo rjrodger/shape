@@ -104,9 +104,9 @@ jobs:
 
       - run: ./cover.sh
 
-  # The differential parity harness: thousands of generated cases through both
-  # implementations, comparing the JSON Schema export, verdict, produced value
-  # and exact error text. Needs both toolchains in one job.
+  # The differential parity harness: thousands of generated cases through all
+  # three implementations, comparing the JSON Schema export, verdict, produced
+  # value and exact error text. Needs every toolchain in one job.
   parity:
     timeout-minutes: 10
     runs-on: ubuntu-latest
@@ -122,6 +122,8 @@ jobs:
         with:
           go-version: '1.22.x'
           cache: false
+
+      - uses: dtolnay/rust-toolchain@stable
 
       - run: cd ts && npm install
       - run: make diff
