@@ -1,5 +1,7 @@
 package shape
 
+import "sync"
+
 // Context flows through validation. Custom validators may read/write Custom
 // for cross-property state, and Refs is used by Define/Refer.
 type Context struct {
@@ -42,6 +44,34 @@ func (c *Context) start() (path []string, pathArr []any) {
 	sc := &scratch{}
 	c.states = sc.states[:0]
 	return sc.path[:0], sc.pathArr[:0]
+}
+
+// A call on a schema with no validators, made without a context of the
+// caller's, reuses its context and scratch from this pool: no user code
+// runs during such a call, so nothing can keep a reference to either past
+// it. The errors of a match are collected in the block too; those of a
+// producing call are returned to the caller, so they are always fresh.
+type callScratch struct {
+	ctx  Context
+	sc   scratch
+	verr ValidationError
+}
+
+var callPool = sync.Pool{New: func() any { return &callScratch{} }}
+
+// begin readies a pooled context for one call: every per-call field is
+// reset, and the path stacks and states come from the block it holds.
+func (cs *callScratch) begin(defs map[string]*node, match bool) (c *Context, path []string, pathArr []any) {
+	c = &cs.ctx
+	*c = Context{Match: match, defs: defs}
+	c.states = cs.sc.states[:0]
+	return c, cs.sc.path[:0], cs.sc.pathArr[:0]
+}
+
+// matchErrors is the error collector of a pooled match, emptied for it.
+func (cs *callScratch) matchErrors() *ValidationError {
+	cs.verr.Issues = nil
+	return &cs.verr
 }
 
 type renameInfo struct {

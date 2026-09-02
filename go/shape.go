@@ -8,6 +8,9 @@ type Schema struct {
 	// The Define'd nodes of the tree, collected once so a Refer can resolve
 	// them whatever the traversal order (see prepare).
 	defs map[string]*node
+	// True when no node of the tree has a validator, so a match can run on
+	// a pooled context (see matchScratch).
+	pure bool
 }
 
 // prepare walks a compiled tree once: every object node gets the set of
@@ -52,6 +55,32 @@ func prepare(n *node, defs map[string]*node) {
 	}
 }
 
+// hasValidators reports whether any node of the tree has a before or after.
+func hasValidators(n *node) bool {
+	if n == nil {
+		return false
+	}
+	if len(n.befores) > 0 || len(n.afters) > 0 {
+		return true
+	}
+	for _, cn := range n.objChildren {
+		if hasValidators(cn) {
+			return true
+		}
+	}
+	for _, cn := range n.arrChildren {
+		if hasValidators(cn) {
+			return true
+		}
+	}
+	for _, sn := range n.list {
+		if hasValidators(sn) {
+			return true
+		}
+	}
+	return hasValidators(n.objRest) || hasValidators(n.arrChild) || hasValidators(n.arrRest)
+}
+
 // Shape compiles a schema-by-example specification with default options.
 // Note: keyexpr is enabled by default — keys like "x: Min(1)" are parsed.
 func Shape(spec any) (*Schema, error) {
@@ -66,7 +95,7 @@ func ShapeWith(spec any, opts ShapeOptions) (*Schema, error) {
 	}
 	defs := map[string]*node{}
 	prepare(n, defs)
-	return &Schema{root: n, defs: defs}, nil
+	return &Schema{root: n, defs: defs, pure: !hasValidators(n)}, nil
 }
 
 // MustShape compiles a schema and panics if invalid.
@@ -98,11 +127,20 @@ func (s *Schema) ValidateCtx(input any, ctx *Context) (any, error) {
 	if s == nil || s.root == nil {
 		return nil, nil
 	}
-	c := newContext(ctx)
-	c.Match = false
-	c.defs = s.defs
-	path, pathArr := c.start()
 	verr := &ValidationError{}
+	var c *Context
+	var path []string
+	var pathArr []any
+	var cs *callScratch
+	if ctx == nil && s.pure {
+		cs = callPool.Get().(*callScratch)
+		c, path, pathArr = cs.begin(s.defs, false)
+	} else {
+		c = newContext(ctx)
+		c.Match = false
+		c.defs = s.defs
+		path, pathArr = c.start()
+	}
 
 	var out any
 	if isIgnore(s.root) {
@@ -114,6 +152,9 @@ func (s *Schema) ValidateCtx(input any, ctx *Context) (any, error) {
 		out = validateNode(s.root, rootInput(input), path, pathArr, "", nil, c, false, verr)
 	}
 
+	if cs != nil {
+		callPool.Put(cs)
+	}
 	if ctx != nil {
 		ctx.Err = append(ctx.Err, verr.Issues...)
 	}
@@ -128,6 +169,15 @@ func (s *Schema) ValidateCtx(input any, ctx *Context) (any, error) {
 func (s *Schema) Match(input any) bool {
 	if s == nil || s.root == nil {
 		return true
+	}
+	if s.pure {
+		cs := callPool.Get().(*callScratch)
+		c, path, pathArr := cs.begin(s.defs, true)
+		verr := cs.matchErrors()
+		validateNode(s.root, rootInput(input), path, pathArr, "", nil, c, true, verr)
+		ok := !verr.hasAny()
+		callPool.Put(cs)
+		return ok
 	}
 	c := newContext(nil)
 	c.Match = true
@@ -149,10 +199,17 @@ func (s *Schema) Error(input any) []FieldError {
 	if s == nil || s.root == nil {
 		return nil
 	}
+	verr := &ValidationError{}
+	if s.pure {
+		cs := callPool.Get().(*callScratch)
+		c, path, pathArr := cs.begin(s.defs, false)
+		validateNode(s.root, rootInput(input), path, pathArr, "", nil, c, false, verr)
+		callPool.Put(cs)
+		return verr.Issues
+	}
 	c := newContext(nil)
 	c.defs = s.defs
 	path, pathArr := c.start()
-	verr := &ValidationError{}
 	validateNode(s.root, rootInput(input), path, pathArr, "", nil, c, false, verr)
 	return verr.Issues
 }

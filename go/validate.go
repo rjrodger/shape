@@ -388,81 +388,82 @@ func validateArray(n *node, in any, path []string, pathArr []any, parent any, ct
 			if !n.silent {
 				verr.add(err)
 			}
-			out := make([]any, len(arr))
-			copy(out, arr)
-			return out
+			return arr
 		}
 
-		out, parentOf := producedSlice(arr, match)
+		p := produced{in: arr}
 		for i, v := range arr {
 			if i < tupleLen {
-				produced := validateElem(n.arrChildren[i], v, path, pathArr, i, parentOf, ctx, match, verr)
-				if !match {
-					out[i] = produced
-				}
+				p.set(i, validateElem(n.arrChildren[i], v, path, pathArr, i, arr, ctx, match, verr), match)
 			} else {
 				// len(arr) > tupleLen only reaches here when arrRest is set.
-				produced := validateElem(n.arrRest, v, path, pathArr, i, parentOf, ctx, match, verr)
-				if !match {
-					out[i] = produced
-				}
+				p.set(i, validateElem(n.arrRest, v, path, pathArr, i, arr, ctx, match, verr), match)
 			}
 		}
 		// Missing tuple positions get their default.
 		for i := len(arr); i < tupleLen; i++ {
 			cn := n.arrChildren[i]
-			produced := validateNode(cn, undefinedVal, append(path, strconv.Itoa(i)), append(pathArr, i), strconv.Itoa(i), parentOf, ctx, match, verr)
+			v := validateNode(cn, undefinedVal, append(path, strconv.Itoa(i)), append(pathArr, i), strconv.Itoa(i), arr, ctx, match, verr)
 			if !match {
-				out = append(out, produced)
+				p.ensure()
+				p.out = append(p.out, v)
 			}
 		}
-		if match {
-			return nil
-		}
-		return out
+		return p.result(match)
 	case n.arrChild != nil:
-		out, parentOf := producedSlice(arr, match)
+		p := produced{in: arr}
 		for i, v := range arr {
-			produced := validateElem(n.arrChild, v, path, pathArr, i, parentOf, ctx, match, verr)
-			if !match {
-				out[i] = produced
-			}
+			p.set(i, validateElem(n.arrChild, v, path, pathArr, i, arr, ctx, match, verr), match)
 		}
-		if match {
-			return nil
-		}
-		return out
+		return p.result(match)
 	case n.arrRest != nil:
 		// Rest with no tuple positions in front of it: every element is a rest
 		// element. Without this case the node fell through to the default and
 		// nothing was validated at all.
-		out, parentOf := producedSlice(arr, match)
+		p := produced{in: arr}
 		for i, v := range arr {
-			produced := validateElem(n.arrRest, v, path, pathArr, i, parentOf, ctx, match, verr)
-			if !match {
-				out[i] = produced
-			}
+			p.set(i, validateElem(n.arrRest, v, path, pathArr, i, arr, ctx, match, verr), match)
 		}
-		if match {
-			return nil
-		}
-		return out
+		return p.result(match)
 	default:
-		out := make([]any, len(arr))
-		copy(out, arr)
-		return out
+		return arr
 	}
 }
 
-// producedSlice is the slice an array's elements are produced into, and the
-// parent the elements see: the produced slice, or the input itself when a
-// match walks in place and produces nothing.
-func producedSlice(arr []any, match bool) ([]any, any) {
-	if match {
-		return nil, arr
+// produced is the slice an array's elements are produced into, made on the
+// first element produced as a different value; until then the input is the
+// result, and a match never writes. Elements see the input as their parent,
+// as in TS, where the walk produces in place.
+type produced struct {
+	in  []any
+	out []any
+}
+
+func (p *produced) ensure() {
+	if p.out == nil {
+		p.out = make([]any, len(p.in), len(p.in)+1)
+		copy(p.out, p.in)
 	}
-	out := make([]any, len(arr))
-	return out, out
+}
+
+func (p *produced) set(i int, v any, match bool) {
+	if match {
+		return
+	}
+	if p.out != nil || !sameValue(v, p.in[i]) {
+		p.ensure()
+		p.out[i] = v
+	}
+}
+
+func (p *produced) result(match bool) any {
+	if match {
+		return nil
+	}
+	if p.out == nil {
+		return p.in
+	}
+	return p.out
 }
 
 func validateObject(n *node, in any, path []string, pathArr []any, parent any, ctx *Context, match bool, verr *ValidationError) any {
@@ -475,55 +476,41 @@ func validateObject(n *node, in any, path []string, pathArr []any, parent any, c
 		return nil
 	}
 
-	// The produced map is only built when a value is produced: a match walks
-	// the input in place and writes nothing. Children see the produced map as
-	// their parent when there is one, the input otherwise.
+	// The produced map is made on the first write that changes something: a
+	// default or a null literal injected, a key renamed or dropped, a child
+	// produced as a different value. Until then the input is the result, and
+	// a match never writes. Children see the input as their parent, as they
+	// do in TS, where the walk produces in place.
 	var out map[string]any
-	if !match {
-		out = make(map[string]any, len(obj)+len(n.objKeys))
-		for k, v := range obj {
-			out[k] = v
-		}
-	}
-	var parentOf any = out
-	if match {
-		parentOf = obj
-	}
-
-	// The keys this object accepts (declared keys, rename targets and claim
-	// sources), computed when the schema was compiled (see prepare).
-	consumed := n.consumed
-
-	// Unknown keys are reported before descending into the declared ones, which
-	// is the order TS emits them in. The keys are sorted because Go map
-	// iteration is random and the message order is compared exactly.
-	if !n.open {
-		var unknown []string
-		for k := range obj {
-			if !consumed[k] {
-				unknown = append(unknown, k)
+	ensure := func() {
+		if out == nil {
+			out = make(map[string]any, len(obj)+len(n.objKeys))
+			for k, v := range obj {
+				out[k] = v
 			}
 		}
-		sort.Strings(unknown)
+	}
+	var parentOf any = obj
 
-		// One error listing every unknown key, not one error per key. The path
-		// is the parent's; the offending keys are reported separately. TS
-		// renders this as:
-		//   Validation failed for property "<parent>" because the property "<k>" is not allowed.
-		//   ... because the properties "<k>, <k>" are not allowed.
-		if len(unknown) > 0 && !n.silent {
-			state := &State{Path: path, PathArr: pathArr, Key: strings.Join(unknown, ", "),
-				Value: obj, Node: n, Match: match, Ctx: ctx}
-			err := makeErr(state, WhyClosed, markObjectClosed, "")
-			err.plural = len(unknown) > 1
-			err.Text = defaultErrText(err)
-			verr.add(err)
-		}
+	// Unknown keys are reported before descending into the declared ones,
+	// which is the order TS emits them in. When the input has no more keys
+	// than the spec declares, the scan waits until the declared keys have
+	// been counted, since an input made only of declared keys has nothing to
+	// report; the error still goes in at the index this object's errors
+	// start, ahead of its children's.
+	errStart := len(verr.Issues)
+	deferScan := !n.open && len(obj) <= len(n.objKeys)
+	if !n.open && !deferScan {
+		reportUnknown(n, obj, path, pathArr, ctx, match, verr, -1)
 	}
 
+	present := 0
 	for i, k := range n.objKeys {
 		cn := n.objChildren[k]
 		v, has := obj[k]
+		if has {
+			present++
+		}
 		var produced any
 		kpath := append(path, k)
 		kpathArr := append(pathArr, n.objKeysAny[i])
@@ -535,6 +522,7 @@ func validateObject(n *node, in any, path []string, pathArr []any, parent any, c
 					v = sv
 					has = true
 					if !cn.renameKeep && !match {
+						ensure()
 						delete(out, src)
 					}
 					break
@@ -545,9 +533,6 @@ func validateObject(n *node, in any, path []string, pathArr []any, parent any, c
 		if !has {
 			produced = validateNode(cn, undefinedVal, kpath, kpathArr, k, parentOf, ctx, match, verr)
 			if cn.skippable && (produced == nil || cn.silent) {
-				if !match {
-					delete(out, k)
-				}
 				continue
 			}
 			// A nil produced value means nothing was injected (required error, or
@@ -555,9 +540,6 @@ func validateObject(n *node, in any, path []string, pathArr []any, parent any, c
 			// The exception is a null literal, whose default is the null
 			// itself: TS injects it, so the key is present and null.
 			if produced == nil && !(cn.kind == KindNull && cn.hasDefault && !cn.required) {
-				if !match {
-					delete(out, k)
-				}
 				continue
 			}
 		} else {
@@ -569,10 +551,14 @@ func validateObject(n *node, in any, path []string, pathArr []any, parent any, c
 					continue
 				}
 				if !kept {
+					ensure()
 					delete(out, k)
 					continue
 				}
-				out[k] = probed
+				if out != nil || !sameValue(probed, v) {
+					ensure()
+					out[k] = probed
+				}
 				continue
 			}
 			produced = validateNode(cn, v, kpath, kpathArr, k, parentOf, ctx, match, verr)
@@ -581,10 +567,14 @@ func validateObject(n *node, in any, path []string, pathArr []any, parent any, c
 		if match {
 			continue
 		}
-		out[k] = produced
+		if !has || out != nil || !sameValue(produced, v) {
+			ensure()
+			out[k] = produced
+		}
 
 		// Apply Rename: if child has renameTo, move into target key.
 		if cn.renameTo != "" && cn.renameTo != k {
+			ensure()
 			out[cn.renameTo] = produced
 			if !cn.renameKeep {
 				delete(out, k)
@@ -592,17 +582,22 @@ func validateObject(n *node, in any, path []string, pathArr []any, parent any, c
 		}
 	}
 
+	if deferScan && present < len(obj) {
+		reportUnknown(n, obj, path, pathArr, ctx, match, verr, errStart)
+	}
+
 	for k, cn := range n.objChildren {
-		if match {
-			if _, present := obj[k]; present {
+		if out != nil {
+			if _, present := out[k]; present {
 				continue
 			}
-		} else if _, present := out[k]; present {
+		} else if _, present := obj[k]; present {
 			continue
 		}
 		if !contains(n.objKeys, k) {
 			produced := validateNode(cn, undefinedVal, append(path, k), append(pathArr, k), k, parentOf, ctx, match, verr)
 			if produced != nil && !match {
+				ensure()
 				out[k] = produced
 			}
 		}
@@ -629,14 +624,19 @@ func validateObject(n *node, in any, path []string, pathArr []any, parent any, c
 					continue
 				}
 				if !kept {
+					ensure()
 					delete(out, k)
 					continue
 				}
-				out[k] = produced
+				if out != nil || !sameValue(produced, obj[k]) {
+					ensure()
+					out[k] = produced
+				}
 				continue
 			}
 			produced := validateNode(n.objRest, obj[k], append(path, k), append(pathArr, k), k, parentOf, ctx, match, verr)
-			if !match {
+			if !match && (out != nil || !sameValue(produced, obj[k])) {
+				ensure()
 				out[k] = produced
 			}
 		}
@@ -645,7 +645,73 @@ func validateObject(n *node, in any, path []string, pathArr []any, parent any, c
 	if match {
 		return nil
 	}
+	if out == nil {
+		return obj
+	}
 	return out
+}
+
+// reportUnknown records the one error naming every key of obj the closed
+// object n does not consume, sorted because Go map iteration is random and
+// the message order is compared exactly. The error is appended, or put in at
+// index at when the scan ran after the children (see validateObject). TS
+// renders this as:
+//
+//	Validation failed for property "<parent>" because the property "<k>" is not allowed.
+//	... because the properties "<k>, <k>" are not allowed.
+func reportUnknown(n *node, obj map[string]any, path []string, pathArr []any, ctx *Context, match bool, verr *ValidationError, at int) {
+	var unknown []string
+	for k := range obj {
+		if !n.consumed[k] {
+			unknown = append(unknown, k)
+		}
+	}
+	if len(unknown) == 0 || n.silent {
+		return
+	}
+	sort.Strings(unknown)
+	state := &State{Path: path, PathArr: pathArr, Key: strings.Join(unknown, ", "),
+		Value: obj, Node: n, Match: match, Ctx: ctx}
+	err := makeErr(state, WhyClosed, markObjectClosed, "")
+	err.plural = len(unknown) > 1
+	err.Text = defaultErrText(err)
+	if at < 0 {
+		verr.add(err)
+		return
+	}
+	verr.Issues = append(verr.Issues, FieldError{})
+	copy(verr.Issues[at+1:], verr.Issues[at:])
+	verr.Issues[at] = err
+}
+
+// sameValue reports whether a produced value is the input value it came
+// from, so that an unchanged child needs no copy of its parent: identity for
+// maps and slices, equality for the comparable kinds.
+func sameValue(a, b any) bool {
+	switch x := a.(type) {
+	case nil:
+		return b == nil
+	case string:
+		y, ok := b.(string)
+		return ok && x == y
+	case float64:
+		y, ok := b.(float64)
+		return ok && x == y
+	case int:
+		y, ok := b.(int)
+		return ok && x == y
+	case bool:
+		y, ok := b.(bool)
+		return ok && x == y
+	case map[string]any:
+		y, ok := b.(map[string]any)
+		return ok && reflect.ValueOf(x).Pointer() == reflect.ValueOf(y).Pointer()
+	case []any:
+		y, ok := b.([]any)
+		return ok && len(x) == len(y) && (len(x) == 0 || &x[0] == &y[0])
+	}
+	ta, tb := reflect.TypeOf(a), reflect.TypeOf(b)
+	return ta == tb && ta.Comparable() && a == b
 }
 
 func evaluateList(n *node, in any, path []string, pathArr []any, key string, parent any, ctx *Context, match bool, verr *ValidationError, absent bool) any {
