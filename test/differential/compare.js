@@ -2,7 +2,10 @@
 // Differential harness comparator: diff the two languages' results and fail
 // on any disagreement.
 //
-//   node test/differential/compare.js <cases.json> <ts.jsonl> <go.jsonl> [--full]
+//   node test/differential/compare.js <cases.json> <ts.jsonl> <go.jsonl> [--full] [--port=go]
+//
+// The second side is a port, Go unless --port names another; the report
+// calls it by that name.
 //
 // Unlike the shared corpus, error text is compared EXACTLY. A separator,
 // ordering or extra-error difference is a failure here, which is the whole
@@ -40,6 +43,8 @@ const J = v => JSON.stringify(canon(undefined === v ? null : v))
 
 const casesPath = process.argv[2]
 const full = process.argv.includes('--full')
+const port = (process.argv.find(a => a.startsWith('--port=')) || '--port=go').slice('--port='.length)
+const PORT = { go: 'Go', rs: 'Rust' }[port] || port
 
 const cases = Object.fromEntries(
   JSON.parse(fs.readFileSync(casesPath, 'utf8')).map(c => [c.name, c]))
@@ -116,12 +121,12 @@ for (const [kind, rows] of Object.entries(buckets)) {
     for (const r of (full ? rs : rs.slice(0, SAMPLES))) {
       console.log(`    spec=${r.spec} input=${r.input}`)
       console.log(`      ts: ${side(r.ts, kind)}`)
-      console.log(`      go: ${side(r.go, kind)}`)
+      console.log(`      ${port}: ${side(r.go, kind)}`)
     }
     if (!full && rs.length > SAMPLES) console.log(`    … ${rs.length - SAMPLES} more`)
   }
 }
 
-if (0 === failed) console.log('\nTS and Go agree on every case.')
+if (0 === failed) console.log(`\nTS and ${PORT} agree on every case.`)
 
 process.exit(0 === failed ? 0 : 1)

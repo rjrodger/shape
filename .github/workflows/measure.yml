@@ -1,6 +1,6 @@
 name: Measure
 
-# Records benchmark runs from several hosts. Each job runs both languages'
+# Records benchmark runs from several hosts. Each job runs every language's
 # benchmarks on one runner and uploads the run files; the last job collects
 # them, rebuilds bench/results/latest and commits to main. Run files are
 # only ever added (see bench/README.md).
@@ -41,6 +41,8 @@ jobs:
         with:
           go-version-file: bench/go/go.mod
           cache: false
+
+      - uses: dtolnay/rust-toolchain@stable
 
       - run: cd ts && npm install && npm run build
       - run: cd bench/ts && npm install --no-audit --no-fund

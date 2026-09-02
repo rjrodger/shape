@@ -1,0 +1,39 @@
+[package]
+# crates.io already has an unrelated `shape`; the package is shape-schema and
+# the library is still `shape`, so `use shape::…` reads as the docs say.
+name = "shape-schema"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.75"
+description = "Schema-by-example validation: your schema looks like your data. The Rust port of shape, held to the canonical TypeScript by a shared corpus."
+license = "MIT"
+repository = "https://github.com/rjrodger/shape"
+homepage = "https://rjrodger.github.io/shape/"
+documentation = "https://docs.rs/shape"
+readme = "README.md"
+keywords = ["validation", "schema", "json", "validator", "json-schema"]
+categories = ["data-structures", "parsing", "encoding"]
+# The corpus and differential tests read ../test at run time; the package
+# carries only the crate.
+include = ["src/**", "Cargo.toml", "README.md", "cover.sh"]
+
+[lib]
+name = "shape"
+
+[dependencies]
+indexmap = "2"
+regex = "1"
+num-bigint = "0.4"
+serde = { version = "1", optional = true }
+# preserve_order keeps object keys in insertion order, as a JavaScript object
+# does; float_roundtrip parses a long integer to the nearest double, as
+# JavaScript does (without it 123456789012345680000 reads one ulp low).
+serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"], optional = true }
+
+[dev-dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
+
+[features]
+default = ["serde"]
+serde = ["dep:serde", "dep:serde_json"]

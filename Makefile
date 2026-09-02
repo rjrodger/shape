@@ -1,4 +1,4 @@
-.PHONY: all build test clean build-ts build-go test-ts test-go clean-ts clean-go diff diff-full bench bench-ts bench-go bench-smoke bench-report publish publish-npm publish-go publish-dry publish-npm-dry publish-go-dry tags-npm tags-go reset
+.PHONY: all build test clean build-ts build-go build-rs test-ts test-go test-rs lint-rs cover-rs clean-ts clean-go clean-rs diff diff-full diff-rs diff-cases diff-run-go diff-run-rs bench bench-ts bench-go bench-rs bench-smoke bench-report publish publish-npm publish-go publish-dry publish-npm-dry publish-go-dry publish-rs-dry tags-npm tags-go tags-rs reset
 
 # Never run recipes concurrently: publish-npm and publish-go both mutate the
 # worktree and index (bump, commit, tag, push), so `make -j publish` must serialize.
@@ -6,11 +6,11 @@
 
 all: build test
 
-build: build-ts build-go
+build: build-ts build-go build-rs
 
-test: test-ts test-go
+test: test-ts test-go test-rs
 
-clean: clean-ts clean-go
+clean: clean-ts clean-go clean-rs
 
 # TypeScript (package lives in ts/)
 build-ts:
@@ -32,6 +32,25 @@ test-go:
 clean-go:
 	cd go && go clean
 
+# Rust (crate lives in rs/). `test-rs` runs the unit tests, the doc tests and
+# the shared corpus; `lint-rs` is what CI holds the crate to; `cover-rs` needs
+# cargo-llvm-cov (`cargo install cargo-llvm-cov`) and fails under 100% lines
+# (see rs/cover.sh for why it reads the lcov export).
+build-rs:
+	cd rs && cargo build --all-features
+
+test-rs:
+	cd rs && cargo test --all-features
+
+lint-rs:
+	cd rs && cargo fmt --check && cargo clippy --all-targets --all-features -- -D warnings
+
+cover-rs:
+	rs/cover.sh
+
+clean-rs:
+	cd rs && cargo clean
+
 # Differential parity harness: run a large generated case matrix through BOTH
 # implementations and diff verdict, produced value and EXACT error text. The
 # shared corpus (test/*.tsv) is the committed gate; this is the wide net that
@@ -39,23 +58,37 @@ clean-go:
 # instead of a sample.
 DIFF_OUT_DIR := test/differential/.out
 
-diff: build-ts
+# The three runners write one JSONL each; the ports are compared with the
+# canonical build one at a time.
+diff-cases: build-ts
 	@mkdir -p $(DIFF_OUT_DIR)
 	@node test/differential/gen.js $(DIFF_OUT_DIR)/cases.json
 	@node test/differential/run-ts.js $(DIFF_OUT_DIR)/cases.json $(DIFF_OUT_DIR)/ts.jsonl
+
+diff-run-go:
 	@cd go && DIFF_IN=../$(DIFF_OUT_DIR)/cases.json DIFF_OUT=../$(DIFF_OUT_DIR)/go.jsonl \
 		go test -run TestDifferential -count=1 . >/dev/null
+
+diff-run-rs:
+	@cd rs && DIFF_IN=../$(DIFF_OUT_DIR)/cases.json DIFF_OUT=../$(DIFF_OUT_DIR)/rs.jsonl \
+		cargo test --all-features --test difftool -q >/dev/null
+
+diff: diff-cases diff-run-go diff-run-rs
 	@node test/differential/compare.js \
 		$(DIFF_OUT_DIR)/cases.json $(DIFF_OUT_DIR)/ts.jsonl $(DIFF_OUT_DIR)/go.jsonl
+	@node test/differential/compare.js \
+		$(DIFF_OUT_DIR)/cases.json $(DIFF_OUT_DIR)/ts.jsonl $(DIFF_OUT_DIR)/rs.jsonl --port=rs
 
-diff-full: build-ts
-	@mkdir -p $(DIFF_OUT_DIR)
-	@node test/differential/gen.js $(DIFF_OUT_DIR)/cases.json
-	@node test/differential/run-ts.js $(DIFF_OUT_DIR)/cases.json $(DIFF_OUT_DIR)/ts.jsonl
-	@cd go && DIFF_IN=../$(DIFF_OUT_DIR)/cases.json DIFF_OUT=../$(DIFF_OUT_DIR)/go.jsonl \
-		go test -run TestDifferential -count=1 . >/dev/null
+diff-full: diff-cases diff-run-go diff-run-rs
 	@node test/differential/compare.js \
 		$(DIFF_OUT_DIR)/cases.json $(DIFF_OUT_DIR)/ts.jsonl $(DIFF_OUT_DIR)/go.jsonl --full
+	@node test/differential/compare.js \
+		$(DIFF_OUT_DIR)/cases.json $(DIFF_OUT_DIR)/ts.jsonl $(DIFF_OUT_DIR)/rs.jsonl --full --port=rs
+
+# The Rust port alone against the canonical build.
+diff-rs: diff-cases diff-run-rs
+	@node test/differential/compare.js \
+		$(DIFF_OUT_DIR)/cases.json $(DIFF_OUT_DIR)/ts.jsonl $(DIFF_OUT_DIR)/rs.jsonl --port=rs
 
 # Benchmarks (bench/): shape against other validators in each language. Each
 # run is filed as an immutable JSON document under bench/results/runs/ and
@@ -72,6 +105,9 @@ bench-ts: build-ts
 bench-go:
 	node bench/run.js go
 
+bench-rs:
+	node bench/run.js rs
+
 bench-smoke: build-ts
 	@test -d bench/ts/node_modules || (cd bench/ts && npm install --no-audit --no-fund)
 	BENCH_QUICK=1 node bench/run.js all --dry >/dev/null
@@ -84,6 +120,9 @@ tags-npm:
 
 tags-go:
 	git tag -l 'go/v*' --sort=-version:refname
+
+tags-rs:
+	git tag -l 'rs/v*' --sort=-version:refname
 
 # Publish both npm and Go with patch version bumps. Runs full build+test for
 # both languages first so a failure in either aborts before any release has
@@ -129,7 +168,7 @@ publish-go: test-go
 # Note: the build-ts / test-ts / test-go prerequisites may regenerate tracked
 # ts/dist artifacts if sources have changed since the last build — that is the
 # same rebuild publish itself would do.
-publish-dry: publish-npm-dry publish-go-dry
+publish-dry: publish-npm-dry publish-go-dry publish-rs-dry
 
 publish-npm-dry: build-ts test-ts
 	@V=$${V:-$$(node -p "const v=require('./ts/package.json').version.split('.'); v[2]=+v[2]+1; v.join('.')")}; \
@@ -156,3 +195,8 @@ reset:
 	cd go && go clean -cache
 	cd go && go build ./...
 	cd go && go test -v ./...
+
+# The crate is published by the Publish workflow with crates.io trusted
+# publishing; locally, only the packaging can be checked.
+publish-rs-dry: test-rs
+	cd rs && cargo publish --dry-run --all-features

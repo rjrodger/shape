@@ -1,0 +1,19 @@
+[package]
+name = "shape-bench"
+version = "0.0.0"
+edition = "2021"
+publish = false
+description = "The Rust benchmark of shape against garde, validator and jsonschema on the shared cases."
+
+[dependencies]
+shape = { package = "shape-schema", path = "../../rs" }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
+garde = { version = "0.23", features = ["derive", "regex"] }
+validator = { version = "0.21", features = ["derive"] }
+jsonschema = { version = "0.52", default-features = false }
+regex = "1"
+sha2 = "0.10"
+
+[profile.release]
+debug = false

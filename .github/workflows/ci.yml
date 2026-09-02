@@ -58,9 +58,55 @@ jobs:
       - run: go vet ./...
       - run: go test ./...
 
-  # The differential parity harness: thousands of generated cases through both
-  # implementations, comparing the JSON Schema export, verdict, produced value
-  # and exact error text. Needs both toolchains in one job.
+  rust-build-and-test:
+    timeout-minutes: 10
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    runs-on: ${{ matrix.os }}
+
+    defaults:
+      run:
+        working-directory: rs
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets --all-features -- -D warnings
+      - run: cargo build --all-features
+      - run: cargo test --all-features
+
+  # Line coverage of the Rust crate, held to 100% as the other two are.
+  rust-coverage:
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: rs
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+
+      - uses: taiki-e/install-action@cargo-llvm-cov
+
+      - run: ./cover.sh
+
+  # The differential parity harness: thousands of generated cases through all
+  # three implementations, comparing the JSON Schema export, verdict, produced
+  # value and exact error text. Needs every toolchain in one job.
   parity:
     timeout-minutes: 10
     runs-on: ubuntu-latest
@@ -76,6 +122,8 @@ jobs:
         with:
           go-version: '1.22.x'
           cache: false
+
+      - uses: dtolnay/rust-toolchain@stable
 
       - run: cd ts && npm install
       - run: make diff
@@ -97,6 +145,8 @@ jobs:
         with:
           go-version-file: bench/go/go.mod
           cache: false
+
+      - uses: dtolnay/rust-toolchain@stable
 
       - run: cd ts && npm install
       - run: make bench-smoke

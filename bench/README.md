@@ -9,20 +9,24 @@ document; a summary is rebuilt from all of them and rendered on the
 |------------|------------------------------------------------------------------------------------------------------------|
 | TypeScript | [Zod](https://zod.dev), [Ajv](https://ajv.js.org), [Joi](https://joi.dev), [Valibot](https://valibot.dev) |
 | Go         | [go-playground/validator](https://github.com/go-playground/validator), [santhosh-tekuri/jsonschema](https://github.com/santhosh-tekuri/jsonschema), [xeipuuv/gojsonschema](https://github.com/xeipuuv/gojsonschema) |
+| Rust       | [garde](https://github.com/jprochazk/garde), [validator](https://github.com/Keats/validator), [jsonschema](https://github.com/Stranger6667/jsonschema) |
 
 ## Running
 
 ```sh
-make bench            # both languages, files a run per language under bench/results/runs/
+make bench            # every language, files a run per language under bench/results/runs/
 make bench-ts         # one language
 make bench-go
+make bench-rs
 make bench-smoke      # a short run of everything, nothing written (CI does this)
 make bench-report     # rebuild bench/results/latest/ from the run files
 ```
 
 `make bench` builds `ts/` first and installs `bench/ts` dependencies on the
 first run. The Go benchmark is its own module (`bench/go`) that points at the
-sibling `go/` directory, so both languages measure the checked-out commit.
+sibling `go/` directory, and the Rust benchmark its own crate (`bench/rs`)
+with a path dependency on `rs/`, built in release mode, so every language
+measures the checked-out commit.
 
 Environment:
 
@@ -38,8 +42,8 @@ Environment:
 
 `cases.json` holds the inputs and, for the JSON Schema validators, the
 schema; the shape specs and the other libraries' schemas are code in
-`ts/bench.js` and `go/main.go`, written to accept exactly the same values
-(closed objects, the same bounds). Every library's verdict is checked
+`ts/bench.js`, `go/main.go` and `rs/src/main.rs`, written to accept exactly
+the same values (closed objects, the same bounds). Every library's verdict is checked
 against the case before anything is timed.
 
 | case      | input                                                                       |
@@ -54,17 +58,19 @@ against the case before anything is timed.
 What is measured is a verdict on an already-decoded value: shape's
 `valid()` (`Valid` in Go) on the valid cases and `error()` on the invalid
 one, Zod's and Valibot's `safeParse`, an Ajv compiled validator, Joi's
-`validate` with conversion off, `validator.Struct`, and the two Go JSON
-Schema validators' `Validate`. Two things to keep in mind when reading the
+`validate` with conversion off, `validator.Struct`, the two Go JSON Schema
+validators' `Validate`, garde's and validator's derived `validate`, and the
+jsonschema crate's `is_valid`. Two things to keep in mind when reading the
 numbers: shape, Zod and Valibot produce a fresh value while the others
-check in place, and go-playground/validator works on a typed struct, so it
-is measured after decoding and skips the `invalid` case (a type error there
-is a decoding error, not a validation one).
+check in place, and go-playground/validator, garde and the validator crate
+work on a typed struct, so they are measured after decoding and skip the
+`invalid` case (a type error there is a decoding error, not a validation
+one).
 
 ## Method
 
-`lib/harness.js` and `go/main.go` implement the same policy so samples from
-the two languages are comparable: warm up for a fixed time, size a batch so
+`lib/harness.js`, `go/main.go` and `rs/src/main.rs` implement the same
+policy so samples from the three languages are comparable: warm up for a fixed time, size a batch so
 it takes about a millisecond and at least fifty steps of the clock (Windows
 reports time in half-millisecond steps, and a batch shorter than that reads
 as zero), then time batches for the budget and record each batch's mean
@@ -82,7 +88,7 @@ survives without the file growing with the budget.
   (and whether the tree was dirty);
 - `host`: an anonymous id, the platform, architecture, CPU model, core
   count and memory, and whether it ran under GitHub Actions;
-- `runtime` and `versions`: Node or Go, and every library's version;
+- `runtime` and `versions`: Node, Go or rustc, and every library's version;
 - `input_hash`: the hash of `cases.json`, taken with LF line endings so a
   Windows checkout (CRLF) hashes as everyone else. The report also hashes each
   case's definition as it was in the run's commit (`case_hash` on every

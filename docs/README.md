@@ -1,9 +1,9 @@
 # Shape documentation
 
 Shape is a **schema-by-example** validator: your schema looks (almost) exactly
-like your data. It runs in JavaScript/TypeScript (browser and backend) and in
-Go, with the two implementations kept at behavioural parity — TypeScript is the
-canonical reference.
+like your data. It runs in JavaScript/TypeScript (browser and backend), in Go
+and in Rust, with the three implementations kept at behavioural parity —
+TypeScript is the canonical reference.
 
 These docs follow the [Diátaxis](https://diataxis.fr) system and are published
 at [rjrodger.github.io/shape](https://rjrodger.github.io/shape/), where a
@@ -44,6 +44,7 @@ Goal-oriented recipes for a task you already have.
 - [Use Shape as a Standard Schema](how-to/use-as-standard-schema.md)
 - [Export and import a JSON Schema](how-to/export-json-schema.md)
 - [Use Shape in Go](how-to/use-shape-in-go.md)
+- [Use Shape in Rust](how-to/use-shape-in-rust.md)
 - [Use Shape in the browser](how-to/use-shape-in-the-browser.md)
 
 ## Reference
@@ -56,6 +57,7 @@ Dry, complete, look-it-up material.
 - [Shape nodes](reference/nodes.md) — the compiled node model.
 - [TypeScript types](reference/typescript-types.md)
 - [Go API](reference/go-api.md) — the Go surface and its idioms.
+- [Rust API](reference/rust-api.md) — the Rust surface and its idioms.
 
 ## Explanation
 
@@ -64,12 +66,15 @@ Background and design discussion.
 - [Schema by example](explanation/schema-by-example.md) — the core idea.
 - [How validation works](explanation/how-validation-works.md) — defaults,
   mutation, traversal, required/optional semantics.
-- [TypeScript ↔ Go parity](explanation/ts-go-parity.md) — the parity contract,
-  the shared conformance corpus, and known divergences.
+- [TypeScript ↔ Go ↔ Rust parity](explanation/ts-go-parity.md) — the parity
+  contract, the shared conformance corpus, and known divergences.
 - [Performance review](explanation/performance.md) — where validation spends
   its time in each language, and what would make it faster.
 - [Performance plan](explanation/performance-plan.md) — the phases, targets
   and measurement protocol for making it faster.
+- [Rust implementation plan](explanation/rust-plan.md) — how the third port
+  in `rs/` was planned: the value type, the crate layout, how it joins the
+  gates, and the phases.
 
 ## Decision records
 
@@ -82,9 +87,11 @@ Design decisions that are expensive to revisit, with the reasoning behind them.
 
 ## Conventions used in these docs
 
-- **TS** examples use the npm package; **Go** examples use the Go module. Where
-  behaviour is identical, only one is shown and the other language differs only
-  in syntax (see the [Go API](reference/go-api.md) for the mapping).
+- **TS** examples use the npm package; **Go** examples use the Go module;
+  **Rust** examples use the crate. Where behaviour is identical, only one is
+  shown and the other languages differ only in syntax (see the
+  [Go API](reference/go-api.md) and [Rust API](reference/rust-api.md) for the
+  mapping).
 - Runnable examples assume `const { Shape } = require('shape')` (TS/JS) or
   `import "github.com/rjrodger/shape/go"` (Go).
 - The canonical behaviour is defined by the TypeScript implementation and pinned
