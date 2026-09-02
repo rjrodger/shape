@@ -3246,6 +3246,10 @@ const Refer = function <V = any>(this: any, inopts: any, shape?: Node<V> | V): N
   // Fill should be false (the default) if used recursively, to prevent loops.
   let fill = !!opts.fill
 
+  // Strict: a name with no Define is an error, rather than a Refer that
+  // does nothing.
+  let strict = !!opts.strict
+
   if (null != name && '' != name) {
     const referrer: any = function Refer(val: any, update: Update, state: State) {
       if (undefined !== val || fill) {
@@ -3259,9 +3263,13 @@ const Refer = function <V = any>(this: any, inopts: any, shape?: Node<V> | V): N
           update.type = node.t
 
         }
+        else if (strict) {
+          update.err = 'Value "$VALUE" for property "$PATH" refers to "' + name +
+            '", which is not defined.'
+          return false
+        }
       }
 
-      // TODO: option to fail if ref not found?
       return true
     }
     referrer.n = S.Refer

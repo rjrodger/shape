@@ -943,7 +943,11 @@ func Define(name string, spec ...any) *Node {
 // ReferOptions controls Refer behaviour. Fill substitutes the referenced node
 // even when the input value is missing/nil, allowing recursive structure.
 type ReferOptions struct {
+	// Fill substitutes even when the value is absent (not for self-recursion).
 	Fill bool
+	// Strict makes a name with no Define an error, rather than a Refer that
+	// does nothing.
+	Strict bool
 }
 
 // Refer substitutes the named node at validation time.
@@ -967,7 +971,9 @@ func ReferWith(name string, opts ReferOptions, spec ...any) *Node {
 			if state.Ctx == nil {
 				return true
 			}
-			if val == nil && !opts.Fill {
+			// An absent value is left alone unless Fill asks; a present null
+			// is a value, as in TS.
+			if state.absent && !opts.Fill {
 				return true
 			}
 			// A Define met on this call first, then the schema's own; both
@@ -976,6 +982,9 @@ func ReferWith(name string, opts ReferOptions, spec ...any) *Node {
 				update.Node = rn
 			} else if rn, ok := state.Ctx.defs[name]; ok {
 				update.Node = rn
+			} else if opts.Strict {
+				update.Err = "Value \"$VALUE\" for property \"$PATH\" refers to \"" + name + "\", which is not defined."
+				return false
 			}
 			return true
 		},

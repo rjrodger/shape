@@ -81,6 +81,19 @@ Shape({ copy: Refer({ name: 'shared', fill: true }) })
 shape.ReferWith("shared", shape.ReferOptions{Fill: true})
 ```
 
+A `Refer` whose name no `Define` supplies does nothing: the value is
+validated by the `Refer`'s own shape, if it has one. To make that a
+mistake rather than a no-op, ask for `strict`:
+
+```js
+Shape({ copy: Refer({ name: 'shared', strict: true }) })
+// Value "1" for property "copy" refers to "shared", which is not defined.
+```
+
+```go
+shape.ReferWith("shared", shape.ReferOptions{Strict: true})
+```
+
 > Use `fill` only when the reference is **not** self-recursive, or you will
 > create an infinite expansion.
 

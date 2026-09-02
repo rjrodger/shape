@@ -1,4 +1,11 @@
 name	spec	input	output	error
+refer-defined	{"a":{"$expr":"Define(\"d\",Number)"},"b":{"$expr":"Refer(\"d\")"}}	{"a":1,"b":2}	{"a":1,"b":2}	
+refer-defined-strict	{"a":{"$expr":"Define(\"d\",Number)"},"b":{"$call":["Refer",{"name":"d","strict":true}]}}	{"a":1,"b":2}	{"a":1,"b":2}	
+refer-defined-strict-bad	{"a":{"$expr":"Define(\"d\",Number)"},"b":{"$call":["Refer",{"name":"d","strict":true}]}}	{"a":1,"b":"x"}		"Validation failed for property \"b\" with string \"x\" because the string is not of type number."
+refer-undefined-lax	{"b":{"$expr":"Refer(\"nope\")"}}	{"b":2}	{"b":2}	
+refer-undefined-strict	{"b":{"$call":["Refer",{"name":"nope","strict":true}]}}	{"b":2}		"Value \"2\" for property \"b\" refers to \"nope\", which is not defined."
+refer-undefined-strict-absent	{"b":{"$call":["Refer",{"name":"nope","strict":true}]}}	{}	{}	
+refer-undefined-strict-fill	{"b":{"$call":["Refer",{"name":"nope","strict":true,"fill":true}]}}	{}	{}	
 null-required	{"a":{"$expr":"null"}}	{"a":null}	{"a":null}	
 null-literal-default-injected	{"a":null}	{}	{"a":null}	
 null-dsl-default-injected	{"a":{"$expr":"null"}}	{}	{"a":null}	
