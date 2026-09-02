@@ -79,3 +79,24 @@ jobs:
 
       - run: cd ts && npm install
       - run: make diff
+
+  # The benchmarks, briefly and without recording anything, so they cannot
+  # rot: every library must still agree on every case's verdict.
+  bench-smoke:
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.x
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: bench/go/go.mod
+          cache: false
+
+      - run: cd ts && npm install
+      - run: make bench-smoke

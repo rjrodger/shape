@@ -1,0 +1,110 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "name": "flat",
+      "description": "A flat object of five primitive properties.",
+      "input": {"id": 1, "name": "Alice", "email": "alice@example.com", "active": true, "score": 42.5},
+      "valid": true,
+      "jsonSchema": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "integer"},
+          "name": {"type": "string"},
+          "email": {"type": "string"},
+          "active": {"type": "boolean"},
+          "score": {"type": "number"}
+        },
+        "required": ["id", "name", "email", "active", "score"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "nested",
+      "description": "An object with a nested object, an array of strings and a settings object.",
+      "input": {
+        "id": 7,
+        "name": "Bob",
+        "address": {"street": "1 Main St", "city": "Springfield", "zip": "12345"},
+        "tags": ["a", "b", "c"],
+        "settings": {"theme": "dark", "notifications": true}
+      },
+      "valid": true,
+      "jsonSchema": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "integer"},
+          "name": {"type": "string"},
+          "address": {
+            "type": "object",
+            "properties": {"street": {"type": "string"}, "city": {"type": "string"}, "zip": {"type": "string"}},
+            "required": ["street", "city", "zip"],
+            "additionalProperties": false
+          },
+          "tags": {"type": "array", "items": {"type": "string"}},
+          "settings": {
+            "type": "object",
+            "properties": {"theme": {"type": "string"}, "notifications": {"type": "boolean"}},
+            "required": ["theme", "notifications"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "name", "address", "tags", "settings"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "array",
+      "description": "An array of fifty small objects.",
+      "generate": {"items": 50},
+      "input": {"items": []},
+      "valid": true,
+      "jsonSchema": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {"sku": {"type": "string"}, "qty": {"type": "integer"}, "price": {"type": "number"}},
+              "required": ["sku", "qty", "price"],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": ["items"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "bounds",
+      "description": "Strings and numbers with length, range and pattern constraints.",
+      "input": {"name": "Carol", "age": 33, "code": "ABC", "ratio": 0.5},
+      "valid": true,
+      "jsonSchema": {
+        "type": "object",
+        "properties": {
+          "name": {"type": "string", "minLength": 3, "maxLength": 40},
+          "age": {"type": "integer", "minimum": 0, "maximum": 150},
+          "code": {"type": "string", "pattern": "^[A-Z]{3}$"},
+          "ratio": {"type": "number", "minimum": 0, "maximum": 1}
+        },
+        "required": ["name", "age", "code", "ratio"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "invalid",
+      "description": "The nested case with two type errors, so the error path is measured.",
+      "input": {
+        "id": "seven",
+        "name": "Bob",
+        "address": {"street": "1 Main St", "city": "Springfield", "zip": 12345},
+        "tags": ["a", "b", "c"],
+        "settings": {"theme": "dark", "notifications": true}
+      },
+      "valid": false,
+      "jsonSchema": {"$ref": "#nested"}
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "name": "shape-bench-ts",
+  "private": true,
+  "description": "Benchmarks shape against other TypeScript validators.",
+  "scripts": {
+    "bench": "node bench.js"
+  },
+  "dependencies": {
+    "ajv": "8.20.0",
+    "joi": "18.2.5",
+    "shape": "file:../../ts",
+    "valibot": "1.4.2",
+    "zod": "4.5.4"
+  }
+}
