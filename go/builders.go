@@ -942,13 +942,17 @@ func ReferWith(name string, opts ReferOptions, spec ...any) *Node {
 	v := validator{
 		name: "Refer",
 		fn: func(val any, update *Update, state *State) bool {
-			if state.Ctx == nil || state.Ctx.Refs == nil {
+			if state.Ctx == nil {
 				return true
 			}
 			if val == nil && !opts.Fill {
 				return true
 			}
+			// A Define met on this call first, then the schema's own; both
+			// maps read fine when nil.
 			if rn, ok := state.Ctx.Refs[name]; ok {
+				update.Node = rn
+			} else if rn, ok := state.Ctx.defs[name]; ok {
 				update.Node = rn
 			}
 			return true

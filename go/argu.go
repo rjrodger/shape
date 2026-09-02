@@ -169,7 +169,7 @@ func isRestNode(n *node) bool {
 func tryMatch(n *node, val any) (bool, []FieldError) {
 	verr := &ValidationError{}
 	ctx := newContext(nil)
-	collectDefines(n, ctx)
+	prepare(n, ctx.Refs)
 	validateNode(n, val, []string{}, []any{}, "", nil, ctx, true, verr)
 	return !verr.hasAny(), verr.Issues
 }
@@ -177,7 +177,7 @@ func tryMatch(n *node, val any) (bool, []FieldError) {
 func requireMatch(n *node, val any, key, prefix string) (any, error) {
 	verr := &ValidationError{}
 	ctx := newContext(nil)
-	collectDefines(n, ctx)
+	prepare(n, ctx.Refs)
 	out := validateNode(n, val, []string{key}, []any{key}, key, nil, ctx, false, verr)
 	if verr.hasAny() {
 		return nil, fmt.Errorf("%s: %s", prefix, verr.Error())

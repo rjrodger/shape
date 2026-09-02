@@ -47,6 +47,96 @@ shape called for its value, `Validate` in Go) shares the walk and should
 gain by nearly the same factor; the benchmarks time the boolean and error
 calls because those are what a request handler calls.
 
+## Results
+
+The phases were carried out on 2026-09-02, in one pull request rather than
+one per language, and measured with the protocol below. The sandbox that ran
+them was not the host of the baseline runs (a 2.10 GHz Xeon, host
+`80bb4b189998`, against the baseline's 2.80 GHz one), so the before column
+was recorded on that host from a clean worktree at `89e081b`, the last
+commit before the phases and the same code as the baseline; the after
+column is the run recorded from the clean tree at the end of the work
+(`9ddbbe9` for TypeScript, `e67ecc6` for Go). Median per call; the targets
+are those set above, so judge a case by its ratio rather than against a
+target set on the faster host.
+
+| case | TS before | TS after | gain | TS target | Go before | Go after | gain | Go target |
+| ---- | --------: | -------: | ---: | --------: | --------: | -------: | ---: | --------: |
+| `flat` | 2.73 µs | 0.85 µs | 3.2× | ≤ 0.8 µs | 2.02 µs | 1.1 µs | 1.8× | ≤ 1.0 µs |
+| `nested` | 5.07 µs | 1.7 µs | 3.0× | ≤ 1.8 µs | 5.57 µs | 3.1 µs | 1.8× | ≤ 2.5 µs |
+| `array` | 85.2 µs | 27.4 µs | 3.1× | ≤ 25 µs | 79.7 µs | 32.7 µs | 2.4× | ≤ 40 µs |
+| `bounds` | 3.07 µs | 1.4 µs | 2.2× | ≤ 1.2 µs | 2.84 µs | 1.4 µs | 2.0× | ≤ 1.2 µs |
+| `invalid` | 6.52 µs | 3.3 µs | 2.0× | ≤ 3.0 µs | 8.67 µs | 6.7 µs | 1.3× | ≤ 4.0 µs |
+
+The sandbox is noisier than the 10% floor in the protocol below: four Go
+runs at `e67ecc6`, minutes apart, put `flat` between 0.9 µs and 1.5 µs and
+`array` between 26 µs and 40 µs. The Go after column is therefore the
+median of those four runs (all committed under `bench/results/runs/`),
+the TypeScript columns are single runs, and the ratios are indicative to
+about a factor of 1.3. The hosted runners are steadier and record the
+same commits when Measure is dispatched after merge.
+
+The Go benchmarks in `go/bench_test.go`, which time the calls without the
+harness, went from 28 allocations per `Valid` on `flat` and 68 on `nested`
+to 3 and 5, from 3.6 µs and 8.5 µs to 1.15 µs and 2.6 µs, and `Error` on
+the invalid input from 12.0 µs and 46 allocations to 5.2 µs and 26.
+
+### What each phase did
+
+- **TypeScript, compile once.** An object's or array's children are
+  nodized, their key expressions parsed and their order fixed the first
+  time the node is visited, and kept on the node in a `WeakMap`; every
+  later call walks the compiled list. A spec is therefore read when it is
+  first validated, and mutating it afterwards has no effect, as declared
+  out of scope above. Deep nodization is memoised in a `WeakSet` so the
+  compose builders that re-nodize a subtree do not redo it.
+- **TypeScript, the walk.** `next()` pops the back-pointer chain in one
+  loop, the frozen-parent probe runs once per parent object instead of
+  once per node, the per-node error list is only reset when it holds
+  something, and the collected errors are pushed once at the end of a
+  node. Two experiments were reverted because they measured slower or the
+  same: pooling the `State` across calls (a reused state cost more than a
+  fresh one, 1.26 µs against 0.9 µs on `flat`), and guarding the write-back
+  of a produced value with an identity check.
+- **Go, prepare once.** `Shape()` walks the tree once and gives each object
+  node its consumed-key set, its keys boxed as `any` for the path, and the
+  schema its `Define` table; nothing is collected per call.
+- **Go, no-copy match.** `Match` and `Valid` walk the input in place: no
+  `out` map, no copy per object, no produced slice, no `unknown` slice
+  until the first unknown key. The producing walk (`Validate`, `Error`)
+  keeps the copy, pre-sized.
+- **Go, per-call scratch.** One allocation per call holds the path stacks
+  with room for eight levels and the first eight validator states; states
+  beyond that come in chunks of eight. `Context` no longer builds `Refs` or
+  the rename table until a `Define` or `Rename` needs it. A `Valid` on
+  `flat` is now the context, the scratch block and the boxed result.
+- **Go, error text.** `makeErr` built its text with `fmt` and rendered the
+  value through the JSON encoder; the default texts are now concatenated,
+  a string the encoder would pass through unchanged is used as it is, and
+  ints and float64s go through `strconv` with the same output. The text is
+  byte for byte what it was, which the corpus and the harness pin.
+
+### What is left
+
+- **TypeScript** is at 10× Zod on `flat` (0.85 µs against 85 ns), above the
+  3× line that phase 5 sets for deciding on code generation. The remaining
+  interpretive cost is the per-node bookkeeping of the walk itself and the
+  extra-key scan of a closed object; the leaf fast path from phase 3 was
+  not done. Those are worth perhaps another 1.3×; the tier of Zod and
+  Valibot needs compiling a shape to a function, which is the phase 5
+  decision.
+- **Go `Error` and `Validate`** still copy every object. `Error` discards
+  the copy, so an error walk that does not produce would halve it, but
+  that changes what a custom `After` validator on an object sees (the
+  produced value with defaults injected, or the input); settle that
+  against the TypeScript behaviour before taking it.
+- **Go `Valid`** is three allocations per call; the remaining time is the
+  map lookups per key and the interface boxing of results, which are the
+  cost of validating `map[string]any` and would only move with typed
+  (struct) validation paths.
+- The hosted runners record these commits when **Measure** is dispatched
+  after merge, and the report's History table shows the step per host.
+
 ## The rules that do not move
 
 Every step keeps the [parity contract](ts-go-parity.md): the shared corpus

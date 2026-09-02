@@ -180,3 +180,28 @@ func TestValidateBranches(t *testing.T) {
 	// Regexp check on a non-string value fails.
 	mustErr(t, MustShape(map[string]any{"a": Check(regexp.MustCompile(`^a`))}), map[string]any{"a": 1.0}, "failed")
 }
+
+// Match walks the input in place and produces nothing: the paths that only
+// write the produced value are skipped, and the verdicts still agree.
+func TestMatchProducesNothing(t *testing.T) {
+	tuple := MustShape([]any{String, 1.0})
+	if !tuple.Match([]any{"a"}) || tuple.Match([]any{1.0}) || tuple.Match([]any{"a", "b"}) {
+		t.Fatal("tuple match")
+	}
+	rest := MustShape(Rest(Number))
+	if !rest.Match([]any{1.0, 2.0}) || rest.Match([]any{"x"}) {
+		t.Fatal("rest match")
+	}
+	ignore := MustShape(map[string]any{"a": Ignore(Number), "b": 1.0})
+	if !ignore.Match(map[string]any{"a": "x"}) || !ignore.Match(map[string]any{"a": 1.0}) {
+		t.Fatal("ignore child match")
+	}
+	openIgnore := MustShape(Child(Ignore(Number), map[string]any{"b": 1.0}))
+	if !openIgnore.Match(map[string]any{"z": "x"}) || !openIgnore.Match(map[string]any{"z": 2.0}) {
+		t.Fatal("ignore rest match")
+	}
+	claim := MustShape(map[string]any{"a": RenameWith("a", RenameOptions{Claim: []string{"old"}}, Number)})
+	if !claim.Match(map[string]any{"old": 1.0}) || claim.Match(map[string]any{"old": "x"}) {
+		t.Fatal("claim match")
+	}
+}

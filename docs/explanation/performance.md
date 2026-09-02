@@ -1,7 +1,10 @@
 # Performance review
 
 **Where the time goes when shape validates, in both implementations, and what
-would make it faster.** Measured with the [benchmarks](../../bench/README.md)
+would make it faster.** *The recommendations below were carried out; the
+[performance plan](performance-plan.md) records what each did and the
+before-and-after numbers in its Results section. The figures here are
+the ones the review was written from.* Measured with the [benchmarks](../../bench/README.md)
 in `bench/` and CPU and allocation profiles of the `flat`, `nested` and
 `array` cases; the numbers are from one Linux host and will differ elsewhere,
 but the proportions are what matter. The live comparison with other
