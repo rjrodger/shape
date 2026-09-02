@@ -15,22 +15,26 @@ func IsShape(v any) bool
 ## `*Schema` methods
 
 ```go
-func (s *Schema) Validate(input any) (any, error)          // *ValidationError
+func (s *Schema) Validate(input any) (any, error) // *ValidationError
 func (s *Schema) ValidateCtx(input any, ctx *Context) (any, error)
 func (s *Schema) Match(input any) bool
-func (s *Schema) Valid(input any) bool                      // alias of Match
-func (s *Schema) Error(input any) []FieldError              // nil when valid
-func (s *Schema) Spec() any                                 // JSON-friendly
-func (s *Schema) Node() *node                               // introspection
-func (s *Schema) String() string                            // debug render
-func (s *Schema) JSONSchema() map[string]any                // JSON Schema, draft 2020-12
-func (s *Schema) ValidateInto(input any, out any) error     // fill a struct with the result
+func (s *Schema) Valid(input any) bool                  // alias of Match
+func (s *Schema) Error(input any) []FieldError          // nil when valid
+func (s *Schema) Spec() any                             // JSON-friendly
+func (s *Schema) Node() *node                           // introspection
+func (s *Schema) String() string                        // debug render
+func (s *Schema) JSONSchema() map[string]any            // JSON Schema, draft 2020-12
+func (s *Schema) ValidateInto(input any, out any) error // fill a struct with the result
+func (s *Schema) Standard() StandardSchema              // Standard Schema V1-style interface
 ```
 
-`(*Node).JSONSchema()` renders a built node the same way.
+`(*Node).JSONSchema()` renders a built node the same way; `(*Node).Kind()` is
+its kind, `(*Node).Meta()` its metadata (sidecar keys and `Describe`'s
+description) and `(*Node).Inner()` the underlying private node, as
+`(*Schema).Node()` is for the root.
 
 ```go
-func FromJSONSchema(schema any) (any, error)   // a spec built from a JSON Schema (as decoded by encoding/json)
+func FromJSONSchema(schema any) (any, error) // a spec built from a JSON Schema (as decoded by encoding/json)
 func MustFromJSONSchema(schema any) any
 ```
 
@@ -57,14 +61,14 @@ can decode into) in one step.
 
 ```go
 type User struct {
-    Name string `json:"name"`
-    Age  int    `json:"age,omitempty"`
+	Name string `json:"name"`
+	Age  int    `json:"age,omitempty"`
 }
 s := shape.MustShape(map[string]any{"name": shape.String, "age": 42})
 
-out, err := s.Validate(User{Name: "Ann"})   // map[string]any{"name":"Ann","age":42}
+out, err := s.Validate(User{Name: "Ann"}) // map[string]any{"name":"Ann","age":42}
 var u User
-err = s.ValidateInto(map[string]any{"name": "Ann"}, &u)   // u.Age == 42
+err = s.ValidateInto(map[string]any{"name": "Ann"}, &u) // u.Age == 42
 ```
 
 **As a spec.** A struct value is also a spec by example, as a map is: each
@@ -76,10 +80,10 @@ whether or not it is zero).
 
 ```go
 type Config struct {
-    Host  string `shape:"Min(1)"`            // non-empty string, default ""
-    Port  int    `shape:"Min(1).Max(65535)"` // default 0 — so set one below
-    Debug bool   `shape:"Boolean"`           // required
-    Name  string `json:"name" shape:"String"`
+	Host  string `shape:"Min(1)"`            // non-empty string, default ""
+	Port  int    `shape:"Min(1).Max(65535)"` // default 0 — so set one below
+	Debug bool   `shape:"Boolean"`           // required
+	Name  string `json:"name" shape:"String"`
 }
 s := shape.MustShape(Config{Host: "localhost", Port: 8080})
 // reads as {"Host: Min(1)": "localhost", "Port: Min(1).Max(65535)": 8080,
@@ -92,6 +96,7 @@ Sentinel `TypeToken` values used in a spec to require a type:
 
 ```go
 var Any, String, Number, Boolean, Object, Array, Function, Integer, Date TypeToken
+
 func (t TypeToken) Kind() Kind
 ```
 
@@ -110,12 +115,57 @@ how a node is narrowed to them here.
 ## Builders
 
 Every builder is a top-level function returning `*Node`; most also have a
-chainable `*Node` method. See the [builder reference](builders.md). Options
-carriers:
+chainable `*Node` method. See the [builder reference](builders.md) for what
+each does; the Go signatures are:
 
 ```go
-type ReferOptions  struct { Fill bool }
-type RenameOptions struct { Keep bool; Claim []string }
+func Required(spec ...any) *Node
+func Optional(spec ...any) *Node
+func Default(dval any, spec ...any) *Node
+func Skip(spec ...any) *Node
+func Ignore(spec ...any) *Node
+func Empty(spec ...any) *Node
+func Nullable(spec ...any) *Node
+func Fault(msg string, spec ...any) *Node
+func Type(kind any, spec ...any) *Node // Kind, TypeToken, kind name or *Node
+func Exact(vals ...any) *Node          // reflect.DeepEqual: Exact(1) does not match 1.0
+func Never(spec ...any) *Node
+func Func(spec ...any) *Node
+func Coerce(spec ...any) *Node
+func Email(spec ...any) *Node
+func Url(spec ...any) *Node
+func Uuid(spec ...any) *Node
+func DateTime(spec ...any) *Node
+func Ip(spec ...any) *Node
+func Ipv4(spec ...any) *Node
+func Ipv6(spec ...any) *Node
+func Min(min any, spec ...any) *Node
+func Max(max any, spec ...any) *Node
+func Above(above any, spec ...any) *Node
+func Below(below any, spec ...any) *Node
+func Len(length int, spec ...any) *Node
+func One(shapes ...any) *Node
+func Some(shapes ...any) *Node
+func All(shapes ...any) *Node
+func Open(spec ...any) *Node
+func Closed(spec ...any) *Node
+func Child(child any, spec ...any) *Node
+func Rest(child any, spec ...any) *Node
+func Define(name string, spec ...any) *Node
+func Key(args ...any) *Node // Key(), Key(depth) or Key(depth, sep)
+```
+
+Options carriers:
+
+```go
+type ReferOptions struct {
+	Fill   bool // substitute even when the value is absent
+	Strict bool // a name with no Define is an error, not a no-op
+}
+type RenameOptions struct {
+	Keep  bool     // keep the original key too
+	Claim []string // alternative source keys to read from
+}
 
 func Refer(name string, spec ...any) *Node
 func ReferWith(name string, opts ReferOptions, spec ...any) *Node
@@ -126,11 +176,11 @@ func RenameWith(name string, opts RenameOptions, spec ...any) *Node
 Builders that take more than a shape:
 
 ```go
-func Discriminated(tag string, branches map[string]any) *Node   // top-level only
+func Discriminated(tag string, branches map[string]any) *Node // top-level only
 func Catch(fallback any, spec ...any) *Node
 func Transform(fn func(val any, state *State) any, spec ...any) *Node
-func Describe(description string, spec ...any) *Node            // read back with (*Node).Meta()
-func Pick(names any, spec ...any) *Node                          // names: string, []string or []any
+func Describe(description string, spec ...any) *Node // read back with (*Node).Meta()
+func Pick(names any, spec ...any) *Node              // names: string, []string or []any
 func Omit(names any, spec ...any) *Node
 func Partial(spec ...any) *Node
 func Extend(extra any, spec ...any) *Node
@@ -180,8 +230,8 @@ type error against a typed shape:
 
 ```go
 s := shape.MustShape(1.0)
-s.Validate(nil)         // 1.0, nil       — absent, so the default fills
-s.Validate(shape.Null)  // "the value is not of type number"
+s.Validate(nil)        // 1, nil — absent, so the default fills
+s.Validate(shape.Null) // nil, "Validation failed for value \"null\" because the value is not of type number."
 ```
 
 Inside a map or slice a plain `nil` already reads as present-null, because the
@@ -191,44 +241,110 @@ key or index exists; `Null` is accepted there too and means the same thing.
 
 ```go
 type ShapeOptions struct {
-    KeyExpr KeyExprOptions   // "x: Min(1)" key parsing
-    Meta    MetaOptions      // "x$$" sidecar metadata
-    ValExpr ValExprOptions   // "$$" value expressions
+	KeyExpr KeyExprOptions // "x: Min(1)" key parsing
+	Meta    MetaOptions    // "x$$" sidecar metadata
+	ValExpr ValExprOptions // "$$" value expressions
 }
-type KeyExprOptions struct { Disable bool }              // default: enabled
-type MetaOptions    struct { Active bool; Suffix string } // default: off, "$$"
-type ValExprOptions struct { Active bool; KeyMark string }// default: off, "$$"
+type KeyExprOptions struct{ Disable bool } // default: enabled
+type MetaOptions struct {                  // default: off, "$$"
+	Active bool
+	Suffix string
+}
+type ValExprOptions struct { // default: off, "$$"
+	Active  bool
+	KeyMark string
+}
 ```
 
 ## Errors
 
 ```go
 type FieldError struct {
-    Path, Key string
-    Type      Kind
-    Value     any
-    Why       string
-    Mark      int
-    Text      string
-    Check     string
-    Args      map[string]any
+	Path    string // dot-notation path, e.g. "users.0.email"
+	PathArr []any  // the path as an array: indices as ints, keys as strings
+	Key     string
+	Type    Kind
+	Value   any
+	Why     string
+	Mark    int
+	Text    string
+	Check   string
+	Args    map[string]any
 }
+
 func (e FieldError) Error() string
 
-type ValidationError struct { Issues []FieldError }
-func (e *ValidationError) Error() string
+type ValidationError struct{ Issues []FieldError }
+
+func (e *ValidationError) Error() string // the issues' Text, joined by newline
+```
+
+`Why` codes are exported as constants, `WhyType`, `WhyRequired`, `WhyClosed`,
+`WhyCheck`, `WhyNever`, `WhyRegexp`, `WhyEmpty` (the lower-case codes) and one
+per builder that fails on its own (`WhyMin`, `WhyExact`, `WhyEmail`,
+`WhyDiscriminated`, …), each equal to the TypeScript `why` string.
+
+## Standard Schema
+
+A Go rendering of the TypeScript `~standard` object: a version, a vendor and a
+`Validate` that never panics and returns either the produced value or a list of
+issues, never both.
+
+```go
+type StandardSchema struct {
+	Version  int                            // always 1
+	Vendor   string                         // always "shape"
+	Validate func(input any) StandardResult // non-throwing validation
+}
+type StandardResult struct {
+	Value  any             // produced value when Issues is empty
+	Issues []StandardIssue // empty on success
+}
+type StandardIssue struct {
+	Message string // FieldError.Text
+	Path    []any  // FieldError.PathArr
+}
+
+func (s *Schema) Standard() StandardSchema
 ```
 
 ## Custom validators
 
 ```go
-type State  struct { Path []string; Key string; Value any; Node *node; Parent any; Match bool; Ctx *Context }
-type Update struct { Done bool; Why string; Mark int; Err any; Val any; HasVal bool; Node *node }
+type State struct {
+	Path    []string // path stack from root; current key at end
+	PathArr []any    // path as array: array indices as ints, object keys as strings
+	Key     string   // immediate key/index name
+	Value   any      // current value being validated
+	Node    *node    // current node
+	Parent  any      // parent map/slice
+	Match   bool     // true when invoked via Match (no mutation, no error report)
+	Ctx     *Context // user/custom context
+}
+type Update struct {
+	Done    bool   // stop running further checks
+	Why     string // why code on failure
+	Mark    int    // numeric mark on failure
+	Err     any    // string, FieldError, or []FieldError
+	Val     any    // replacement value
+	HasVal  bool   // true if Val should override
+	Node    *node  // override node (used by Refer)
+	Replace bool   // compat marker, not currently consulted
+}
+type Context struct {
+	Err    []FieldError
+	Custom map[string]any   // cross-property state for custom validators
+	Refs   map[string]*node // used by Define/Refer
+	Match  bool
+}
 
 func Before(fn func(val any, u *Update, s *State) bool, spec ...any) *Node
-func After (fn func(val any, u *Update, s *State) bool, spec ...any) *Node
-func Check (check any, spec ...any) *Node   // func(...) bool or *regexp.Regexp
+func After(fn func(val any, u *Update, s *State) bool, spec ...any) *Node
+func Check(check any, spec ...any) *Node // func(...) bool or *regexp.Regexp
 ```
+
+`ValidateCtx` runs a validation with a `*Context` the caller supplies, so custom
+validators can share state through `Custom`.
 
 ## String DSL
 
@@ -253,7 +369,7 @@ name keys `a`, `b`, `c`, … to fix argument positions.
 ## Version
 
 ```go
-const Version = "0.2.0"
+const Version = "0.5.0"
 ```
 
 See [Use Shape in Go](../how-to/use-shape-in-go.md) for idioms and the

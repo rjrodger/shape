@@ -10,7 +10,7 @@ go get github.com/rjrodger/shape/go
 ```
 
 ```go
-import "github.com/rjrodger/shape/go"   // package name is `shape`
+import "github.com/rjrodger/shape/go" // package name is `shape`
 ```
 
 Requires Go 1.22+.
@@ -26,9 +26,11 @@ package exports sentinel tokens:
 | `shape.String`    | strings                                       |
 | `shape.Number`    | any numeric kind (`int*`, `uint*`, `float*`)  |
 | `shape.Boolean`   | booleans                                      |
-| `shape.Object`    | `map[string]any`                              |
+| `shape.Object`    | `map[string]any` (or a struct, see below)     |
 | `shape.Array`     | `[]any`                                       |
 | `shape.Function`  | any `reflect.Func` value                      |
+| `shape.Integer`   | a number with no fractional part              |
+| `shape.Date`      | `time.Time` values                            |
 
 For a dot-import style without clashing with stdlib names, `G`-prefixed aliases
 exist: `GString`, `GNumber`, `GMin`, `GRequired`, …
@@ -36,15 +38,16 @@ exist: `GString`, `GNumber`, `GMin`, `GRequired`, …
 ## Compile and validate
 
 ```go
-s, err := shape.Shape(spec)              // (*Schema, error)
-s := shape.MustShape(spec)               // panics on a bad spec
+s, err := shape.Shape(spec) // (*Schema, error)
+s := shape.MustShape(spec)  // panics on a bad spec
 s := shape.MustShapeWith(spec, opts)
 
-out, err := s.Validate(input)            // produced value + *ValidationError
-out, err := s.ValidateCtx(input, ctx)    // with a *shape.Context
-ok := s.Match(input)                     // bool, no errors built
-ok := s.Valid(input)                     // alias of Match
-issues := s.Error(input)                 // []FieldError, nil when valid
+out, err := s.Validate(input)         // produced value + *ValidationError
+out, err := s.ValidateCtx(input, ctx) // with a *shape.Context
+ok := s.Match(input)                  // bool, no errors built
+ok := s.Valid(input)                  // alias of Match
+issues := s.Error(input)              // []FieldError, nil when valid
+std := s.Standard()                   // Standard Schema V1-style interface
 ```
 
 ## Values are JSON-shaped
@@ -62,8 +65,8 @@ produced value is still a map; `ValidateInto` decodes it back into a struct.
 
 ```go
 type User struct {
-    Name string `json:"name"`
-    Age  int    `json:"age,omitempty"`
+	Name string `json:"name"`
+	Age  int    `json:"age,omitempty"`
 }
 s := shape.MustShape(map[string]any{"name": shape.String, "age": 42})
 
@@ -81,7 +84,10 @@ means what the map key `"Port: Min(1).Max(65535)"` means. See
 
 `shape.Number` accepts every numeric kind. There is no single "number" type in
 Go, so a JSON number arrives as `float64`; native ints/uints/floats are also
-accepted.
+accepted. Type checks and bounds (`Min`, `Max`, …) compare numerically, but
+`Exact` compares with `reflect.DeepEqual`, so its literals must have the Go
+type the input will have: `Exact(1)` matches the `int` 1 and not the
+`float64` 1.0 that `json.Unmarshal` produces — write `Exact(1.0)` for that.
 
 ## `undefined` vs `null`
 
@@ -98,9 +104,9 @@ defaulted or required); an explicit `nil` value is treated as a present `null`
 ```go
 argu := shape.MakeArgu("connect")
 args, err := argu.Validate(
-    []any{"localhost", 8080.0},
-    "host, port",
-    map[string]any{"a": shape.String, "b": shape.Number},
+	[]any{"localhost", 8080.0},
+	"host, port",
+	map[string]any{"a": shape.String, "b": shape.Number},
 )
 // args == map[string]any{"a": "localhost", "b": 8080}
 ```
