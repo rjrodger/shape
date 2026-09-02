@@ -49,19 +49,27 @@ the canonical behaviour needs four things JSON cannot represent:
 | insertion order of object keys | error order, closed-object messages and rendered values follow key order in TypeScript |
 
 So: `enum Value { Undefined, Null, Bool(bool), Num(f64), Str(String),
-Arr(Vec<Value>), Obj(Map), Date(i64), Func(FuncId) }`, with `Map` an
-insertion-ordered map (`indexmap`), and `From<serde_json::Value>` /
-`Into<serde_json::Value>` behind a `serde` feature so a caller who decoded
-with serde pays one conversion. Numbers are `f64` throughout, as in
-TypeScript; an `Integer` is an `f64` with no fractional part. This is the
-one place the plan asks for an ADR before work starts, because every other
-module builds on it.
+BigInt(BigInt), Arr(Vec<Value>), Obj(Map), Date(i64), Func(FuncId) }`,
+with `Map` an insertion-ordered map (`indexmap`), and
+`From<serde_json::Value>` / `Into<serde_json::Value>` behind a `serde`
+feature so a caller who decoded with serde pays one conversion. That
+feature must require `serde_json`'s `preserve_order`, or the order is lost
+before the value reaches shape; and callers can `Deserialize` straight
+into `Value`, which keeps order without it. Numbers are `f64` throughout,
+as in TypeScript; an `Integer` is an `f64` with no fractional part; a
+`BigInt` is its own variant (`num-bigint`), since the canonical `BigInt`
+token and bigint defaults are behaviour the JSON-based gates cannot carry,
+so the crate pins them with unit tests of its own. This is the one place
+the plan asks for an ADR before work starts, because every other module
+builds on it.
 
 **Ordered maps close the largest Go divergence.** Go's alphabetical key
 order was the parity page's first entry: it changes the order of multiple
-errors and how an object renders inside a message. With `indexmap` the Rust
-port walks keys in insertion order, as TypeScript does, so the harness can
-compare error order exactly against Rust where it compares Go canonically.
+errors and how an object renders inside a message, so the differential
+cases are written with keys in alphabetical order to keep the Go comparison
+exact. With `indexmap` the Rust port walks keys in insertion order, as
+TypeScript does, so the harness can add cases whose keys are not in
+alphabetical order and compare Rust's error text exactly on those too.
 
 **Ownership makes two of this year's hardest problems disappear.** Builders
 consume and return nodes (`Min(0, Integer)`, or `Integer.min(0)`), so a
@@ -69,9 +77,11 @@ compiled `Schema` is immutable, `Send + Sync`, and cannot be given a
 validator after the fact: the generation counters both other ports needed
 have nothing to detect. And the producing walk takes its input by value
 (`validate(input: Value) -> Result<Value, ValidationError>`), so it produces
-in place like TypeScript with no copy and no copy-on-write; the boolean
-calls borrow (`valid(&Value)`, `error(&Value)`) and run terse, recording
-errors without text as the other ports now do.
+in place like TypeScript with no copy and no copy-on-write. `valid(&Value)`
+and `match(&Value)` borrow and run terse, recording errors without text as
+the other ports' boolean calls now do; `error(&Value)` borrows too but
+runs the full diagnostic path, since its whole purpose is the rendered
+errors.
 
 ## The crate
 
@@ -98,6 +108,7 @@ rs/
     argu.rs             MakeArgu (positional arguments)
     stringify.rs        node → spec text (the .String() / describe rendering)
     derive.rs           ValidateInto<T: DeserializeOwned> (serde feature; the struct story)
+    standard.rs         the Standard Schema surface (a non-throwing result: value or issues with array paths), as go/standard.go
   tests/
     compat_tsv.rs       the corpus runner (test/*.tsv, every sentinel)
     difftool.rs         the differential runner, gated on DIFF_IN / DIFF_OUT
@@ -123,8 +134,11 @@ producing the same `Node`:
    Integer), "tags": [String] })`. Literals become defaults, tokens become
    required kinds, nested braces become objects, brackets arrays; builders
    are ordinary expressions inside it.
-3. **The string DSL**, which is part of the contract anyway:
-   `Shape::parse("{ name: String, age: Min(0, Integer) }")`.
+3. **The string DSL**, which is part of the contract anyway, for a single
+   expression: `Shape::parse("Min(0, Integer)")`, and inside a key
+   expression of the structured forms (`"age: Min(0)": 18`). The DSL has
+   no object-literal grammar in TypeScript or Go, and Rust adds none; an
+   object is written with the builders or the macro.
 
 The corpus and differential decoders use builders only, mapping the
 sentinels (`$type`, `$open`, `$closed`, `$required`, `$optional`, `$expr`,
@@ -144,9 +158,12 @@ Go; the entry becomes "Go and Rust".
 
 `Before(|state: &mut State, update: &mut Update| -> bool)` and `After`,
 `Check`, with `State` exposing `path`, `key`, `value`, `parent`, `node` and
-`ctx.custom: &mut Map` as the other ports do. Closures must be `Send +
-Sync` for the `Schema` to be; that is the one constraint the Go port did not
-have, and it is the right one.
+`ctx.custom` as the other ports do. `custom` is type-erased
+(`HashMap<String, Box<dyn Any + Send + Sync>>`, with typed `get`/`insert`
+helpers), not a map of `Value`: TypeScript takes any property and Go uses
+`map[string]any`, and a validator may keep a counter, a handle or a domain
+object there. Closures must be `Send + Sync` for the `Schema` to be; that
+is the one constraint the Go port did not have, and it is the right one.
 
 ## Plugging into the gates
 
@@ -164,9 +181,10 @@ Nothing new is invented here; each gate grows a third runner.
 | publish | npm by OIDC, Go by tag | crates.io by trusted publishing (OIDC), version in `Cargo.toml`, tag `rs/vX.Y.Z`; a `rust` input on the Publish workflow |
 | docs | `docs/reference/go-api.md`, `use-shape-in-go.md` | `rust-api.md`, `use-shape-in-rust.md`; the parity page becomes the ports page with a column per language |
 
-The differential `compare.js` gains one thing: it compares error *order*
-exactly against Rust, since Rust has the canonical key order, where it
-canonicalises for Go.
+`compare.js` already compares error text exactly, for Go as for Rust, and
+canonicalises only structured values (schemas, produced values); that does
+not change. What Rust adds is the freedom to include cases whose keys are
+not in alphabetical order, which the Go comparison has to avoid.
 
 ## The parity traps, named now
 
@@ -197,20 +215,35 @@ they are done first.
 7. **`Function` and `Symbol` kinds.** A function is a value in TypeScript
    and best-effort in Go; Rust carries an opaque `Value::Func` so the kind
    exists and its messages match, and has no Symbol, as Go has none.
+8. **`Exact` compares by identity in TypeScript** (strict equality: an
+   object, array or date matches only the same reference) and structurally
+   in Go, which the parity page records. An owned `Value` compares
+   structurally too, so Rust takes Go's side of that entry, says so on the
+   parity page, and pins it with a unit test, since the JSON gates cannot
+   see identity.
+9. **Behaviour the JSON gates cannot carry** (`BigInt`, `Exact` identity,
+   the Standard Schema surface, `Function` values) gets unit tests in the
+   crate written from the TypeScript tests, so the gates being green never
+   means those are untested.
 
 ## Phases
 
-Each phase ends green on the corpus files it claims, at 100% coverage of
-what exists, with `cargo fmt` and `clippy` clean; the differential harness
-is turned on in phase 5 and stays on.
+Each phase claims a set of corpus rows and ends with every one of them
+passing and none skipped: the runner reports skipped rows by name, and a
+claim is only green at zero skips. Rows with an `$expr`, `$call`,
+`$discriminated` or `$jsonschema` cell in an otherwise-claimed file belong
+to the phase that builds that sentinel, so a file is fully claimed only
+when its last sentinel is. Every phase is at 100% coverage of what exists,
+with `cargo fmt` and `clippy` clean; the differential harness is turned on
+in phase 5 and stays on.
 
 | # | phase | claims | done when |
 | - | ----- | ------ | --------- |
 | 0 | **Scaffold.** Crate, `Value` and `Map`, JS-compatible number/string/date rendering, `Node`, the corpus runner that decodes every sentinel and skips what it cannot build yet, `make test-rs`, the CI job. | – | the runner reads all ten files and reports per-row skips; rendering has unit tests for the JS rules |
-| 1 | **Core walk.** `normalize` (literal → default, token → required), objects (closed, open, `Child`, `Rest`), arrays (tuples, child shape, `Rest`), leaves (`String`, `Number`, `Integer`, `Boolean`, `Date`, `Any`, `Null`, `Never`), `Required`/`Optional`/`Default`/`Skip`/`Empty`/`Nullable`, defaults injected, `valid`/`validate`/`error`, the default error texts. | `defaults`, `objects`, `arrays` | those files pass row for row |
-| 2 | **Builders.** Bounds (`Min`/`Max`/`Above`/`Below`/`Len`/`Exact`), `Check`/`Before`/`After`, `Fault`, `Describe`, `Type`, `Rename` (with claim), `Define`/`Refer` (with `strict`), `Catch`/`Ignore`/`Transform`, `Key`, `Closed`/`Open`, the format builders, `Coerce`, `One`/`Some`/`All`; builder argument checks as fault nodes. | `builders`, `checks`, `composition`, `misc` | pass; `docs/reference/builders.md` has nothing the crate lacks |
-| 3 | **The string DSL and expressions.** `expr`, key expressions (`"a: Min(1)"`), value expressions, meta keys; the `shape!` macro. | `keyexpr`, and every `$expr` cell in the other files | pass; `Shape::parse` round-trips `stringify` on every corpus spec |
-| 4 | **Schema and structure.** JSON Schema export and import, `Pick`/`Omit`/`Partial`/`Extend`, `Discriminated`, `MakeArgu`, `ValidateInto<T>` by serde. | `jsonschema`, `algebra`, and the `$discriminated` and `$call` cells | every corpus file passes |
+| 1 | **Core walk.** `normalize` (literal → default, token → required), objects (closed, open, `Child`, `Rest`), arrays (tuples, child shape, `Rest`), leaves (`String`, `Number`, `Integer`, `Boolean`, `Date`, `Any`, `Null`, `Never`), `Required`/`Optional`/`Default`/`Skip`/`Empty`/`Nullable`, defaults injected, `valid`/`validate`/`error`, the default error texts. | the rows of `defaults`, `objects` and `arrays` with no sentinel but `$type`, `$open`, `$closed`, `$required`, `$optional` | every claimed row passes, none skipped |
+| 2 | **Builders.** Bounds (`Min`/`Max`/`Above`/`Below`/`Len`/`Exact`), `Check`/`Before`/`After`, `Fault`, `Describe`, `Type`, `Rename` (with claim), `Define`/`Refer` (with `strict`), `Catch`/`Ignore`/`Transform`, `Key`, `Closed`/`Open`, the format builders, `Coerce`, `One`/`Some`/`All`; builder argument checks as fault nodes; the unit tests for `BigInt` and `Exact`. | the same sentinels in `builders`, `checks`, `composition`, `misc` | every claimed row passes, none skipped; `docs/reference/builders.md` has nothing the crate lacks |
+| 3 | **The string DSL and expressions.** `expr`, key expressions (`"a: Min(1)"`), value expressions, meta keys; the `shape!` macro. | `keyexpr`, and every `$expr` row of the files above | every claimed row passes, none skipped; `Shape::parse` round-trips `stringify` on every expression in the corpus |
+| 4 | **Schema and structure.** JSON Schema export and import, `Pick`/`Omit`/`Partial`/`Extend`, `Discriminated`, `MakeArgu`, `ValidateInto<T>` by serde, the Standard Schema surface with its unit tests. | `jsonschema`, `algebra`, and every `$discriminated`, `$call` and `$jsonschema` row | every corpus row passes, none skipped |
 | 5 | **The wide net.** `rs/tests/difftool.rs`, `make diff-rs`, `compare.js` with Rust as a second port, exact error order; coverage to 100%; parity page entries for Rust. | – | `make diff` agrees on every case for both ports; CI `parity` runs both |
 | 6 | **Bench, docs, publish.** `bench/rs`, the report and site with three languages, `rust-api.md` and the how-to, the crate README, trusted publishing and the `rust` input on Publish. | – | a Measure run records Rust on three platforms; `cargo publish --dry-run` passes; `shape` on crates.io at `0.1.0` |
 
@@ -235,10 +268,10 @@ shows the result beside the other two.
 | - | ------------ | --------------- |
 | 1 | ADR: the `Value` type and the three spec forms | – |
 | 2 | Phase 0: crate, rendering, corpus runner, Makefile, CI job | `make test-rs` runs (all rows skipped) |
-| 3 | Phase 1 | `defaults`, `objects`, `arrays` green |
-| 4 | Phase 2 | `builders`, `checks`, `composition`, `misc` green |
-| 5 | Phase 3 | `keyexpr` green, every `$expr` cell built |
-| 6 | Phase 4 | every corpus file green |
+| 3 | Phase 1 | the plain rows of `defaults`, `objects`, `arrays` green, none skipped |
+| 4 | Phase 2 | the plain rows of `builders`, `checks`, `composition`, `misc` green |
+| 5 | Phase 3 | `keyexpr` and every `$expr` row green |
+| 6 | Phase 4 | every corpus row green, zero skips |
 | 7 | Phase 5 | `make diff` green for Go and Rust; 100% coverage |
 | 8 | Phase 6 | bench recorded, docs, `0.1.0` on crates.io |
 
