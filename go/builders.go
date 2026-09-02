@@ -950,6 +950,8 @@ func ReferWith(name string, opts ReferOptions, spec ...any) *Node {
 			}
 			if rn, ok := state.Ctx.Refs[name]; ok {
 				update.Node = rn
+			} else if rn, ok := state.Ctx.defs[name]; ok {
+				update.Node = rn
 			}
 			return true
 		},

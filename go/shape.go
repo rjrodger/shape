@@ -5,6 +5,47 @@ const Version = "0.3.0"
 // Schema is a compiled shape specification.
 type Schema struct {
 	root *node
+	// The Define'd nodes of the tree, collected once so a Refer can resolve
+	// them whatever the traversal order (see prepare).
+	defs map[string]*node
+}
+
+// prepare walks a compiled tree once: every object node gets the set of
+// keys it accepts, and every Define'd node is collected by name. Both were
+// derived on every validation before.
+func prepare(n *node, defs map[string]*node) {
+	if n == nil {
+		return
+	}
+	if n.defineName != "" {
+		defs[n.defineName] = n
+	}
+	if n.kind == KindObject && n.consumed == nil {
+		consumed := make(map[string]bool, len(n.objKeys))
+		for _, k := range n.objKeys {
+			consumed[k] = true
+			cn := n.objChildren[k]
+			if cn.renameTo != "" {
+				consumed[cn.renameTo] = true
+			}
+			for _, src := range cn.renameClaim {
+				consumed[src] = true
+			}
+		}
+		n.consumed = consumed
+	}
+	for _, cn := range n.objChildren {
+		prepare(cn, defs)
+	}
+	prepare(n.objRest, defs)
+	for _, cn := range n.arrChildren {
+		prepare(cn, defs)
+	}
+	prepare(n.arrChild, defs)
+	prepare(n.arrRest, defs)
+	for _, sn := range n.list {
+		prepare(sn, defs)
+	}
 }
 
 // Shape compiles a schema-by-example specification with default options.
@@ -19,7 +60,9 @@ func ShapeWith(spec any, opts ShapeOptions) (*Schema, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Schema{root: n}, nil
+	defs := map[string]*node{}
+	prepare(n, defs)
+	return &Schema{root: n, defs: defs}, nil
 }
 
 // MustShape compiles a schema and panics if invalid.
@@ -53,7 +96,7 @@ func (s *Schema) ValidateCtx(input any, ctx *Context) (any, error) {
 	}
 	c := newContext(ctx)
 	c.Match = false
-	collectDefines(s.root, c)
+	c.defs = s.defs
 	verr := &ValidationError{}
 
 	var out any
@@ -61,9 +104,9 @@ func (s *Schema) ValidateCtx(input any, ctx *Context) (any, error) {
 		// Ignore at the root drops a value that does not validate, exactly as
 		// it does for an object property. Without this the failing value was
 		// handed back unchanged.
-		out, _ = validateIgnored(s.root, rootInput(input), []string{}, []any{}, "", nil, c, false)
+		out, _ = validateIgnored(s.root, rootInput(input), rootPath(), rootPathArr(), "", nil, c, false)
 	} else {
-		out = validateNode(s.root, rootInput(input), []string{}, []any{}, "", nil, c, false, verr)
+		out = validateNode(s.root, rootInput(input), rootPath(), rootPathArr(), "", nil, c, false, verr)
 	}
 
 	if ctx != nil {
@@ -83,9 +126,9 @@ func (s *Schema) Match(input any) bool {
 	}
 	c := newContext(nil)
 	c.Match = true
-	collectDefines(s.root, c)
+	c.defs = s.defs
 	verr := &ValidationError{}
-	validateNode(s.root, rootInput(input), []string{}, []any{}, "", nil, c, true, verr)
+	validateNode(s.root, rootInput(input), rootPath(), rootPathArr(), "", nil, c, true, verr)
 	return !verr.hasAny()
 }
 
@@ -101,9 +144,9 @@ func (s *Schema) Error(input any) []FieldError {
 		return nil
 	}
 	c := newContext(nil)
-	collectDefines(s.root, c)
+	c.defs = s.defs
 	verr := &ValidationError{}
-	validateNode(s.root, rootInput(input), []string{}, []any{}, "", nil, c, false, verr)
+	validateNode(s.root, rootInput(input), rootPath(), rootPathArr(), "", nil, c, false, verr)
 	return verr.Issues
 }
 
@@ -136,3 +179,9 @@ func IsShape(v any) bool {
 	_, ok := v.(*Schema)
 	return ok
 }
+
+// The path stacks start with room for a deep tree, so the per-key appends
+// down the walk allocate nothing until that depth. An error copies the path
+// it reports (see makeErr), so the shared backing array is never retained.
+func rootPath() []string { return make([]string, 0, 32) }
+func rootPathArr() []any { return make([]any, 0, 32) }

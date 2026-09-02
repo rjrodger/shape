@@ -60,6 +60,10 @@ type node struct {
 	exactVals []any
 	hasExact  bool
 
+	// The keys an object node accepts (its declared keys, rename targets and
+	// claim sources), computed once when the schema is compiled.
+	consumed map[string]bool
+
 	// Define / Refer name (also stored on validator closures via befores).
 	defineName string
 	referName  string

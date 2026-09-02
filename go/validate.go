@@ -387,34 +387,58 @@ func validateArray(n *node, in any, path []string, pathArr []any, parent any, ct
 			return out
 		}
 
-		out := make([]any, len(arr))
+		out, parentOf := producedSlice(arr, match)
 		for i, v := range arr {
 			if i < tupleLen {
-				out[i] = validateElem(n.arrChildren[i], v, path, pathArr, i, out, ctx, match, verr)
+				produced := validateElem(n.arrChildren[i], v, path, pathArr, i, parentOf, ctx, match, verr)
+				if !match {
+					out[i] = produced
+				}
 			} else {
 				// len(arr) > tupleLen only reaches here when arrRest is set.
-				out[i] = validateElem(n.arrRest, v, path, pathArr, i, out, ctx, match, verr)
+				produced := validateElem(n.arrRest, v, path, pathArr, i, parentOf, ctx, match, verr)
+				if !match {
+					out[i] = produced
+				}
 			}
 		}
 		// Missing tuple positions get their default.
 		for i := len(arr); i < tupleLen; i++ {
 			cn := n.arrChildren[i]
-			out = append(out, validateNode(cn, undefinedVal, append(path, strconv.Itoa(i)), append(pathArr, i), strconv.Itoa(i), out, ctx, match, verr))
+			produced := validateNode(cn, undefinedVal, append(path, strconv.Itoa(i)), append(pathArr, i), strconv.Itoa(i), parentOf, ctx, match, verr)
+			if !match {
+				out = append(out, produced)
+			}
+		}
+		if match {
+			return nil
 		}
 		return out
 	case n.arrChild != nil:
-		out := make([]any, len(arr))
+		out, parentOf := producedSlice(arr, match)
 		for i, v := range arr {
-			out[i] = validateElem(n.arrChild, v, path, pathArr, i, out, ctx, match, verr)
+			produced := validateElem(n.arrChild, v, path, pathArr, i, parentOf, ctx, match, verr)
+			if !match {
+				out[i] = produced
+			}
+		}
+		if match {
+			return nil
 		}
 		return out
 	case n.arrRest != nil:
 		// Rest with no tuple positions in front of it: every element is a rest
 		// element. Without this case the node fell through to the default and
 		// nothing was validated at all.
-		out := make([]any, len(arr))
+		out, parentOf := producedSlice(arr, match)
 		for i, v := range arr {
-			out[i] = validateElem(n.arrRest, v, path, pathArr, i, out, ctx, match, verr)
+			produced := validateElem(n.arrRest, v, path, pathArr, i, parentOf, ctx, match, verr)
+			if !match {
+				out[i] = produced
+			}
+		}
+		if match {
+			return nil
 		}
 		return out
 	default:
@@ -422,6 +446,17 @@ func validateArray(n *node, in any, path []string, pathArr []any, parent any, ct
 		copy(out, arr)
 		return out
 	}
+}
+
+// producedSlice is the slice an array's elements are produced into, and the
+// parent the elements see: the produced slice, or the input itself when a
+// match walks in place and produces nothing.
+func producedSlice(arr []any, match bool) ([]any, any) {
+	if match {
+		return nil, arr
+	}
+	out := make([]any, len(arr))
+	return out, out
 }
 
 func validateObject(n *node, in any, path []string, pathArr []any, parent any, ctx *Context, match bool, verr *ValidationError) any {
@@ -434,30 +469,30 @@ func validateObject(n *node, in any, path []string, pathArr []any, parent any, c
 		return nil
 	}
 
-	out := map[string]any{}
-	for k, v := range obj {
-		out[k] = v
+	// The produced map is only built when a value is produced: a match walks
+	// the input in place and writes nothing. Children see the produced map as
+	// their parent when there is one, the input otherwise.
+	var out map[string]any
+	if !match {
+		out = make(map[string]any, len(obj)+len(n.objKeys))
+		for k, v := range obj {
+			out[k] = v
+		}
+	}
+	var parentOf any = out
+	if match {
+		parentOf = obj
 	}
 
-	// Track keys that are legally consumed by this object schema:
-	// declared keys, rename targets, and claim sources.
-	consumed := map[string]bool{}
-	for _, k := range n.objKeys {
-		consumed[k] = true
-		cn := n.objChildren[k]
-		if cn.renameTo != "" {
-			consumed[cn.renameTo] = true
-		}
-		for _, src := range cn.renameClaim {
-			consumed[src] = true
-		}
-	}
+	// The keys this object accepts (declared keys, rename targets and claim
+	// sources), computed when the schema was compiled (see prepare).
+	consumed := n.consumed
 
 	// Unknown keys are reported before descending into the declared ones, which
 	// is the order TS emits them in. The keys are sorted because Go map
 	// iteration is random and the message order is compared exactly.
 	if !n.open {
-		unknown := make([]string, 0, len(obj))
+		var unknown []string
 		for k := range obj {
 			if !consumed[k] {
 				unknown = append(unknown, k)
@@ -493,7 +528,7 @@ func validateObject(n *node, in any, path []string, pathArr []any, parent any, c
 				if sv, sh := obj[src]; sh {
 					v = sv
 					has = true
-					if !cn.renameKeep {
+					if !cn.renameKeep && !match {
 						delete(out, src)
 					}
 					break
@@ -502,9 +537,11 @@ func validateObject(n *node, in any, path []string, pathArr []any, parent any, c
 		}
 
 		if !has {
-			produced = validateNode(cn, undefinedVal, kpath, kpathArr, k, out, ctx, match, verr)
+			produced = validateNode(cn, undefinedVal, kpath, kpathArr, k, parentOf, ctx, match, verr)
 			if cn.skippable && (produced == nil || cn.silent) {
-				delete(out, k)
+				if !match {
+					delete(out, k)
+				}
 				continue
 			}
 			// A nil produced value means nothing was injected (required error, or
@@ -512,14 +549,19 @@ func validateObject(n *node, in any, path []string, pathArr []any, parent any, c
 			// The exception is a null literal, whose default is the null
 			// itself: TS injects it, so the key is present and null.
 			if produced == nil && !(cn.kind == KindNull && cn.hasDefault && !cn.required) {
-				delete(out, k)
+				if !match {
+					delete(out, k)
+				}
 				continue
 			}
 		} else {
 			// Ignore: keep the value only when it validates cleanly, otherwise
 			// drop it (and any errors it would raise).
 			if isIgnore(cn) {
-				probed, kept := validateIgnored(cn, v, kpath, kpathArr, k, out, ctx, match)
+				probed, kept := validateIgnored(cn, v, kpath, kpathArr, k, parentOf, ctx, match)
+				if match {
+					continue
+				}
 				if !kept {
 					delete(out, k)
 					continue
@@ -527,9 +569,12 @@ func validateObject(n *node, in any, path []string, pathArr []any, parent any, c
 				out[k] = probed
 				continue
 			}
-			produced = validateNode(cn, v, kpath, kpathArr, k, out, ctx, match, verr)
+			produced = validateNode(cn, v, kpath, kpathArr, k, parentOf, ctx, match, verr)
 		}
 
+		if match {
+			continue
+		}
 		out[k] = produced
 
 		// Apply Rename: if child has renameTo, move into target key.
@@ -542,12 +587,16 @@ func validateObject(n *node, in any, path []string, pathArr []any, parent any, c
 	}
 
 	for k, cn := range n.objChildren {
-		if _, present := out[k]; present {
+		if match {
+			if _, present := obj[k]; present {
+				continue
+			}
+		} else if _, present := out[k]; present {
 			continue
 		}
 		if !contains(n.objKeys, k) {
-			produced := validateNode(cn, undefinedVal, append(path, k), append(pathArr, k), k, out, ctx, match, verr)
-			if produced != nil {
+			produced := validateNode(cn, undefinedVal, append(path, k), append(pathArr, k), k, parentOf, ctx, match, verr)
+			if produced != nil && !match {
 				out[k] = produced
 			}
 		}
@@ -569,7 +618,10 @@ func validateObject(n *node, in any, path []string, pathArr []any, parent any, c
 			// Ignore drops the keys that do not validate.
 			if isIgnore(n.objRest) {
 				produced, kept := validateIgnored(n.objRest, obj[k],
-					append(path, k), append(pathArr, k), k, out, ctx, match)
+					append(path, k), append(pathArr, k), k, parentOf, ctx, match)
+				if match {
+					continue
+				}
 				if !kept {
 					delete(out, k)
 					continue
@@ -577,10 +629,16 @@ func validateObject(n *node, in any, path []string, pathArr []any, parent any, c
 				out[k] = produced
 				continue
 			}
-			out[k] = validateNode(n.objRest, obj[k], append(path, k), append(pathArr, k), k, out, ctx, match, verr)
+			produced := validateNode(n.objRest, obj[k], append(path, k), append(pathArr, k), k, parentOf, ctx, match, verr)
+			if !match {
+				out[k] = produced
+			}
 		}
 	}
 
+	if match {
+		return nil
+	}
 	return out
 }
 
@@ -915,35 +973,6 @@ func toAnySlice(v any) ([]any, bool) {
 		return out, true
 	}
 	return nil, false
-}
-
-// collectDefines walks the node tree and registers all Define nodes into
-// ctx.Refs so Refer lookups don't depend on traversal order.
-func collectDefines(n *node, ctx *Context) {
-	if n == nil || ctx == nil {
-		return
-	}
-	if n.defineName != "" {
-		ctx.Refs[n.defineName] = n
-	}
-	for _, cn := range n.objChildren {
-		collectDefines(cn, ctx)
-	}
-	if n.objRest != nil {
-		collectDefines(n.objRest, ctx)
-	}
-	for _, cn := range n.arrChildren {
-		collectDefines(cn, ctx)
-	}
-	if n.arrChild != nil {
-		collectDefines(n.arrChild, ctx)
-	}
-	if n.arrRest != nil {
-		collectDefines(n.arrRest, ctx)
-	}
-	for _, sn := range n.list {
-		collectDefines(sn, ctx)
-	}
 }
 
 func contains(ss []string, s string) bool {

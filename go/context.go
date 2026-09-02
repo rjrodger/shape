@@ -9,6 +9,8 @@ type Context struct {
 	Match  bool
 	// Rename bookkeeping (parity with TS s.ctx.Rename)
 	rename map[string]renameInfo
+	// The compiled schema's Define'd nodes, read when Refs has no entry.
+	defs map[string]*node
 }
 
 type renameInfo struct {
@@ -23,7 +25,6 @@ func newContext(in *Context) *Context {
 		return &Context{
 			Custom: map[string]any{},
 			Refs:   map[string]*node{},
-			rename: map[string]renameInfo{},
 		}
 	}
 	if in.Custom == nil {
@@ -31,9 +32,6 @@ func newContext(in *Context) *Context {
 	}
 	if in.Refs == nil {
 		in.Refs = map[string]*node{}
-	}
-	if in.rename == nil {
-		in.rename = map[string]renameInfo{}
 	}
 	return in
 }

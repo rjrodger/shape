@@ -548,5 +548,5 @@ func TestZZValidateSmallHelpers(t *testing.T) {
 	}
 
 	// collectDefines with nil args returns immediately (695-697).
-	collectDefines(nil, nil)
+	prepare(nil, nil)
 }
