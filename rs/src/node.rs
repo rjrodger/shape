@@ -201,6 +201,9 @@ pub struct Node {
 
     pub list_mode: ListMode,
     pub list: Vec<Node>,
+    /// A Discriminated union: the tag it chooses by, and its branch names,
+    /// which are the list in that order.
+    pub disc: Option<crate::discriminated::Disc>,
 
     pub exact_vals: Vec<Value>,
     pub has_exact: bool,

@@ -17,11 +17,13 @@ path = "src/lib.rs"
 indexmap = "2"
 regex = "1"
 num-bigint = "0.4"
+serde = { version = "1", optional = true }
 serde_json = { version = "1", features = ["preserve_order"], optional = true }
 
 [dev-dependencies]
+serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 
 [features]
 default = ["serde"]
-serde = ["dep:serde_json"]
+serde = ["dep:serde", "dep:serde_json"]

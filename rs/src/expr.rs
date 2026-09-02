@@ -2,6 +2,7 @@
 //! `"One(String, Number)"`. Builder names, type tokens, JSON literals and
 //! `/regexp/` tokens, chained with dots and given arguments in parentheses.
 
+use crate::algebra::{extend_node, omit_node, partial_node, pick_node, Names};
 use crate::builders::*;
 use crate::node::{Node, Token};
 use crate::normalize::{literal_node, nan_node, normalize, regexp_node};
@@ -516,6 +517,34 @@ fn call_builder(name: &str, mut args: Vec<Spec>) -> Result<Node, ExprError> {
                 .collect();
             Ok(key_args(&vals))
         }
+        "Pick" | "Omit" => {
+            if args.is_empty() {
+                return err(format!("{}: missing property names", name));
+            }
+            let names = match value_at(&args, 0) {
+                Some(v) => {
+                    Names::from_value(&v, name).map_err(|e| ExprError(format!("Shape: {}", e)))?
+                }
+                None => return err(format!("Shape: {} needs a list of property names", name)),
+            };
+            let spec = shape_at(&mut args, 1, any_spec());
+            let built = if name == "Pick" {
+                pick_node(names, spec)
+            } else {
+                omit_node(names, spec)
+            };
+            built.map_err(|e| ExprError(format!("Shape: {}", e)))
+        }
+        "Partial" => partial_node(shape_at(&mut args, 0, any_spec()))
+            .map_err(|e| ExprError(format!("Shape: {}", e))),
+        "Extend" => {
+            if args.is_empty() {
+                return err("Extend: missing extension".to_string());
+            }
+            let extra = args.remove(0);
+            let spec = shape_at(&mut args, 0, any_spec());
+            extend_node(extra, spec).map_err(|e| ExprError(format!("Shape: {}", e)))
+        }
         _ => err(format!(
             "Shape: {} is not available in the string form",
             name
@@ -803,9 +832,15 @@ mod tests {
             ("Define(1)", "Define: name must be a string"),
             ("Refer()", "Refer: missing name"),
             ("Rename()", "Rename: missing name"),
+            ("Pick([\"a\"])", "Shape: Pick needs an object shape"),
+            ("Pick()", "Pick: missing property names"),
+            ("Omit(1)", "Shape: Omit needs a list of property names"),
+            ("Omit(Number)", "Shape: Omit needs a list of property names"),
+            ("Partial", "Shape: Partial needs an object shape"),
+            ("Extend()", "Extend: missing extension"),
             (
-                "Pick([\"a\"])",
-                "Shape: Pick is not available in the string form",
+                "Extend(Number, Number)",
+                "Shape: Extend needs an object shape",
             ),
             (
                 "Transform",

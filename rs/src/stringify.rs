@@ -54,6 +54,9 @@ pub fn stringify_node(n: &Node, inline: bool) -> String {
         Kind::Check => suffix("Check".to_string(), n),
         Kind::Function => suffix("Function".to_string(), n),
         Kind::List => {
+            if let Some(d) = &n.disc {
+                return suffix(format!("Discriminated({},{})", d.tag, d.tags.join(",")), n);
+            }
             let mode = match n.list_mode {
                 ListMode::Some => "Some",
                 ListMode::All => "All",

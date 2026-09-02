@@ -10,11 +10,6 @@ thread_local! {
     static EXPRS: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
 }
 
-const ALGEBRA: [&str; 4] = ["Pick", "Omit", "Partial", "Extend"];
-
-fn uses_algebra(src: &str) -> bool {
-    ALGEBRA.iter().any(|b| src.contains(b))
-}
 use std::fs;
 use std::path::Path;
 
@@ -120,9 +115,6 @@ fn decode_spec(v: &serde_json::Value) -> Result<Spec, Unsupported> {
                     "$optional" => return Ok(Spec::from(shape::optional(decode_spec(sv)?))),
                     "$expr" => {
                         let src = sv.as_str().unwrap_or("");
-                        if uses_algebra(src) {
-                            return Err(Unsupported(format!("$expr {}", src)));
-                        }
                         EXPRS.with(|e| e.borrow_mut().push(src.to_string()));
                         let node = expr(src).unwrap_or_else(|e| panic!("{}: {}", src, e));
                         return Ok(Spec::from(node));
@@ -165,58 +157,45 @@ fn decode_spec(v: &serde_json::Value) -> Result<Spec, Unsupported> {
                                 }
                                 _ => Err(Unsupported("$call Refer".into())),
                             },
+                            "Pick" | "Omit" => {
+                                let names =
+                                    shape::Names::from_value(&Value::from(arr[1].clone()), name)
+                                        .unwrap();
+                                Ok(Spec::from(if name == "Pick" {
+                                    shape::pick(names, spec)
+                                } else {
+                                    shape::omit(names, spec)
+                                }))
+                            }
+                            "Partial" => Ok(Spec::from(shape::partial(decode_spec(&arr[1])?))),
+                            "Extend" => Ok(Spec::from(shape::extend(decode_spec(&arr[1])?, spec))),
                             other => Err(Unsupported(format!("$call {}", other))),
                         };
                     }
-                    "$jsonschema" | "$discriminated" => return Err(Unsupported(k.clone())),
+                    "$discriminated" => {
+                        let arr = sv.as_array().unwrap();
+                        let tag = arr[0].as_str().unwrap();
+                        let mut branches = Vec::new();
+                        for (t, b) in arr[1].as_object().unwrap() {
+                            branches.push((t.clone(), decode_spec(b)?));
+                        }
+                        return Ok(Spec::from(shape::discriminated(tag, branches)));
+                    }
+                    "$jsonschema" => {
+                        return Ok(shape::from_json_schema(&Value::from(sv.clone()))
+                            .unwrap_or_else(|e| panic!("{}: {}", k, e)));
+                    }
                     _ => {}
                 }
             }
             let mut pairs = Vec::with_capacity(m.len());
             for (k, sv) in m {
-                if is_key_expr(k) && uses_algebra(k) {
-                    return Err(Unsupported(format!("key expression {:?}", k)));
-                }
                 pairs.push((k.clone(), decode_spec(sv)?));
             }
             Ok(Spec::Obj(pairs))
         }
         other => Ok(Spec::Value(Value::from(other.clone()))),
     }
-}
-
-/// A property key that carries an expression, `"a: Min(2)"`: the rule of
-/// the TypeScript `KEY_EXPR_RE`, a name (quoted, or without spaces) then a
-/// colon and the expression.
-fn is_key_expr(k: &str) -> bool {
-    let t = k.trim_start();
-    let rest = if let Some(after) = t.strip_prefix('"') {
-        // A quoted name: skip to the closing quote, honouring escapes.
-        let mut chars = after.char_indices();
-        let mut end = None;
-        while let Some((i, c)) = chars.next() {
-            match c {
-                '\\' => {
-                    chars.next();
-                }
-                '"' => {
-                    end = Some(i);
-                    break;
-                }
-                _ => {}
-            }
-        }
-        match end {
-            Some(i) => &after[i + 1..],
-            None => return false,
-        }
-    } else {
-        match t.find(|c: char| c.is_whitespace() || c == ':') {
-            Some(i) => &t[i..],
-            None => return false,
-        }
-    };
-    rest.starts_with(':')
 }
 
 /// Both sides through the same JSON normalisation, so numeric width and
