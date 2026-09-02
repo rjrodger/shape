@@ -1,6 +1,6 @@
 # Latest measurements
 
-Generated 2026-09-02T13:57:50.184Z from 12 run(s). Times are median nanoseconds per operation; lower is better.
+Generated 2026-09-02T14:09:10.425Z from 16 run(s). Times are median nanoseconds per operation; lower is better.
 
 ## go on github:windows-x64
 
@@ -16,15 +16,15 @@ Host `1fee8adaf205`: AMD EPYC 9V74 80-Core Processor, 4 cores, win32/x64. Last r
 
 ## go on linux-xeon-sandbox
 
-Host `80bb4b189998`: Intel(R) Xeon(R) Processor @ 2.10GHz, 4 cores, linux/x64. Last run 2026-09-02 (cases `64dd85eab212`).
+Host `80bb4b189998`: Intel(R) Xeon(R) Processor @ 2.10GHz, 4 cores, linux/x64. Last run 2026-09-02 (cases `64dd85eab212`). Measured from a worktree with uncommitted changes.
 
 | case | shape | validator | jsonschema | gojsonschema | shape / fastest |
 |---|---:|---:|---:|---:|---:|
-| flat | 1.4 µs | 313 ns | 1.8 µs | 5.9 µs | 4.4× |
-| nested | 2.9 µs | 1.0 µs | 3.6 µs | 9.4 µs | 2.9× |
-| array | 24.3 µs | 14.0 µs | 64.0 µs | 186.6 µs | 1.7× |
-| bounds | 2.0 µs | 669 ns | 3.4 µs | 5.9 µs | 3.0× |
-| invalid | 8.3 µs | – | 4.7 µs | 12.4 µs | 1.8× |
+| flat | 1.5 µs | 326 ns | 1.9 µs | 6.1 µs | 4.6× |
+| nested | 3.1 µs | 1.0 µs | 3.3 µs | 9.5 µs | 3.0× |
+| array | 27.1 µs | 14.6 µs | 65.3 µs | 193.0 µs | 1.9× |
+| bounds | 2.0 µs | 677 ns | 3.5 µs | 5.9 µs | 3.0× |
+| invalid | 6.8 µs | – | 3.5 µs | 12.1 µs | 1.9× |
 
 ## go on linux-xeon-sandbox
 
@@ -137,6 +137,10 @@ Shape's median per case on every run, newest last; only runs against the same ca
 | run | commit | shape | flat | nested | array | bounds | invalid |
 |---|---|---|---:|---:|---:|---:|---:|
 | 2026-09-02 13:57 | `9ddbbe9` | 0.3.0 | 1.4 µs | 2.9 µs | 24.3 µs | 2.0 µs | 8.3 µs |
+| 2026-09-02 14:06 | `e67ecc6` | 0.3.0 | 898 ns | 3.1 µs | 38.3 µs | 1.3 µs | 6.6 µs |
+| 2026-09-02 14:07 | `e67ecc6` (dirty) | 0.3.0 | 915 ns | 1.9 µs | 26.4 µs | 1.4 µs | 7.0 µs |
+| 2026-09-02 14:08 | `e67ecc6` (dirty) | 0.3.0 | 1.3 µs | 3.1 µs | 39.9 µs | 1.5 µs | 6.0 µs |
+| 2026-09-02 14:09 | `e67ecc6` (dirty) | 0.3.0 | 1.5 µs | 3.1 µs | 27.1 µs | 2.0 µs | 6.8 µs |
 
 ## go on linux-xeon-sandbox
 
