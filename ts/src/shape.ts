@@ -164,17 +164,33 @@ type Validate =
 // properties, with a key expression ("a: Min(2)") reduced to its name.
 type IsAny<T> = 0 extends (1 & T) ? true : false
 
-type KeyName<K> =
-  K extends `${infer N}: ${string}` ? (N extends `"${infer Q}"` ? Q : N) : K
+// The runtime grammar (KEY_EXPR_RE): optional whitespace, a quoted or a
+// whitespace-free name, a colon, then a non-empty expression; anything else
+// is a plain key.
+type Trim<S extends string> =
+  S extends ` ${infer R}` ? Trim<R> : S extends `${infer R} ` ? Trim<R> : S
 
+type KeyName<K> =
+  K extends string ? (
+    Trim<K> extends `"${infer Q}":${infer E}` ? ('' extends Trim<E> ? K : Q) :
+    Trim<K> extends `${infer N}:${infer E}` ?
+    (N extends `${string} ${string}` ? K : '' extends Trim<E> ? K : N) :
+    K
+  ) : K
+
+// A result object keeps the input's own extra properties; a property the
+// spec declares is the spec's (Coerce turns a string into a number).
 type Produced<V, R> =
   IsAny<V> extends true ? R :
   R extends readonly any[] ? R :
-  R extends object ? V & R :
+  R extends object ? (V extends object ? Omit<V, keyof R> & R : R) :
   R
 
-// A builder used bare (`{ n: Integer }`) carries the type it stands for.
-type Bare<R> = { readonly bare$: R }
+// A builder used bare (`{ n: Integer }`) carries the type it stands for. The
+// brand's key is a symbol this module does not export, so nothing can read
+// it at runtime.
+declare const BARE: unique symbol
+type Bare<R> = { readonly [BARE]: R }
 
 // An Exact value list: its literals are the result, not their widened kinds.
 type Literal<L> = { readonly literal$: L }
@@ -2712,7 +2728,16 @@ const Never = bare<never>()(function Never <V = never>(this: any, shape?: Node<V
 
 // Inject the key path of the value.
 // OR: provide validation of Key - depth could also be a RegExp
-const Key = bare<string>()(function Key(this: any, depth?: number | Function, join?: string): Node<string> {
+// Key yields the parent key, the path up to a depth (joined with a
+// separator when one is given), or whatever a function of the path returns.
+interface KeyBuilder {
+  (this: any): Node<string>
+  (this: any, depth: number, join: string): Node<string>
+  (this: any, depth: number): Node<string[]>
+  <R>(this: any, depth: (path: string[], state: State) => R): Node<R>
+}
+
+const Key = bare<string>()(function Key(this: any, depth?: number | Function, join?: string): Node<any> {
   let node = buildize(this)
 
   let ascend = S.number === typeof depth
@@ -2751,7 +2776,7 @@ const Key = bare<string>()(function Key(this: any, depth?: number | Function, jo
   })
 
   return node
-})
+} as KeyBuilder)
 
 
 // Pass only if all match. Does not short circuit (as defaults may be missed).
@@ -3245,11 +3270,12 @@ type TypeRef =
   ArrayConstructor | ObjectConstructor | FunctionConstructor |
   SymbolConstructor | Symbol | Record<any, any> | null | undefined | typeof NaN
 
-const Type = function <K extends TypeRef, V = K>(
+// The result is the forced kind's; the spec's structure is discarded.
+const Type = function <K extends TypeRef>(
   this: any,
   tref: K,
-  shape?: Node<V> | V
-): Node<V> {
+  shape?: any
+): Node<ShapeResult<K>> {
   let tnat = nodize(TNAT[tref as string] || (S.Integer === tref ? Integer : tref))
 
   let node = buildize(this, shape)

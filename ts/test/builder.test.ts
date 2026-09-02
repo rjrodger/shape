@@ -1313,7 +1313,7 @@ Value "5" for property "d.1" must be below 4 (was 5).`)
             part2: Key(2),
             join: Key(3, '.'),
             self: Key(-1),
-            custom: Key((path: string, _state: State) => {
+            custom: Key((path: string[], _state: State) => {
               return path.length
             }),
             x: 1,

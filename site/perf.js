@@ -40,9 +40,10 @@
       const versions = {}
       for (const r of rows) versions[r.lib] = r.version
       const at = rows.map((r) => r.at).sort().pop()
-      const commit = rows.find((r) => r.at === at).commit
+      const last = rows.find((r) => r.at === at)
+      const dirty = rows.some((r) => r.dirty) ? ' <strong>Measured from a worktree with uncommitted changes, so the commit is approximate.</strong>' : ''
       html += `<h2 id="${lang}">${LANG[lang]}</h2>`
-      html += `<p class="muted">Latest run ${at.slice(0, 10)} at <a href="https://github.com/rjrodger/shape/commit/${commit}"><code>${commit.slice(0, 7)}</code></a>: ` + libs.map((l) => `${l} ${versions[l] || ''}`).join(', ') + '.</p>'
+      html += `<p class="muted">Latest run ${at.slice(0, 10)} at <a href="https://github.com/rjrodger/shape/commit/${last.commit}"><code>${last.commit.slice(0, 7)}</code></a> against cases <code>${last.input_hash}</code>: ` + libs.map((l) => `${l} ${versions[l] || ''}`).join(', ') + `.${dirty}</p>'
       html += legend(libs)
       html += barChart(rows, libs, data.cases)
       html += table(rows, libs, data.cases)
@@ -113,9 +114,12 @@
     return html + '</tbody></table>'
   }
 
-  // trend draws the median of one case across every run on the host.
+  // trend draws the median of one case across every run on the host that
+  // measured the same cases as the latest run.
   function trend(lang, libs) {
-    const pts = data.history.filter((h) => h.lang === lang && h.host === state.host && h.case === state.trend)
+    const current = data.matrix.find((m) => m.lang === lang && m.host === state.host)
+    const hash = current ? current.input_hash : undefined
+    const pts = data.history.filter((h) => h.lang === lang && h.host === state.host && h.case === state.trend && h.input_hash === hash)
     const runs = [...new Set(pts.map((p) => p.run))].sort()
     if (runs.length < 2) return `<p class="muted">Trend for <code>${state.trend}</code>: one run so far on this host; a line appears once there are more.</p>`
     const W = 760, H = 220, left = 60, right = 20, top = 12, bottom = 28
@@ -134,7 +138,7 @@
       const series = runs.map((r, i) => { const p = pts.find((q) => q.run === r && q.lib === lib); return p ? [x(i), y(p.median_ns), p] : null }).filter(Boolean)
       if (!series.length) return
       svg += `<polyline class="line" stroke="${color(lib, li)}" points="${series.map((s) => s[0] + ',' + s[1]).join(' ')}"/>`
-      for (const s of series) svg += `<circle cx="${s[0]}" cy="${s[1]}" r="3" fill="${color(lib, li)}"><title>${lib} ${s[2].at.slice(0, 10)}: ${fmt(s[2].median_ns)} (${s[2].commit.slice(0, 7)})</title></circle>`
+      for (const s of series) svg += `<circle cx="${s[0]}" cy="${s[1]}" r="3" fill="${color(lib, li)}"><title>${lib} ${s[2].at.slice(0, 10)}: ${fmt(s[2].median_ns)} (${s[2].commit.slice(0, 7)}${s[2].dirty ? ', uncommitted changes' : ''})</title></circle>`
     })
     return svg + '</svg>'
   }

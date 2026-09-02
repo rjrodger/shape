@@ -193,9 +193,12 @@ func listSchema(n *node, s map[string]any, defs map[string]any) {
 	if n.disc != nil {
 		for i, b := range branches {
 			bs := b.(map[string]any)
-			// Every branch carries the tag as a key (see discriminated.go),
-			// so it always has properties.
-			props := bs["properties"].(map[string]any)
+			// An object branch carries the tag as a key (see discriminated.go);
+			// any other branch gets the tag as its only property, as in TS.
+			props, _ := bs["properties"].(map[string]any)
+			if props == nil {
+				props = map[string]any{}
+			}
 			props[n.disc.tag] = map[string]any{"type": "string", "const": n.disc.tags[i]}
 			bs["properties"] = props
 			required := []string{n.disc.tag}

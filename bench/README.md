@@ -85,14 +85,23 @@ survives without the file growing with the budget.
 
 The host id is the first twelve hex characters of a SHA-256 of the
 hostname, platform, architecture, CPU model and core count under a domain
-separator, or of `HOST_KEY` when set; the hostname itself is not kept.
+separator, or of `HOST_KEY` when set; the hostname itself is not kept. On a
+GitHub-hosted runner the key is the runner class (OS, architecture and
+image) instead, since every run lands on a fresh machine of that class and
+the class is the series worth following.
 
 A run file under `results/runs/` is never rewritten or removed: `run.js`
 refuses to overwrite one, and the measurement workflow only adds. The
 `results/latest/` directory is derived: `index.json` lists every run,
 `summary.json` holds the latest measurement per language, host, case and
 library plus the median history for trends, and `README.md` is a readable
-table of the latest numbers.
+table of the latest numbers. Measurements are only compared against the
+same cases: the summary keys every row by the input hash, the matrix holds
+only rows measured against the hash of the latest run per language and
+host, and the trend on the site follows that hash. A run measured from a
+worktree with uncommitted changes carries `source.dirty`, and the summary
+and the site say so rather than attribute it to its commit; record runs
+from a clean checkout.
 
 ## Recording from many hosts
 

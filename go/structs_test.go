@@ -28,9 +28,14 @@ type StExported struct {
 	Version int `json:"version"`
 }
 
+type stPtrBase struct {
+	Base string `json:"base"`
+}
+
 type stUser struct {
 	stAudit
 	StExported
+	*stPtrBase
 	stLabel  `json:"label"`
 	Name     string            `json:"name"`
 	Age      int               `json:"age"`
@@ -68,6 +73,7 @@ func TestStructValueReads(t *testing.T) {
 		stAudit:    stAudit{CreatedBy: "sys", hidden: "x"},
 		stLabel:    stLabel{Text: "L"},
 		StExported: StExported{Version: 3},
+		stPtrBase:  &stPtrBase{Base: "p"},
 		Name:       "Ann",
 		Age:        30,
 		Secret:     "s",
@@ -96,6 +102,7 @@ func TestStructValueReads(t *testing.T) {
 		"createdBy": "sys",
 		"label":     map[string]any{"text": "L"},
 		"version":   3,
+		"base":      "p",
 		"name":      "Ann",
 		"age":       30,
 		"Untagged":  true,
@@ -134,6 +141,35 @@ func TestStructValueReads(t *testing.T) {
 	if _, ok := objectValue(map[int]int{1: 1}); ok {
 		t.Fatal("map with non-string keys should not read as an object")
 	}
+
+	// A nil embedded pointer contributes nothing; a defined scalar type
+	// reads as its built-in type.
+	type Port int
+	type Name string
+	type withNil struct {
+		*stPtrBase
+		Port  Port          `json:"port"`
+		Name  Name          `json:"name"`
+		On    bool          `json:"on"`
+		Ports []Port        `json:"ports"`
+		ByKey map[Name]Port `json:"byKey"`
+	}
+	got4, _ := objectValue(withNil{Port: 8080, Name: "n", On: true, Ports: []Port{1}, ByKey: map[Name]Port{"k": 2}})
+	stWant(t, "nil embedded pointer and defined scalars", got4, map[string]any{
+		"port": 8080, "name": "n", "on": true, "ports": []any{1}, "byKey": map[string]any{"k": 2},
+	})
+	if _, isInt := got4["port"].(int); !isInt {
+		t.Fatalf("port should be an int, is %T", got4["port"])
+	}
+	type config struct {
+		Port Port `shape:"Min(1)"`
+	}
+	mustOK(t, MustShape(config{Port: 80}), map[string]any{})
+	// Values reached through a struct or a typed map are converted; a
+	// map[string]any is used as given.
+	mustOK(t, MustShape(map[string]any{"port": Number}), map[string]Port{"port": 1})
+	mustErr(t, MustShape(map[string]any{"port": Number}), map[string]Name{"port": "x"}, "not of type number")
+	mustErr(t, MustShape(map[string]any{"port": Number}), map[string]any{"port": Port(1)}, "not of type number")
 
 	// Plain values, times, and nils are not objects.
 	for _, v := range []any{1, "s", nil, time.Now(), &when, []any{}} {

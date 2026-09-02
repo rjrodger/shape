@@ -7,6 +7,11 @@
 //                 library), the hosts seen, and the median history of every
 //                 (language, host, case, library) across runs for trends
 //
+// Measurements are only comparable against the same cases: every row carries
+// the input hash, the matrix holds only rows measured against the hash of
+// the latest run per language and host, and a run from a dirty worktree is
+// marked so the report does not attribute it to its commit.
+//
 // The site (site/) and `make bench-report` read these; nothing reads the
 // run files twice.
 
@@ -30,6 +35,9 @@ function build(resultsDir) {
   const latest = {}
   const history = []
   const index = []
+  // The input hash of the newest run per language and host: the matrix
+  // holds measurements against those cases only.
+  const newest = {}
 
   for (const r of runs) {
     const h = r.host
@@ -43,6 +51,7 @@ function build(resultsDir) {
       lang: r.run.lang,
       host: h.id,
       commit: r.run.source.commit,
+      dirty: !!r.run.source.dirty,
       ref: r.run.source.ref,
       runtime: r.runtime,
       versions: r.versions,
@@ -50,17 +59,20 @@ function build(resultsDir) {
       policy: r.policy,
       cases: r.benchmarks.length,
     })
+    newest[r.run.lang + '/' + h.id] = r.input_hash
     for (const b of r.benchmarks) {
-      const key = [r.run.lang, h.id, b.case, b.lib].join('/')
+      const key = [r.run.lang, h.id, r.input_hash, b.case, b.lib].join('/')
       const row = {
         lang: r.run.lang,
         host: h.id,
+        input_hash: r.input_hash,
         case: b.case,
         lib: b.lib,
         version: b.version,
         run: r.run.id,
         at: r.run.at,
         commit: r.run.source.commit,
+        dirty: !!r.run.source.dirty,
         median_ns: b.median_ns,
         mean_ns: b.mean_ns,
         p05_ns: b.p05_ns,
@@ -88,7 +100,7 @@ function build(resultsDir) {
     hosts,
     cases,
     libs,
-    matrix: Object.values(latest),
+    matrix: Object.values(latest).filter((m) => m.input_hash === newest[m.lang + '/' + m.host]),
     history,
   }
 
@@ -120,7 +132,8 @@ function markdown(summary) {
     const rows = byLangHost[k]
     const libs = summary.libs[lang]
     lines.push(`## ${lang} on ${h.label || hostId}`, '')
-    lines.push(`Host \`${hostId}\`: ${h.cpu}, ${h.cores} cores, ${h.os}/${h.arch}. Last run ${rows[0].at.slice(0, 10)}.`, '')
+    const dirty = rows.some((r) => r.dirty) ? ' Measured from a worktree with uncommitted changes.' : ''
+    lines.push(`Host \`${hostId}\`: ${h.cpu}, ${h.cores} cores, ${h.os}/${h.arch}. Last run ${rows[0].at.slice(0, 10)} (cases \`${rows[0].input_hash}\`).${dirty}`, '')
     lines.push('| case | ' + libs.join(' | ') + ' | shape / fastest |')
     lines.push('|---|' + libs.map(() => '---:').join('|') + '|---:|')
     for (const c of summary.cases) {

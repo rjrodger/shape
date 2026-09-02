@@ -89,12 +89,21 @@ func structFields(rv reflect.Value, spec bool) map[string]any {
 		fv := rv.Field(i)
 		name, omitEmpty := jsonName(f)
 		_, named := f.Tag.Lookup("json")
-		embedded := f.Anonymous && fv.Kind() == reflect.Struct
+		// An embedded struct, or pointer to one; a nil pointer contributes
+		// nothing, as in encoding/json.
+		embedded := f.Anonymous && (fv.Kind() == reflect.Struct ||
+			(fv.Kind() == reflect.Pointer && fv.Type().Elem().Kind() == reflect.Struct))
 		if !f.IsExported() && !embedded {
 			continue
 		}
 		if embedded {
 			fv = readable(fv)
+			if fv.Kind() == reflect.Pointer {
+				if fv.IsNil() {
+					continue
+				}
+				fv = fv.Elem()
+			}
 		}
 		if embedded && !named {
 			// An embedded struct's fields are promoted (its own name is not
@@ -192,6 +201,34 @@ func valueOf(rv reflect.Value, spec bool) any {
 			out[iter.Key().String()] = valueOf(iter.Value(), spec)
 		}
 		return out
+	}
+	return scalarOf(rv)
+}
+
+// The built-in type of each scalar kind, so a defined type (type Port int)
+// reads as the value the validator's type switches know.
+var scalarTypes = map[reflect.Kind]reflect.Type{
+	reflect.Bool:    reflect.TypeOf(false),
+	reflect.Int:     reflect.TypeOf(int(0)),
+	reflect.Int8:    reflect.TypeOf(int8(0)),
+	reflect.Int16:   reflect.TypeOf(int16(0)),
+	reflect.Int32:   reflect.TypeOf(int32(0)),
+	reflect.Int64:   reflect.TypeOf(int64(0)),
+	reflect.Uint:    reflect.TypeOf(uint(0)),
+	reflect.Uint8:   reflect.TypeOf(uint8(0)),
+	reflect.Uint16:  reflect.TypeOf(uint16(0)),
+	reflect.Uint32:  reflect.TypeOf(uint32(0)),
+	reflect.Uint64:  reflect.TypeOf(uint64(0)),
+	reflect.Float32: reflect.TypeOf(float32(0)),
+	reflect.Float64: reflect.TypeOf(float64(0)),
+	reflect.String:  reflect.TypeOf(""),
+}
+
+// scalarOf converts a scalar of a defined type to its built-in type and
+// leaves everything else as it is.
+func scalarOf(rv reflect.Value) any {
+	if t, ok := scalarTypes[rv.Kind()]; ok && rv.Type() != t {
+		return rv.Convert(t).Interface()
 	}
 	return rv.Interface()
 }

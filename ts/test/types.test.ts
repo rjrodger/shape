@@ -150,7 +150,56 @@ type _keys = Expect<Equal<'ke' extends keyof Out ? true : false, true>>
 type _nokeys = Expect<Equal<'ke: Min(2)' extends keyof Out ? true : false, false>>
 
 
+// Review findings: the modes of Key, Type's forced kind, key-expression
+// spellings, schema-owned input properties, and the hidden bare brand.
+function inferredMore() {
+  const keyed = Shape({
+    plain: Key(),
+    joined: Key(2, '.'),
+    path: Key(2),
+    custom: Key((path: string[]) => path.length),
+  })({})
+  type _k1 = Expect<Equal<typeof keyed.plain, string>>
+  type _k2 = Expect<Equal<typeof keyed.joined, string>>
+  type _k3 = Expect<Equal<typeof keyed.path, string[]>>
+  type _k4 = Expect<Equal<typeof keyed.custom, number>>
+
+  const typed = Shape({
+    obj: Type(Object, { a: 1 }),
+    num: Type('Number', 'x'),
+    int: Type(Integer),
+  })({})
+  type _t1 = Expect<Equal<typeof typed.obj, any>>
+  type _t2 = Expect<Equal<typeof typed.num, number>>
+  type _t3 = Expect<Equal<typeof typed.int, number>>
+
+  const keys = Shape({
+    'x:Min(1)': 2,
+    ' y:Min(1) ': 3,
+    '"a: b": Min(1)': 4,
+    'z:': 5,
+    'not an expr': 6,
+  })({})
+  type _e1 = Expect<Equal<typeof keys.x, number>>
+  type _e2 = Expect<Equal<typeof keys.y, number>>
+  type _e3 = Expect<Equal<typeof keys['a: b'], number>>
+  type _e4 = Expect<Equal<typeof keys['z:'], number>>
+  type _e5 = Expect<Equal<typeof keys['not an expr'], number>>
+
+  const coerced = Shape({ n: Coerce(Number) })({ n: '1', extra: true })
+  type _c1 = Expect<Equal<typeof coerced.n, number>>
+  type _c2 = Expect<Equal<typeof coerced.extra, boolean>>
+  const prim = Shape({ n: Number })('not an object' as string)
+  type _c3 = Expect<Equal<typeof prim, { n: number }>>
+
+  // @ts-expect-error the brand is not a property
+  Integer.bare$
+  return { keyed, typed, keys, coerced, prim }
+}
+
+
 test('types-agree-with-values', () => {
+  assert.equal(typeof inferredMore, 'function')
   const v = shape({ name: 'n', n: 2, chained: 3, nu: null, tup: [1, 'a'], nested: { q: { r: true } }, e: 'admin', en: 1,
     u: 'x', so: true, al: 2, i: 1, ic: 1, em: 'a@b.co', dt: new Date(0), re: 'abc', k: 'ignored', c: { z: 1 }, rest: [1],
     disc: { kind: 'dog', bark: true }, t: 'abc', ca: 'x', ke: 3, om: { b: 'y' }, ex: { z: true }, ty: 1, tn: 's',

@@ -103,11 +103,15 @@ function round(x) {
 // host describes the machine, with a stable anonymous id: the first twelve
 // hex characters of a hash of a machine key under a domain separator. The
 // key is HOST_KEY when set (so a machine can be renamed or several kept
-// apart), else hostname, platform, architecture, CPU model and core count.
+// apart); on a GitHub-hosted runner it is the runner class (OS, architecture
+// and image), since each run lands on a fresh machine of that class; else
+// it is the hostname, platform, architecture, CPU model and core count.
 function host(env = process.env) {
   const cpus = os.cpus()
   const cpu = cpus.length ? cpus[0].model.trim() : 'unknown'
-  const key = env.HOST_KEY || [os.hostname(), os.platform(), os.arch(), cpu, cpus.length].join('|')
+  const key = env.HOST_KEY ||
+    (env.GITHUB_ACTIONS === 'true' ? ['github', env.RUNNER_OS, env.RUNNER_ARCH, env.ImageOS || ''].join('|') :
+      [os.hostname(), os.platform(), os.arch(), cpu, cpus.length].join('|'))
   const id = crypto.createHash('sha256').update('shape-bench-host/1\n' + key).digest('hex').slice(0, 12)
   return {
     id,
