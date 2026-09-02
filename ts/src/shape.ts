@@ -231,6 +231,7 @@ type Validate =
     s?: (n: Node<any>) => string, // stringify validator of builder
     a?: readonly any[] // args to the builder
     n?: string // name of builder
+    o?: any // builder options the string form cannot express
   }
 
 
@@ -923,7 +924,8 @@ function nodize<S>(shape?: any, depth?: number, meta?: NodeMeta): Node<S> {
       let gs = v.node ? v.node() : v
       t = gs.t
       v = gs.v
-      f = v
+      // The shape's own default: an object's children are not one.
+      f = gs.f
       r = gs.r
       u = { ...gs.u }
       a = [...gs.a]
@@ -1614,6 +1616,9 @@ function shapify<const S>(intop?: S, inopts?: ShapeOptions) {
   // JSON Schema (draft 2020-12) for the values this shape accepts.
   shape.jsonSchema = () => jsonSchema(shape.node())
 
+  // The declarative JSON of the shape, which build() reads back.
+  shape.json = () => nodeJson(shape.node())
+
 
   shape.toString = function(this: any) {
     desc = '' === desc ? this.stringify() : desc
@@ -1700,10 +1705,11 @@ function expr(
     top = true
     spec.tokens = []
 
-    //         A       BC      D L   E         F  M   H        N        I        JK
-    let tre = /\s*,?\s*([)(\.]|"(\\.|[^"\\])*"|\/(\\.|[^\/\\])*\/[a-z]?|[^)(,.\s]+)\s*/g
+    //         A       O                          BC      D L   E         F  M   H        N        I        JK
+    let tre = /\s*,?\s*(-?\d+\.\d+(?:[eE][+-]?\d+)?|[)(\.]|"(\\.|[^"\\])*"|\/(\\.|[^\/\\])*\/[a-z]?|[^)(,.\s]+)\s*/g
     // A: prefixing space and/or comma
     // B-J: the next token is submatch 1, containing a set of alternates
+    // O: a number with a fraction (1.5), which is one token, not 1 . 5
     // C: class parens-dot
     // D: quoted string
     // L: backslash escape within string
@@ -1846,6 +1852,13 @@ function expr(
   }
 
   return g
+}
+
+
+// Whether a key is a key expression: a name, a colon, and an expression.
+function isKeyExpr(k: string): boolean {
+  const m = KEY_EXPR_RE.exec(k)
+  return null != m && '' !== m[3]
 }
 
 
@@ -2118,10 +2131,8 @@ function engineRegexp(re: RegExp): RegExp {
 // instead. The kind is left alone, since only the builder knows whether it
 // declared one or merely defaulted to it.
 function keyExprNode(src: string, example: any, depth: number, meta?: NodeMeta) {
-  const node: any = expr({ src, d: depth, meta }, example)
-
-  if (undefined === example || null == node || !node.$?.shape$) {
-    return node
+  if (undefined === example) {
+    return expr({ src, d: depth, meta })
   }
 
   let bare: any
@@ -2131,13 +2142,37 @@ function keyExprNode(src: string, example: any, depth: number, meta?: NodeMeta) 
   catch (_e: any) {
     // The expression cannot be built without the example — Pick(["a"]) has
     // nothing to pick from — so the example plainly made a difference.
+    bare = undefined
+  }
+
+  // A chain that names its kind (String, Integer.Min(2), Optional(Number),
+  // Any) keeps it: the example is the value and the default, nothing more.
+  // Without this the example's own kind won ({ 'a: Integer.Min(2)': 0 } read
+  // as a number) and so did what its value implied ({ 'a: String': '' }
+  // allowed the empty string).
+  if (null != bare && bare.$?.shape$ && true === bare.u.tset) {
+    const ex: any = nodize(example, depth, meta)
+    bare.v = ex.v
+    bare.f = ex.f
+    bare.n = ex.n
+    if (undefined === bare.c) {
+      bare.c = ex.c
+    }
+    return bare
+  }
+
+  // Otherwise the example is appended as the innermost call's last argument,
+  // so a builder that takes a shape consumes it: Child(Number) with [] is an
+  // array of numbers, Min(2) with 0 a bounded number.
+  const node: any = expr({ src, d: depth, meta }, example)
+
+  if (null == node || !node.$?.shape$ ||
+    null == bare || !bare.$?.shape$ || !sameShapeNode(node, bare)) {
     return node
   }
 
-  if (null == bare || !bare.$?.shape$ || !sameShapeNode(node, bare)) {
-    return node
-  }
-
+  // The example made no difference to the node (Optional(Number, 5) drops
+  // the 5), so it is the author's stated default, applied as the value.
   const ex: any = nodize(example, depth, meta)
 
   node.v = ex.v
@@ -2162,31 +2197,55 @@ function sameShapeNode(x: any, y: any): boolean {
 }
 
 
-function build(v: any, opts: ShapeOptions = {}, top = true) {
+function build(v: any, opts: ShapeOptions = {}, top = true): any {
   let out: any
   const t = Array.isArray(v) ? 'array' : null === v ? 'null' : typeof v
 
   if ('string' === t) {
-    out = expr(v)
+    // A string is an expression; the empty string is the empty example, as
+    // a required string's example is ({ 'a: String': '' }).
+    out = '' === v ? v : expr(v)
   }
-  else if ('number' === t || 'boolean' === t) {
+  else if ('number' === t || 'boolean' === t || 'null' === t) {
     out = v
   }
   else if (S.object === t) {
-    out = Object.entries(v).reduce((a: any, n: any[]) => {
-      a[n[0]] = (opts.valexpr?.keymark || '$$') === n[0] ? n[1] : build(n[1], opts, false)
-      return a
-    }, {})
+    const keymark = opts.valexpr?.keymark || '$$'
+    let mark: any = undefined
+    out = {}
+    for (const [k, cv] of Object.entries(v)) {
+      if (keymark === k && S.string === typeof cv) {
+        mark = cv
+      }
+      // The example of a key expression is a value, so a string there is
+      // the string itself ({ 'a: String.Optional': 'x' }).
+      else {
+        out[k] = (S.string === typeof cv && isKeyExpr(k)) ? cv : build(cv, opts, false)
+      }
+    }
+
+    // The expression under the mark applies to the object that holds it,
+    // and the sidecars beside it ("$$0") are its arguments.
+    if (S.string === typeof mark) {
+      const node: any = nodize(out)
+      const res: any = nodize(expr({ src: mark, node }, node))
+      if (null != res.v && S.object === typeof res.v) {
+        for (const k of keys(res.v)) {
+          if (k.startsWith(keymark)) {
+            delete res.v[k]
+          }
+        }
+        res.n = keys(res.v).length
+      }
+      out = res
+    }
   }
   else if (S.array === t) {
     out = v.map((n: any) => build(n, opts, false))
   }
 
   if (top) {
-    opts.valexpr = opts.valexpr || {}
-    opts.valexpr.active = true
-    let g = Shape(out, opts)
-    return g
+    return Shape(out, opts)
   }
 
   return out
@@ -3007,6 +3066,7 @@ const Integer = bare<number>()(function Integer <V = number>(this: any, shape?: 
   node.p = false
   node.v = 0
   node.f = 0
+  node.u.tset = true
   return node
 })
 
@@ -3166,7 +3226,7 @@ const Key = bare<string>()(function Key(this: any, depth?: number | Function, jo
     node = Any()
   }
 
-  attach(node.b, function Key(_val: any, update: Update, state: State) {
+  const keyer: any = function Key(_val: any, update: Update, state: State) {
     if (custom) {
       update.val = custom(state.path, state)
     }
@@ -3186,7 +3246,10 @@ const Key = bare<string>()(function Key(this: any, depth?: number | Function, jo
     }
 
     return true
-  })
+  }
+  keyer.n = S.Key
+  keyer.a = custom ? [custom] : ascend ? (null == join ? [depth] : [depth, join]) : []
+  attach(node.b, keyer)
 
   return node
 } as KeyBuilder)
@@ -3444,6 +3507,8 @@ const Check = function <V = any>(
         value: String(check)
       })
       defprop(refn, 'shape$', { value: { Check: true } })
+      refn.n = S.Check
+      refn.a = [check]
       refn.s = () => S.Check + '(' + stringify(check, true) + ')'
       attach(node.b, refn)
 
@@ -3562,6 +3627,8 @@ const Refer = function <V = any>(this: any, inopts: any, shape?: Node<V> | V): N
     }
     referrer.n = S.Refer
     referrer.a = [name]
+    // Options the string form has no word for.
+    referrer.o = (fill || strict) ? opts : undefined
     attach(node.b, referrer)
   }
 
@@ -3587,7 +3654,7 @@ const Rename = function <V = any>(this: any, inopts: any, shape?: Node<V> | V): 
 
     // If there is a claim, grab the value so that validations
     // can be applied to it.
-    let before = (val: any, update: Update, s: State) => {
+    let before: any = (val: any, update: Update, s: State) => {
       if (undefined === val && 0 < claim.length) {
         s.ctx.Rename = (s.ctx.Rename || {})
         s.ctx.Rename.fromDflt = (s.ctx.Rename.fromDflt || {})
@@ -3654,9 +3721,13 @@ const Rename = function <V = any>(this: any, inopts: any, shape?: Node<V> | V): 
       return true
     }
     defprop(before, S.name, { value: 'Rename:' + name })
+    before.n = S.Rename
+    before.a = [name]
+    // Options the string form has no word for.
+    before.o = (undefined !== keep || 0 < claim.length) ? opts : undefined
     attach(node.b, before)
 
-    let after = (val: any, update: Update, s: State) => {
+    let after: any = (val: any, update: Update, s: State) => {
       s.parent[name] = val
 
       if (!s.match &&
@@ -3682,6 +3753,7 @@ const Rename = function <V = any>(this: any, inopts: any, shape?: Node<V> | V): 
       return true
     }
     defprop(after, S.name, { value: 'Rename:' + name })
+    after.n = S.Rename
     attach(node.a, after)
   }
 
@@ -4322,6 +4394,617 @@ function node2json(n: Node<any>): any {
 }
 
 
+// Declarative JSON
+// ================
+// A shape written back as the JSON that build() reads: every string is an
+// expression of the string DSL, a key expression ("a: String") carries its
+// example as the value, and a "$$" key applies an expression to the object
+// that holds it, with "$$0", "$$1", ... beside it for the arguments an
+// expression cannot spell inline (an object or array shape). The result
+// reads back as the same shape: build(shape.json()).json() is shape.json(),
+// and the two accept and produce the same values. Nothing a function does
+// can be written down, so a shape carrying one (Check(fn), Before, After,
+// Transform, Key(fn)) throws, as does a builder option the DSL has no word
+// for (Rename's keep and claim, Refer's fill and strict) and a default that
+// is an object, an array or a date.
+
+const JSON_MARK = '$$'
+
+const JSON_TOKEN: { [t: string]: string } = {
+  string: S.String,
+  number: S.Number,
+  integer: S.Integer,
+  boolean: S.Boolean,
+}
+
+const JSON_FORMATS: { [n: string]: boolean } = {
+  Email: true, Url: true, Uuid: true, DateTime: true, Ip: true, Ipv4: true, Ipv6: true,
+}
+
+// An argument of a call: inline expression text, or a spec that rides in a
+// sidecar ("$$0") beside the expression.
+type JsonArg = { x: string } | { j: any }
+type JsonCall = { n: string, a: JsonArg[] }
+
+
+function jsonFault(what: string): never {
+  throw new Error('Shape: json cannot express ' + what)
+}
+
+
+// The inline text of a literal argument: a JSON scalar, or NaN.
+function jsonLiteral(v: any, what: string): string {
+  const t = typeof v
+  if (S.number === t) {
+    return Number.isFinite(v) ? '' + v : isNaN(v) ? 'NaN' : jsonFault(what + ' ' + v)
+  }
+  if (S.string === t || S.boolean === t || null === v) {
+    return JSON.stringify(v)
+  }
+  return jsonFault(what + ' ' + (undefined === v ? S.undefined : t))
+}
+
+
+// A node whose children have been compiled. The walk compiles an object's
+// keys (a key expression under its name) the first time the shape runs;
+// a node that has not run yet (an array element, a list branch) runs here.
+function jsonNode(n: any): Node<any> {
+  n = nodize(n)
+  if (S.object === n.t && null != n.v && n.k.length !== keys(n.v).length) {
+    const d = n.d
+    shapify(n).node()
+    n.d = d
+  }
+  return n
+}
+
+
+function jsonNoAfters(afters: Validate[]) {
+  for (const v of afters) {
+    if (release !== v && S.Rename !== (v as any).n) {
+      jsonFault('a custom after check' + (v.name ? ' ' + v.name : ''))
+    }
+  }
+}
+
+
+// The checks a node carries, as calls, in the order they run; a check named
+// in `skip` is the head of the expression and is left out.
+function jsonValidatorCalls(n: Node<any>, skip?: any): JsonCall[] {
+  const calls: JsonCall[] = []
+  for (const v of n.b) {
+    if (skip !== v) {
+      jsonValidatorCall(v, calls)
+    }
+  }
+  jsonNoAfters(n.a)
+  return calls
+}
+
+
+function jsonValidatorCall(v: any, calls: JsonCall[]) {
+  const name: string | undefined = v.n
+  const args: any[] = v.a || []
+
+  if (undefined === name) {
+    jsonFault('a custom check' + (v.name ? ' ' + v.name : ''))
+  }
+  else if (undefined !== v.o) {
+    jsonFault('the options of ' + name)
+  }
+  else if (S.Min === name || S.Max === name || S.Above === name ||
+    S.Below === name || S.Len === name) {
+    calls.push({ n: name, a: [{ x: jsonLiteral(args[0], 'the bound') }] })
+  }
+  else if (S.Catch === name || S.Ignore === name) {
+    // The taken checks run inside, so they read ahead of the taker.
+    for (const iv of v.inner.b) {
+      jsonValidatorCall(iv, calls)
+    }
+    jsonNoAfters(v.inner.a)
+    calls.push({
+      n: name,
+      a: S.Catch === name ? [{ x: jsonLiteral(args[0], 'the fallback') }] : []
+    })
+  }
+  else if (S.Coerce === name || JSON_FORMATS[name]) {
+    calls.push({ n: name, a: [] })
+  }
+  else if (S.Define === name || S.Refer === name || S.Rename === name) {
+    calls.push({ n: name, a: [{ x: JSON.stringify(args[0]) }] })
+  }
+  else if (S.Key === name) {
+    calls.push({ n: name, a: args.map((a: any) => ({ x: jsonLiteral(a, 'the Key argument') })) })
+  }
+  else if (S.Check === name) {
+    calls.push({ n: name, a: [{ x: String(args[0]) }] })
+  }
+  else if (S.Exact === name) {
+    calls.push({ n: name, a: args.map((a: any) => ({ x: jsonLiteral(a, 'the Exact value') })) })
+  }
+  else if (S.One === name || S.Some === name || S.All === name || S.Discriminated === name) {
+    // The list itself is the head of the expression.
+  }
+  else {
+    jsonFault(name)
+  }
+}
+
+
+// Whether the node is required or skipped, as calls, for a head that says
+// neither: Required where the head is optional by itself, Optional or Skip
+// where it is required. Ignore says skipped already.
+function jsonRequiredCalls(n: Node<any>, headRequired: boolean): JsonCall[] {
+  const calls: JsonCall[] = []
+  const ignored = n.b.some((v: any) => S.Ignore === v.n)
+  if (n.r && !headRequired) {
+    calls.push({ n: S.Required, a: [] })
+  }
+  else if (!n.r && !ignored) {
+    if (n.p) {
+      calls.push({ n: S.Skip, a: [] })
+    }
+    else if (headRequired) {
+      calls.push({ n: S.Optional, a: [] })
+    }
+  }
+  return calls
+}
+
+
+// The flags of the node, as calls. An empty literal head says Empty by
+// itself.
+function jsonFlagCalls(n: Node<any>, literalHead: boolean): JsonCall[] {
+  const calls: JsonCall[] = []
+  if (S.string === n.t && n.u.empty && !(literalHead && '' === n.f)) {
+    calls.push({ n: S.Empty, a: [] })
+  }
+  if (n.u.nullable) {
+    calls.push({ n: S.Nullable, a: [] })
+  }
+  return calls
+}
+
+
+function jsonTailCalls(n: Node<any>): JsonCall[] {
+  const calls: JsonCall[] = []
+  if (undefined !== n.m?.description) {
+    calls.push({ n: S.Describe, a: [{ x: JSON.stringify(n.m.description) }] })
+  }
+  if (undefined !== n.z) {
+    calls.push({ n: S.Fault, a: [{ x: JSON.stringify(n.z) }] })
+  }
+  return calls
+}
+
+
+// The value form of a node as an argument: inline when it is a string.
+function jsonArg(n: any): JsonArg {
+  const j = nodeJson(n)
+  return S.string === typeof j ? { x: j } : { j }
+}
+
+
+// Whether an open object's child shape is the plain Any of Open.
+function jsonIsOpen(c: any): boolean {
+  return S.any === c.t && !c.r && 0 === c.b.length && 0 === c.a.length &&
+    undefined === c.c && undefined === c.f
+}
+
+
+// The text of a call, its sidecar arguments registered in refs. A shape is
+// the call's last argument.
+function jsonCallText(c: JsonCall, refs: any, shape?: string): string {
+  const parts: string[] = []
+  for (const a of c.a) {
+    if ('x' in a) {
+      parts.push(a.x)
+    }
+    else {
+      const name = JSON_MARK + keys(refs).length
+      refs[name] = a.j
+      parts.push(name)
+    }
+  }
+  if (undefined !== shape) {
+    parts.push(shape)
+  }
+  return c.n + (0 < parts.length ? '(' + parts.join(',') + ')' : '')
+}
+
+
+// A chain of calls after a head, or (with no head) as a bare chain; null
+// with neither.
+function jsonChainText(head: string | null, calls: JsonCall[], refs: any): string | null {
+  let out = head
+  for (const c of calls) {
+    const text = jsonCallText(c, refs)
+    out = null === out ? text : out + '.' + text
+  }
+  return out
+}
+
+
+// The calls around a shape that is not a node by itself (a literal, a
+// regexp, a sidecar): the first takes it, the rest chain: Min(2,0).Skip.
+function jsonWrapText(calls: JsonCall[], shape: string, refs: any): string {
+  let out = jsonCallText(calls[0], refs, shape)
+  for (let i = 1; i < calls.length; i++) {
+    out += '.' + jsonCallText(calls[i], refs)
+  }
+  return out
+}
+
+
+// A carrier object: the expression under "$$", the sidecars beside it.
+function jsonCarrier(text: string, refs: any): any {
+  return { [JSON_MARK]: text, ...refs }
+}
+
+
+// A literal, held by the call that says whether it is required.
+function jsonLiteralHead(n: Node<any>, lit: string): string {
+  return (n.p ? S.Skip : n.r ? S.Required : S.Optional) + '(' + lit + ')'
+}
+
+
+// The validators that make the node the head of its expression, so that
+// the node has no key form: Key makes it, and Exact reads every argument
+// as a value.
+function jsonHeadValidator(n: Node<any>): any {
+  return n.b.find((v: any) => S.Key === v.n || S.Exact === v.n)
+}
+
+
+// The parts of a scalar: the head (a type token, a held literal, or Key),
+// the token of the key form (null where the head is not one), the example
+// of the key form, and the calls after the head.
+function jsonScalar(n: Node<any>): { head: string, token: string | null, example: any, calls: JsonCall[] } {
+  const z = EMPTY_VAL[n.t]
+  const zero = undefined === n.f || z === n.f
+  const example = zero ? z : n.f
+  const hv = jsonHeadValidator(n)
+  let head: string
+  let token: string | null = null
+  let calls: JsonCall[]
+
+  if (undefined !== hv && S.Key === hv.n) {
+    const kc: JsonCall[] = []
+    jsonValidatorCall(hv, kc)
+    head = jsonCallText(kc[0], {})
+    calls = jsonRequiredCalls(n, false).concat(jsonFlagCalls(n, false))
+  }
+  // A literal stands for its own kind, but not for integer, and an empty
+  // string literal allows the empty string; a required zero is the type
+  // token.
+  else if ((n.r && zero) || S.integer === n.t ||
+    (S.string === n.t && !n.u.empty && '' === n.f)) {
+    token = JSON_TOKEN[n.t]
+    head = token
+    calls = jsonRequiredCalls(n, true).concat(jsonFlagCalls(n, false))
+  }
+  else {
+    head = jsonLiteralHead(n, jsonLiteral(example, 'the default'))
+    calls = jsonFlagCalls(n, true)
+  }
+
+  calls = calls.concat(
+    jsonValidatorCalls(n, undefined !== hv && S.Key === hv.n ? hv : undefined),
+    jsonTailCalls(n))
+
+  return { head, token, example, calls }
+}
+
+
+// The key form of a property, "name: chain" with its example, or null where
+// the node has no key form (a list, a regexp, a shape needing sidecars).
+function jsonKeyForm(n: Node<any>): { chain: string, example: any } | null {
+  const t = n.t
+
+  if (undefined !== jsonHeadValidator(n)) {
+    return null
+  }
+
+  if (undefined !== JSON_TOKEN[t]) {
+    const sc = jsonScalar(n)
+    // With a literal head, the call that held the literal starts the chain.
+    const head = null !== sc.token ? sc.token : n.p ? S.Skip : n.r ? S.Required : null
+    return { chain: jsonChainText(head, sc.calls, {}) || '', example: sc.example }
+  }
+
+  if (S.object === t) {
+    const o = jsonObject(n)
+    if (0 < keys(o.refs).length) {
+      return null
+    }
+    return { chain: o.chain || '', example: o.children }
+  }
+
+  if (S.array === t) {
+    const a = jsonArray(n)
+    if (0 < keys(a.refs).length || a.closed) {
+      return null
+    }
+    return { chain: a.chain || '', example: a.elements }
+  }
+
+  return null
+}
+
+
+// The children of an object in key form, and the chain that applies to
+// the object (null when there is none).
+function jsonObject(n: Node<any>): { children: any, chain: string | null, refs: any } {
+  const children: any = {}
+  const refs: any = {}
+  const kk = 0 < n.k.length ? n.k : keys(n.v)
+
+  // A type token brings the empty object as its default, which the walk
+  // makes for an absent object anyway; any other default is one the
+  // expression form cannot spell.
+  if (undefined !== n.f && 0 < keys(n.f).length) {
+    jsonFault('an object default')
+  }
+
+  for (const k of kk) {
+    if (k.startsWith(JSON_MARK)) {
+      jsonFault('the property name ' + JSON.stringify(k))
+    }
+    const c = jsonNode(n.v[k])
+    const kf = jsonKeyForm(c)
+    const quoted = /[\s"\\]/.test(k) || '' === k || isKeyExpr(k)
+
+    if (null != kf && '' !== kf.chain) {
+      children[(quoted ? JSON.stringify(k) : k) + ': ' + kf.chain] = kf.example
+    }
+    else if (null != kf && isKeyExpr(k)) {
+      // A name that reads as a key expression is quoted, and so needs a
+      // chain; Optional says nothing about a node that is optional already.
+      children[JSON.stringify(k) + ': ' + S.Optional] = kf.example
+    }
+    else if (isKeyExpr(k)) {
+      jsonFault('the property name ' + JSON.stringify(k) + ' of a value with no key form')
+    }
+    else {
+      children[k] = nodeJson(c)
+    }
+  }
+
+  const calls = jsonRequiredCalls(n, false).concat(jsonFlagCalls(n, false), jsonValidatorCalls(n))
+  if (undefined === n.c) {
+    if (0 === kk.length) {
+      calls.push({ n: S.Closed, a: [] })
+    }
+  }
+  else if (jsonIsOpen(n.c)) {
+    if (0 < kk.length) {
+      calls.push({ n: S.Open, a: [] })
+    }
+  }
+  else {
+    calls.push({ n: S.Child, a: [jsonArg(n.c)] })
+  }
+  calls.push(...jsonTailCalls(n))
+
+  const chain = 0 === calls.length ? null : jsonChainText(null, calls, refs)
+
+  return { children, chain, refs }
+}
+
+
+// The elements of an array in value form: the fixed positions, or the one
+// element shape. A single fixed position is closed, which [X] cannot say.
+function jsonArray(n: Node<any>): { elements: any[], calls: JsonCall[], chain: string | null, refs: any, closed: boolean } {
+  const refs: any = {}
+  let elements: any[]
+  let closed = false
+
+  if (undefined !== n.f && 0 < n.f.length) {
+    jsonFault('an array default')
+  }
+
+  const positions = null == n.v ? [] : keys(n.v).map((k: string) => n.v[k])
+  if (0 < positions.length) {
+    elements = positions.map((p: any) => nodeJson(p))
+    closed = 1 === positions.length
+  }
+  else if (undefined !== n.c && !n.m?.rest) {
+    elements = [nodeJson(n.c)]
+  }
+  else {
+    elements = []
+  }
+
+  const calls = jsonRequiredCalls(n, false).concat(jsonFlagCalls(n, false), jsonValidatorCalls(n))
+  if (n.m?.rest) {
+    calls.push({ n: S.Rest, a: [jsonArg(n.c)] })
+  }
+  calls.push(...jsonTailCalls(n))
+
+  const chain = 0 === calls.length ? null : jsonChainText(null, calls, refs)
+
+  return { elements, calls, chain, refs, closed }
+}
+
+
+// A node whose head is a call that makes it (Key, Exact on an object or an
+// array): the head, then the rest of the chain.
+function jsonHeaded(n: Node<any>, hv: any, kind: string): any {
+  if (S.Exact === hv.n) {
+    jsonFault('Exact on ' + kind)
+  }
+  const kc: JsonCall[] = []
+  jsonValidatorCall(hv, kc)
+  const calls = jsonRequiredCalls(n, false)
+    .concat(jsonFlagCalls(n, false), jsonValidatorCalls(n, hv), jsonTailCalls(n))
+  return jsonChainText(jsonCallText(kc[0], {}), calls, {})
+}
+
+
+// The value form of a node: the JSON that reads back as it.
+function nodeJson(n: Node<any>): any {
+  n = jsonNode(n)
+  const t = n.t
+
+  if (undefined !== JSON_TOKEN[t]) {
+    const sc = jsonScalar(n)
+    // A literal with nothing after it is the JSON value; a string is quoted,
+    // as a bare one would read as an expression.
+    if (null === sc.token && 0 === sc.calls.length &&
+      undefined === jsonHeadValidator(n) && !n.r && !n.p) {
+      return S.string === t ? JSON.stringify(sc.example) : sc.example
+    }
+    return jsonChainText(sc.head, sc.calls, {})
+  }
+
+  const hv = jsonHeadValidator(n)
+
+  if (S.object === t) {
+    if (undefined !== hv) {
+      return jsonHeaded(n, hv, 'an object')
+    }
+    const o = jsonObject(n)
+    if (null !== o.chain) {
+      o.children[JSON_MARK] = o.chain
+      Object.assign(o.children, o.refs)
+    }
+    return o.children
+  }
+
+  if (S.array === t) {
+    if (undefined !== hv) {
+      return jsonHeaded(n, hv, 'an array')
+    }
+    const a = jsonArray(n)
+    if (null === a.chain && !a.closed) {
+      return a.elements
+    }
+    // The calls take the array as their shape; a single position is closed
+    // first, as a one element array is an element shape.
+    const refs: any = {}
+    const name = JSON_MARK + '0'
+    refs[name] = a.elements
+    const shape = a.closed ? S.Closed + '(' + name + ')' : name
+    return jsonCarrier(0 === a.calls.length ? shape : jsonWrapText(a.calls, shape, refs), refs)
+  }
+
+  if (S.list === t) {
+    const refs: any = {}
+    const head: JsonCall = n.u.discriminated ?
+      {
+        n: S.Discriminated, a: [
+          { x: JSON.stringify(n.u.discriminated.tag) },
+          { j: jsonBranches(n) },
+        ]
+      } :
+      {
+        n: n.b.find((v: any) => S.One === v.n || S.Some === v.n || S.All === v.n)?.n as string,
+        a: n.u.list.map((b: any) => jsonArg(b))
+      }
+    const calls = jsonRequiredCalls(n, true)
+      .concat(jsonFlagCalls(n, false), jsonValidatorCalls(n), jsonTailCalls(n))
+    const text = jsonChainText(jsonCallText(head, refs), calls, refs) as string
+    return 0 === keys(refs).length ? text : jsonCarrier(text, refs)
+  }
+
+  if (S.regexp === t) {
+    // A regexp is not a node until a builder takes it, so the calls wrap it.
+    const calls = jsonRequiredCalls(n, true)
+      .concat(jsonFlagCalls(n, false), jsonValidatorCalls(n), jsonTailCalls(n))
+    const re = String(n.v)
+    return 0 === calls.length ? re : jsonWrapText(calls, re, {})
+  }
+
+  if (S.nan === t) {
+    const calls = jsonFlagCalls(n, true).concat(jsonValidatorCalls(n), jsonTailCalls(n))
+    return 0 === calls.length && !n.r && !n.p ? 'NaN' :
+      jsonChainText(jsonLiteralHead(n, 'NaN'), calls, {})
+  }
+
+  // The rest are a call that names the kind, then the chain.
+  let head: string
+  let headRequired = true
+  let headSkipped = false
+  if (S.any === t) {
+    head = n.r ? S.Required : S.Any
+    headRequired = n.r
+    if (undefined !== n.f) {
+      head += '(' + jsonLiteral(n.f, 'the default') + ')'
+    }
+    if (undefined !== n.c && jsonIsOpen(n.c)) {
+      head += '.' + S.Open
+    }
+  }
+  else if (S.never === t) {
+    head = S.Never
+    headRequired = false
+  }
+  else if (S.null === t) {
+    if (!n.r && !n.p && 0 === n.b.length && 0 === n.a.length &&
+      !n.u.nullable && undefined === n.z && undefined === n.m?.description) {
+      return null
+    }
+    head = n.r ? S.Required + '(null)' : n.p ? S.Skip + '(null)' : 'null'
+    headRequired = n.r
+    headSkipped = n.p
+  }
+  else if (S.undefined === t) {
+    head = (n.r ? S.Required : S.Optional) + '(undefined)'
+    headRequired = n.r
+  }
+  else if (S.date === t || S.function === t) {
+    if (undefined !== n.f) {
+      jsonFault('a ' + t + ' default')
+    }
+    head = S.date === t ? S.Date : S.Function
+  }
+  else if (S.check === t) {
+    // Check is the first call, and says required.
+    const first: any = n.b[0]
+    if (0 === n.b.length || S.Check !== first.n) {
+      jsonFault('a check function')
+    }
+    const kc: JsonCall[] = []
+    jsonValidatorCall(first, kc)
+    head = jsonCallText(kc[0], {})
+    const calls = jsonRequiredCalls(n, true)
+      .concat(jsonFlagCalls(n, false), jsonValidatorCalls(n, first), jsonTailCalls(n))
+    return jsonChainText(head, calls, {})
+  }
+  else {
+    jsonFault('a ' + t + ' value')
+  }
+
+  const rp = headSkipped ? [] : jsonRequiredCalls(n, headRequired)
+  const calls = jsonFlagCalls(n, false).concat(jsonValidatorCalls(n), jsonTailCalls(n))
+  if (headRequired && 0 < rp.length && S.any !== t) {
+    // Optional(Date), Skip(Never): the call holds the token.
+    head = rp[0].n + '(' + head + ')'
+    return jsonChainText(head, calls, {})
+  }
+  return jsonChainText(head, rp.concat(calls), {})
+}
+
+
+// The branches of a Discriminated union by tag value. A branch's tag
+// property is what the union added, unless the author declared it.
+function jsonBranches(n: Node<any>): any {
+  const { tag, tags } = n.u.discriminated
+  const out: any = {}
+  tags.forEach((t: string, i: number) => {
+    const b = jsonNode(n.u.list[i])
+    const j = nodeJson(b)
+    const tn = S.object === b.t ? b.v[tag] : undefined
+    if (undefined !== tn && S.string === tn.t && !tn.r && t === tn.f &&
+      0 === tn.b.length && 0 === tn.a.length && undefined === tn.z) {
+      delete j[tag]
+    }
+    out[t] = j
+  })
+  return out
+}
+
+
 function stringify(
   src: any,
   dequote?: boolean,
@@ -4724,8 +5407,8 @@ function checkSchema(n: Node<any>, s: any) {
         }
       }
     }
-    else if (S.string === typeof name && v.shape$?.Check && name.startsWith('/')) {
-      s.pattern = name.substring(1, name.lastIndexOf('/'))
+    else if (S.Check === name && undefined !== v.a && v.a[0] instanceof RegExp) {
+      s.pattern = v.a[0].source
     }
   }
 }
@@ -5297,6 +5980,7 @@ type ShapeShape = ReturnType<typeof shapify> &
   spec: () => any,
   node: () => Node<any>,
   jsonSchema: () => any,
+  json: () => any,
   isShape: (v: any) => boolean,
   shape: typeof SHAPE
 } & StandardSchemaV1
