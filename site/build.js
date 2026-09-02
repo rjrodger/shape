@@ -30,7 +30,8 @@ const EXTRA = {
 // The sponsor box lives in the footer of every page; the README carries the
 // same table at its end, which the index page drops in favour of the footer.
 const SPONSOR_HTML = '<p class="sponsor"><a href="https://www.voxgig.com"><img src="https://www.voxgig.com/res/img/vgt01r.png" alt="Voxgig"></a> This open source module is sponsored and supported by <a href="https://www.voxgig.com">Voxgig</a>.</p>'
-const SPONSOR_TABLE_RE = /<table>\s*<thead>[\s\S]*?voxgig[\s\S]*?<\/table>\s*/i
+// One table only: nothing between its tags may open another table.
+const SPONSOR_TABLE_RE = /<table>(?:(?!<table>)[\s\S])*?voxgig(?:(?!<table>)[\s\S])*?<\/table>\s*/i
 
 const NAV = [
   ['Docs', 'docs/index.html'],
