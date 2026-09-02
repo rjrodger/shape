@@ -92,7 +92,7 @@ describe('builder', () => {
     // A builder called with the wrong argument throws at build.
     throws(() => Min('x' as any), 'Shape: Min needs a number')
     throws(() => Max(NaN), 'Shape: Max needs a number')
-    throws(() => Above(undefined as any), 'Shape: Above needs a number')
+    throws(() => Above('nope' as any), 'Shape: Above needs a number')
     throws(() => Below('q' as any), 'Shape: Below needs a number')
     throws(() => Len(-1), 'Shape: Len needs a whole number of zero or more')
     throws(() => Len(1.5), 'Shape: Len needs a whole number of zero or more')
@@ -100,8 +100,10 @@ describe('builder', () => {
     throws(() => Define({} as any), 'Shape: Define needs a name')
     throws(() => Refer(''), 'Shape: Refer needs a name')
     throws(() => Rename({ keep: true }), 'Shape: Rename needs a name')
-    // A numeric string and a date are numbers for a bound.
+    // A numeric string and a date are numbers for a bound, and no bound at
+    // all is the key-expression form, whose bound is the example.
     deepEqual(Shape(Min('2' as any))(3), 3)
+    deepEqual(Shape({ 'a: Min()': 3 })({ a: 4 }), { a: 4 })
   })
 
   test('builder-required', () => {
