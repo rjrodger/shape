@@ -288,5 +288,179 @@
    "sample_points": 128
   },
   "cases": 19
+ },
+ {
+  "id": "20260902T133854Z-f2c2ec319f42-ts",
+  "at": "2026-09-02T13:38:54.500Z",
+  "lang": "ts",
+  "host": "f2c2ec319f42",
+  "commit": "ab6b663a7f3c2abf231a8ad7b4828d26ae8631c1",
+  "dirty": false,
+  "ref": "main",
+  "runtime": {
+   "node": "v24.19.0",
+   "v8": "13.6.233.17-node.51"
+  },
+  "versions": {
+   "shape": "11.1.0",
+   "zod": "4.5.4",
+   "ajv": "8.20.0",
+   "joi": "18.2.5",
+   "valibot": "1.4.2"
+  },
+  "input_hash": "64dd85eab212",
+  "policy": {
+   "warmup_ms": 300,
+   "time_ms": 2000,
+   "batch_ms": 1,
+   "min_batches": 10,
+   "sample_points": 128
+  },
+  "cases": 25
+ },
+ {
+  "id": "20260902T133855Z-ea12b5414dd4-ts",
+  "at": "2026-09-02T13:38:55.572Z",
+  "lang": "ts",
+  "host": "ea12b5414dd4",
+  "commit": "ab6b663a7f3c2abf231a8ad7b4828d26ae8631c1",
+  "dirty": false,
+  "ref": "main",
+  "runtime": {
+   "node": "v24.18.0",
+   "v8": "13.6.233.17-node.50"
+  },
+  "versions": {
+   "shape": "11.1.0",
+   "zod": "4.5.4",
+   "ajv": "8.20.0",
+   "joi": "18.2.5",
+   "valibot": "1.4.2"
+  },
+  "input_hash": "64dd85eab212",
+  "policy": {
+   "warmup_ms": 300,
+   "time_ms": 2000,
+   "batch_ms": 1,
+   "min_batches": 10,
+   "sample_points": 128
+  },
+  "cases": 25
+ },
+ {
+  "id": "20260902T133924Z-1fee8adaf205-ts",
+  "at": "2026-09-02T13:39:24.400Z",
+  "lang": "ts",
+  "host": "1fee8adaf205",
+  "commit": "ab6b663a7f3c2abf231a8ad7b4828d26ae8631c1",
+  "dirty": false,
+  "ref": "main",
+  "runtime": {
+   "node": "v24.19.0",
+   "v8": "13.6.233.17-node.51"
+  },
+  "versions": {
+   "shape": "11.1.0",
+   "zod": "4.5.4",
+   "ajv": "8.20.0",
+   "joi": "18.2.5",
+   "valibot": "1.4.2"
+  },
+  "input_hash": "c1a75d4a6878",
+  "policy": {
+   "warmup_ms": 300,
+   "time_ms": 2000,
+   "batch_ms": 1,
+   "min_batches": 10,
+   "sample_points": 128
+  },
+  "cases": 25
+ },
+ {
+  "id": "20260902T133950Z-f2c2ec319f42-go",
+  "at": "2026-09-02T13:39:50.813Z",
+  "lang": "go",
+  "host": "f2c2ec319f42",
+  "commit": "ab6b663a7f3c2abf231a8ad7b4828d26ae8631c1",
+  "dirty": false,
+  "ref": "main",
+  "runtime": {
+   "go": "go1.25.0",
+   "goarch": "amd64",
+   "goos": "linux"
+  },
+  "versions": {
+   "gojsonschema": "1.2.0",
+   "jsonschema": "6.0.3",
+   "shape": "0.3.0",
+   "validator": "10.30.3"
+  },
+  "input_hash": "64dd85eab212",
+  "policy": {
+   "warmup_ms": 300,
+   "time_ms": 2000,
+   "batch_ms": 1,
+   "min_batches": 10,
+   "sample_points": 128
+  },
+  "cases": 19
+ },
+ {
+  "id": "20260902T133952Z-ea12b5414dd4-go",
+  "at": "2026-09-02T13:39:52.600Z",
+  "lang": "go",
+  "host": "ea12b5414dd4",
+  "commit": "ab6b663a7f3c2abf231a8ad7b4828d26ae8631c1",
+  "dirty": false,
+  "ref": "main",
+  "runtime": {
+   "go": "go1.25.0",
+   "goarch": "arm64",
+   "goos": "darwin"
+  },
+  "versions": {
+   "gojsonschema": "1.2.0",
+   "jsonschema": "6.0.3",
+   "shape": "0.3.0",
+   "validator": "10.30.3"
+  },
+  "input_hash": "64dd85eab212",
+  "policy": {
+   "warmup_ms": 300,
+   "time_ms": 2000,
+   "batch_ms": 1,
+   "min_batches": 10,
+   "sample_points": 128
+  },
+  "cases": 19
+ },
+ {
+  "id": "20260902T134035Z-1fee8adaf205-go",
+  "at": "2026-09-02T13:40:35.103Z",
+  "lang": "go",
+  "host": "1fee8adaf205",
+  "commit": "ab6b663a7f3c2abf231a8ad7b4828d26ae8631c1",
+  "dirty": false,
+  "ref": "main",
+  "runtime": {
+   "go": "go1.25.0",
+   "goarch": "amd64",
+   "goos": "windows"
+  },
+  "versions": {
+   "gojsonschema": "1.2.0",
+   "jsonschema": "6.0.3",
+   "shape": "0.3.0",
+   "validator": "10.30.3"
+  },
+  "input_hash": "c1a75d4a6878",
+  "policy": {
+   "warmup_ms": 300,
+   "time_ms": 2000,
+   "batch_ms": 1,
+   "min_batches": 10,
+   "sample_points": 128
+  },
+  "cases": 19
  }
 ]
