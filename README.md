@@ -3,11 +3,10 @@
 # Shape: An object shape validation utility.
 
 [![npm version](https://img.shields.io/npm/v/shape.svg)](https://npmjs.com/package/shape)
-[![build](https://github.com/rjrodger/shape/actions/workflows/build.yml/badge.svg)](https://github.com/rjrodger/shape/actions/workflows/build.yml)
+[![build](https://github.com/rjrodger/shape/actions/workflows/ci.yml/badge.svg)](https://github.com/rjrodger/shape/actions/workflows/ci.yml)
 [![Coverage Status](https://coveralls.io/repos/github/rjrodger/shape/badge.svg?branch=main)](https://coveralls.io/github/rjrodger/shape?branch=main)
 [![Known Vulnerabilities](https://snyk.io/test/github/rjrodger/shape/badge.svg)](https://snyk.io/test/github/rjrodger/shape)
 [![DeepScan grade](https://deepscan.io/api/teams/5016/projects/19509/branches/508695/badge/grade.svg)](https://deepscan.io/dashboard#view=project&tid=5016&pid=19509&bid=508695)
-[![Maintainability](https://api.codeclimate.com/v1/badges/de19e425771fb65e98e2/maintainability)](https://codeclimate.com/github/rjrodger/shape/maintainability)
 
 A schema validator in the tradition of [Joi](https://joi.dev) or
 [JSON-Schema](https://json-schema.org/), but with a much nicer developer
