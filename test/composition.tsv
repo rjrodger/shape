@@ -1,4 +1,13 @@
 name	spec	input	output	error
+default-untyped-kind	{"a":{"$expr":"Default(2,Required())"}}	{"a":"x"}		"Validation failed for property \"a\" with string \"x\" because the string is not of type number."
+default-untyped-absent	{"a":{"$expr":"Default(2,Required())"}}	{}	{"a":2}	
+default-untyped-describe	{"a":{"$expr":"Default(2,Describe(\"two\",Required()))"}}	{"a":3}	{"a":3}	
+default-untyped-fault	{"a":{"$expr":"Default(2,Fault(\"not two\",Exact(2)))"}}	{"a":3}		"Value \"3\" for property \"a\" must be exactly one of: 2"
+default-untyped-exact	{"a":{"$expr":"Default(2,Exact(2,3))"}}	{"a":3}	{"a":3}	
+default-untyped-nullable	{"a":{"$expr":"Default(2,Nullable(Required()))"}}	{"a":null}	{"a":null}	
+default-untyped-empty	{"a":{"$expr":"Default(\"x\",Empty(Required()))"}}	{"a":""}	{"a":""}	
+all-any-token	{"a":{"$expr":"All(String,Any)"}}	{"a":1}		"Value \"1\" for property \"a\" does not satisfy all of: String, Any"
+one-min-any-token	{"a":{"$expr":"One(Number,Min(2,Any))"}}	{"a":"x"}		"Value \"x\" for property \"a\" does not satisfy one of: Number, Min(2)"
 one-of-ok	{"a":{"$expr":"One(Number,String)"}}	{"a":"x"}	{"a":"x"}	
 one-of-fail	{"a":{"$expr":"One(Number,String)"}}	{"a":true}		"Value \"true\" for property \"a\" does not satisfy one of: Number, String"
 some-of-ok	{"a":{"$expr":"Some(Number,String)"}}	{"a":5}	{"a":5}	

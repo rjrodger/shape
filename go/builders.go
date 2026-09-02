@@ -37,11 +37,21 @@ func Required(spec ...any) *Node {
 		nb.n.skippable = false
 		return nb
 	}
-	nb := buildize(spec[0])
+	nb := buildizeLiteral(spec[0])
 	nb.n.required = true
 	nb.n.requiredSet = true
 	nb.n.skippable = false
 	return nb
+}
+
+// buildizeLiteral is buildize for an explicit spec argument, where a nil is
+// the null literal (TS Required(null)) rather than the absence of a spec.
+func buildizeLiteral(spec any) *Node {
+	if spec == nil {
+		n, _ := normalize(nil)
+		return newNodeWrap(n)
+	}
+	return buildize(spec)
 }
 
 // Required (chained) on a Node.
@@ -60,7 +70,7 @@ func Optional(spec ...any) *Node {
 		nb.n.requiredSet = true
 		return nb
 	}
-	nb := buildize(spec[0])
+	nb := buildizeLiteral(spec[0])
 	nb.n.required = false
 	nb.n.requiredSet = true
 	return nb
@@ -203,6 +213,24 @@ func Default(dval any, spec ...any) *Node {
 		nb = buildize(dval)
 	} else {
 		nb = buildize(spec[0])
+		// An untyped shape (Required(), Exact(1)) is built over the default
+		// instead, and so takes the default's kind, as in TS.
+		if nb.n.kind == KindAny && dval != nil {
+			if base, err := normalize(dval); err == nil {
+				base.befores = append(append([]validator{}, nb.n.befores...), base.befores...)
+				base.afters = append(append([]validator{}, nb.n.afters...), base.afters...)
+				base.hasExact, base.exactVals = nb.n.hasExact, nb.n.exactVals
+				base.empty, base.nullable, base.silent = nb.n.empty, nb.n.nullable, nb.n.silent
+				base.faultMsg = nb.n.faultMsg
+				for k, v := range nb.n.meta {
+					if base.meta == nil {
+						base.meta = map[string]any{}
+					}
+					base.meta[k] = v
+				}
+				nb = newNodeWrap(base)
+			}
+		}
 	}
 	nb.n.required = false
 	nb.n.requiredSet = true

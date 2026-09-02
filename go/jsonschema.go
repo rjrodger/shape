@@ -145,9 +145,15 @@ func objectSchema(n *node, s map[string]any, defs map[string]any) {
 	}
 	if !n.open || n.objRest == nil {
 		s["additionalProperties"] = false
-	} else if n.objRest.kind != KindAny {
+	} else if !isAnySchema(n.objRest) {
 		s["additionalProperties"] = nodeSchema(n.objRest, defs)
 	}
+}
+
+// isAnySchema reports a child shape of Any, which says nothing, unless it
+// stands for a reference.
+func isAnySchema(child *node) bool {
+	return child.kind == KindAny && child.referName == ""
 }
 
 func arraySchema(n *node, s map[string]any, defs map[string]any) {
@@ -158,8 +164,9 @@ func arraySchema(n *node, s map[string]any, defs map[string]any) {
 		child = n.arrRest
 	}
 	// An element shape of Any says nothing, as an Any rest shape does not for
-	// an object.
-	if child != nil && child.kind == KindAny {
+	// an object; nothing may follow a closed tuple.
+	closed := child == nil
+	if child != nil && isAnySchema(child) {
 		child = nil
 	}
 	if len(n.arrChildren) > 0 {
@@ -168,9 +175,9 @@ func arraySchema(n *node, s map[string]any, defs map[string]any) {
 			fixed[i] = nodeSchema(cn, defs)
 		}
 		s["prefixItems"] = fixed
-		if child == nil {
+		if closed {
 			s["items"] = false
-		} else {
+		} else if child != nil {
 			s["items"] = nodeSchema(child, defs)
 		}
 	} else if child != nil {
@@ -186,6 +193,8 @@ func listSchema(n *node, s map[string]any, defs map[string]any) {
 	if n.disc != nil {
 		for i, b := range branches {
 			bs := b.(map[string]any)
+			// An object branch carries the tag as a key (see discriminated.go);
+			// any other branch gets the tag as its only property, as in TS.
 			props, _ := bs["properties"].(map[string]any)
 			if props == nil {
 				props = map[string]any{}

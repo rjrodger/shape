@@ -113,7 +113,7 @@ func TestAlgebraExtend(t *testing.T) {
 		algObj("a", 1.0, "b", "x", "c", true, "e", 2.0))
 
 	mustErr(t, MustShape(Extend("x", base)), algObj(), "Extend needs an object to extend with")
-	mustErr(t, MustShape(Extend(struct{}{}, base)), algObj(), "Extend needs an object to extend with")
+	mustErr(t, MustShape(Extend(make(chan int), base)), algObj(), "Extend needs an object to extend with")
 	mustErr(t, MustShape(Extend(algObj(), String)), "x", "Extend needs an object shape")
 }
 

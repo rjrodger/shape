@@ -37,6 +37,7 @@ s := shape.MustShapeWith(spec, options)
 | `shape.stringify(...)` | `s.String()` | DSL-ish string rendering. |
 | `shape.jsonify()` | — | JSON form used by `stringify`. |
 | `shape.jsonSchema()` | `s.JSONSchema()` | a JSON Schema (draft 2020-12) for the values accepted — see [the how-to](../how-to/export-json-schema.md). |
+| `fromJsonSchema(schema)` | `FromJSONSchema(schema)` | a spec built from a JSON Schema, to compile with `Shape` — see [the how-to](../how-to/export-json-schema.md#import). |
 | `Shape.isShape(v)` | `shape.IsShape(v)` | is `v` a compiled shape? |
 
 ## The validation context

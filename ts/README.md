@@ -61,6 +61,7 @@ shape.spec()               // a JSON-friendly description of the compiled shape
 shape.node()               // the compiled root node
 shape.stringify()          // the shape as DSL-ish text
 shape.jsonSchema()         // a JSON Schema (draft 2020-12) for the values accepted
+Shape(fromJsonSchema(doc)) // and back: a spec built from a JSON Schema
 shape['~standard']         // a Standard Schema V1 validator
 ```
 
@@ -136,10 +137,12 @@ and [the string DSL](../docs/how-to/use-the-string-dsl.md).
 
 ## TypeScript
 
-`Shape(spec)` infers the produced type from the spec: `String` becomes
-`string`, `[Number]` becomes `number[]`, a literal its own type, a nested
-object recursively. The exported types are `Node`, `Context`, `Update`,
-`State`, `Validate`, `Builder`, `ShapeShape` and `StandardSchemaV1`. See
+`Shape(spec)` infers the produced type from the spec, through every builder:
+`Min(1, String)` is `string`, `Exact('a', 'b')` is `'a' | 'b'`, `Skip(Number)`
+is `number | undefined`, a discriminated union is a union of its branches, and
+a key expression `'port: Max(9)'` is the property `port`. The exported types
+are `Node`, `Context`, `Update`, `State`, `Validate`, `Builder`, `ShapeShape`
+and `StandardSchemaV1`. See
 [TypeScript types](../docs/reference/typescript-types.md).
 
 ## Development

@@ -61,7 +61,10 @@ go get github.com/rjrodger/shape/go     # Go (1.22+)
 ## Documentation
 
 Full documentation, organized with the [Diátaxis](https://diataxis.fr) system,
-lives in **[`docs/`](docs/README.md)**:
+lives in **[`docs/`](docs/README.md)** and is published at
+**[rjrodger.github.io/shape](https://rjrodger.github.io/shape/)**, along with
+a [performance report](https://rjrodger.github.io/shape/perf/) comparing
+shape to other validators across hosts and versions:
 
 - **[Getting started](docs/tutorials/getting-started.md)** — build your first
   shape, step by step (TS and Go).
@@ -73,7 +76,7 @@ lives in **[`docs/`](docs/README.md)**:
   [composition](docs/how-to/compose-shapes.md),
   [coercion & formats](docs/how-to/coerce-and-formats.md),
   [errors](docs/how-to/handle-and-collect-errors.md),
-  [JSON Schema export](docs/how-to/export-json-schema.md), and
+  [JSON Schema export and import](docs/how-to/export-json-schema.md), and
   [more](docs/README.md#how-to-guides).
 - **Reference** — [builders](docs/reference/builders.md),
   [Shape API](docs/reference/shape-api.md),
@@ -98,11 +101,16 @@ lives in **[`docs/`](docs/README.md)**:
   `Extend`) to build one shape out of another.
 - `Catch` a failure with a fallback, `Transform` a valid value, `Describe` a
   node for tooling.
-- A JSON Schema export (draft 2020-12) and Standard Schema V1 interop.
+- JSON Schema export and import (draft 2020-12) and Standard Schema V1 interop.
 - A compact string DSL (`expr` / `build`) and inline key expressions.
 - Detailed, path-aware error messages.
 - TypeScript and Go implementations kept at behavioural parity by a
   [shared conformance corpus](test/README.md).
+- Full TypeScript inference of the produced type through every builder, and
+  Go structs accepted as values and as specs.
+- [Benchmarks](bench/README.md) against Zod, Ajv, Joi and Valibot
+  (TypeScript) and validator, jsonschema and gojsonschema (Go), recorded
+  from several hosts on the [performance report](https://rjrodger.github.io/shape/perf/).
 
 ## Repository layout
 
@@ -112,6 +120,8 @@ lives in **[`docs/`](docs/README.md)**:
 | `go/`       | Go port and tests. See [`go/README.md`](go/README.md). |
 | `docs/`     | Diátaxis documentation. |
 | `test/`     | Shared, language-neutral conformance corpus. |
+| `bench/`    | Benchmarks against other validators and the recorded runs. See [`bench/README.md`](bench/README.md). |
+| `site/`     | Builds the [project site](https://rjrodger.github.io/shape/): the docs and the performance report. |
 | `AGENTS.md` | Contributor & AI-agent guide (build, test, parity rules). |
 
 ## Contributing

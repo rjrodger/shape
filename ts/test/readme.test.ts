@@ -63,7 +63,7 @@ const {
 
 describe('readme', () => {
   test('readme-optional', () => {
-    let shape = Shape(Optional(String))
+    let shape: any = Shape(Optional(String))
     deepEqual(shape(), '')
     deepEqual(shape('a'), 'a')
     throws(() => shape(1), 'type')
@@ -81,7 +81,7 @@ describe('readme', () => {
 
 
   test('readme-default', () => {
-    let shape = Shape(Default('none', String))
+    let shape: any = Shape(Default('none', String))
     deepEqual(shape(), 'none')
     deepEqual(shape('a'), 'a')
     throws(() => shape(1), 'type')

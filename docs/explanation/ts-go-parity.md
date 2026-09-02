@@ -102,6 +102,12 @@ Some differences are inherent to Go and are unlikely ever to close.
   build: `expr` throws and `Expr` returns an error. The differential harness
   compares valid constructions only.
 
+- **Structs are a Go-only convenience.** A struct is read into the same
+  `map[string]any` model that TypeScript's plain objects occupy, on the way in
+  (as a value, by its `json` tags) and on the way out (`ValidateInto`), and a
+  struct spec's `shape` tags are ordinary key expressions. Nothing a shape
+  accepts or produces changes; the differential harness never sees a struct.
+
 ## Error metadata
 
 Both languages produce the same message *text*. The Go `FieldError` also exposes

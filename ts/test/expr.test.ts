@@ -221,7 +221,7 @@ describe('expr', () => {
 
 
   test('desc-call-order', () => {
-    let g = Shape({ a: Min(1) })
+    let g: any = Shape({ a: Min(1) })
     deepEqual(g({ a: 1 }), { a: 1 })
     // let gs = g.stringify(null, true)
     let gs = g.stringify()
@@ -294,7 +294,7 @@ describe('expr', () => {
 
 
   test('expr-type', () => {
-    let g = Shape({ a: Number })
+    let g: any = Shape({ a: Number })
     deepEqual(g({ a: 1 }), { a: 1 })
     let gs = g.stringify()
     deepEqual(gs, '{"a":"Number"}')
@@ -304,7 +304,7 @@ describe('expr', () => {
 
 
   test('expr-list', () => {
-    let g = Shape({ a: One(Number, String) })
+    let g: any = Shape({ a: One(Number, String) })
     deepEqual(g({ a: 1 }), { a: 1 })
     let gs = g.stringify()
     deepEqual(gs, '{"a":"One(Number,String)"}')

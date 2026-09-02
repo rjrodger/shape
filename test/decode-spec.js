@@ -23,6 +23,7 @@ function decodeSpec(v, Shape) {
       if ('$required' === k) return Shape.Required(decodeSpec(v.$required, Shape))
       if ('$optional' === k) return Shape.Optional(decodeSpec(v.$optional, Shape))
       if ('$expr' === k) return Shape.expr(v.$expr)
+      if ('$jsonschema' === k) return Shape.fromJsonSchema(v.$jsonschema)
       if ('$call' === k) {
         const [name, ...args] = v.$call
         return Shape[name](...args.map(a => decodeSpec(a, Shape)))

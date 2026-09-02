@@ -130,3 +130,13 @@ func TestJSONSchemaRoot(t *testing.T) {
 	schemaWant(t, "key expression", MustShape(map[string]any{"a: Min(2)": 0}).JSONSchema(),
 		`{`+draft+`,"type":"object","properties":{"a":{"type":"number","minimum":2,"default":0}},"additionalProperties":false}`)
 }
+
+// A discriminated union may have a non-object branch, which gets the tag as
+// its only property in the export, as in TS.
+func TestJSONSchemaDiscriminatedNonObject(t *testing.T) {
+	s := MustShape(Discriminated("kind", map[string]any{"dog": String, "cat": map[string]any{"lives": 9.0}}))
+	schemaWant(t, "non-object branch", s.JSONSchema(), `{`+draft+`,"oneOf":[
+		{"type":"object","properties":{"kind":{"type":"string","const":"cat"},"lives":{"type":"number","default":9}},
+		 "required":["kind"],"additionalProperties":false},
+		{"type":"string","minLength":1,"properties":{"kind":{"type":"string","const":"dog"}},"required":["kind"]}]}`)
+}

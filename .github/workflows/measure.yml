@@ -1,0 +1,108 @@
+name: Measure
+
+# Records benchmark runs from several hosts. Each job runs both languages'
+# benchmarks on one runner and uploads the run files; the last job collects
+# them, rebuilds bench/results/latest and commits to main. Run files are
+# only ever added (see bench/README.md).
+
+on:
+  workflow_dispatch:
+    inputs:
+      time_ms:
+        description: 'Measurement budget per benchmark, in milliseconds'
+        default: '2000'
+  schedule:
+    - cron: '17 4 1 * *'
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: measure
+  cancel-in-progress: false
+
+jobs:
+  measure:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.x
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: bench/go/go.mod
+          cache: false
+
+      - run: cd ts && npm install && npm run build
+      - run: cd bench/ts && npm install --no-audit --no-fund
+
+      - name: Benchmark
+        env:
+          BENCH_TIME_MS: ${{ github.event.inputs.time_ms || '2000' }}
+        run: node bench/run.js all --out out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: runs-${{ matrix.os }}
+          path: out/runs/*.json
+          if-no-files-found: error
+
+  record:
+    needs: measure
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.x
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: runs-*
+          path: incoming
+          merge-multiple: true
+
+      - name: File the runs
+        run: |
+          set -e
+          added=0
+          for f in incoming/*.json; do
+            name=$(basename "$f")
+            if [ -e "bench/results/runs/$name" ]; then
+              echo "skip $name (exists)"; continue
+            fi
+            cp "$f" "bench/results/runs/$name"; added=$((added+1))
+            echo "add $name"
+          done
+          echo "added=$added" >> "$GITHUB_ENV"
+          node bench/lib/report.js bench/results > /dev/null
+
+      - name: Commit
+        if: env.added != '0'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add bench/results
+          git commit -m "bench: record $added run(s) from hosted runners"
+          git push origin HEAD:main
+
+      # A push made with the workflow token starts no other workflow, so
+      # the site is rebuilt explicitly.
+      - name: Rebuild the site
+        if: env.added != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run pages.yml --ref main
