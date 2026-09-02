@@ -24,7 +24,7 @@ tokens as bare words and any other Rust expression standing for a builder's
 result:
 
 ```rust
-use shape::{shape, min, Schema, Token, Value};
+use shape::{min, shape, Schema, Token, Value};
 
 let s = Schema::new(shape!({
     "port": 8080,                    // optional, defaults to 8080, must be a number
@@ -41,12 +41,13 @@ same, and `Schema::parse("String.Min(2)")` reads the string form.
 ## Validate
 
 ```rust
-let out = s.validate(Value::from(serde_json::json!({ "debug": true })))?;
-// out == { "debug": true, "port": 8080, "host": "localhost", "tags": [] }
+let input = Value::from(serde_json::json!({ "debug": true, "workers": 2 }));
+let out = s.validate(input.clone())?;
+// out == { "debug": true, "workers": 2, "port": 8080, "host": "localhost", "tags": [] }
 
-s.valid(&input)            // a verdict, nothing produced
-s.error(&input)            // every FieldError
-let cfg: Config = s.validate_into(input)?;   // produce, then deserialize with serde
+let ok = s.valid(&input); // a verdict, nothing produced
+let errs = s.error(&input); // every FieldError
+let cfg: Config = s.validate_into(input)?; // produce, then deserialize with serde
 ```
 
 `validate` takes the value and gives the produced one back; there is no
@@ -70,20 +71,32 @@ you mean to reshape twice.
 
 A builder given a wrong argument returns a fault node that reports the
 message at validation, since a Rust function cannot throw as the TypeScript
-one does; in the string form the same mistake is an `ExprError`.
+one does; `Schema::parse` returns the same node, and is an `ExprError` only
+for an expression that does not parse.
 
 ## Custom validation
 
 ```rust
 use shape::{check, Token};
 
-let even = check(|state, update| {
-    if state.value.as_f64().map(|n| n % 2.0 == 0.0).unwrap_or(false) {
-        return true;
-    }
-    update.err = Some(shape::UpdateErr::Text("Value \"$VALUE\" for property \"$PATH\" must be even.".into()));
-    false
-}, Token::Integer);
+let even = check(
+    |state, update| {
+        if state
+            .value
+            .as_f64()
+            .map(|n| n % 2.0 == 0.0)
+            .unwrap_or(false)
+        {
+            return true;
+        }
+        update.err = Some(shape::UpdateErr::Text(
+            "Value \"$VALUE\" for property \"$PATH\" must be even.".into(),
+        ));
+        false
+    },
+    Token::Integer,
+);
+// under {"n": even}, 3 fails: Value "3" for property "n" must be even.
 ```
 
 `before` and `after` take the same closure; `transform` a `Fn(Value, &mut State) -> Value`.

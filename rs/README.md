@@ -46,7 +46,7 @@ Every builder of the canonical implementation is here as a function taking
 the spec it applies to last, and as a chain method:
 
 ```rust
-use shape::{min, max, optional, Token};
+use shape::{max, min, optional, Token};
 
 let port = optional(max(65535, min(1, Token::Integer)));
 let name = shape::buildize(Token::String).min(3).max(40);
