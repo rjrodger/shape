@@ -407,7 +407,31 @@ func (n *Node) Exact(vals ...any) *Node {
 }
 
 // Min specifies a minimum value or length.
+// fault is what a builder returns when called wrongly: a node that
+// accepts nothing and says why at validation, since a Go builder cannot
+// throw as the TypeScript one does (see the parity page).
+func fault(msg string) *Node {
+	return newNodeWrap(&node{kind: KindNever, faultMsg: msg})
+}
+
+// boundArg reports whether a bound is a number: a numeric value, a time
+// (for a Date), or a string that reads as a number, as +size takes it in
+// TypeScript.
+func boundArg(v any) bool {
+	switch x := v.(type) {
+	case time.Time:
+		return true
+	case string:
+		_, err := strconv.ParseFloat(strings.TrimSpace(x), 64)
+		return err == nil
+	}
+	return isNumeric(v)
+}
+
 func Min(min any, spec ...any) *Node {
+	if !boundArg(min) {
+		return fault("Shape: Min needs a number")
+	}
 	var nb *Node
 	if len(spec) == 0 {
 		nb = buildize(nil)
@@ -455,6 +479,9 @@ func (n *Node) Min(min any) *Node {
 
 // Max specifies a maximum value or length.
 func Max(max any, spec ...any) *Node {
+	if !boundArg(max) {
+		return fault("Shape: Max needs a number")
+	}
 	var nb *Node
 	if len(spec) == 0 {
 		nb = buildize(nil)
@@ -502,6 +529,9 @@ func (n *Node) Max(max any) *Node {
 
 // Above specifies a strict lower bound on value or length.
 func Above(above any, spec ...any) *Node {
+	if !boundArg(above) {
+		return fault("Shape: Above needs a number")
+	}
 	var nb *Node
 	if len(spec) == 0 {
 		nb = buildize(nil)
@@ -549,6 +579,9 @@ func (n *Node) Above(above any) *Node {
 
 // Below specifies a strict upper bound on value or length.
 func Below(below any, spec ...any) *Node {
+	if !boundArg(below) {
+		return fault("Shape: Below needs a number")
+	}
 	var nb *Node
 	if len(spec) == 0 {
 		nb = buildize(nil)
@@ -596,6 +629,9 @@ func (n *Node) Below(below any) *Node {
 
 // Len requires an exact value or collection length.
 func Len(length int, spec ...any) *Node {
+	if length < 0 {
+		return fault("Shape: Len needs a whole number of zero or more")
+	}
 	var nb *Node
 	if len(spec) == 0 {
 		nb = buildize(nil)
@@ -913,6 +949,9 @@ func (n *Node) Rest(child any) *Node {
 
 // Define names the current node so a later Refer with the same name can clone it.
 func Define(name string, spec ...any) *Node {
+	if name == "" {
+		return fault("Shape: Define needs a name")
+	}
 	var nb *Node
 	if len(spec) == 0 {
 		nb = buildize(nil)
@@ -957,6 +996,9 @@ func Refer(name string, spec ...any) *Node {
 
 // ReferWith is Refer with explicit options.
 func ReferWith(name string, opts ReferOptions, spec ...any) *Node {
+	if name == "" {
+		return fault("Shape: Refer needs a name")
+	}
 	var nb *Node
 	if len(spec) == 0 {
 		nb = buildize(nil)
@@ -1012,6 +1054,9 @@ func Rename(name string, spec ...any) *Node {
 
 // RenameWith is Rename with explicit options (Keep, Claim).
 func RenameWith(name string, opts RenameOptions, spec ...any) *Node {
+	if name == "" {
+		return fault("Shape: Rename needs a name")
+	}
 	var nb *Node
 	if len(spec) == 0 {
 		nb = buildize(nil)

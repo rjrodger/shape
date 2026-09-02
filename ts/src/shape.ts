@@ -9,12 +9,9 @@
 // FEATURE: merge shapes (allows extending given shape - e.g. adding object props)
 // FEATURE: Key validation by RegExp
 
-// TODO: Validation of Builder parameters
 // TODO: ShapeShape.d is damaged by composition
 // TODO: Better stringifys for builder shapes
-// TODO: Error messages should state property is missing, not `value ""`
 // TODO: node.s can be a lazy function to avoid unnecessary string building
-// TODO: Finish Default shape-builder
 // FIX: Shape(Shape(..)) should work
 
 // DOC: Skip also makes value optional - thus Skip() means any value, or nonexistent
@@ -3212,6 +3209,14 @@ const Closed = function <V = any>(this: any, shape?: Node<V> | V): Node<V> {
 }
 
 
+// A builder that names something needs a name.
+function needsName(builder: string, name: any) {
+  if (S.string !== typeof name || '' === name) {
+    throw new Error('Shape: ' + builder + ' needs a name')
+  }
+}
+
+
 // Define a named reference to this value. See Refer.
 const Define = function <V = any>(this: any, inopts: any, shape?: Node<V> | V): Node<V> {
   let node = buildize(this, shape)
@@ -3219,8 +3224,9 @@ const Define = function <V = any>(this: any, inopts: any, shape?: Node<V> | V): 
   let opts = S.object === typeof inopts ? inopts || {} : {}
   let name = S.string === typeof inopts ? inopts : opts.name
 
+  needsName(S.Define, name)
 
-  if (null != name && '' != name) {
+  {
     const definer: any = function Define(_val: any, _update: Update, state: State) {
       let ref = state.ctx.ref = state.ctx.ref || {}
       ref[name] = state.node
@@ -3250,7 +3256,9 @@ const Refer = function <V = any>(this: any, inopts: any, shape?: Node<V> | V): N
   // does nothing.
   let strict = !!opts.strict
 
-  if (null != name && '' != name) {
+  needsName(S.Refer, name)
+
+  {
     const referrer: any = function Refer(val: any, update: Update, state: State) {
       if (undefined !== val || fill) {
         let ref = state.ctx.ref = state.ctx.ref || {}
@@ -3293,7 +3301,9 @@ const Rename = function <V = any>(this: any, inopts: any, shape?: Node<V> | V): 
   // NOTE: Rename claims are experimental.
   let claim = isarr(opts.claim) ? opts.claim : []
 
-  if (null != name && '' != name) {
+  needsName(S.Rename, name)
+
+  {
 
     // If there is a claim, grab the value so that validations
     // can be applied to it.
@@ -3509,6 +3519,13 @@ function makeSizeBuilder(
   valid: (vsize: number, size: number, val: any, update: Update, state: State) => boolean
 ) {
   let node = buildize(self, shape)
+
+  // A bound that is not a number is a mistake in the spec, not a value. No
+  // bound at all is the key-expression form ("a: Min()": 3), whose bound is
+  // the example.
+  if (undefined !== size && !Number.isFinite(+size)) {
+    throw new Error('Shape: ' + name + ' needs a number')
+  }
   size = +size
 
   let validator: any = function(val: any, update: Update, state: State) {
@@ -3628,6 +3645,9 @@ const Len = function <V = any>(
   len: number,
   shape?: Node<V> | V
 ): Node<V> {
+  if (!Number.isInteger(+len) || +len < 0) {
+    throw new Error('Shape: Len needs a whole number of zero or more')
+  }
   return makeSizeBuilder(this, len, shape, S.Len,
     (vsize: number, len: number, val: any, update: Update, state: State) => {
       if (len === vsize) {

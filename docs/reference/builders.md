@@ -30,6 +30,13 @@ chainable).
 Notes:
 - A literal in a spec is already "optional with a default"; these builders adjust
   that. A type marker is required; `Optional`/`Default` relax it.
+- `Default(value)` alone takes the value's kind; `Default(value, spec)` keeps
+  the spec, and an untyped spec (`Required()`, `Exact(1)`) takes the value's
+  kind. In a key expression `"a: Default()": 5` the example is the default.
+- A builder called with the wrong argument is a mistake in the spec:
+  `Min('x')`, `Len(-1)`, `Define('')`. TypeScript throws at build
+  (`Shape: Min needs a number`); a Go builder cannot, so it returns a node
+  that accepts nothing and reports the same message at validation.
 - `Ignore` keeps a valid value and silently drops an invalid one. It judges the
   whole subtree, so a failing descendant is swallowed too.
 

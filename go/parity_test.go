@@ -663,12 +663,13 @@ func TestTypeTokenArgumentsInArgumentPosition(t *testing.T) {
 
 func TestBoundArgumentRendering(t *testing.T) {
 	// Large integral bounds print in full, as JS prints them, not in %v's
-	// exponent form; a non-numeric bound falls back to %v.
+	// exponent form; a numeric string bound prints as the string it was
+	// given (TS prints the number it read from it).
 	if got := stringifyNode(Min(1577836800000.0).n, true); got != "Min(1577836800000)" {
 		t.Fatalf("large bound render = %q", got)
 	}
-	if got := stringifyNode(Min("x").n, true); got != "Min(x)" {
-		t.Fatalf("non-numeric bound render = %q", got)
+	if got := stringifyNode(Min("2").n, true); got != "Min(2)" {
+		t.Fatalf("numeric string bound render = %q", got)
 	}
 	mustErr(t, MustShape(Min(1000000.0, Number)), 5.0, "must be a minimum of 1000000 (was 5)")
 }
