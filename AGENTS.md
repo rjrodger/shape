@@ -14,6 +14,8 @@ behavioural parity**:
 | `go/`     | Go port (`go/*.go`) + tests. |
 | `docs/`   | [Diátaxis](https://diataxis.fr) documentation (tutorials / how-to / reference / explanation). |
 | `test/`   | Shared, language-neutral conformance corpus (`*.tsv`) run by both languages. |
+| `bench/`  | Benchmarks against other validators (`bench/ts`, `bench/go`) and the immutable recorded runs (`bench/results/`). See `bench/README.md`. |
+| `site/`   | Static site generator (`site/build.js`) for the docs and the performance report, deployed by the Pages workflow. |
 | `Makefile`| Top-level build/test/publish orchestration. |
 
 ## The golden rule: TypeScript is canonical
@@ -149,6 +151,20 @@ Documentation is [Diátaxis](https://diataxis.fr)-structured under `docs/`. When
 you change behaviour, update the relevant reference/how-to page and, if it's a
 parity-relevant difference, `docs/explanation/ts-go-parity.md`. The root
 `README.md` is a slim landing page — keep it short and link into `docs/`.
+
+The docs are published by `.github/workflows/pages.yml`, which runs
+`site/build.js` (Markdown → HTML, links between pages rewritten, broken
+links fail the build) and deploys `site/dist` to GitHub Pages together with
+the performance report read from `bench/results/latest/`.
+
+## Benchmarks
+
+`make bench` measures shape against other validators in both languages and
+files a run per language under `bench/results/runs/` — never edit or delete
+a run file; `bench/results/latest/` is rebuilt from all of them. The
+`Measure` workflow records runs from the hosted runners; CI runs
+`make bench-smoke` so the benchmarks and every library's verdict stay
+correct. See `bench/README.md`.
 
 ## Making a change — checklist
 

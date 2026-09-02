@@ -61,7 +61,10 @@ go get github.com/rjrodger/shape/go     # Go (1.22+)
 ## Documentation
 
 Full documentation, organized with the [Diátaxis](https://diataxis.fr) system,
-lives in **[`docs/`](docs/README.md)**:
+lives in **[`docs/`](docs/README.md)** and is published at
+**[rjrodger.github.io/shape](https://rjrodger.github.io/shape/)**, along with
+a [performance report](https://rjrodger.github.io/shape/perf/) comparing
+shape to other validators across hosts and versions:
 
 - **[Getting started](docs/tutorials/getting-started.md)** — build your first
   shape, step by step (TS and Go).
@@ -103,6 +106,11 @@ lives in **[`docs/`](docs/README.md)**:
 - Detailed, path-aware error messages.
 - TypeScript and Go implementations kept at behavioural parity by a
   [shared conformance corpus](test/README.md).
+- Full TypeScript inference of the produced type through every builder, and
+  Go structs accepted as values and as specs.
+- [Benchmarks](bench/README.md) against Zod, Ajv, Joi and Valibot
+  (TypeScript) and validator, jsonschema and gojsonschema (Go), recorded
+  from several hosts on the [performance report](https://rjrodger.github.io/shape/perf/).
 
 ## Repository layout
 
@@ -112,6 +120,8 @@ lives in **[`docs/`](docs/README.md)**:
 | `go/`       | Go port and tests. See [`go/README.md`](go/README.md). |
 | `docs/`     | Diátaxis documentation. |
 | `test/`     | Shared, language-neutral conformance corpus. |
+| `bench/`    | Benchmarks against other validators and the recorded runs. See [`bench/README.md`](bench/README.md). |
+| `site/`     | Builds the [project site](https://rjrodger.github.io/shape/): the docs and the performance report. |
 | `AGENTS.md` | Contributor & AI-agent guide (build, test, parity rules). |
 
 ## Contributing

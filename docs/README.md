@@ -5,8 +5,10 @@ like your data. It runs in JavaScript/TypeScript (browser and backend) and in
 Go, with the two implementations kept at behavioural parity — TypeScript is the
 canonical reference.
 
-These docs follow the [Diátaxis](https://diataxis.fr) system. Pick the column
-that matches what you need right now:
+These docs follow the [Diátaxis](https://diataxis.fr) system and are published
+at [rjrodger.github.io/shape](https://rjrodger.github.io/shape/), where a
+[performance report](https://rjrodger.github.io/shape/perf/) compares shape to
+other validators. Pick the column that matches what you need right now:
 
 | I want to…                                   | Go to            |
 | -------------------------------------------- | ---------------- |

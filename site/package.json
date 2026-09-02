@@ -1,0 +1,11 @@
+{
+  "name": "shape-site",
+  "private": true,
+  "description": "Builds the project site: the documentation and the performance report.",
+  "scripts": {
+    "build": "node build.js"
+  },
+  "dependencies": {
+    "marked": "18.0.11"
+  }
+}

@@ -35,7 +35,8 @@ cd ts && node --test --experimental-test-coverage dist-test/**/*.test.js
 ## Layout
 
 `ts/` canonical TypeScript · `go/` Go port · `docs/` Diátaxis docs ·
-`test/` shared conformance corpus · `AGENTS.md` full guide.
+`test/` shared conformance corpus · `bench/` benchmarks and recorded runs ·
+`site/` site generator (docs + perf report) · `AGENTS.md` full guide.
 
 See [AGENTS.md](AGENTS.md) for the change checklist, gotchas (numbers,
 undefined-vs-null, key ordering, gofmt), and the corpus format.
