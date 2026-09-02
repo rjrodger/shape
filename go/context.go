@@ -11,6 +11,20 @@ type Context struct {
 	rename map[string]renameInfo
 	// The compiled schema's Define'd nodes, read when Refs has no entry.
 	defs map[string]*node
+	// The per-node validator states of the current call, allocated in
+	// chunks rather than one at a time (see newState).
+	states []State
+}
+
+// newState hands out the State for one node from a chunk, so a walk over
+// many nodes allocates a few chunks instead of a State each. A State is
+// only ever used during the call it was made for.
+func (c *Context) newState() *State {
+	if len(c.states) == cap(c.states) {
+		c.states = make([]State, 0, 8)
+	}
+	c.states = c.states[:len(c.states)+1]
+	return &c.states[len(c.states)-1]
 }
 
 type renameInfo struct {

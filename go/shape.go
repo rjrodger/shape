@@ -180,8 +180,8 @@ func IsShape(v any) bool {
 	return ok
 }
 
-// The path stacks start with room for a deep tree, so the per-key appends
+// The path stacks start with room for a typical tree, so the per-key appends
 // down the walk allocate nothing until that depth. An error copies the path
 // it reports (see makeErr), so the shared backing array is never retained.
-func rootPath() []string { return make([]string, 0, 32) }
-func rootPathArr() []any { return make([]any, 0, 32) }
+func rootPath() []string { return make([]string, 0, 8) }
+func rootPathArr() []any { return make([]any, 0, 8) }

@@ -111,7 +111,13 @@ func validateNode(n *node, in any, path []string, pathArr []any, key string, par
 		in = nil
 	}
 
-	state := &State{
+	var state *State
+	if ctx == nil {
+		state = &State{}
+	} else {
+		state = ctx.newState()
+	}
+	*state = State{
 		Path:    path,
 		PathArr: pathArr,
 		Key:     key,
