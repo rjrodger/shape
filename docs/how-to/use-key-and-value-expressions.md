@@ -17,7 +17,8 @@ const shape = Shape({
   'port: Required': 8080,          // make an otherwise-optional literal required
 })
 
-shape({ name: 'a', port: 8080 })   // → validated, key is "name" (not "name: Min(1)")
+shape({ name: 'a', port: 8080 })
+// → { name: 'a', port: 8080, tags: [] }   — the key is "name", not "name: Min(1)"
 ```
 
 **Go**
@@ -70,12 +71,15 @@ shape.MustShapeWith(spec, shape.ShapeOptions{
 ## Meta sidecar keys (off by default)
 
 With `meta` active, a key ending in the meta suffix (`$$` by default) attaches
-metadata to the property it precedes.
+metadata to the property it precedes. The meta key must come immediately before
+the property's own key (any other position is an error). A string becomes the
+node's `m.short`; an object is merged into `m`.
 
 **TS**
 
 ```js
-Shape({ 'a$$': 'a short description', a: Number }, { meta: { active: true } })
+const shape = Shape({ 'a$$': 'a short description', a: Number }, { meta: { active: true } })
+shape.node().v.a.m   // { short: 'a short description' }
 ```
 
 **Go**

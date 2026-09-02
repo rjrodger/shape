@@ -15,7 +15,8 @@ const { Shape, expr } = require('shape')
 
 const shape = Shape(expr('String.Min(2).Max(10)'))
 shape('hi')     // OK
-shape('h')      // throws: minimum length of 2
+shape('h')
+// throws: Value "h" for property "" must be a minimum length of 2 (was 1).
 ```
 
 **Go**
@@ -73,7 +74,7 @@ shape({ name: 'a', age: 3, tags: ['x'] })   // OK
 s, _ := shape.Build(map[string]any{
     "name": "Min(1,String)",
     "age":  "Min(0,Number)",
-    "tags": []any{"Number"},
+    "tags": []any{"String"},
 })
 ```
 

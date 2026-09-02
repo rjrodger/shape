@@ -97,7 +97,8 @@ const shape = Shape({
 })
 
 shape({ message: 'hi', debug: true })   // OK
-shape({ debug: true })                   // throws: message is required
+shape({ debug: true })
+// throws: Validation failed for property "message" because the property is missing.
 ```
 
 **Go**
@@ -110,7 +111,8 @@ s := shape.MustShape(map[string]any{
 })
 
 s.Validate(map[string]any{"message": "hi", "debug": true}) // OK
-s.Validate(map[string]any{"debug": true})                  // error: message is required
+s.Validate(map[string]any{"debug": true})
+// error: Validation failed for property "message" because the property is missing.
 ```
 
 Required fields have no default — you only declare the type.
@@ -127,7 +129,8 @@ const shape = Shape({
 })
 
 shape({ tags: ['a', 'b'] })  // OK
-shape({ tags: [1] })         // throws: index 0 is not of type string
+shape({ tags: [1] })
+// throws: Validation failed for index "tags.0" with number "1" because the number is not of type string.
 ```
 
 A single-element array means "zero or more of this shape". Multiple elements
@@ -166,7 +169,7 @@ By default TS **throws** a `ShapeError`; Go **returns** an `error`.
 
 ```js
 try {
-  shape({ age: 999 })
+  shape({ name: 'Ann', age: 999 })
 } catch (err) {
   console.log(err.message) // Value "999" for property "age" must be a maximum of 120 (was 999).
 }
@@ -175,13 +178,14 @@ try {
 **Go**
 
 ```go
-out, err := s.Validate(map[string]any{"age": 999})
+out, err := s.Validate(map[string]any{"name": "Ann", "age": 999})
 if err != nil {
     fmt.Println(err) // Value "999" for property "age" must be a maximum of 120 (was 999).
 }
 ```
 
-To collect all errors instead of stopping at the first, see
+The thrown message lists every error found, one per line. To get the errors
+as data instead of an exception, see
 [Handle and collect errors](../how-to/handle-and-collect-errors.md).
 
 ## Where to next

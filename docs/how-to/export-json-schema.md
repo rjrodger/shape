@@ -52,7 +52,7 @@ Both give:
     "role":  { "enum": ["admin", "user"] },
     "tags":  { "type": "array", "items": { "type": "string", "minLength": 1 } }
   },
-  "required": ["email", "name", "role"],
+  "required": ["email", "name"],
   "additionalProperties": false
 }
 ```
@@ -142,7 +142,7 @@ s := shape.MustShape(spec)
 | `pattern`, `format` (`email`, `uri`, `uuid`, `date-time`, `ipv4`, `ipv6`) | a regexp; `Email`, `Url`, `Uuid`, `DateTime`, `Ipv4`, `Ipv6`; the export's `anyOf` of the two address formats is `Ip`. An unknown format is ignored |
 | `enum`, `const` | `Exact(...)` |
 | `anyOf`, `oneOf`, `allOf` | `One`, `One`, `All`; a `oneOf` of objects that each require a distinct string `const` on one property is `Discriminated` on it |
-| `not: {}`, `true`, `false` | `Never`; `Any`; `Never` |
+| `not: {}`, `true`, `false` | `Never`; `Any`; `Never` (a boolean is read as a subschema — the document itself must be an object) |
 | `default`, `description` | `Default`, `Describe` |
 | `$ref: "#/$defs/name"` (or `definitions`), `$ref: "#"` | the definition, inlined where it is referenced; a definition that refers to itself is `Define`d at its outermost use and `Refer`red within, so recursion validates |
 
@@ -155,11 +155,12 @@ shape (`items: null`) is an error naming the location, such as
 ### Round trips
 
 Export → import → export gives the same document for every rendering in the
-table above, with three exceptions to know about: a definition used more
-than once comes back inlined at each use (no `$defs`), a `Date` comes back
-as a `DateTime` string, and a default the shape itself would reject (such as
-`Optional(String)`'s `""` against `minLength: 1`) comes back allowed, since a
-default is a value the shape produces. The
+table above, with two exceptions to know about: a definition used more
+than once comes back inlined at each use (no `$defs`), and a `Date` comes
+back as a `DateTime` string. A default the shape itself would reject (such as
+`Optional(String)`'s `""` against `minLength: 1`) round-trips unchanged: it is
+read back as a default, since a default is a value the shape produces rather
+than one it checks. The
 [differential harness](../../test/differential/README.md) compares the
 re-export in both languages on every case, and the
 [corpus](../../test/README.md) has `{"$jsonschema": …}` rows.

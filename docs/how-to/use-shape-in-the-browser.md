@@ -10,14 +10,17 @@ Import the module the usual way for your build tool and let your bundler include
 it:
 
 ```js
-import { Shape, Min, String } from 'shape'
+import { Shape, Min } from 'shape'
 
 const validate = Shape({ name: Min(1, String) })
 ```
 
+Type markers (`String`, `Number`, `Boolean`, …) are the built-in constructors,
+not exports of the package.
+
 This is the same API as on the backend — everything in these docs applies.
 The package's `browser` field swaps Node's `util` (the one Node module
-`shape.js` touches, only for `inspect`) for a two-line stub, so no polyfill is
+`shape.js` touches, only for `inspect`) for a one-line stub, so no polyfill is
 needed.
 
 ## Standalone script tag
@@ -29,7 +32,7 @@ which also carries the builders; the same file is a CommonJS module if required:
 ```html
 <script src="shape.min.js"></script>
 <script>
-  const { Min, String } = Shape
+  const { Min } = Shape
   const validate = Shape({ name: Min(1, String) })
   console.log(validate({ name: 'ok' }))
 </script>
