@@ -42,7 +42,7 @@ out, _ := s.Validate(map[string]any{"port": 9090, "verbose": true})
 
 - A wrong type is rejected even though the field is optional:
   `applyOptions({ port: 'nope' })` fails with a type error.
-- Nested option objects fill out recursively — declare them inline.
+- Nested option objects fill out recursively—declare them inline.
 - Shape **mutates** the input to inject defaults (TS). If you need to keep the
   original untouched, clone it first. See
   [How validation works](../explanation/how-validation-works.md#default-injection-and-mutation).

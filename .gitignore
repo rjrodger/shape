@@ -41,3 +41,13 @@ go/*.test
 # Rust build output
 rs/target/
 bench/rs/target/
+
+# Vale's downloaded style packages. `vale sync` fetches Google from the
+# package registry into .vale/styles/Google/, which is third-party
+# content on its own release cadence -- pinned in .vale.ini and in the
+# workflow, not vendored.
+#
+# Named EXACTLY, not as .vale/styles/* with a re-inclusion: that form
+# also drops .vale/styles/Shape/, which is our own rule set and has to
+# be committed.
+.vale/styles/Google/

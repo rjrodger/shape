@@ -65,7 +65,7 @@ s := shape.MustShape(map[string]any{
 
 When the alternatives are objects told apart by one property, `Discriminated`
 picks the branch by that property's value and reports **only that branch's**
-errors — not a list of every alternative.
+errors—not a list of every alternative.
 
 **TS**
 
@@ -104,6 +104,6 @@ pet := shape.MustShape(shape.Discriminated("kind", map[string]any{
   was.
 - `Exact` also matches when the value is absent but the node's default equals one
   of the listed literals.
-- These builders are not chainable methods — call them as top-level builders.
+- These builders are not chainable methods—call them as top-level builders.
 - An absent optional composition (`Optional(One(String, Number))`) is simply
   absent; it is not put to its branches.

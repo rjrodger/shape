@@ -75,8 +75,8 @@ throwing. See [the Shape API](../docs/reference/shape-api.md) and
 
 ## Builders
 
-Every builder is a named export, a property of `Shape`, and — except `One`,
-`Some`, `All`, `Exact` and `Discriminated` — a chainable method on a node.
+Every builder is a named export, a property of `Shape`, and—except `One`,
+`Some`, `All`, `Exact` and `Discriminated`—a chainable method on a node.
 `G`-prefixed aliases (`GMin`, `GPick`, …) avoid clashes with local names.
 
 ```js
@@ -99,14 +99,14 @@ Required(Number).Min(2)                  // the same builders, chained
 | ----- | -------- |
 | Required / optional / defaults | `Required` `Optional` `Default` `Skip` `Ignore` `Empty` `Nullable` `Fault` |
 | Type / equality | `Type` `Integer` `Date` `Exact` `Never` `Func` `Any` |
-| Coercion | `Coerce` — a decimal string to a number, `"true"`/`"1"` to a boolean, a number or boolean to a string, an ISO 8601 string or millisecond count to a `Date` |
+| Coercion | `Coerce`—a decimal string to a number, `"true"`/`"1"` to a boolean, a number or boolean to a string, an ISO 8601 string or millisecond count to a `Date` |
 | String formats | `Email` `Url` `Uuid` `DateTime` `Ip` `Ipv4` `Ipv6` |
-| Bounds | `Min` `Max` `Above` `Below` `Len` — value for numbers, length for strings, arrays and objects |
+| Bounds | `Min` `Max` `Above` `Below` `Len`—value for numbers, length for strings, arrays and objects |
 | Custom checks | `Check` (a function or a `RegExp`) `Before` `After` |
 | Isolation | `Catch(fallback, …)` `Transform(fn, …)` `Describe(text, …)` |
 | Composition | `One` `Some` `All` `Discriminated(tag, { … })` |
 | Objects / arrays | `Open` `Closed` `Child` `Rest` |
-| Object algebra | `Pick` `Omit` `Partial` `Extend` — each builds a new object shape out of another |
+| Object algebra | `Pick` `Omit` `Partial` `Extend`—each builds a new object shape out of another |
 | References | `Define` `Refer` `Rename` |
 | Misc | `Key` |
 
@@ -170,10 +170,10 @@ make -C .. test                                # all three languages must pass i
 make -C .. diff                                # the differential harness
 ```
 
-A behaviour change starts here and is then mirrored in Go and Rust — see
+A behaviour change starts here and is then mirrored in Go and Rust—see
 [`../AGENTS.md`](../AGENTS.md).
 
 ## License
 
-Copyright (c) 2021-2024, Richard Rodger and other contributors.
+Copyright (c) 2021-2024 Richard Rodger and other contributors.
 Licensed under [MIT](./LICENSE).

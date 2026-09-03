@@ -30,7 +30,7 @@ shape({ a: 2, b: 3 })   // → { a: 2, b: 3 }
 shape.MustShape(shape.Open(map[string]any{"a": 1}))
 ```
 
-> An **empty** object `{}` is treated as `Open` — it matches any object.
+> An **empty** object `{}` is treated as `Open`—it matches any object.
 
 ## Constrain unknown values: `Child`
 
@@ -64,11 +64,11 @@ Shape({
 })
 ```
 
-Error paths use dot notation, e.g. `server.tls.enabled`.
+Error paths use dot notation, for example `server.tls.enabled`.
 
 ## Force closed
 
-If a shape became open (e.g. via `Child`/`Open`) and you want it closed again,
+If a shape became open (through `Child` or `Open`) and you want it closed again,
 wrap it with [`Closed`](../reference/builders.md#objects--arrays).
 
 ## Reshape a declared object: `Pick`, `Omit`, `Partial`, `Extend`

@@ -1,6 +1,6 @@
 # Performance plan
 
-**The work that takes shape from where the [performance review](performance.md)
+**The work that takes shape from where the [performance review](../explanation/performance.md)
 found it to the tier of the fast validators, in what order, and how each step
 is measured.** The review says where the time goes; this page says what to
 do about it. The baseline is the pair of benchmark runs recorded from a clean
@@ -205,7 +205,7 @@ declined for now.
 
 ## The rules that do not move
 
-Every step keeps the [parity contract](ts-go-parity.md): the shared corpus
+Every step keeps the [parity contract](../explanation/ts-go-parity.md): the shared corpus
 and the differential harness must pass unchanged in both languages after
 each phase, so the produced values, the exact error text and its order, the
 JSON Schema export and the re-import all stay as they are. Coverage stays at

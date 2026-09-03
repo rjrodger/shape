@@ -109,10 +109,10 @@ compiles to, where a chain starts; pass `any()` for the bare form.
 | `exact(values)` | `.exact(values)` |
 | `min(bound, spec)`, `max(..)`, `above(..)`, `below(..)`, `len(length, spec)` | `.min(b)`, `.max(b)`, `.above(b)`, `.below(b)`, `.len(n)` |
 | `check(f, spec)`, `check_re(regex, spec)`, `before(f, spec)`, `after(f, spec)` | `.check(f)`, `.check_re(re)`, `.before(f)`, `.after(f)` |
-| `one(shapes)`, `some(shapes)`, `all(shapes)`, `discriminated(tag, branches)` (the branches `(name, spec)` pairs) | – |
+| `one(shapes)`, `some(shapes)`, `all(shapes)`, `discriminated(tag, branches)` (the branches `(name, spec)` pairs) | n/a |
 | `define(name, spec)`, `refer(name, spec)`, `refer_with(name, ReferOptions, spec)` | `.define(name)`, `.refer(name)`, `.refer_with(name, opts)` |
 | `rename(name, spec)`, `rename_with(name, RenameOptions, spec)` | `.rename(name)`, `.rename_with(name, opts)` |
-| `key()`, `key_depth(depth)`, `key_join(depth, sep)`, `key_args(&[Value])` | – |
+| `key()`, `key_depth(depth)`, `key_join(depth, sep)`, `key_args(&[Value])` | n/a |
 | `catch(fallback, spec)`, `transform(f, spec)`, `describe(text, spec)` | `.catch(v)`, `.transform(f)`, `.describe(text)` |
 | `coerce(spec)`, `email(spec)`, `url(spec)`, `uuid(spec)`, `date_time(spec)`, `ip(spec)`, `ipv4(spec)`, `ipv6(spec)` | `.coerce()`, `.email()`, `.url()`, `.uuid()`, `.date_time()`, `.ip()`, `.ipv4()`, `.ipv6()` |
 | `pick(names, spec)`, `omit(names, spec)`, `partial(spec)`, `extend(extra, spec)` | `.pick(names)`, `.omit(names)`, `.partial()`, `.extend(extra)` |

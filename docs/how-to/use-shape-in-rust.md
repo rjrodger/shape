@@ -18,7 +18,7 @@ conversions with `serde_json::Value` and `validate_into`; turn it off with
 ## Write a spec
 
 A spec is an example of the value: a literal is optional with that default,
-a type token is required, an object or array carries its children. The
+a type token is required, and an object or array carries its children. The
 `shape!` macro writes one in the `serde_json::json!` style, with the type
 tokens as bare words and any other Rust expression standing for a builder's
 result:

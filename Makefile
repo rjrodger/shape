@@ -1,4 +1,4 @@
-.PHONY: all build test clean build-ts build-go build-rs test-ts test-go test-rs lint-rs cover-rs clean-ts clean-go clean-rs diff diff-full diff-rs diff-cases diff-run-go diff-run-rs bench bench-ts bench-go bench-rs bench-smoke bench-report publish publish-npm publish-go publish-dry publish-npm-dry publish-go-dry publish-rs-dry tags-npm tags-go tags-rs reset
+.PHONY: all build test clean build-ts build-go build-rs test-ts test-go test-rs lint-rs cover-rs clean-ts clean-go clean-rs diff diff-full diff-rs diff-cases diff-run-go diff-run-rs bench bench-ts bench-go bench-rs bench-smoke bench-report lint-docs lint-docs-full publish publish-npm publish-go publish-dry publish-npm-dry publish-go-dry publish-rs-dry tags-npm tags-go tags-rs reset
 
 # Never run recipes concurrently: publish-npm and publish-go both mutate the
 # worktree and index (bump, commit, tag, push), so `make -j publish` must serialize.
@@ -114,6 +114,22 @@ bench-smoke: build-ts
 
 bench-report:
 	node bench/lib/report.js bench/results
+
+# The prose gate. One invocation, shared by the developer and by CI
+# (.github/workflows/docs.yml calls this target), so a run here and a
+# run there lint exactly the same file set at exactly the same levels.
+#
+# docs/design/ holds the plans -- working documents for maintainers,
+# excluded here because `docs` is passed as a whole. Levels and the
+# reason for each are in .vale.ini; the rules are in docs/STYLE-GUIDE.md.
+VALE_DOCS = --glob='!docs/design/**' docs README.md ts/README.md go/README.md rs/README.md
+
+lint-docs:
+	vale --minAlertLevel=error $(VALE_DOCS)
+
+# Warnings and suggestions too: advisory, never a gate.
+lint-docs-full:
+	vale --minAlertLevel=suggestion $(VALE_DOCS)
 
 tags-npm:
 	git tag -l 'ts/v*' --sort=-version:refname

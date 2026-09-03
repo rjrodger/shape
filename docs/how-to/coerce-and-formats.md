@@ -41,7 +41,7 @@ s := shape.MustShape(map[string]any{
 ```
 
 Coercion runs ahead of bounds as well: `Coerce(Min(2, Number))` given `"1"`
-reports that `1` is below 2. The exact conversion table is in the
+reports that `1` is under the bound of 2. The exact conversion table is in the
 [builder reference](../reference/builders.md#coercion).
 
 ## Check a string format
@@ -79,8 +79,8 @@ engines, so a value passes or fails identically in TypeScript and Go.
 
 ## Repair, replace or describe: `Catch`, `Transform`, `Describe`
 
-`Catch` replaces whatever fails inside — the node's own checks, its type, any
-descendant — with a fallback and raises nothing:
+`Catch` replaces whatever fails inside—the node's own checks, its type, any
+descendant—with a fallback and raises nothing:
 
 ```js
 Shape({ port: Catch(8080, Min(1, Number)) })({ port: 'x' })   // → { port: 8080 }
@@ -103,7 +103,7 @@ n.m.description   // 'the TCP port to listen on'   (Go: n.Meta()["description"])
 
 ## See also
 
-- [Builder reference](../reference/builders.md) — coercion table, formats,
+- [Builder reference](../reference/builders.md)—coercion table, formats,
   isolation.
 - [Add custom validation](add-custom-validation.md) for `Check`, `Before` and
   `After`.

@@ -1,7 +1,7 @@
 # How to serialize a shape
 
 **Goal:** write a shape down as JSON, store or send it, and read it back as
-the same shape — in any of the three languages.
+the same shape—in any of the three languages.
 
 A shape is normally written as a literal in the program that uses it. The
 declarative JSON export writes one out instead, as the JSON dialect the
@@ -101,7 +101,7 @@ Shape(Open({ a: 1 })).json()
 ```
 
 **A `$$0`, `$$1`, ... key beside it carries a shape the expression cannot
-spell inline** — an object or an array in an argument position:
+spell inline**—an object or an array in an argument position:
 
 ```js
 Shape({ a: Some({ x: 1 }, [String]) }).json()
@@ -116,7 +116,7 @@ bare string would read as an expression.
 A function has no text, so a shape that carries one cannot be written:
 `Check(fn)`, `Before`, `After`, `Transform`, and `Key(fn)`. Nor can a builder
 option the DSL has no word for (`Rename`'s `keep` and `claim`, `Refer`'s
-`fill` and `strict`), or a default that is an object, an array or a date.
+`fill` and `strict`), or a default that is an object, an array, or a date.
 
 TypeScript throws, Go returns an error, and Rust returns `Err`; the message
 names what stopped it.
@@ -126,8 +126,8 @@ Shape({ a: Shape.Check(v => v > 1) }).json()
 // Error: Shape: json cannot express a check function
 ```
 
-Everything else round trips, including tuples, rests, open and closed
-objects, discriminated unions, formats, bounds, `Catch`, `Ignore`, `Coerce`,
+Everything else round trips, including tuples, rests, objects both open
+and closed, discriminated unions, formats, bounds, `Catch`, `Ignore`, `Coerce`,
 `Define` and `Refer`, `Describe` and `Fault`.
 
 ## When to use which export

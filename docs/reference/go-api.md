@@ -187,8 +187,8 @@ func Partial(spec ...any) *Node
 func Extend(extra any, spec ...any) *Node
 ```
 
-A builder called wrongly — `Discriminated` without a branch, `Pick` of an
-unknown property — cannot return an error, so the fault surfaces at validation
+A builder called wrongly—`Discriminated` without a branch, `Pick` of an
+unknown property—cannot return an error, so the fault surfaces at validation
 as a `never` node carrying the message, as for any bad spec. In the string DSL
 `Expr` returns it as an error.
 
@@ -212,7 +212,7 @@ Type     Url      Uuid
 plus the type shortcuts `.Number()`, `.Boolean()`, `.Object()`, `.Array()`,
 `.Function()`, `.Integer()` and `.Date()`. There is no `.String()`: a method of
 that name on an exported type reads as `fmt.Stringer` and `go vet` rejects the
-signature — use `.Type(String)`, which is what the shortcuts call anyway.
+signature—use `.Type(String)`, which is what the shortcuts call anyway.
 
 The object algebra methods (`.Pick`, `.Omit`, `.Partial`, `.Extend`) return a
 new node and leave the receiver as it was; every other chain method narrows the

@@ -1,8 +1,8 @@
 # How to export and import a JSON Schema
 
 **Goal:** hand the values a shape accepts to a tool that speaks
-[JSON Schema](https://json-schema.org/) — an editor, a form generator, an API
-description — without writing the schema twice; and go the other way, so a
+[JSON Schema](https://json-schema.org/)—an editor, a form generator, an API
+description—without writing the schema twice; and go the other way, so a
 schema you already have becomes a shape.
 
 ## Export
@@ -66,11 +66,11 @@ alongside the validation results.
 | Shape | Schema |
 | ----- | ------ |
 | `String`, `Number`, `Integer`, `Boolean`, `null`, `Date` | `type` (`Date` is a `date-time` string); a string gets `minLength: 1` unless `Empty` |
-| a literal, `Default`, `Optional(token)` | `default` — the value an absent property is given |
+| a literal, `Default`, `Optional(token)` | `default`—the value an absent property is given |
 | a required property | listed in `required` (sorted) |
 | a closed object | `additionalProperties: false`; `Open` omits it; `Child(shape)` sets it to that shape |
 | `[shape]`, a tuple, `Rest`, `Closed([shape])` | `items`, `prefixItems` (+ `items: false` when nothing may follow) |
-| `Min` / `Max` / `Above` / `Below` / `Len` | `minimum`…, `minLength`…, `minItems`…, `minProperties`… by the node's kind — every family when it has none |
+| `Min` / `Max` / `Above` / `Below` / `Len` | `minimum`…, `minLength`…, `minItems`…, `minProperties`… by the node's kind—every family when it has none |
 | `Exact` | `enum` |
 | `Email`, `Url`, `Uuid`, `DateTime`, `Ipv4`, `Ipv6` | `format`; `Ip` is an `anyOf` of the two |
 | a bare `/re/`, `Check(/re/)` | `pattern` |
@@ -80,7 +80,7 @@ alongside the validation results.
 | `Define(name)` / `Refer(name)` | the definition under `$defs`; `{ "$ref": "#/$defs/name" }` |
 | `Describe` | `description` |
 | `Never` | `{ "not": {} }` |
-| `Any`, `Func`, a function `Check` | `{}` — nothing to say |
+| `Any`, `Func`, a function `Check` | `{}`—nothing to say |
 
 `Catch`, `Transform` and `Ignore` are transparent: the schema describes the
 shape inside them. `Coerce`, `Rename` and `Key` change what comes *out*, not
@@ -89,7 +89,7 @@ what goes in, so they have no rendering.
 ## Import
 
 `fromJsonSchema` (TS) and `FromJSONSchema` (Go) build a *spec* from a JSON
-Schema document — draft 2020-12, and the common keywords of the earlier
+Schema document—draft 2020-12, and the common keywords of the earlier
 drafts. Compile it with `Shape`, or compose it further with the builders as
 you would any spec.
 
@@ -142,20 +142,20 @@ s := shape.MustShape(spec)
 | `pattern`, `format` (`email`, `uri`, `uuid`, `date-time`, `ipv4`, `ipv6`) | a regexp; `Email`, `Url`, `Uuid`, `DateTime`, `Ipv4`, `Ipv6`; the export's `anyOf` of the two address formats is `Ip`. An unknown format is ignored |
 | `enum`, `const` | `Exact(...)` |
 | `anyOf`, `oneOf`, `allOf` | `One`, `One`, `All`; a `oneOf` of objects that each require a distinct string `const` on one property is `Discriminated` on it |
-| `not: {}`, `true`, `false` | `Never`; `Any`; `Never` (a boolean is read as a subschema — the document itself must be an object) |
+| `not: {}`, `true`, `false` | `Never`; `Any`; `Never` (a boolean is read as a subschema—the document itself must be an object) |
 | `default`, `description` | `Default`, `Describe` |
 | `$ref: "#/$defs/name"` (or `definitions`), `$ref: "#"` | the definition, inlined where it is referenced; a definition that refers to itself is `Define`d at its outermost use and `Refer`red within, so recursion validates |
 
 Keywords with no counterpart (`patternProperties`, `uniqueItems`,
 `dependentRequired`, `if`/`then`, `$ref` to another document…) are ignored;
-a wrong type, an unknown reference, a bad pattern or a keyword of the wrong
+a wrong type, an unknown reference, a bad pattern, or a keyword of the wrong
 shape (`items: null`) is an error naming the location, such as
 `JSON Schema: unknown type "strng" at /properties/a`.
 
 ### Round trips
 
 Export → import → export gives the same document for every rendering in the
-table above, with two exceptions to know about: a definition used more
+preceding table, with two exceptions to know about: a definition used more
 than once comes back inlined at each use (no `$defs`), and a `Date` comes
 back as a `DateTime` string. A default the shape itself would reject (such as
 `Optional(String)`'s `""` against `minLength: 1`) round-trips unchanged: it is
@@ -167,5 +167,5 @@ re-export in both languages on every case, and the
 
 ## See also
 
-- [Shape API](../reference/shape-api.md) — the other introspection methods.
+- [Shape API](../reference/shape-api.md)—the other introspection methods.
 - [Use Shape as a Standard Schema](use-as-standard-schema.md).

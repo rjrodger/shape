@@ -11,7 +11,7 @@ A literal value is optional; a *type marker* is required.
 | TS/JS    | `String`, `Number`, `Boolean`, `Object`, `Array`, `Function`, `Symbol`, `Date` (the globals) and `Integer` (from `shape`) |
 | Go       | `shape.String`, `shape.Number`, `shape.Boolean`, `shape.Object`, `shape.Array`, `shape.Function`, `shape.Integer`, `shape.Date` |
 
-`Any` / `shape.Any` is **not** a required marker — it accepts an absent value.
+`Any` / `shape.Any` is **not** a required marker—it accepts an absent value.
 To require a value of any type use `Required(Any)` (or bare `Required()`).
 
 **TS**
@@ -49,7 +49,7 @@ Shape({
 
 ## The inverse: force optional
 
-If a value would otherwise be required (e.g. under a `Check`), use
+If a value would otherwise be required (for example, under a `Check`), use
 [`Optional`](../reference/builders.md#required--optional--defaults), or use
 [`Skip`](../reference/builders.md#required--optional--defaults) to make it optional **and** skip
 default injection entirely.
@@ -70,7 +70,7 @@ Shape(Partial({ name: String, age: Number }))({})   // → { name: '', age: 0 }
 
 ## Allow null
 
-A required field rejects `null` — it is a present value of the wrong type. Use
+A required field rejects `null`—it is a present value of the wrong type. Use
 [`Nullable`](../reference/builders.md#required--optional--defaults) to accept
 it; absent is still governed by required/optional:
 
@@ -81,6 +81,6 @@ Shape({ note: Nullable(String) })({})               // throws: required
 
 ## Notes
 
-- Required fields never have a default — there is nothing to default to.
+- Required fields never have a default—there is nothing to default to.
 - An empty string fails a required (or any) string field unless
   [`Empty`](../reference/builders.md#required--optional--defaults) is used.

@@ -13,7 +13,7 @@ expensive to revisit get an ADR when they are made.
 The Go port showed the shape of the work: about 13,000 lines of Go and 6,000
 of tests reproduced every builder, the string DSL, key and value expressions,
 JSON Schema export and import, the object algebra and the exact error text,
-and the [parity page](ts-go-parity.md) lists the handful of divergences that
+and the [parity page](../explanation/ts-go-parity.md) lists the handful of divergences that
 are inherent to the language. Rust follows the same path, with the same
 rules from [AGENTS.md](../../AGENTS.md):
 

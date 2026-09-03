@@ -1,12 +1,11 @@
 # Performance review
 
 **Where the time goes when shape validates, in both implementations, and what
-would make it faster.** *The recommendations below were carried out; the
-[performance plan](performance-plan.md) records what each did and the
-before-and-after numbers in its Results section. The figures here are
-the ones the review was written from. The review predates the Rust port,
-which the benchmarks and the report now measure too but which was not
-profiled here.* Measured with the [benchmarks](../../bench/README.md)
+would make it faster.** *The recommendations that follow were carried out;
+the figures here are the ones the review was written from, and the
+[benchmark report](https://rjrodger.github.io/shape/perf/) carries the
+current numbers. The review predates the Rust port, which the benchmarks
+and the report now measure too but which was not profiled here.* Measured with the [benchmarks](../../bench/README.md)
 in `bench/` and CPU and allocation profiles of the `flat`, `nested` and
 `array` cases; the numbers are from one Linux host and will differ elsewhere,
 but the proportions are what matter. The live comparison with other
@@ -153,15 +152,16 @@ tree with no definitions at all.
    producing path, where the copy is genuinely needed, so the map does not
    grow in steps.
 
-The [performance plan](performance-plan.md) turns these into phases with
-targets and a measurement protocol.
+Each of these was carried out. The [benchmark
+report](https://rjrodger.github.io/shape/perf/) has the current numbers for
+every case on every host measured.
 
 ## Keeping parity while doing this
 
-Every item above changes how the walk is done, not what it accepts, produces
+Every item here changes how the walk is done, not what it accepts, produces
 or says, so the [shared corpus](../../test/README.md) and the
 [differential harness](../../test/differential/README.md) are the safety
-net: the exact error text, the produced value and the JSON Schema export
+net: the exact error text, the produced value, and the JSON Schema export
 must not move. Do the TypeScript change first, prove it with `make test` and
 `make diff`, then mirror it in Go, as for any change. Record a benchmark run
 before and after (`make bench`) so the report shows the effect per host.

@@ -1,8 +1,8 @@
 # How to use Shape as a Standard Schema
 
 **Goal:** hand a Shape validator to any tool that speaks
-[Standard Schema V1](https://standardschema.dev/) — a common, non-throwing
-validation interface — or get the same result shape in Go.
+[Standard Schema V1](https://standardschema.dev/)—a common, non-throwing
+validation interface—or get the same result shape in Go.
 
 ## TypeScript / JavaScript: the `~standard` property
 
@@ -27,7 +27,7 @@ const bad = std.validate({ host: 123 })
 // { issues: [ { message: '…', path: ['host'] } ] }
 ```
 
-`~standard.validate(value)` **never throws** — a failure is returned as
+`~standard.validate(value)` **never throws**—a failure is returned as
 `{ issues }`, a success as `{ value }` (never both). Issue paths are arrays:
 object keys are strings and array indices are numbers.
 
@@ -69,8 +69,8 @@ shape.MustShape([]any{shape.Number}).Standard().
 The underlying array-path is also available on every error, alongside the
 dot-string path:
 
-- **TS** — `ErrDesc.pathArr` (e.g. `['users', 0, 'email']`).
-- **Go** — `FieldError.PathArr` (e.g. `[]any{"users", 0, "email"}`).
+- **TS**: `ErrDesc.pathArr`, for example `['users', 0, 'email']`.
+- **Go**: `FieldError.PathArr`, for example `[]any{"users", 0, "email"}`.
 
 Unlike the dot-string `path`, the array form is unambiguous for keys that
 contain dots.

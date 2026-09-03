@@ -1,0 +1,89 @@
+# The prose gate. Vale over docs/ and the four package READMEs, at the
+# levels set in .vale.ini.
+#
+# Separate from ci.yml because it is neither a platform check nor a
+# language check: one runner, one job, no matrix. It runs on doc and
+# config changes only, so a code-only pull request does not wait on it.
+#
+# This is HALF the gate. The other half is ts/test/docs.test.ts, which
+# runs with `npm test` in ci.yml on every platform and carries the house
+# rules Vale cannot express. Both read the banned list from
+# .vale/styles/config/vocabularies/Shape/reject.txt, so they cannot
+# disagree about what is banned. See docs/STYLE-GUIDE.md.
+name: Docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'README.md'
+      - 'ts/README.md'
+      - 'go/README.md'
+      - 'rs/README.md'
+      - '.vale.ini'
+      - '.vale/**'
+      - 'Makefile'
+      - '.github/workflows/docs.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'README.md'
+      - 'ts/README.md'
+      - 'go/README.md'
+      - 'rs/README.md'
+      - '.vale.ini'
+      - '.vale/**'
+      - 'Makefile'
+      - '.github/workflows/docs.yml'
+
+jobs:
+  prose:
+    timeout-minutes: 5
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Pinned. Vale ships new rules in the binary as well as in the
+      # Google package, and an unpinned gate turns someone else's
+      # release into a red build on a pull request that touched one
+      # word. The package is pinned by release URL in .vale.ini, which
+      # is the other half of the same precaution.
+      - name: Install Vale
+        env:
+          VALE_VERSION: '3.14.0'
+        run: |
+          curl -sSfL -o vale.tar.gz \
+            "https://github.com/errata-ai/vale/releases/download/v${VALE_VERSION}/vale_${VALE_VERSION}_Linux_64-bit.tar.gz"
+          tar xzf vale.tar.gz vale
+          sudo mv vale /usr/local/bin/
+          vale --version
+
+      # Downloads the Google package into .vale/styles/Google/, which is
+      # gitignored -- .vale/styles/Shape/ and the vocabularies under
+      # .vale/styles/config/ are ours and are committed.
+      - name: Sync Vale packages
+        run: vale sync
+
+      # `make lint-docs` is the same invocation a developer runs, file
+      # set and levels included, so a green local run means a green job.
+      # Fails on any error-level finding; warnings and suggestions are
+      # reported in the step summary and do not block. The demotion
+      # notes in .vale.ini say what sits at which level and why.
+      - name: Prose gate
+        run: make lint-docs
+
+      - name: Full report (advisory)
+        if: always()
+        run: |
+          {
+            echo '## Prose report'
+            echo
+            echo 'Errors block the build. Warnings and suggestions do not.'
+            echo
+            echo '```'
+            make lint-docs-full 2>&1 | tail -40 || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

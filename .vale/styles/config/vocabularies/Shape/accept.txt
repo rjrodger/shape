@@ -1,0 +1,104 @@
+# Terms Vale's dictionary does not know. Entries are REGEXES, so
+# [Nn]odize accepts both casings without Vale.Terms then enforcing one
+# of them over the other -- listing both plain forms is what turns this
+# file into a capitalisation rule by accident.
+#
+# Every entry here was a real hit on a clean run over docs/ and the four
+# READMEs. A word added speculatively is a hole in the spelling gate
+# nobody notices, because nothing ever fires on it.
+
+# British spellings. Google style is US English; the house voice is not,
+# and the precedence in .vale.ini puts the house voice first.
+#
+# LISTED, not matched by suffix. An earlier version of the jostraca file
+# this is ported from had `\w+ise` and friends, which accept any word
+# ending in those letters -- `madeupise` included -- and so punched a
+# hole straight through the error-level spelling gate this file exists
+# to make usable. Add the stem when a new one is needed; the cost of
+# doing that is the point.
+#
+# Vale's own dictionary already carries most of these; they are written
+# down anyway so that the house ruling survives a dictionary change.
+[Cc]anonicalis(?:e|ed|es|ing)
+[Cc]ustomis(?:e|ed|es|ing)
+[Mm]aterialis(?:e|ed|es|ing)
+[Mm]emoise[ds]?
+[Nn]ormalis(?:e|ed|es|ing|ation)
+[Oo]ptimis(?:e|ed|es|ing)
+[Ss]pecialis(?:e|ed|es|ing)
+
+# The API surface. These are identifiers before they are words, and they
+# appear in prose because a sentence about `nodize` has to name it.
+Argu
+[Bb]uildize
+[Cc]hainable
+[Nn]odiz(?:e|es|ed|ing|ation)
+[Rr]equiredness
+[Ss]ubschema
+[Tt]ruthy
+[Vv]alidator
+[Vv]alidators'?
+
+# Language and runtime vocabulary, in a project documenting three of
+# them.
+[Aa]ccessors
+[Aa]rity
+[Aa]sync
+[Bb]oolean
+[Bb]ooleans
+[Bb]undler
+[Bb]undlers
+[Cc]omposable
+[Cc]onfig
+[Dd]ereferencing
+[Dd]eserializ(?:e|es|ed|ing)
+[Ee]sbuild
+[Gg]etters
+[Gg]lobals
+[Ii]nlined
+[Ii]nterop
+[Nn]ewtypes?
+[Nn]s
+[Nn]pm
+[Pp]olyfill
+[Pp]ragma
+[Pp]recompute
+[Pp]redeclared
+[Pp]repended
+[Ss]erde
+[Ss]kippable
+[Ss]tdlib
+[Ss]tructs?'?
+[Ss]ubtree
+[Ss]ubstring
+[Tt]henable
+[Tt]okenizer
+[Uu]nexported
+[Uu]npinnable
+[Uu]ntyped
+
+# Regular-expression vocabulary, for docs/reference/regexp.md.
+[Bb]ackreferences
+[Ll]ookaround
+
+# The other validators the benchmarks and the comparisons name.
+Ajv'?s?
+[Gg]arde
+[Gg]ojsonschema
+[Jj]sonschema
+Joi
+[Nn]orma
+[Pp]arambulator
+Valibot
+Zod
+
+# People, companies and frameworks cited in the pages.
+Voxgig
+Vue
+
+# Documentation and prose-gate vocabulary.
+[Cc]ombinator
+[Dd]eclaratives
+[Jj]ostraca
+READMEs
+[Rr]eflow(?:s|ed|ing)?
