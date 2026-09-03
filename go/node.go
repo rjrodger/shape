@@ -75,6 +75,19 @@ type node struct {
 	// allocates, and it happened per key per call).
 	consumed   map[string]bool
 	objKeysAny []any
+	// The declared children in objKeys order, and the keys objChildren
+	// holds that objKeys does not (none in a tree the builders make, so
+	// the walk no longer ranges over the map to look for them). Computed
+	// with consumed.
+	objChildList []*node
+	objExtra     []string
+	// plain marks a String, Number, Boolean or Integer node with nothing
+	// but its kind's check to apply: no validator, rename or silence, and
+	// no composition. A present value of the kind is judged in its
+	// parent's loop, without a State (the mirror of the TypeScript inline
+	// leaf and the Rust plain flag). Computed whenever the tree is
+	// prepared, since a validator may be attached late.
+	plain bool
 
 	// Define / Refer name (also stored on validator closures via befores).
 	defineName  string

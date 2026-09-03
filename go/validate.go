@@ -8,7 +8,47 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unsafe"
 )
+
+// The keys of the first indices, made once: an index is its digits as a
+// key and a boxed int on the path, and past what the runtime caches (99
+// and 255) both allocate, per element per call.
+const indexKeys = 1024
+
+var indexKey [indexKeys]string
+var indexAny [indexKeys]any
+
+func init() {
+	for i := range indexKey {
+		indexKey[i] = strconv.Itoa(i)
+		indexAny[i] = i
+	}
+}
+
+// skipPath reports whether the path stacks can be left alone: a verdict-only
+// call on a schema with no validators has nothing that reads them, since a
+// terse error records no path and no validator exists to ask.
+func skipPath(ctx *Context) bool {
+	return ctx != nil && ctx.pure && ctx.terse
+}
+
+// plainOK reports whether a present value passes a plain node's whole
+// check, the empty-string, NaN and fraction rules included; anything else
+// takes the full walk, which reports it.
+func plainOK(n *node, v any) bool {
+	switch n.kind {
+	case KindString:
+		s, ok := v.(string)
+		return ok && (s != "" || n.empty)
+	case KindNumber:
+		return isNumber(v) && !isNaN(v)
+	case KindBoolean:
+		_, ok := v.(bool)
+		return ok
+	}
+	return isInteger(v)
+}
 
 // TS-aligned marks. See src/shape.ts makeErrImpl call sites.
 const (
@@ -117,17 +157,18 @@ func validateNode(n *node, in any, path []string, pathArr []any, key string, par
 	} else {
 		state = ctx.newState()
 	}
-	*state = State{
-		Path:    path,
-		PathArr: pathArr,
-		Key:     key,
-		Value:   in,
-		Node:    n,
-		Parent:  parent,
-		Match:   match,
-		Ctx:     ctx,
-		absent:  absent,
-	}
+	// Field by field: a composite literal is built on the stack and copied
+	// in whole, with a write barrier over every word.
+	state.Path = path
+	state.PathArr = pathArr
+	state.Key = key
+	state.Value = in
+	state.Node = n
+	state.Parent = parent
+	state.Match = match
+	state.Ctx = ctx
+	state.absent = absent
+	state.checkName = ""
 
 	// Run before-validators. They may replace the value or the node, and a
 	// failing one ends the structural checks (TS handleValidate sets
@@ -151,12 +192,16 @@ func validateNode(n *node, in any, path []string, pathArr []any, key string, par
 		}
 	}
 	if done {
-		runAfters(state, verr)
+		if len(state.Node.afters) > 0 {
+			runAfters(state, verr)
+		}
 		return state.Value
 	}
 
 	state.Value = validateStructure(n, state, absent, path, pathArr, key, parent, ctx, match, verr)
-	runAfters(state, verr)
+	if len(state.Node.afters) > 0 {
+		runAfters(state, verr)
+	}
 	return state.Value
 }
 
@@ -388,6 +433,13 @@ func validateArray(n *node, in any, path []string, pathArr []any, parent any, ct
 		emitTypeErr(state, verr, n)
 		return nil
 	}
+	// The slice as the elements see their parent and as the result is
+	// returned: the interface it arrived in, or the []any a typed slice
+	// was read as, boxed once here rather than once per element.
+	var boxed any = in
+	if _, direct := in.([]any); !direct {
+		boxed = arr
+	}
 
 	switch {
 	case len(n.arrChildren) > 0:
@@ -405,14 +457,17 @@ func validateArray(n *node, in any, path []string, pathArr []any, parent any, ct
 			return arr
 		}
 
-		p := newProduced(arr, ctx, match)
+		p := newProduced(arr, boxed, ctx, match)
 		for i, v := range arr {
+			cn := n.arrRest
 			if i < tupleLen {
-				p.set(i, validateElem(n.arrChildren[i], v, path, pathArr, i, p.parent(), ctx, match, verr), match)
-			} else {
-				// len(arr) > tupleLen only reaches here when arrRest is set.
-				p.set(i, validateElem(n.arrRest, v, path, pathArr, i, p.parent(), ctx, match, verr), match)
+				cn = n.arrChildren[i]
 			}
+			// len(arr) > tupleLen only reaches here when arrRest is set.
+			if cn.plain && plainOK(cn, v) {
+				continue
+			}
+			p.set(i, validateElem(cn, v, path, pathArr, i, p.parent(), ctx, match, verr), match)
 		}
 		// Missing tuple positions get their default.
 		for i := len(arr); i < tupleLen; i++ {
@@ -421,22 +476,33 @@ func validateArray(n *node, in any, path []string, pathArr []any, parent any, ct
 			if !match {
 				p.ensure()
 				p.out = append(p.out, v)
+				p.par = p.out
 			}
 		}
 		return p.result(match)
 	case n.arrChild != nil:
-		p := newProduced(arr, ctx, match)
+		p := newProduced(arr, boxed, ctx, match)
+		cn := n.arrChild
 		for i, v := range arr {
-			p.set(i, validateElem(n.arrChild, v, path, pathArr, i, p.parent(), ctx, match, verr), match)
+			// A plain element of its kind is its own produced value, and a
+			// copy already holds it: nothing to do.
+			if cn.plain && plainOK(cn, v) {
+				continue
+			}
+			p.set(i, validateElem(cn, v, path, pathArr, i, p.parent(), ctx, match, verr), match)
 		}
 		return p.result(match)
 	case n.arrRest != nil:
 		// Rest with no tuple positions in front of it: every element is a rest
 		// element. Without this case the node fell through to the default and
 		// nothing was validated at all.
-		p := newProduced(arr, ctx, match)
+		p := newProduced(arr, boxed, ctx, match)
+		cn := n.arrRest
 		for i, v := range arr {
-			p.set(i, validateElem(n.arrRest, v, path, pathArr, i, p.parent(), ctx, match, verr), match)
+			if cn.plain && plainOK(cn, v) {
+				continue
+			}
+			p.set(i, validateElem(cn, v, path, pathArr, i, p.parent(), ctx, match, verr), match)
 		}
 		return p.result(match)
 	default:
@@ -452,10 +518,14 @@ func validateArray(n *node, in any, path []string, pathArr []any, parent any, ct
 type produced struct {
 	in  []any
 	out []any
+	// The parent the elements see and the result when nothing changed:
+	// the input as it was boxed on arrival, then the produced slice, boxed
+	// when it is made rather than per element.
+	par any
 }
 
-func newProduced(arr []any, ctx *Context, match bool) produced {
-	p := produced{in: arr}
+func newProduced(arr []any, boxed any, ctx *Context, match bool) produced {
+	p := produced{in: arr, par: boxed}
 	if !match && !pureCall(ctx) {
 		p.ensure()
 	}
@@ -465,10 +535,7 @@ func newProduced(arr []any, ctx *Context, match bool) produced {
 // parent is what the elements see as their parent: the produced slice when
 // there is one, the input otherwise.
 func (p *produced) parent() any {
-	if p.out != nil {
-		return p.out
-	}
-	return p.in
+	return p.par
 }
 
 // pureCall reports whether the call runs a schema with no validators, so
@@ -481,6 +548,7 @@ func (p *produced) ensure() {
 	if p.out == nil {
 		p.out = make([]any, len(p.in), len(p.in)+1)
 		copy(p.out, p.in)
+		p.par = p.out
 	}
 }
 
@@ -498,10 +566,7 @@ func (p *produced) result(match bool) any {
 	if match {
 		return nil
 	}
-	if p.out == nil {
-		return p.in
-	}
-	return p.out
+	return p.par
 }
 
 func validateObject(n *node, in any, path []string, pathArr []any, parent any, ctx *Context, match bool, verr *ValidationError) any {
@@ -551,15 +616,28 @@ func validateObject(n *node, in any, path []string, pathArr []any, parent any, c
 	}
 
 	present := 0
+	noPath := skipPath(ctx)
 	for i, k := range n.objKeys {
-		cn := n.objChildren[k]
+		cn := n.objChildList[i]
 		v, has := obj[k]
 		if has {
 			present++
+			// A plain leaf of its kind is its own produced value; a copy
+			// already holds it, and is written only as the full path would
+			// have written it, after an earlier child's rename to this key.
+			if cn.plain && plainOK(cn, v) {
+				if !match && out != nil {
+					out[k] = v
+				}
+				continue
+			}
 		}
 		var produced any
-		kpath := append(path, k)
-		kpathArr := append(pathArr, n.objKeysAny[i])
+		kpath, kpathArr := path, pathArr
+		if !noPath {
+			kpath = append(path, k)
+			kpathArr = append(pathArr, n.objKeysAny[i])
+		}
 
 		// Rename.claim: if the value is missing and claim source has it, pick up.
 		if !has && cn.renameTo != "" && len(cn.renameClaim) > 0 {
@@ -632,7 +710,10 @@ func validateObject(n *node, in any, path []string, pathArr []any, parent any, c
 		reportUnknown(n, obj, path, pathArr, ctx, match, verr, errStart)
 	}
 
-	for k, cn := range n.objChildren {
+	// A child held under a key the declared list does not name (none in a
+	// tree the builders make).
+	for _, k := range n.objExtra {
+		cn := n.objChildren[k]
 		if out != nil {
 			if _, present := out[k]; present {
 				continue
@@ -640,12 +721,10 @@ func validateObject(n *node, in any, path []string, pathArr []any, parent any, c
 		} else if _, present := obj[k]; present {
 			continue
 		}
-		if !contains(n.objKeys, k) {
-			produced := validateNode(cn, undefinedVal, append(path, k), append(pathArr, k), k, parentOf, ctx, match, verr)
-			if produced != nil && !match {
-				ensure()
-				out[k] = produced
-			}
+		produced := validateNode(cn, undefinedVal, append(path, k), append(pathArr, k), k, parentOf, ctx, match, verr)
+		if produced != nil && !match {
+			ensure()
+			out[k] = produced
 		}
 	}
 
@@ -755,8 +834,9 @@ func sameValue(a, b any) bool {
 		y, ok := b.(map[string]any)
 		return ok && reflect.ValueOf(x).Pointer() == reflect.ValueOf(y).Pointer()
 	case []any:
+		// The data pointers, without boxing either slice through reflect.
 		y, ok := b.([]any)
-		return ok && len(x) == len(y) && reflect.ValueOf(x).Pointer() == reflect.ValueOf(y).Pointer()
+		return ok && len(x) == len(y) && unsafe.SliceData(x) == unsafe.SliceData(y)
 	}
 	ta, tb := reflect.TypeOf(a), reflect.TypeOf(b)
 	return ta == tb && ta.Comparable() && a == b
@@ -966,9 +1046,18 @@ func applyUpdate(state *State, update *Update) {
 // object property and the root do: a value that does not validate is dropped
 // along with the errors it would raise.
 func validateElem(cn *node, v any, path []string, pathArr []any, i int, parent any, ctx *Context, match bool, verr *ValidationError) any {
-	key := strconv.Itoa(i)
-	epath := append(path, key)
-	epathArr := append(pathArr, i)
+	var key string
+	var boxed any
+	if i < indexKeys {
+		key, boxed = indexKey[i], indexAny[i]
+	} else {
+		key, boxed = strconv.Itoa(i), i
+	}
+	epath, epathArr := path, pathArr
+	if !skipPath(ctx) {
+		epath = append(path, key)
+		epathArr = append(pathArr, boxed)
+	}
 
 	if isIgnore(cn) {
 		produced, kept := validateIgnored(cn, v, epath, epathArr, key, parent, ctx, match)

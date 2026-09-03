@@ -125,7 +125,6 @@ type State struct {
 	Parent  any      // parent map/slice (for Rename and similar)
 	Match   bool     // true when invoked via .Match (no mutation, no error report)
 	Ctx     *Context // user/custom context
-	curErr  []FieldError
 	// absent is true when the value is missing (JS undefined) rather than an
 	// explicit null. It distinguishes a missing key (required error, rendered as
 	// "undefined") from a present null (a type error), mirroring TS.

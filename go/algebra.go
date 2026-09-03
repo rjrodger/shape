@@ -56,6 +56,12 @@ func copyNode(n *node) *node {
 		cp.objChildren[k] = cn
 	}
 	cp.objKeys = append([]string{}, n.objKeys...)
+	// What prepare computed for the original describes its keys, not the
+	// copy's: the copy is prepared afresh.
+	cp.consumed = nil
+	cp.objKeysAny = nil
+	cp.objChildList = nil
+	cp.objExtra = nil
 	cp.befores = append([]validator{}, n.befores...)
 	bumpValidatorGen()
 	cp.afters = append([]validator{}, n.afters...)

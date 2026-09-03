@@ -1,6 +1,9 @@
 package shape
 
-import "sync/atomic"
+import (
+	"sort"
+	"sync/atomic"
+)
 
 const Version = "0.5.1"
 
@@ -68,6 +71,7 @@ func prepare(n *node, defs map[string]*node) {
 	if n.defineName != "" {
 		defs[n.defineName] = n
 	}
+	n.plain = plainNode(n)
 	if n.kind == KindObject && n.consumed == nil {
 		consumed := make(map[string]bool, len(n.objKeys))
 		for _, k := range n.objKeys {
@@ -82,9 +86,19 @@ func prepare(n *node, defs map[string]*node) {
 		}
 		n.consumed = consumed
 		n.objKeysAny = make([]any, len(n.objKeys))
+		n.objChildList = make([]*node, len(n.objKeys))
 		for i, k := range n.objKeys {
 			n.objKeysAny[i] = k
+			n.objChildList[i] = n.objChildren[k]
 		}
+		for k := range n.objChildren {
+			if !contains(n.objKeys, k) {
+				n.objExtra = append(n.objExtra, k)
+			}
+		}
+		// Sorted: the map's order is random and an error order is compared
+		// exactly.
+		sort.Strings(n.objExtra)
 	}
 	for _, cn := range n.objChildren {
 		prepare(cn, defs)
@@ -98,6 +112,18 @@ func prepare(n *node, defs map[string]*node) {
 	for _, sn := range n.list {
 		prepare(sn, defs)
 	}
+}
+
+// plainNode reports whether a present value of n's kind needs nothing but
+// the kind's own check (see node.plain).
+func plainNode(n *node) bool {
+	switch n.kind {
+	case KindString, KindNumber, KindBoolean, KindInteger:
+	default:
+		return false
+	}
+	return len(n.befores) == 0 && len(n.afters) == 0 &&
+		n.renameTo == "" && len(n.renameClaim) == 0 && !n.silent && n.listMode == listNone
 }
 
 // hasValidators reports whether any node of the tree has a before or after.
@@ -172,7 +198,9 @@ func (s *Schema) ValidateCtx(input any, ctx *Context) (any, error) {
 	if s == nil || s.root == nil {
 		return nil, nil
 	}
-	verr := &ValidationError{}
+	// The collector lives here, and is copied to the heap only when the
+	// call fails: the returned error is always fresh.
+	var verr ValidationError
 	var c *Context
 	var path []string
 	var pathArr []any
@@ -195,7 +223,7 @@ func (s *Schema) ValidateCtx(input any, ctx *Context) (any, error) {
 		// handed back unchanged.
 		out, _ = validateIgnored(s.root, rootInput(input), path, pathArr, "", nil, c, false)
 	} else {
-		out = validateNode(s.root, rootInput(input), path, pathArr, "", nil, c, false, verr)
+		out = validateNode(s.root, rootInput(input), path, pathArr, "", nil, c, false, &verr)
 	}
 
 	if cs != nil {
@@ -205,7 +233,8 @@ func (s *Schema) ValidateCtx(input any, ctx *Context) (any, error) {
 		ctx.Err = append(ctx.Err, verr.Issues...)
 	}
 	if verr.hasAny() {
-		return out, verr
+		failed := verr
+		return out, &failed
 	}
 	return out, nil
 }

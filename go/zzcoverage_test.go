@@ -2,6 +2,8 @@ package shape
 
 import (
 	"math"
+	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -513,9 +515,26 @@ func TestZZValidateAftersAndLists(t *testing.T) {
 
 	// Object node whose objChildren has a key absent from objKeys (405-409).
 	on := &node{kind: KindObject, objChildren: map[string]*node{"extra": Optional(Number).n}}
+	prepare(on, map[string]*node{})
 	out := validateNode(on, map[string]any{}, []string{}, []any{}, "", nil, newContext(nil), false, &ValidationError{})
 	if om, ok := out.(map[string]any); !ok || om["extra"] == nil {
 		t.Fatalf("expected extra key injected, got %v", out)
+	}
+
+	// The same child present in the input, with and without a produced copy.
+	if got := validateNode(on, map[string]any{"extra": 5.0}, []string{}, []any{}, "", nil, newContext(nil), false, &ValidationError{}); got.(map[string]any)["extra"] != 5.0 {
+		t.Fatalf("extra key kept, got %v", got)
+	}
+	// On a verdict the key is unknown (nothing declared consumes it) and the
+	// child loop still finds it present.
+	if validateNodeMatches(on, map[string]any{"extra": 5.0}) {
+		t.Fatal("extra key present on a verdict")
+	}
+	dn, _ := normalize(1.0)
+	on2 := &node{kind: KindObject, objKeys: []string{"a"}, objChildren: map[string]*node{"a": dn, "extra": Optional(Number).n}}
+	prepare(on2, map[string]*node{})
+	if got := validateNode(on2, map[string]any{"extra": 5.0}, []string{}, []any{}, "", nil, newContext(nil), false, &ValidationError{}); got.(map[string]any)["extra"] != 5.0 || got.(map[string]any)["a"] != 1.0 {
+		t.Fatalf("extra key kept beside a default, got %v", got)
 	}
 
 	// Open object with a nil objRest keeps unknown keys as-is (421).
@@ -549,4 +568,41 @@ func TestZZValidateSmallHelpers(t *testing.T) {
 
 	// collectDefines with nil args returns immediately (695-697).
 	prepare(nil, nil)
+
+	// A pooled block releases whatever a validator put in Custom.
+	cs := callPool.Get().(*callScratch)
+	cs.custom["x"] = 1
+	cs.release()
+	if len(cs.custom) != 0 {
+		t.Fatal("custom cleared on release")
+	}
+}
+
+// An array longer than the index-key table: keys and paths are still made,
+// and read the same.
+func TestZZLongArrayIndexKeys(t *testing.T) {
+	arr := make([]any, indexKeys+10)
+	for i := range arr {
+		arr[i] = 1.0
+	}
+	s := MustShape([]any{Number})
+	if !s.Valid(arr) {
+		t.Fatal("long array valid")
+	}
+	arr[indexKeys+5] = "x"
+	errs := s.Error(arr)
+	if len(errs) != 1 || errs[0].Path != strconv.Itoa(indexKeys+5) || errs[0].PathArr[0] != indexKeys+5 {
+		t.Fatalf("long array error path: %v", errs)
+	}
+	if !strings.Contains(errs[0].Text, "index \""+strconv.Itoa(indexKeys+5)+"\"") {
+		t.Fatalf("long array error text: %s", errs[0].Text)
+	}
+}
+
+// validateNodeMatches runs a hand-built node in match mode and reports the
+// verdict.
+func validateNodeMatches(n *node, in any) bool {
+	verr := &ValidationError{terse: true}
+	validateNode(n, in, []string{}, []any{}, "", nil, newContext(nil), true, verr)
+	return !verr.hasAny()
 }
