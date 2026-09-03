@@ -642,3 +642,48 @@ func TestZZUserValidatorsAndPooling(t *testing.T) {
 		}
 	}
 }
+
+// The bounds and Exact build no message on a verdict, and their message
+// assembled directly is the one the template gave, the two cases the
+// template's replacement order shows through included: a key named
+// "$VALUE" and a literal holding a "$".
+func TestZZBoundTexts(t *testing.T) {
+	for _, c := range []struct {
+		spec any
+		in   any
+		path string
+		text string
+	}{
+		{map[string]any{"$VALUE": Min(3, Number)}, map[string]any{"$VALUE": 1.0}, "$VALUE", `Value "1" for property "1" must be a minimum of 3 (was 1).`},
+		{map[string]any{"$VALUE": Len(2, String)}, map[string]any{"$VALUE": "abc"}, "$VALUE", `Value "abc" for property "abc" must be exactly 2 in length (was 3).`},
+		{map[string]any{"k": Exact("$PATH", "y")}, map[string]any{"k": "x"}, "k", `Value "x" for property "k" must be exactly one of: k, y`},
+		{map[string]any{"k": Exact(1, "a", true)}, map[string]any{"k": 2.0}, "k", `Value "2" for property "k" must be exactly one of: 1, a, true`},
+		{map[string]any{"k": Above(3, Number)}, map[string]any{"k": 2.0}, "k", `Value "2" for property "k" must be above 3 (was 2).`},
+		{map[string]any{"k": Below(3, String)}, map[string]any{"k": "abcd"}, "k", `Value "abcd" for property "k" must have length below 3 (was 4).`},
+		{map[string]any{"k": Len(2, String)}, map[string]any{"k": "abc"}, "k", `Value "abc" for property "k" must be exactly 2 in length (was 3).`},
+		{map[string]any{"a": map[string]any{"k": Max(3, Number)}}, map[string]any{"a": map[string]any{"k": 5.0}}, "a.k", `Value "5" for property "a.k" must be a maximum of 3 (was 5).`},
+	} {
+		s := MustShape(c.spec)
+		errs := s.Error(c.in)
+		if len(errs) != 1 || errs[0].Path != c.path || errs[0].Text != c.text {
+			t.Fatalf("bound text: got %v, want %q", errs, c.text)
+		}
+		// The verdict counts the failure without the message.
+		if s.Valid(c.in) {
+			t.Fatalf("bound verdict for %v", c.in)
+		}
+	}
+	// Exact's direct comparisons: strings, booleans and floats of the same
+	// kind, and the rational path for the rest.
+	s := MustShape(map[string]any{"k": Exact("a", true, 2.0, 3)})
+	for _, ok := range []any{"a", true, 2.0, 3.0, 3, int64(2)} {
+		if !s.Valid(map[string]any{"k": ok}) {
+			t.Fatalf("exact accepts %v", ok)
+		}
+	}
+	for _, bad := range []any{"b", false, 2.5, "true", 4} {
+		if s.Valid(map[string]any{"k": bad}) {
+			t.Fatalf("exact rejects %v", bad)
+		}
+	}
+}

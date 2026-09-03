@@ -299,7 +299,7 @@ func validateStructure(n *node, state *State, absent bool, path []string, pathAr
 		// string is matched rather than rejected as empty.
 		sv, ok := state.Value.(string)
 		if !ok {
-			err := makeErr(state, WhyType, markScalarType, "")
+			err := newErr(state, WhyType, markScalarType)
 			err.Type = KindString
 			if !err.terse {
 				err.Text = defaultErrText(err)
@@ -798,7 +798,7 @@ func reportUnknown(n *node, obj map[string]any, path []string, pathArr []any, ct
 	sort.Strings(unknown)
 	state := &State{Path: path, PathArr: pathArr, Key: strings.Join(unknown, ", "),
 		Value: obj, Node: n, Match: match, Ctx: ctx}
-	err := makeErr(state, WhyClosed, markObjectClosed, "")
+	err := newErr(state, WhyClosed, markObjectClosed)
 	err.plural = len(unknown) > 1
 	if !err.terse {
 		err.Text = defaultErrText(err)
@@ -1119,7 +1119,12 @@ func cloneDefault(n *node) any {
 // cloneAny copies maps and slices deeply. A cycle, or a container reached
 // twice, is reproduced rather than followed.
 func cloneAny(v any) any {
-	return cloneSeen(v, map[uintptr]any{})
+	// Only a container is copied; a scalar needs no cycle table.
+	switch v.(type) {
+	case map[string]any, []any:
+		return cloneSeen(v, map[uintptr]any{})
+	}
+	return v
 }
 
 func cloneSeen(v any, seen map[uintptr]any) any {
@@ -1223,18 +1228,35 @@ func contains(ss []string, s string) bool {
 }
 
 func joinPath(path []string) string {
-	out := ""
+	// The segments' lengths are known, so the dotted form is one
+	// allocation, and a single segment is itself.
+	n, size := 0, 0
+	first := ""
 	for _, p := range path {
 		if p == "" {
 			continue
 		}
-		if out == "" {
-			out = p
-		} else {
-			out += "." + p
+		if n == 0 {
+			first = p
 		}
+		n++
+		size += len(p)
 	}
-	return out
+	if n <= 1 {
+		return first
+	}
+	var b strings.Builder
+	b.Grow(size + n - 1)
+	for _, p := range path {
+		if p == "" {
+			continue
+		}
+		if b.Len() > 0 {
+			b.WriteByte('.')
+		}
+		b.WriteString(p)
+	}
+	return b.String()
 }
 
 func pathstr(s *State) string {

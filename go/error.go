@@ -121,6 +121,21 @@ func (e *ValidationError) hasAny() bool {
 
 // makeErr builds a FieldError mirroring TS makeErrImpl text shape.
 func makeErr(s *State, why string, mark int, text string) FieldError {
+	err := newErr(s, why, mark)
+	if err.terse {
+		return err
+	}
+	if text != "" {
+		err.Text = expandErrTextFor(text, err.Path, s.Value, err.absent)
+	} else {
+		err.Text = defaultErrText(err)
+	}
+	return err
+}
+
+// newErr is makeErr without the text, for a site that renders its own once
+// it has set the fields the text depends on.
+func newErr(s *State, why string, mark int) FieldError {
 	if why == "" {
 		why = WhyCheck
 	}
@@ -154,11 +169,6 @@ func makeErr(s *State, why string, mark int, text string) FieldError {
 		if s.Node != nil && s.Node.regexpVal != nil {
 			err.regexpSrc = "/" + s.Node.regexpSrc + "/"
 		}
-	}
-	if text != "" {
-		err.Text = expandErrTextFor(text, err.Path, s.Value, err.absent)
-	} else {
-		err.Text = defaultErrText(err)
 	}
 	return err
 }
