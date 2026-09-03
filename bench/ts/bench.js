@@ -166,6 +166,10 @@ function main() {
 
   process.stdout.write(JSON.stringify({
     lang: 'ts',
+    // The harness version, folded into every row's case hash by the
+    // report: the specs and inputs changed on 2026-09-03 (typed leaves, a
+    // decoded large input), and a run before that is not comparable.
+    harness: 2,
     runtime: { node: process.version, v8: process.versions.v8 },
     versions,
     input_hash: hash,

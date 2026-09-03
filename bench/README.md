@@ -106,7 +106,12 @@ survives without the file growing with the budget.
   row of `summary.json`), so a case added later leaves the others'
   history comparable, and a case changed later cuts its own history at
   the change;
-- `policy`: the timing policy used.
+- `policy`: the timing policy used;
+- `harness`: the version of the language's harness, recorded once it has
+  changed what it measures (the TypeScript harness is at 2 since
+  2026-09-03; a run without the field is version 1). The report folds it
+  into every row's case hash, so runs of different harness versions are
+  never compared.
 
 The host id is the first twelve hex characters of a SHA-256 of the
 hostname, platform, architecture, CPU model and core count under a domain
