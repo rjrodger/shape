@@ -175,7 +175,8 @@ func validateNode(n *node, in any, path []string, pathArr []any, key string, par
 	// update.done) — but every before still runs, and so do the afters.
 	done := false
 	for _, b := range n.befores {
-		update := &Update{}
+		update := &state.upd
+		*update = Update{}
 		state.checkName = b.name
 		ok := b.fn(state.Value, update, state)
 		applyUpdate(state, update)
@@ -191,18 +192,17 @@ func validateNode(n *node, in any, path []string, pathArr []any, key string, par
 			done = true
 		}
 	}
-	if done {
-		if len(state.Node.afters) > 0 {
-			runAfters(state, verr)
-		}
-		return state.Value
+	if !done {
+		state.Value = validateStructure(n, state, absent, path, pathArr, key, parent, ctx, match, verr)
 	}
-
-	state.Value = validateStructure(n, state, absent, path, pathArr, key, parent, ctx, match, verr)
 	if len(state.Node.afters) > 0 {
 		runAfters(state, verr)
 	}
-	return state.Value
+	out := state.Value
+	if ctx != nil {
+		ctx.popState()
+	}
+	return out
 }
 
 // absentSkips reports whether a failed check is to raise nothing: TS drops the
@@ -416,7 +416,8 @@ func runAfters(state *State, verr *ValidationError) {
 	// Every after runs, whatever the ones before it reported (TS).
 	n := state.Node
 	for _, a := range n.afters {
-		update := &Update{}
+		update := &state.upd
+		*update = Update{}
 		state.checkName = a.name
 		ok := a.fn(state.Value, update, state)
 		applyUpdate(state, update)

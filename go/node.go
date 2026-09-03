@@ -127,6 +127,11 @@ type validator struct {
 	name string
 	fn   func(val any, update *Update, state *State) bool
 	args []any
+	// user marks a function the caller supplied (Check, Before, After,
+	// Transform): it may keep what it is handed, so a call that runs one
+	// reuses nothing across nodes or calls. The library's own validators
+	// keep nothing.
+	user bool
 	// stringify renders the validator into its TS-style ".Name(args)" suffix.
 	stringify func() string
 	// inner holds the checks an isolating builder (Catch, Transform) took

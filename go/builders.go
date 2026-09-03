@@ -766,7 +766,7 @@ func Check(check any, spec ...any) *Node {
 		fn := func(val any, update *Update, state *State) bool {
 			return state.absent || c(val, update, state)
 		}
-		v := validator{name: "Check", fn: fn, stringify: func() string { return "Check()" }}
+		v := validator{name: "Check", fn: fn, user: true, stringify: func() string { return "Check()" }}
 		nb.n.befores = append(nb.n.befores, v)
 		bumpValidatorGen()
 	case *regexp.Regexp:
@@ -828,7 +828,7 @@ func Before(fn func(val any, update *Update, state *State) bool, spec ...any) *N
 		nb = buildize(spec[0])
 	}
 	nb.n.befores = append(nb.n.befores,
-		validator{name: "Before", fn: fn, stringify: func() string { return "Before()" }})
+		validator{name: "Before", fn: fn, user: true, stringify: func() string { return "Before()" }})
 	bumpValidatorGen()
 	return nb
 }
@@ -836,7 +836,7 @@ func Before(fn func(val any, update *Update, state *State) bool, spec ...any) *N
 // Before (chained).
 func (n *Node) Before(fn func(val any, update *Update, state *State) bool) *Node {
 	n.n.befores = append(n.n.befores,
-		validator{name: "Before", fn: fn, stringify: func() string { return "Before()" }})
+		validator{name: "Before", fn: fn, user: true, stringify: func() string { return "Before()" }})
 	bumpValidatorGen()
 	return n
 }
@@ -850,7 +850,7 @@ func After(fn func(val any, update *Update, state *State) bool, spec ...any) *No
 		nb = buildize(spec[0])
 	}
 	nb.n.afters = append(nb.n.afters,
-		validator{name: "After", fn: fn, stringify: func() string { return "After()" }})
+		validator{name: "After", fn: fn, user: true, stringify: func() string { return "After()" }})
 	bumpValidatorGen()
 	return nb
 }
@@ -858,7 +858,7 @@ func After(fn func(val any, update *Update, state *State) bool, spec ...any) *No
 // After (chained).
 func (n *Node) After(fn func(val any, update *Update, state *State) bool) *Node {
 	n.n.afters = append(n.n.afters,
-		validator{name: "After", fn: fn, stringify: func() string { return "After()" }})
+		validator{name: "After", fn: fn, user: true, stringify: func() string { return "After()" }})
 	bumpValidatorGen()
 	return n
 }

@@ -120,6 +120,7 @@ func (n *Node) Transform(fn func(val any, state *State) any) *Node {
 	n.n.befores = []validator{{
 		name:  "Transform",
 		inner: &in,
+		user:  true,
 		fn: func(_ any, update *Update, state *State) bool {
 			out, sub := in.probe(state)
 			if sub.hasAny() {

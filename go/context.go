@@ -18,20 +18,39 @@ type Context struct {
 	states []State
 	// True when the schema of the call has no validators (see Schema.pure).
 	pure bool
+	// True when no validator of the call is the caller's (see
+	// Schema.noUser): a node's State is handed back when the node returns,
+	// since nothing can keep it.
+	noUser bool
 	// True when the call wants a verdict only (Match, Valid): an error is
 	// recorded without its path, text or value rendering, and only counted.
 	terse bool
 }
 
-// newState hands out the State for one node from a chunk, so a walk over
-// many nodes allocates a few chunks instead of a State each. A State is
-// only ever used during the call it was made for.
+// newState hands out the State for one node from the call's stack of them,
+// so a walk over many nodes allocates a few blocks instead of a State each.
+// A State is only ever used during the call it was made for. The stack
+// grows by copying, and a pointer already handed out keeps addressing the
+// slot it was given (nothing reads a State through the stack), so a call
+// that hands slots back (see popState) does so on one stack.
 func (c *Context) newState() *State {
 	if len(c.states) == cap(c.states) {
-		c.states = make([]State, 0, 8)
+		grown := make([]State, len(c.states), 2*cap(c.states)+8)
+		copy(grown, c.states)
+		c.states = grown
 	}
 	c.states = c.states[:len(c.states)+1]
 	return &c.states[len(c.states)-1]
+}
+
+// popState hands a node's State back when the node returns, on a call
+// where no validator of the caller's could have kept it: the slot is the
+// last one, since children return before their parent, and a tree of any
+// size then needs no more States than it is deep.
+func (c *Context) popState() {
+	if c.noUser {
+		c.states = c.states[:len(c.states)-1]
+	}
 }
 
 // scratch is one allocation per call holding what a walk over a typical
@@ -51,10 +70,10 @@ func (c *Context) start() (path []string, pathArr []any) {
 	return sc.path[:0], sc.pathArr[:0]
 }
 
-// A call on a schema with no validators, made without a context of the
-// caller's, reuses its context and scratch from this pool: no user code
-// runs during such a call, so nothing can keep a reference to either past
-// it. The errors of a match are collected in the block too; those of a
+// A call on a schema with no validator of the caller's, made without a
+// context of the caller's, reuses its context and scratch from this pool:
+// no user code runs during such a call, so nothing can keep a reference to
+// either past it. The errors of a match are collected in the block too; those of a
 // producing call are returned to the caller, so they are always fresh.
 // The block still carries a Custom map, kept empty, so that a validator
 // attached to a node after the schema was compiled (which the compile
@@ -69,10 +88,11 @@ type callScratch struct {
 var callPool = sync.Pool{New: func() any { return &callScratch{custom: map[string]any{}} }}
 
 // begin readies a pooled context for one call: every per-call field is
-// reset, and the path stacks and states come from the block it holds.
-func (cs *callScratch) begin(defs map[string]*node, match bool) (c *Context, path []string, pathArr []any) {
+// reset, and the path stacks and states come from the block it holds. The
+// call has no validator of the caller's; pure says whether it has any.
+func (cs *callScratch) begin(defs map[string]*node, match bool, pure bool) (c *Context, path []string, pathArr []any) {
 	c = &cs.ctx
-	*c = Context{Custom: cs.custom, Match: match, defs: defs, pure: true, terse: match}
+	*c = Context{Custom: cs.custom, Match: match, defs: defs, pure: pure, noUser: true, terse: match}
 	c.states = cs.sc.states[:0]
 	return c, cs.sc.path[:0], cs.sc.pathArr[:0]
 }
@@ -88,6 +108,9 @@ func (cs *callScratch) matchErrors() *ValidationError {
 // left in it: the states it used, the errors of a match and anything a
 // validator put in Custom are cleared.
 func (cs *callScratch) release() {
+	// The stack may have grown past the block; what the block holds is
+	// cleared whole, since a popped slot may still carry the call's input.
+	clear(cs.sc.states[:])
 	clear(cs.ctx.states)
 	cs.ctx.states = nil
 	cs.verr.Issues = nil
@@ -132,6 +155,9 @@ type State struct {
 	// checkName is the name of the validator currently running (TS s.check.name),
 	// used to render `check "<name>" failed` for checks with no custom text.
 	checkName string
+	// upd is the bag each validator of the node fills in, reset before
+	// each: one per node rather than one allocation per validator run.
+	upd Update
 }
 
 // Update is the bag a custom validator fills in to influence validation.

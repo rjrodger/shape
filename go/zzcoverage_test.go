@@ -606,3 +606,39 @@ func validateNodeMatches(n *node, in any) bool {
 	validateNode(n, in, []string{}, []any{}, "", nil, newContext(nil), true, verr)
 	return !verr.hasAny()
 }
+
+// A validator of the caller's anywhere in the tree (a tuple position, a
+// composition branch, inside a Catch) keeps the call off the pool; the
+// library's own validators do not.
+func TestZZUserValidatorsAndPooling(t *testing.T) {
+	user := func(v any, u *Update, s *State) bool { return true }
+	if MustShape([]any{Number, Check(user)}).isNoUser() {
+		t.Fatal("tuple position")
+	}
+	if MustShape(One(Check(user), Number)).isNoUser() {
+		t.Fatal("composition branch")
+	}
+	if MustShape(map[string]any{"a": Catch(0.0, Before(user, Number))}).isNoUser() {
+		t.Fatal("inside a Catch")
+	}
+	if !MustShape(map[string]any{"a": Max(3, Min(1, Number)), "b": Catch(0.0, Min(1, Number))}).isNoUser() {
+		t.Fatal("built-in validators only")
+	}
+
+	// A pooled call on a schema with built-in validators leaks nothing between
+	// calls: verdicts, produced values and errors are the same every time.
+	s := MustShape(map[string]any{"n": Max(3, Min(1, Number)), "s": Min(2, String), "d": "dflt"})
+	for i := 0; i < 3; i++ {
+		if !s.Valid(map[string]any{"n": 2.0, "s": "ab"}) || s.Valid(map[string]any{"n": 5.0, "s": "ab"}) || s.Valid(map[string]any{"n": 2.0, "s": "a"}) {
+			t.Fatal("pooled verdicts")
+		}
+		out, err := s.Validate(map[string]any{"n": 2.0, "s": "ab"})
+		if err != nil || out.(map[string]any)["d"] != "dflt" {
+			t.Fatal("pooled produce", out, err)
+		}
+		errs := s.Error(map[string]any{"n": 5.0, "s": "a"})
+		if len(errs) != 2 || errs[0].Path != "n" || errs[1].Path != "s" {
+			t.Fatal("pooled errors", errs)
+		}
+	}
+}

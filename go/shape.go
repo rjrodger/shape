@@ -15,11 +15,15 @@ type Schema struct {
 	// with pure when a validator (a Define is one) was attached late.
 	defs atomic.Pointer[defsTable]
 	// pure is true when no node of the tree has a validator, so a call can
-	// run on a pooled context and produce into its input (see callScratch).
-	// It is read through isPure, which recomputes it when a validator was
-	// attached anywhere since it was last computed.
+	// produce into its input (see callScratch). It is read through isPure,
+	// which recomputes it when a validator was attached anywhere since it
+	// was last computed.
 	pure atomic.Bool
-	gen  atomic.Uint64
+	// noUser is true when no validator of the tree is the caller's: the
+	// library's own keep nothing, so a call can run on a pooled context
+	// and reuse its per-node state.
+	noUser atomic.Bool
+	gen    atomic.Uint64
 }
 
 // validatorGen counts the validators attached to any node, so a Schema can
@@ -41,6 +45,16 @@ func (s *Schema) isPure() bool {
 	return s.pure.Load()
 }
 
+// isNoUser reports whether no validator of the tree is the caller's, read
+// as isPure reads pure.
+func (s *Schema) isNoUser() bool {
+	g := validatorGen.Load()
+	if s.gen.Load() != g {
+		s.reread(g)
+	}
+	return s.noUser.Load()
+}
+
 // reread reads the tree again at validator generation g: whether it has
 // validators, and its definitions, since a Define chained onto a node
 // after the compile is one of them.
@@ -49,6 +63,7 @@ func (s *Schema) reread(g uint64) {
 	prepare(s.root, defs)
 	s.defs.Store(&defsTable{m: defs})
 	s.pure.Store(!hasValidators(s.root))
+	s.noUser.Store(!hasUserValidators(s.root))
 	s.gen.Store(g)
 }
 
@@ -124,6 +139,44 @@ func plainNode(n *node) bool {
 	}
 	return len(n.befores) == 0 && len(n.afters) == 0 &&
 		n.renameTo == "" && len(n.renameClaim) == 0 && !n.silent && n.listMode == listNone
+}
+
+// hasUserValidators reports whether any validator of the tree is the
+// caller's, the checks a Catch or Transform took inside included.
+func hasUserValidators(n *node) bool {
+	if n == nil {
+		return false
+	}
+	for _, list := range [][]validator{n.befores, n.afters} {
+		for _, v := range list {
+			if v.user {
+				return true
+			}
+			if v.inner != nil {
+				for _, iv := range append(append([]validator{}, v.inner.befores...), v.inner.afters...) {
+					if iv.user {
+						return true
+					}
+				}
+			}
+		}
+	}
+	for _, cn := range n.objChildren {
+		if hasUserValidators(cn) {
+			return true
+		}
+	}
+	for _, cn := range n.arrChildren {
+		if hasUserValidators(cn) {
+			return true
+		}
+	}
+	for _, sn := range n.list {
+		if hasUserValidators(sn) {
+			return true
+		}
+	}
+	return hasUserValidators(n.objRest) || hasUserValidators(n.arrChild) || hasUserValidators(n.arrRest)
 }
 
 // hasValidators reports whether any node of the tree has a before or after.
@@ -205,14 +258,15 @@ func (s *Schema) ValidateCtx(input any, ctx *Context) (any, error) {
 	var path []string
 	var pathArr []any
 	var cs *callScratch
-	if ctx == nil && s.isPure() {
+	if ctx == nil && s.isNoUser() {
 		cs = callPool.Get().(*callScratch)
-		c, path, pathArr = cs.begin(s.defsMap(), false)
+		c, path, pathArr = cs.begin(s.defsMap(), false, s.isPure())
 	} else {
 		c = newContext(ctx)
 		c.Match = false
 		c.defs = s.defsMap()
 		c.pure = s.isPure()
+		c.noUser = s.isNoUser()
 		path, pathArr = c.start()
 	}
 
@@ -245,9 +299,9 @@ func (s *Schema) Match(input any) bool {
 	if s == nil || s.root == nil {
 		return true
 	}
-	if s.isPure() {
+	if s.isNoUser() {
 		cs := callPool.Get().(*callScratch)
-		c, path, pathArr := cs.begin(s.defsMap(), true)
+		c, path, pathArr := cs.begin(s.defsMap(), true, s.isPure())
 		verr := cs.matchErrors()
 		validateNode(s.root, rootInput(input), path, pathArr, "", nil, c, true, verr)
 		ok := !verr.hasAny()
@@ -259,6 +313,7 @@ func (s *Schema) Match(input any) bool {
 	c.terse = true
 	c.defs = s.defsMap()
 	c.pure = s.isPure()
+	c.noUser = s.isNoUser()
 	path, pathArr := c.start()
 	verr := &ValidationError{terse: true}
 	validateNode(s.root, rootInput(input), path, pathArr, "", nil, c, true, verr)
@@ -277,9 +332,9 @@ func (s *Schema) Error(input any) []FieldError {
 		return nil
 	}
 	verr := &ValidationError{}
-	if s.isPure() {
+	if s.isNoUser() {
 		cs := callPool.Get().(*callScratch)
-		c, path, pathArr := cs.begin(s.defsMap(), false)
+		c, path, pathArr := cs.begin(s.defsMap(), false, s.isPure())
 		validateNode(s.root, rootInput(input), path, pathArr, "", nil, c, false, verr)
 		cs.release()
 		return verr.Issues
@@ -287,6 +342,7 @@ func (s *Schema) Error(input any) []FieldError {
 	c := newContext(nil)
 	c.defs = s.defsMap()
 	c.pure = s.isPure()
+	c.noUser = s.isNoUser()
 	path, pathArr := c.start()
 	validateNode(s.root, rootInput(input), path, pathArr, "", nil, c, false, verr)
 	return verr.Issues
