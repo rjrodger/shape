@@ -525,7 +525,12 @@ pub(crate) fn value_len(v: &Value) -> Option<f64> {
     match v {
         Value::Date(ms) => Some(*ms as f64),
         Value::Num(f) => Some(*f),
-        Value::Str(s) => Some(s.encode_utf16().count() as f64),
+        // An ASCII string is one UTF-16 unit per byte.
+        Value::Str(s) => Some(if s.is_ascii() {
+            s.len()
+        } else {
+            s.encode_utf16().count()
+        } as f64),
         Value::Arr(a) => Some(a.len() as f64),
         Value::Obj(m) => Some(m.len() as f64),
         _ => None,
@@ -651,14 +656,17 @@ fn bound_node(kind: Bound, bound: Value) -> Node {
                     return true;
                 }
             }
-            update.why = Some(kind.name().to_string());
             update.done = true;
             update.mark = kind.mark();
-            update.err = Some(UpdateErr::Text(kind.text(
-                is_numeric(state.value),
-                &text,
-                &size_text(size),
-            )));
+            // A verdict-only call counts the failure and reads no message.
+            if !state.ctx.terse {
+                update.why = Some(kind.name().to_string());
+                update.err = Some(UpdateErr::Text(kind.text(
+                    is_numeric(state.value),
+                    &text,
+                    &size_text(size),
+                )));
+            }
             false
         },
     ));
@@ -687,20 +695,23 @@ fn len_node(length: Value) -> Node {
             if size == Some(limit) {
                 return true;
             }
-            let suffix = if is_numeric(state.value) {
-                ""
-            } else {
-                " in length"
-            };
-            update.why = Some("Len".to_string());
             update.done = true;
             update.mark = 4015;
-            update.err = Some(UpdateErr::Text(format!(
-                "Value \"$VALUE\" for property \"$PATH\" must be exactly {}{} (was {}).",
-                text,
-                suffix,
-                size_text(size)
-            )));
+            // A verdict-only call counts the failure and reads no message.
+            if !state.ctx.terse {
+                let suffix = if is_numeric(state.value) {
+                    ""
+                } else {
+                    " in length"
+                };
+                update.why = Some("Len".to_string());
+                update.err = Some(UpdateErr::Text(format!(
+                    "Value \"$VALUE\" for property \"$PATH\" must be exactly {}{} (was {}).",
+                    text,
+                    suffix,
+                    size_text(size)
+                )));
+            }
             false
         },
     ));
@@ -1061,7 +1072,7 @@ impl Node {
             move |state, _update| {
                 // The definition met on this call, for a later refer on the
                 // same context, is the compiled one of this name.
-                if let Some(d) = state.ctx.defs.get(&name).cloned() {
+                if let Some(d) = state.defs.get(&name).cloned() {
                     state.ctx.refs.insert(name.clone(), d);
                 }
                 true
@@ -1099,7 +1110,7 @@ impl Node {
                     .refs
                     .get(&name)
                     .cloned()
-                    .or_else(|| state.ctx.defs.get(&name).cloned());
+                    .or_else(|| state.defs.get(&name).cloned());
                 match found {
                     Some(rn) => update.node = Some(rn),
                     None if opts.strict => {
@@ -1263,6 +1274,12 @@ mod tests {
         assert_eq!(at_a(above(3, any())).error(&j(&a("1")))[0].mark, 4013);
         assert_eq!(at_a(below(3, any())).error(&j(&a("9")))[0].mark, 4014);
         assert_eq!(at_a(len(3, any())).error(&j(&a("9")))[0].mark, 4015);
+        // A verdict on a failing bound counts it and builds no message.
+        assert!(!at_a(len(3, any())).valid(&j(&a("9"))));
+        assert!(!at_a(min(3, any())).valid(&j(&a("1"))));
+        assert!(!at_a(max(3, any())).valid(&j(&a("9"))));
+        assert!(!at_a(above(3, any())).valid(&j(&a("1"))));
+        assert!(!at_a(below(3, any())).valid(&j(&a("9"))));
 
         // Dates compare by their time value.
         let s = at_a(min(Value::Date(1000), Token::Date));

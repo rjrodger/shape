@@ -77,3 +77,34 @@ func BenchmarkErrorInvalid(b *testing.B) {
 		s.Error(benchInvalidIn)
 	}
 }
+
+// The bounds case, with a valid input and one failing two bounds, and the
+// array case of fifty small objects: the validator and element paths.
+var benchBounds = map[string]any{
+	"name": Max(40, Min(3, String)), "age": Max(150, Min(0, Integer)),
+	"code": MustExpr("/^[A-Z]{3}$/"), "ratio": Max(1, Min(0, Number)),
+}
+var benchBoundsIn = map[string]any{"name": "Alice", "age": 30.0, "code": "ABC", "ratio": 0.5}
+var benchBoundsBad = map[string]any{"name": "Al", "age": 200.0, "code": "ABC", "ratio": 0.5}
+
+var benchArray, benchArrayIn = func() (map[string]any, map[string]any) {
+	items := make([]any, 50)
+	for i := range items {
+		items[i] = map[string]any{"sku": "SKU-" + string(rune('0'+i/10)) + string(rune('0'+i%10)), "qty": float64(i % 7), "price": float64(i) * 1.25}
+	}
+	return map[string]any{"items": []any{map[string]any{"sku": String, "qty": Integer, "price": Number}}}, map[string]any{"items": items}
+}()
+
+func BenchmarkValidBounds(b *testing.B)    { benchValid(b, benchBounds, benchBoundsIn) }
+func BenchmarkValidateBounds(b *testing.B) { benchValidate(b, benchBounds, benchBoundsIn) }
+func BenchmarkValidBoundsBad(b *testing.B) { benchValid(b, benchBounds, benchBoundsBad) }
+func BenchmarkErrorBoundsBad(b *testing.B) {
+	s := MustShape(benchBounds)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		s.Error(benchBoundsBad)
+	}
+}
+func BenchmarkValidArray(b *testing.B)    { benchValid(b, benchArray, benchArrayIn) }
+func BenchmarkValidateArray(b *testing.B) { benchValidate(b, benchArray, benchArrayIn) }

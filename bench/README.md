@@ -46,6 +46,17 @@ schema; the shape specs and the other libraries' schemas are code in
 the same values (closed objects, the same bounds). Every library's verdict is checked
 against the case before anything is timed.
 
+Until 2026-09-03 the TypeScript specs took `String`, `Number` and
+`Boolean` from the shape module, which exports none of them, so every
+such leaf was `undefined`: an optional `any` node that never takes the
+inline leaf path, and the `invalid` case raised one error rather than two.
+The TypeScript runs recorded before that date measured that slower shape
+and are not comparable with the runs after it; the sanity check now
+refuses a spec with an untyped leaf. The same change gives the `large`
+input the fast-mode object `JSON.parse` produces (fifty keyed stores had
+left it in V8's dictionary mode), as the Go and Rust harnesses decode
+theirs.
+
 | case      | input                                                                       |
 |-----------|-----------------------------------------------------------------------------|
 | `flat`    | five primitive properties                                                    |
@@ -95,7 +106,12 @@ survives without the file growing with the budget.
   row of `summary.json`), so a case added later leaves the others'
   history comparable, and a case changed later cuts its own history at
   the change;
-- `policy`: the timing policy used.
+- `policy`: the timing policy used;
+- `harness`: the version of the language's harness, recorded once it has
+  changed what it measures (the TypeScript harness is at 2 since
+  2026-09-03; a run without the field is version 1). The report folds it
+  into every row's case hash, so runs of different harness versions are
+  never compared.
 
 The host id is the first twelve hex characters of a SHA-256 of the
 hostname, platform, architecture, CPU model and core count under a domain

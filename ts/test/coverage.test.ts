@@ -17,7 +17,7 @@ const Shape: ShapeX = ShapeModule
 
 const {
   Fault, Ignore, Exact, Default, Rename, Number: GNum, String: GStr,
-  Min, Open, expr, stringify, nodize,
+  Min, Open, Required, Check, expr, stringify, nodize,
 } = Shape as any
 
 
@@ -108,6 +108,68 @@ describe('coverage-extra', () => {
     assert.ok(0 < points.length)
     // Ascent past object/array parents emits 'eo'/'ea' style points.
     assert.ok(points.some(p => p.startsWith('e')))
+  })
+
+
+  test('retained-node-changed-after-compile', () => {
+    // A retained node re-chained to another kind after its parent's child
+    // list was compiled: the inline leaf check must not trust the kind it
+    // compiled (a builder bumps the generation).
+    const leaf = Required(String)
+    const g = Shape({ a: leaf, b: Number })
+    assert.equal(g.valid({ a: 'x', b: 1 }), true)
+    leaf.Number()
+    assert.equal(g.valid({ a: 'x', b: 1 }), false)
+    assert.equal(g.valid({ a: 2, b: 1 }), true)
+
+    // Likewise a validator attached afterwards.
+    const leaf2 = Required(String)
+    const g2 = Shape({ a: leaf2, b: Number })
+    assert.equal(g2.valid({ a: 'x', b: 1 }), true)
+    leaf2.Check(() => false)
+    assert.equal(g2.valid({ a: 'x', b: 1 }), false)
+  })
+
+
+  test('shape-error-stack', () => {
+    // The stack is formatted on first read, with this module's own frames
+    // removed; it can still be assigned, as any error's can.
+    let err: any
+    try {
+      Shape({ a: Number })({ a: 'x' })
+    }
+    catch (e: any) {
+      err = e
+    }
+    assert.equal(err.name, 'ShapeError')
+    assert.equal(typeof err.stack, 'string')
+    assert.ok(err.stack.startsWith('ShapeError: '))
+    assert.ok(!/\/shape\/shape\.[tj]s/.test(err.stack))
+    assert.equal(err.stack, err.stack)
+    err.stack = 'replaced'
+    assert.equal(err.stack, 'replaced')
+    assert.ok(!Object.keys(err).includes('stack'))
+  })
+
+
+  test('nested-validation-inside-a-validator', () => {
+    // A validator that runs another shape, and the shape being validated,
+    // while a call is in progress: each walk keeps its own frames.
+    const inner = Shape({ q: Number, r: String })
+    let outer: any
+    outer = Shape({
+      a: Check((v: any) => inner.valid({ q: v, r: 'r' }) && (v < 2 || outer.valid({ a: v - 1, b: ['x'] })), Number),
+      b: [String],
+    })
+    assert.equal(outer.valid({ a: 3, b: ['y', 'z'] }), true)
+    assert.equal(outer.valid({ a: 'x', b: ['y'] }), false)
+    assert.deepEqual(outer({ a: 2, b: [] }), { a: 2, b: [] })
+
+    // A throw inside a walk (a bad meta key, found on the first visit) leaves
+    // the next call intact.
+    assert.throws(() => Shape({ 'x$$': 'meta', y: 1 }, { meta: { active: true } }), /Invalid meta key/)
+    assert.equal(outer.valid({ a: 1, b: [] }), true)
+    assert.deepEqual(Shape({ n: Number, s: 'dflt' })({ n: 1 }), { n: 1, s: 'dflt' })
   })
 
 

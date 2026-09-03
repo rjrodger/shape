@@ -42,8 +42,6 @@ pub struct Context {
     pub custom: HashMap<String, Box<dyn Any + Send + Sync>>,
     /// The nodes `Define` recorded during this call.
     pub refs: HashMap<String, Arc<Node>>,
-    /// The schema's own definitions, as of its compile.
-    pub(crate) defs: Arc<HashMap<String, Arc<Node>>>,
     /// The errors of the call, when the caller asked for them.
     pub err: Vec<FieldError>,
     /// The caller wants a verdict only, so an error is recorded without its
@@ -87,6 +85,10 @@ pub struct State<'a> {
     pub absent: bool,
     /// The name of the validator running, for `check "<name>" failed`.
     pub check_name: &'a str,
+    /// The schema's own definitions, as of its compile. Borrowed from the
+    /// schema for the walk: a context of its own cost an allocation and
+    /// an atomic per call.
+    pub(crate) defs: &'a HashMap<String, Arc<Node>>,
 }
 
 impl<'a> State<'a> {
@@ -171,6 +173,7 @@ mod tests {
         let mut ctx = Context::new();
         let node = Node::default();
         let path = [k("a")];
+        let defs = HashMap::new();
         let s = State {
             path_arr: &path,
             key: "a",
@@ -181,6 +184,7 @@ mod tests {
             ctx: &mut ctx,
             absent: false,
             check_name: "",
+            defs: &defs,
         };
         assert_eq!(s.path_str(), "a");
         assert_eq!(s.path_keys(), vec!["a".to_string()]);

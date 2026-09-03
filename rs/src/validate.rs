@@ -5,6 +5,7 @@ use crate::error::*;
 use crate::node::{Kind, ListMode, Node, Validator};
 use crate::stringify::stringify_node;
 use crate::value::{is_integer, Map, Value};
+use std::collections::HashMap;
 use std::sync::Arc;
 
 /// A cursor onto the value under validation: mutable when producing, shared
@@ -41,6 +42,8 @@ impl<'a, T> Cur<'a, T> {
 /// What a walk carries besides the value.
 pub(crate) struct Walk<'c> {
     pub ctx: &'c mut Context,
+    /// The schema's own definitions, borrowed for the walk.
+    pub defs: &'c HashMap<String, Arc<Node>>,
     pub is_match: bool,
     /// The path from the root, the current key last.
     pub path: Vec<PathPart>,
@@ -160,6 +163,7 @@ pub(crate) fn validate_node_with(
                 ctx: w.ctx,
                 absent,
                 check_name: &b.name,
+                defs: w.defs,
             };
             (b.func)(&mut state, &mut update)
         };
@@ -221,6 +225,7 @@ pub(crate) fn validate_node_with(
                 ctx: w.ctx,
                 absent,
                 check_name: &a.name,
+                defs: w.defs,
             };
             (a.func)(&mut state, &mut update)
         };
@@ -269,7 +274,12 @@ pub(crate) fn at_of<'a>(
         parent_arr: parent_is_array,
         absent: value.is_undefined(),
         check,
-        regexp_src: n.regexp.as_ref().map(|_| format!("/{}/", n.regexp_src)),
+        // Rendered only when the error will be: a terse one is counted.
+        regexp_src: if w.ctx.terse {
+            None
+        } else {
+            n.regexp.as_ref().map(|_| format!("/{}/", n.regexp_src))
+        },
         terse: w.ctx.terse,
     }
 }
@@ -592,6 +602,24 @@ fn aligned(n: &Node, map: &Map) -> bool {
             .all(|(k, dk)| k.as_str() == &**dk)
 }
 
+/// The child at `k`, guessed at its declared position first: the input
+/// written from the same shape has it there, and the guess is a short
+/// comparison rather than a hash lookup. Any other order looks it up.
+fn guess<'m>(map: &'m Map, idx: usize, k: &str) -> Option<&'m Value> {
+    match map.get_index(idx) {
+        Some((mk, v)) if mk == k => Some(v),
+        _ => map.get(k),
+    }
+}
+
+/// The index of the child at `k`, guessed as `guess` does.
+fn guess_index(map: &Map, idx: usize, k: &str) -> Option<usize> {
+    match map.get_index(idx) {
+        Some((mk, _)) if mk == k => Some(idx),
+        _ => map.get_index_of(k),
+    }
+}
+
 /// The keys of a closed object it does not consume, in the input's order.
 fn unknown_keys(n: &Node, map: &Map) -> Vec<String> {
     map.iter()
@@ -652,8 +680,8 @@ fn validate_object(
         if cn.plain {
             let found = match &oc {
                 Cur::Ref(map) if aligned => map.get_index(idx).map(|(_, v)| v),
-                Cur::Ref(map) => map.get(k),
-                Cur::Mut(map) => map.get(k),
+                Cur::Ref(map) => guess(map, idx, k),
+                Cur::Mut(map) => guess(map, idx, k),
             };
             if let Some(v) = found {
                 if plain_scalar_passes(cn, v) {
@@ -711,24 +739,32 @@ fn validate_object(
         if w.paths {
             w.push(PathPart::Key(child_key(n, idx, k)));
         }
-        let mut scratch = Value::Undefined;
+        // The scratch slot of an absent child on a read-only walk, made
+        // only on that path.
+        let mut scratch: Value;
         let (child, was_absent) = match &mut oc {
-            Cur::Mut(map) => {
-                let was_absent = !map.contains_key(k);
-                let slot = map.entry(k.clone()).or_insert(Value::Undefined);
-                (Cur::Mut(slot), was_absent)
-            }
+            Cur::Mut(map) => match guess_index(map, idx, k) {
+                // The key is cloned only when it is absent and must be made.
+                Some(pos) => (Cur::Mut(&mut map[pos]), false),
+                None => (
+                    Cur::Mut(map.entry(k.clone()).or_insert(Value::Undefined)),
+                    true,
+                ),
+            },
             Cur::Ref(map) => {
                 // A read-only walk of an aligned input finds the child by
                 // index; the map cannot have changed under it.
                 let found = if aligned {
                     map.get_index(idx).map(|(_, v)| v)
                 } else {
-                    claimed.or_else(|| map.get(k))
+                    claimed.or_else(|| guess(map, idx, k))
                 };
                 match found {
                     Some(child) if !child.is_undefined() => (Cur::Ref(child), false),
-                    _ => (Cur::Mut(&mut scratch), true),
+                    _ => {
+                        scratch = Value::Undefined;
+                        (Cur::Mut(&mut scratch), true)
+                    }
                 }
             }
         };
@@ -876,15 +912,16 @@ fn validate_array(
     if let Some(child_shape) = n.arr_child.as_deref().or(n.arr_rest.as_deref()) {
         let mut drop_at: Vec<usize> = Vec::new();
         while i < len {
-            // A plain element shape on a read-only walk: a scalar element is
-            // judged here, an object descended into directly.
+            // A plain element shape: a scalar element of its kind is judged
+            // here on either walk (it is its own produced value), and a
+            // read-only walk descends into an object directly.
             if child_shape.plain {
+                if plain_scalar_passes(child_shape, &ac.get()[i]) {
+                    i += 1;
+                    continue;
+                }
                 if let Cur::Ref(a) = &ac {
                     let v = &a[i];
-                    if plain_scalar_passes(child_shape, v) {
-                        i += 1;
-                        continue;
-                    }
                     if child_shape.kind == Kind::Object && matches!(v, Value::Obj(_)) {
                         let k = if w.paths { index_key(i, &mut buf) } else { "" };
                         w.push(PathPart::Index(i));
@@ -1233,8 +1270,10 @@ mod tests {
         let n = crate::normalize::normalize(obj([("a", Token::Number)]));
         assert!(n.obj_keys.is_empty());
         let mut ctx = crate::Context::new();
+        let defs = HashMap::new();
         let mut w = Walk {
             ctx: &mut ctx,
+            defs: &defs,
             is_match: false,
             path: Vec::new(),
             paths: true,

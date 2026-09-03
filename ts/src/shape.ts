@@ -46,7 +46,7 @@ const KEY_EXPR_RE = /^\s*("(\\.|[^"\\])*"|[^\s]+):\s*(.*?)\s*$/
 // Kept off the node itself so nothing leaks into its spec or its JSON.
 // A compiled child list: the keys, their nodes, and for each the leaf fast
 // path it may take (see fastKind; 0 when it may not).
-type Compiled = { keys: string[], nodes: Node<any>[], fast: number[], vgen: number }
+type Compiled = { keys: string[], nodes: Node<any>[], fast: number[], vgen: number, known: Set<string> | null }
 const COMPILED = new WeakMap<object, Compiled>()
 
 // Child shapes (Child, Rest, a one-element array) normalized to their full
@@ -59,15 +59,14 @@ const DEEP = new WeakSet<object>()
 // included) needs no frame; anything else takes the general path. An object
 // takes it for all of its children or none: a custom validator on one child
 // may read the frames of its siblings (the argument parser does), so a
-// sibling of a validator is always given a frame. The compiled kind is
-// checked against the child at each visit, since a retained node may be
-// re-chained to another kind, or given a validator, after its first
-// validation; such a child takes the general path.
-// The validator generation: bumped whenever a before or after is attached
-// to any node, so that a compiled list can tell that a validator may have
-// arrived since its kinds were compiled (a spec is read at compile time,
-// but a retained node can be given a validator afterwards) and recompile
-// them rather than trust what it saw.
+// sibling of a validator is always given a frame.
+// The builder generation: bumped by every builder application and whenever
+// a before or after is attached to any node, so that a compiled list can
+// tell that a child may have changed since its kinds were compiled (a spec
+// is read at compile time, but a retained node can be re-chained to
+// another kind, or given a validator, afterwards) and recompile them
+// rather than trust what it saw. No builder runs during a validation, so
+// a compiled list is recompiled once per change, not per call.
 let VGEN = 0
 function attach(list: any[], v: any) {
   VGEN++
@@ -93,13 +92,6 @@ function fastKind(cn: Node<any>): number {
     S.number === cn.t ? FAST_NUMBER :
       S.boolean === cn.t ? FAST_BOOLEAN :
         S.integer === cn.t ? FAST_INTEGER : 0
-}
-
-// Whether the child is still the leaf its compiled fast kind describes.
-function fastStill(f: number, cn: Node<any>): boolean {
-  return cn.t === (FAST_STRING === f ? S.string : FAST_NUMBER === f ? S.number :
-    FAST_BOOLEAN === f ? S.boolean : S.integer) &&
-    0 === cn.b.length && 0 === cn.a.length
 }
 
 function fastValid(f: number, cv: any): boolean {
@@ -484,14 +476,17 @@ class State {
 
   root: any
 
-  val: any
-  parent: any
+  // Initialised here so every State has one shape from construction:
+  // a field first written in next() would move the object to another
+  // hidden class per call.
+  val: any = undefined
+  parent: any = undefined
   nodes: (Node<any> | number)[]
   vals: any[]
   ctx: any
-  oval: any
+  oval: any = undefined
 
-  check?: Function
+  check: Function | undefined = undefined
   checkargs?: Record<string, any>
 
   // The last parent object seen and whether it was frozen (see next).
@@ -508,7 +503,10 @@ class State {
     this.root = root
     this.vals = [root, -1]
     this.node = top
-    this.nodes = [top, -1]
+    // The root's back pointer is 0, which stops the walk as any zero does:
+    // a negative index is not an array index, and reading it takes the
+    // generic keyed-load path, at the same site every pop uses.
+    this.nodes = [top, 0]
     this.ctx = ctx || {}
     this.match = !!match
     this.terse = !!terse
@@ -741,7 +739,29 @@ class ShapeError extends TypeError {
     this.code = code
     this.gname = gname
     this.desc = () => ({ name, code, err, ctx, })
-    this.stack = this.stack?.replace(/.*\/shape\/shape\.[tj]s.*\n/g, '')
+
+    // The frames are formatted when the stack is first read, as they are
+    // for any error, and this module's own frames removed then: formatting
+    // them in the constructor cost more than the validation that threw.
+    const raw = Object.getOwnPropertyDescriptor(this, 'stack')
+    let done = false
+    let stack: any = undefined
+    Object.defineProperty(this, 'stack', {
+      configurable: true,
+      enumerable: false,
+      get: () => {
+        if (!done) {
+          done = true
+          const text = raw && (raw.get ? raw.get.call(this) : raw.value)
+          stack = text?.replace(/.*\/shape\/shape\.[tj]s.*\n/g, '')
+        }
+        return stack
+      },
+      set: (v: any) => {
+        done = true
+        stack = v
+      },
+    })
 
     this.props = err.map((e: ErrDesc) => ({
       path: e.path,
@@ -1154,12 +1174,15 @@ function shapify<const S>(intop?: S, inopts?: ShapeOptions) {
               let hasKeys = false
               let start = s.nI
               const compiled = COMPILED.get(n)
+              let ck: string[] | null = null
+              let known: Set<string> | null = null
 
               if (undefined !== compiled) {
                 // Compiled on an earlier visit: the children in first-seen
                 // order, no key expressions or meta keys left to read.
-                const ckeys = compiled.keys
+                const ckeys = ck = compiled.keys
                 const cnodes = compiled.nodes
+                known = compiled.known
                 if (compiled.vgen !== VGEN) {
                   compiled.fast = fastKinds(cnodes)
                   compiled.vgen = VGEN
@@ -1171,7 +1194,7 @@ function shapify<const S>(intop?: S, inopts?: ShapeOptions) {
                     const rk = ckeys[kI]
                     const cv = val[rk]
                     const f = cfast[kI]
-                    if (fastOk && 0 !== f && fastValid(f, cv) && fastStill(f, cnodes[kI])) {
+                    if (fastOk && 0 !== f && fastValid(f, cv)) {
                       continue
                     }
                     s.nodes[s.nI] = cnodes[kI]
@@ -1277,15 +1300,29 @@ function shapify<const S>(intop?: S, inopts?: ShapeOptions) {
                   nodes: n.k.map((k: string) => n.v[k]),
                   fast: fastKinds(n.k.map((k: string) => n.v[k])),
                   vgen: VGEN,
+                  known: new Set(n.k),
                 })
               }
               }
 
               let extra: string[] | null = null
               let valKeys = keys(val)
-              for (let vkI = 0; vkI < valKeys.length; vkI++) {
-                if (undefined === n.v[valKeys[vkI]]) {
-                  (extra ??= []).push(valKeys[vkI])
+
+              // The value's keys are the declared keys in order, or a
+              // prefix of them (JSON written from the same shape): none is
+              // extra, and no lookup is needed. Otherwise a declared key is
+              // found in the compiled set, and only an undeclared one is
+              // looked up in the spec, as every key was before.
+              let aligned = null !== ck && valKeys.length <= ck.length
+              for (let i = 0; aligned && i < valKeys.length; i++) {
+                aligned = ck![i] === valKeys[i]
+              }
+              if (!aligned) {
+                for (let vkI = 0; vkI < valKeys.length; vkI++) {
+                  const k = valKeys[vkI]
+                  if (!(null !== known && known.has(k)) && undefined === n.v[k]) {
+                    (extra ??= []).push(k)
+                  }
                 }
               }
 
@@ -1357,7 +1394,7 @@ function shapify<const S>(intop?: S, inopts?: ShapeOptions) {
               for (let ekI = 0; ekI < elementKeys.length; ekI++) {
                 elementNodes.push(n.v[ekI] = nodize(n.v[ekI], 1 + s.dI))
               }
-              compiled = { keys: elementKeys, nodes: elementNodes, fast: [], vgen: VGEN }
+              compiled = { keys: elementKeys, nodes: elementNodes, fast: [], vgen: VGEN, known: null }
               COMPILED.set(n, compiled)
             }
             const elementKeys = compiled.keys
@@ -2279,14 +2316,15 @@ function handleValidate(vf: Validate, s: State): Update {
     }
 
     let w = update.why || S.check
-    let path = pathstr(s)
-    let patha = patharr(s)
 
     if (S.string === typeof (update.err)) {
       s.curerr.push(makeErr(s, (update.err as string)))
     }
     else if (S.object === typeof (update.err)) {
-      // Assumes makeErr already called
+      // Assumes makeErr already called; only an error without a path of
+      // its own needs the path built here.
+      const path = pathstr(s)
+      const patha = patharr(s)
       const errsrc = update.err
       if (isarr(errsrc)) {
         for (let eI = 0; eI < (errsrc as any[]).length; eI++) {
@@ -2318,7 +2356,9 @@ function handleValidate(vf: Validate, s: State): Update {
   }
 
   // Use uval for undefined and NaN
-  if (update.hasOwnProperty('uval')) {
+  // The update is the plain object made above, so its own properties are
+  // all it has.
+  if ('uval' in update) {
     s.updateVal(update.uval)
     s.ignoreVal = false
   }
@@ -4024,6 +4064,9 @@ const Len = function <V = any>(
 
 // Make a Node chainable with Builder methods.
 function buildize<V = any>(self?: any, shape?: any): Node<V> {
+  // A builder may re-chain a retained node (see VGEN).
+  VGEN++
+
   // Detect chaining. If not chained, ignore `this` if it is the global context.
 
   let globalNode = null != self && (self.window === self || self.global === self)
@@ -4064,8 +4107,15 @@ function buildize<V = any>(self?: any, shape?: any): Node<V> {
 
   // Only add chainable Builders.
   // NOTE: One, Some, All not chainable.
-  return (node as any).Above ? node : // No need if already made chainable
-    Object.assign(node, {
+  if ((node as any).Above) {
+    return node // No need if already made chainable
+  }
+
+  // The same own, enumerable, writable properties that assignment gives,
+  // defined in one step: assigning this many named properties one by one
+  // takes a V8 object past its fast-property limit into dictionary mode,
+  // and every read of the node's fields in the walk becomes a hash lookup.
+  const chain: Record<string, any> = {
       Above,
       After,
       Any,
@@ -4119,7 +4169,12 @@ function buildize<V = any>(self?: any, shape?: any): Node<V> {
       Function: () => Type.call(node, Function),
       Symbol: () => Type.call(node, Symbol),
       Date: () => Type.call(node, Date),
-    } as any)
+  }
+  const descs: PropertyDescriptorMap = {}
+  for (const name in chain) {
+    descs[name] = { value: chain[name], writable: true, enumerable: true, configurable: true }
+  }
+  return Object.defineProperties(node, descs)
 }
 
 
@@ -4135,6 +4190,17 @@ function makeErr(state: State, text?: string, why?: string, user?: any) {
 }
 
 
+// The characters JSON.stringify escapes in a string (a surrogate is taken
+// whether or not it is paired), and the quote the rendering removes.
+const JSON_ESCAPED_RE = /["\\\u0000-\u001f\ud800-\udfff]/
+
+// The start of a builder's message: the value, then the path.
+const TEXT_PREFIX = S.Value + ' ' + S.$VALUE + S.forprop + S.$PATH
+
+// The parts of a verdict-only error nothing reads.
+const TERSE_ARR: any[] = Object.freeze([]) as any
+const TERSE_OBJ: any = Object.freeze({})
+
 // Internal utility to make ErrDesc objects.
 function makeErrImpl(
   why: string,
@@ -4147,8 +4213,8 @@ function makeErrImpl(
   // A verdict-only call reads none of the path, the rendering or the text.
   if (s.terse) {
     return {
-      key: s.key, type: s.node.t, node: s.node, value: s.val, path: '', pathArr: [],
-      why, check: s.check?.name || 'none', args: s.checkargs || {}, mark, text: '', use: user || {},
+      key: s.key, type: s.node.t, node: s.node, value: s.val, path: '', pathArr: TERSE_ARR,
+      why, check: s.check?.name || 'none', args: s.checkargs || TERSE_OBJ, mark, text: '', use: user || TERSE_OBJ,
     }
   }
 
@@ -4168,14 +4234,19 @@ function makeErrImpl(
   }
 
   // TODO: truncate len, and ignore should be ShapeOptions
-  // A primitive renders as its JSON, as it would through the replacer.
+  // A primitive renders as its JSON with the quotes removed, as it would
+  // through the replacer: a string with nothing JSON would escape and no
+  // quote is that JSON, a finite number is its own text, and neither has a
+  // quote to remove; anything else is rendered and stripped as before.
   const vt = typeof s.val
-  let jstr = undefined === s.val ? S.undefined :
-    (S.string === vt || S.boolean === vt) ? JS(s.val) :
-      S.number === vt ? (s.val === s.val ? JS(s.val) : 'NaN') :
-        stringify(s.val, false, false, { key: [/\$$/] }
-        )
-  let valstr = truncate(jstr.replace(/"/g, ''), 111)
+  let valstr = S.string === vt ? (JSON_ESCAPED_RE.test(s.val) ? JS(s.val).replace(/"/g, '') : s.val) :
+    S.number === vt ? (s.val === s.val ? (Number.isFinite(s.val) ? '' + s.val : 'null') : 'NaN') :
+      S.boolean === vt ? (s.val ? 'true' : 'false') :
+        undefined === s.val ? S.undefined :
+          stringify(s.val, false, false, { key: [/\$$/] }).replace(/"/g, '')
+  if (111 < valstr.length) {
+    valstr = truncate(valstr, 111)
+  }
 
   text = text || s.node.z
 
@@ -4242,9 +4313,16 @@ function makeErrImpl(
       + (err.use.thrown ? ' (threw: ' + err.use.thrown.message + ')' : '.')
   }
   else {
-    err.text = text
-      .replace(/\$VALUE/g, valstr)
-      .replace(/\$PATH/g, err.path)
+    // A builder's text starts with the value and the path, each once; when
+    // neither they nor the rest of the text hold a '$', assembling it is
+    // what the two replacements produce (a '$' anywhere could be another
+    // placeholder or a replacement pattern, and takes them).
+    const tail = text.startsWith(TEXT_PREFIX) ? text.substring(TEXT_PREFIX.length) : '$'
+    err.text = (-1 === tail.indexOf('$') && -1 === valstr.indexOf('$') && -1 === err.path.indexOf('$')) ?
+      'Value "' + valstr + '" for property "' + err.path + '"' + tail :
+      text
+        .replace(/\$VALUE/g, valstr)
+        .replace(/\$PATH/g, err.path)
   }
 
   return err

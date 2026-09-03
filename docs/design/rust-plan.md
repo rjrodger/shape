@@ -340,6 +340,58 @@ with a `State` each, and `invalid`, where the message is rendered
 eagerly. The typed validators (garde, validator) remain an order of
 magnitude ahead, as they are of the typed Go and TypeScript validators.
 
+#### A third pass
+
+The third performance round (2026-09-03) took the Rust port along with
+the other two. Measured on the host of the earlier passes (`80bb4b189998`)
+with the harness at a 200 ms warm-up and a 600 ms budget, and in instructions per
+`valid()` call under callgrind, one binary built against each tree; the
+before column is the tree at `c9fff39`, the after column `9dadba7`.
+
+| case | before | after | gain | instructions before | after |
+| ---- | -----: | ----: | ---: | ------------------: | ----: |
+| `flat` | 81 ns | 46 ns | 1.7× | 1007 | 759 |
+| `nested` | 125 ns | 88 ns | 1.4× | 1764 | 1506 |
+| `array` | 1.25 µs | 1.12 µs | 1.1× | 19370 | 19060 |
+| `bounds` | 300 ns | 210 ns | 1.4× | 3721 | 3316 |
+| `large` | 310 ns | 252 ns | 1.2× | 4615 | 4361 |
+| `invalid` | 1.87 µs | 0.79 µs | 2.4× | 19481 | 9158 |
+
+The producing call, which the harness does not time, gains the most in
+instructions: `validate()` on `flat` 5005 → 3644, on `nested` 15868 →
+10412, on `array` 231434 → 197511. What the pass did, with no change to
+any error text or produced value (a 1169-line differential of both
+against the previous commit, the corpus and the differential harness
+hold, and the 100% line gate too):
+
+- **No context of its own.** Every call built a `Context` whose
+  definitions table was a fresh `Arc<HashMap>`, allocated and freed at
+  once before the schema's own was cloned in, with the two atomics of
+  that clone on top. The walk and the validator's `State` now borrow the
+  schema's table, and a `Context` allocates nothing.
+- **Positional lookups when producing.** The producing walk hashed every
+  key up to three times per child: a lookup, a presence test, and an
+  `entry` that cloned the key. It guesses the child's declared position
+  first, as the read-only aligned walk does, and hashes only when the
+  input's order differs; a key is cloned only when it is absent and must
+  be made. A plain scalar element of an array is judged in place on the
+  producing walk too.
+- **A leaner error path.** The default text is written once into one
+  buffer instead of three `format!` calls; a whole number below 2^53
+  prints as its digits without the shortest-digits machinery; a string
+  value renders in one pass; a verdict-only error keeps nothing but its
+  kind and mark, and a regexp node renders its source only for an error
+  that will be read; a failed bound or `Len` on a verdict records the
+  failure and builds no message.
+- **The small items.** `is_integer` uses the i64 round trip below 2^53
+  instead of a `trunc` call; an ASCII string's UTF-16 length is its byte
+  length; the scratch slot of an absent child is made only on the path
+  that needs it.
+
+One item was declined: keeping the path's shared keys without their
+atomic clone and drop would need unsafe code, for a few nanoseconds per
+child on the calls that keep a path.
+
 ## Order of work
 
 | # | pull request | gate at the end |

@@ -41,6 +41,7 @@ impl Inner {
         let mut sub = ValidationError::default();
         let mut w = Walk {
             ctx: state.ctx,
+            defs: state.defs,
             is_match: state.is_match,
             path: state.path_arr.to_vec(),
             paths: true,

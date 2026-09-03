@@ -42,9 +42,11 @@ func (in inner) desc() string {
 // probe validates the node as it stands, with the taken checks, in isolation,
 // reporting the produced value and whatever failed.
 func (in inner) probe(state *State) (any, *ValidationError) {
+	// The copy is local and belongs to no Schema, so the generation is
+	// not bumped: a bump here made every Schema re-read its tree on its
+	// next call, for every Catch or Transform validated.
 	n := *state.Node
 	n.befores, n.afters = in.befores, in.afters
-	bumpValidatorGen()
 	val := state.Value
 	if state.absent {
 		val = undefinedT{}
@@ -118,6 +120,7 @@ func (n *Node) Transform(fn func(val any, state *State) any) *Node {
 	n.n.befores = []validator{{
 		name:  "Transform",
 		inner: &in,
+		user:  true,
 		fn: func(_ any, update *Update, state *State) bool {
 			out, sub := in.probe(state)
 			if sub.hasAny() {

@@ -176,6 +176,10 @@ function cases() {
         required.push(k)
       }
       c.jsonSchema = { type: 'object', properties, required, additionalProperties: false }
+      // Fifty keyed stores leave a V8 object in dictionary mode, which no
+      // decoded input is; the round trip gives the object JSON.parse
+      // would, as the Go and Rust harnesses decode theirs.
+      c.input = JSON.parse(JSON.stringify(c.input))
     }
     if (c.jsonSchema && typeof c.jsonSchema.$ref === 'string' && c.jsonSchema.$ref.startsWith('#')) {
       c.jsonSchema = byName[c.jsonSchema.$ref.slice(1)].jsonSchema

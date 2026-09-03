@@ -369,6 +369,7 @@ func Exact(vals ...any) *Node {
 	nb.n.kind = KindAny
 	nb.n.hasExact = true
 	nb.n.exactVals = append([]any{}, vals...)
+	listText := formatList(vals)
 	v := validator{
 		name: "Exact",
 		args: append([]any{}, vals...),
@@ -389,9 +390,11 @@ func Exact(vals ...any) *Node {
 			}
 			update.Why = WhyExact
 			update.Mark = 4010
-			update.Err = makeErr(state, WhyExact, 4010,
-				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" must be exactly one of: %s", formatList(vals)))
 			update.Done = true
+			if terseCall(state) {
+				return false
+			}
+			update.Err = boundErr(state, WhyExact, 4010, " must be exactly one of: "+listText)
 			return false
 		},
 		stringify: func() string {
@@ -417,11 +420,48 @@ func (n *Node) Exact(vals ...any) *Node {
 // fault is what a builder returns when called wrongly: a node that
 // accepts nothing and says why at validation, since a Go builder cannot
 // throw as the TypeScript one does (see the parity page).
+// terseCall reports whether the call wants a verdict only: a validator that
+// fails then records nothing but the failure, and builds no message.
+func terseCall(state *State) bool {
+	return state.Ctx != nil && state.Ctx.terse
+}
+
+// boundErr is the error of a failed bound or Exact: the value and the path,
+// then the clause given, assembled directly. A path holding "$VALUE" (a key
+// named so) or a clause holding a "$" takes the template's replacements
+// instead, whose order (the path first) can put the value into either.
+func boundErr(state *State, why string, mark int, clause string) FieldError {
+	err := newErr(state, why, mark)
+	if strings.Contains(err.Path, "$VALUE") || strings.Contains(clause, "$") {
+		err.Text = expandErrTextFor("Value \"$VALUE\" for property \"$PATH\""+clause, err.Path, state.Value, err.absent)
+		return err
+	}
+	valstr := "undefined"
+	if !err.absent {
+		valstr = valueToString(state.Value)
+	}
+	err.Text = "Value \"" + valstr + "\" for property \"" + err.Path + "\"" + clause
+	return err
+}
+
 // exactEqual is Exact's comparison: numbers by value whatever their kind, so
 // an int literal in the spec matches the float64 a JSON decoder produces, as
 // one JavaScript number type would; anything else structurally. Numbers are
 // compared as exact rationals, so large integers keep their precision.
 func exactEqual(val, want any) bool {
+	// The common kinds are compared directly; the rest as below.
+	switch x := val.(type) {
+	case string:
+		y, ok := want.(string)
+		return ok && x == y
+	case bool:
+		y, ok := want.(bool)
+		return ok && x == y
+	case float64:
+		if y, ok := want.(float64); ok {
+			return x == y
+		}
+	}
 	if reflect.DeepEqual(val, want) {
 		return true
 	}
@@ -485,6 +525,7 @@ func Min(min any, spec ...any) *Node {
 		nb = buildize(spec[0])
 	}
 	limit := toFloat(min)
+	minText := numText(min)
 	v := validator{
 		name: "Min",
 		args: []any{min},
@@ -496,16 +537,18 @@ func Min(min any, spec ...any) *Node {
 			if ok && limit <= vsize {
 				return true
 			}
+			update.Why = WhyMin
+			update.Done = true
+			update.Mark = 4011
+			if terseCall(state) {
+				return false
+			}
 			lenpart := ""
 			if !isNumeric(val) {
 				lenpart = "length "
 			}
-			update.Why = WhyMin
-			update.Done = true
-			update.Mark = 4011
-			update.Err = makeErr(state, WhyMin, 4011,
-				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" must be a minimum %sof %s (was %s).",
-					lenpart, numText(min), sizeText(vsize, ok)))
+			update.Err = boundErr(state, WhyMin, 4011,
+				" must be a minimum "+lenpart+"of "+minText+" (was "+sizeText(vsize, ok)+").")
 			return false
 		},
 		stringify: func() string { return "Min(" + numText(min) + ")" },
@@ -540,6 +583,7 @@ func Max(max any, spec ...any) *Node {
 		nb = buildize(spec[0])
 	}
 	limit := toFloat(max)
+	maxText := numText(max)
 	v := validator{
 		name: "Max",
 		args: []any{max},
@@ -551,16 +595,18 @@ func Max(max any, spec ...any) *Node {
 			if ok && vsize <= limit {
 				return true
 			}
+			update.Why = WhyMax
+			update.Done = true
+			update.Mark = 4012
+			if terseCall(state) {
+				return false
+			}
 			lenpart := ""
 			if !isNumeric(val) {
 				lenpart = "length "
 			}
-			update.Why = WhyMax
-			update.Done = true
-			update.Mark = 4012
-			update.Err = makeErr(state, WhyMax, 4012,
-				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" must be a maximum %sof %s (was %s).",
-					lenpart, numText(max), sizeText(vsize, ok)))
+			update.Err = boundErr(state, WhyMax, 4012,
+				" must be a maximum "+lenpart+"of "+maxText+" (was "+sizeText(vsize, ok)+").")
 			return false
 		},
 		stringify: func() string { return "Max(" + numText(max) + ")" },
@@ -595,6 +641,7 @@ func Above(above any, spec ...any) *Node {
 		nb = buildize(spec[0])
 	}
 	limit := toFloat(above)
+	aboveText := numText(above)
 	v := validator{
 		name: "Above",
 		args: []any{above},
@@ -606,16 +653,18 @@ func Above(above any, spec ...any) *Node {
 			if ok && limit < vsize {
 				return true
 			}
+			update.Why = WhyAbove
+			update.Done = true
+			update.Mark = 4013
+			if terseCall(state) {
+				return false
+			}
 			verb := "be"
 			if !isNumeric(val) {
 				verb = "have length"
 			}
-			update.Why = WhyAbove
-			update.Done = true
-			update.Mark = 4013
-			update.Err = makeErr(state, WhyAbove, 4013,
-				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" must %s above %s (was %s).",
-					verb, numText(above), sizeText(vsize, ok)))
+			update.Err = boundErr(state, WhyAbove, 4013,
+				" must "+verb+" above "+aboveText+" (was "+sizeText(vsize, ok)+").")
 			return false
 		},
 		stringify: func() string { return "Above(" + numText(above) + ")" },
@@ -650,6 +699,7 @@ func Below(below any, spec ...any) *Node {
 		nb = buildize(spec[0])
 	}
 	limit := toFloat(below)
+	belowText := numText(below)
 	v := validator{
 		name: "Below",
 		args: []any{below},
@@ -661,16 +711,18 @@ func Below(below any, spec ...any) *Node {
 			if ok && vsize < limit {
 				return true
 			}
+			update.Why = WhyBelow
+			update.Done = true
+			update.Mark = 4014
+			if terseCall(state) {
+				return false
+			}
 			verb := "be"
 			if !isNumeric(val) {
 				verb = "have length"
 			}
-			update.Why = WhyBelow
-			update.Done = true
-			update.Mark = 4014
-			update.Err = makeErr(state, WhyBelow, 4014,
-				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" must %s below %s (was %s).",
-					verb, numText(below), sizeText(vsize, ok)))
+			update.Err = boundErr(state, WhyBelow, 4014,
+				" must "+verb+" below "+belowText+" (was "+sizeText(vsize, ok)+").")
 			return false
 		},
 		stringify: func() string { return "Below(" + numText(below) + ")" },
@@ -705,6 +757,7 @@ func Len(length int, spec ...any) *Node {
 		nb = buildize(spec[0])
 	}
 	limit := float64(length)
+	lengthText := strconv.Itoa(length)
 	v := validator{
 		name: "Len",
 		args: []any{length},
@@ -716,16 +769,18 @@ func Len(length int, spec ...any) *Node {
 			if ok && vsize == limit {
 				return true
 			}
+			update.Why = WhyLen
+			update.Done = true
+			update.Mark = 4015
+			if terseCall(state) {
+				return false
+			}
 			suffix := ""
 			if !isNumeric(val) {
 				suffix = " in length"
 			}
-			update.Why = WhyLen
-			update.Done = true
-			update.Mark = 4015
-			update.Err = makeErr(state, WhyLen, 4015,
-				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" must be exactly %d%s (was %s).",
-					length, suffix, sizeText(vsize, ok)))
+			update.Err = boundErr(state, WhyLen, 4015,
+				" must be exactly "+lengthText+suffix+" (was "+sizeText(vsize, ok)+").")
 			return false
 		},
 		stringify: func() string { return fmt.Sprintf("Len(%d)", length) },
@@ -766,7 +821,7 @@ func Check(check any, spec ...any) *Node {
 		fn := func(val any, update *Update, state *State) bool {
 			return state.absent || c(val, update, state)
 		}
-		v := validator{name: "Check", fn: fn, stringify: func() string { return "Check()" }}
+		v := validator{name: "Check", fn: fn, user: true, stringify: func() string { return "Check()" }}
 		nb.n.befores = append(nb.n.befores, v)
 		bumpValidatorGen()
 	case *regexp.Regexp:
@@ -828,7 +883,7 @@ func Before(fn func(val any, update *Update, state *State) bool, spec ...any) *N
 		nb = buildize(spec[0])
 	}
 	nb.n.befores = append(nb.n.befores,
-		validator{name: "Before", fn: fn, stringify: func() string { return "Before()" }})
+		validator{name: "Before", fn: fn, user: true, stringify: func() string { return "Before()" }})
 	bumpValidatorGen()
 	return nb
 }
@@ -836,7 +891,7 @@ func Before(fn func(val any, update *Update, state *State) bool, spec ...any) *N
 // Before (chained).
 func (n *Node) Before(fn func(val any, update *Update, state *State) bool) *Node {
 	n.n.befores = append(n.n.befores,
-		validator{name: "Before", fn: fn, stringify: func() string { return "Before()" }})
+		validator{name: "Before", fn: fn, user: true, stringify: func() string { return "Before()" }})
 	bumpValidatorGen()
 	return n
 }
@@ -850,7 +905,7 @@ func After(fn func(val any, update *Update, state *State) bool, spec ...any) *No
 		nb = buildize(spec[0])
 	}
 	nb.n.afters = append(nb.n.afters,
-		validator{name: "After", fn: fn, stringify: func() string { return "After()" }})
+		validator{name: "After", fn: fn, user: true, stringify: func() string { return "After()" }})
 	bumpValidatorGen()
 	return nb
 }
@@ -858,7 +913,7 @@ func After(fn func(val any, update *Update, state *State) bool, spec ...any) *No
 // After (chained).
 func (n *Node) After(fn func(val any, update *Update, state *State) bool) *Node {
 	n.n.afters = append(n.n.afters,
-		validator{name: "After", fn: fn, stringify: func() string { return "After()" }})
+		validator{name: "After", fn: fn, user: true, stringify: func() string { return "After()" }})
 	bumpValidatorGen()
 	return n
 }

@@ -203,6 +203,156 @@ The two moves that would change the tier, compiling a shape to a function
 in TypeScript and a struct-specialised walk in Go, were considered and
 declined for now.
 
+## Results, third round
+
+The third round was carried out on 2026-09-03, in one pull request for
+all three languages, and it started with the benchmark itself. The
+TypeScript harness took `String`, `Number` and `Boolean` from the shape
+module, which exports none of them, so every such leaf was `undefined`:
+an optional `any` node that never took the inline leaf path, and the
+`invalid` case raised one error rather than the two it describes. Every
+TypeScript figure recorded before the correction, the two rounds above
+included, measured that slower shape; the Go and Rust harnesses had typed
+leaves all along. The harness also handed the `large` case a V8 object in
+dictionary mode (fifty keyed stores); it is now the object `JSON.parse`
+gives, as the other two harnesses decode theirs. A run records the version
+of its harness and the report folds it into the case hash, so runs from
+before and after the correction are never drawn on one line.
+
+Measured on the host of the second round (`80bb4b189998`, the 2.10 GHz
+Xeon) with the harness at a 200 ms warm-up and a 600 ms budget per
+benchmark, from clean trees: before is `c9fff39`, the corrected harness
+on the code of the second round, and after is `beee5ac`. Median per call;
+the runs recorded with the full budget at `a4f13a2` are under
+`bench/results/runs/` and on the report's History table for that host.
+The TypeScript before column is therefore not the second round's after
+column, which measured `any` leaves.
+
+| case | TS before | TS after | gain | Go before | Go after | gain | Rust before | Rust after | gain |
+| ---- | --------: | -------: | ---: | --------: | -------: | ---: | ----------: | ---------: | ---: |
+| `flat` | 435 ns | 191 ns | 2.3× | 472 ns | 171 ns | 2.8× | 81 ns | 46 ns | 1.7× |
+| `nested` | 1.36 µs | 0.68 µs | 2.0× | 1.52 µs | 0.33 µs | 4.6× | 125 ns | 88 ns | 1.4× |
+| `array` | 15.9 µs | 6.1 µs | 2.6× | 34.3 µs | 3.9 µs | 8.9× | 1.25 µs | 1.12 µs | 1.1× |
+| `bounds` | 1.48 µs | 0.70 µs | 2.1× | 1.89 µs | 0.41 µs | 4.6× | 300 ns | 210 ns | 1.4× |
+| `large` | 4.43 µs | 1.27 µs | 3.5× | 4.99 µs | 0.88 µs | 5.7× | 310 ns | 252 ns | 1.2× |
+| `invalid` | 3.28 µs | 1.43 µs | 2.3× | 2.66 µs | 1.31 µs | 2.0× | 1.87 µs | 0.79 µs | 2.4× |
+
+The Go benchmarks in `go/bench_test.go`, which time the calls without the
+harness: `Valid` on `flat` went from 445 ns to 150 ns, on `nested` from
+1.6 µs and 4 allocations to 313 ns and none, on `large` from 6.0 µs and 6
+allocations to 0.8 µs and none; `Validate` on `nested` from 1.9 µs and 8
+allocations to 0.37 µs and none; `Error` on the invalid input from 3.0 µs
+and 18 allocations to 1.7 µs and 11. The file gained a `bounds` case,
+valid and failing, and an `array` case: `Valid` on `bounds` is 0.42 µs
+with no allocations, a failing bound on a verdict allocates nothing (it
+allocated 15 times), and `Error` on it allocates 19 times (from 29).
+
+Rust is also measured in instructions per call (callgrind, one binary
+built against each tree), which the sandbox's noise cannot move:
+
+| call | before | after | change |
+| ---- | -----: | ----: | -----: |
+| `valid` on `flat` | 1007 | 759 | -25% |
+| `valid` on `nested` | 1764 | 1506 | -15% |
+| `valid` on `large` | 4615 | 4361 | -6% |
+| `valid` on `bounds` | 3721 | 3316 | -11% |
+| `valid` on `array` | 19370 | 19060 | -2% |
+| `validate` on `flat` | 5005 | 3644 | -27% |
+| `validate` on `nested` | 15868 | 10412 | -34% |
+| `validate` on `array` | 231434 | 197511 | -15% |
+| `error` on `invalid` | 19481 | 9158 | -53% |
+
+### What this round did
+
+Every change keeps the corpus, the differential harness (5031 cases per
+port against the canonical build) and 100% line coverage, and each
+language's error texts were also diffed byte for byte against the
+previous build over a battery of awkward values (7548 rows in TypeScript,
+1169 lines in Rust, the bound and Exact texts pinned by test in Go).
+
+- **TypeScript, fast-mode nodes.** `buildize` attached its 52 chainable
+  builders with `Object.assign`, which took every builder-made node past
+  V8's fast-property limit into dictionary mode, so each read of a node's
+  fields in the walk was a hash lookup. The same properties are defined
+  in one step and the node stays fast: the largest single item of the
+  round, about a third off every case.
+- **TypeScript, the walk.** The root's terminal back pointer was -1, a
+  non-index keyed load at the site every pop uses; it is 0. The State's
+  late-written fields are initialised in the constructor, so every State
+  has one hidden class. The closed-object scan compares the value's keys
+  positionally with the compiled key list first (JSON written from the
+  same shape), then consults a compiled set, and looks a key up in the
+  spec only when it is undeclared. Every builder application bumps the
+  generation the compiled child lists are keyed by, so the per-child
+  re-check of a leaf's kind and validators goes; a retained node
+  re-chained after its parent compiled is still noticed, which a test
+  pins.
+- **TypeScript, the error path.** A primitive value renders directly
+  rather than through `JSON.stringify` and a global quote-stripping
+  replace; a builder's message is assembled rather than produced by two
+  replacements when no `$` can make a difference; the paths a failing
+  validator built eagerly are built only for an error that lacks one;
+  the probe for a validator's `uval` is an `in` test; and `ShapeError`
+  formats its stack on first read rather than in its constructor, which
+  cost more than the validation that threw.
+- **Go, plain leaves and prepared lists.** A String, Number, Boolean or
+  Integer child with nothing but its kind's check is judged in its
+  parent's loop when its value is present and of the kind, without a
+  State: the mirror of the TypeScript inline leaf and the Rust plain
+  flag. `prepare` gives an object node its children in declared order
+  and the keys its child map holds beyond the declared ones (none in a
+  tree the builders make), so the walk indexes children instead of a map
+  lookup per key and no longer ranges over the whole map per object. An
+  array's parent slice is boxed once per array; the State is filled
+  field by field; a verdict-only call on a schema with no validators
+  leaves the path stacks alone; the first 1024 index keys are made once.
+- **Go, the State stack and pooling for built-in validators.** A
+  validator records whether its function is the caller's. A schema with
+  none of those runs its calls on the pooled context, as a schema with
+  no validators did, and hands a node's State back when the node returns,
+  so a tree of any size needs no more States than it is deep. Each
+  validator run filled a fresh heap `Update`; the State carries one.
+- **Go, the error path.** A failed bound on a verdict records the failure
+  and builds no message; a bound's message is assembled directly, with
+  its own text made once when it is built; the two sites that rendered a
+  text twice render once; the dotted path is one allocation; Exact
+  compares strings, booleans and same-kind floats directly.
+- **Go, a probe's generation bump.** A Catch or Transform probe bumped the
+  global validator generation at validation time, so every Schema re-read
+  its tree on its next call; the probe's copy belongs to no Schema, and
+  the bump goes.
+- **Rust.** Every call built a Context whose definitions table was a fresh
+  `Arc`, allocated and freed at once; the walk and the validator's State
+  borrow the schema's table, and a Context allocates nothing. The
+  producing walk hashed every key up to three times per child; it guesses
+  the child's declared position first, as the read-only aligned walk
+  does, and clones a key only when it is absent and must be made. The
+  default error text is written once into one buffer; a whole number
+  below 2^53 prints as its digits; a string value renders in one pass; a
+  verdict-only error keeps nothing but its kind and mark; a failed bound
+  on a verdict builds no message; `is_integer` uses the i64 round trip;
+  an ASCII string's UTF-16 length is its byte length.
+
+Two things were declined or reverted. Pooling the TypeScript walk's frame
+stacks across calls, with a re-entrancy guard, measured slower on every
+case (flat by a third), as pooling the State did in the first round: a
+reused array ages into old space and every store pays a write barrier.
+Keeping the Rust path's shared keys without their atomic traffic would
+need unsafe code, and was not taken.
+
+### What is left after the third round
+
+TypeScript `flat` stands at 191 ns against Zod's 74 ns on this host, 2.6×,
+and ahead of Valibot on every case; Go `flat` at 171 ns is ahead of
+go-playground/validator (314 ns) on every case, which was the target set
+above; Rust `flat` at 46 ns is 5× garde and 2.6× the validator crate, and
+ahead of the validator crate on `nested`. What remains in TypeScript is
+the frame per non-leaf node and the `keys()` of every object; in Go, the
+map lookup per key and the interface boxing of the input's values; in
+Rust, the State per validator on a node that has one and the eager
+rendering of `error()`. Code generation in TypeScript and a typed walk
+in Go remain declined.
+
 ## The rules that do not move
 
 Every step keeps the [parity contract](../explanation/ts-go-parity.md): the shared corpus

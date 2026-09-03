@@ -2,6 +2,8 @@ package shape
 
 import (
 	"math"
+	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -513,9 +515,26 @@ func TestZZValidateAftersAndLists(t *testing.T) {
 
 	// Object node whose objChildren has a key absent from objKeys (405-409).
 	on := &node{kind: KindObject, objChildren: map[string]*node{"extra": Optional(Number).n}}
+	prepare(on, map[string]*node{})
 	out := validateNode(on, map[string]any{}, []string{}, []any{}, "", nil, newContext(nil), false, &ValidationError{})
 	if om, ok := out.(map[string]any); !ok || om["extra"] == nil {
 		t.Fatalf("expected extra key injected, got %v", out)
+	}
+
+	// The same child present in the input, with and without a produced copy.
+	if got := validateNode(on, map[string]any{"extra": 5.0}, []string{}, []any{}, "", nil, newContext(nil), false, &ValidationError{}); got.(map[string]any)["extra"] != 5.0 {
+		t.Fatalf("extra key kept, got %v", got)
+	}
+	// On a verdict the key is unknown (nothing declared consumes it) and the
+	// child loop still finds it present.
+	if validateNodeMatches(on, map[string]any{"extra": 5.0}) {
+		t.Fatal("extra key present on a verdict")
+	}
+	dn, _ := normalize(1.0)
+	on2 := &node{kind: KindObject, objKeys: []string{"a"}, objChildren: map[string]*node{"a": dn, "extra": Optional(Number).n}}
+	prepare(on2, map[string]*node{})
+	if got := validateNode(on2, map[string]any{"extra": 5.0}, []string{}, []any{}, "", nil, newContext(nil), false, &ValidationError{}); got.(map[string]any)["extra"] != 5.0 || got.(map[string]any)["a"] != 1.0 {
+		t.Fatalf("extra key kept beside a default, got %v", got)
 	}
 
 	// Open object with a nil objRest keeps unknown keys as-is (421).
@@ -549,4 +568,122 @@ func TestZZValidateSmallHelpers(t *testing.T) {
 
 	// collectDefines with nil args returns immediately (695-697).
 	prepare(nil, nil)
+
+	// A pooled block releases whatever a validator put in Custom.
+	cs := callPool.Get().(*callScratch)
+	cs.custom["x"] = 1
+	cs.release()
+	if len(cs.custom) != 0 {
+		t.Fatal("custom cleared on release")
+	}
+}
+
+// An array longer than the index-key table: keys and paths are still made,
+// and read the same.
+func TestZZLongArrayIndexKeys(t *testing.T) {
+	arr := make([]any, indexKeys+10)
+	for i := range arr {
+		arr[i] = 1.0
+	}
+	s := MustShape([]any{Number})
+	if !s.Valid(arr) {
+		t.Fatal("long array valid")
+	}
+	arr[indexKeys+5] = "x"
+	errs := s.Error(arr)
+	if len(errs) != 1 || errs[0].Path != strconv.Itoa(indexKeys+5) || errs[0].PathArr[0] != indexKeys+5 {
+		t.Fatalf("long array error path: %v", errs)
+	}
+	if !strings.Contains(errs[0].Text, "index \""+strconv.Itoa(indexKeys+5)+"\"") {
+		t.Fatalf("long array error text: %s", errs[0].Text)
+	}
+}
+
+// validateNodeMatches runs a hand-built node in match mode and reports the
+// verdict.
+func validateNodeMatches(n *node, in any) bool {
+	verr := &ValidationError{terse: true}
+	validateNode(n, in, []string{}, []any{}, "", nil, newContext(nil), true, verr)
+	return !verr.hasAny()
+}
+
+// A validator of the caller's anywhere in the tree (a tuple position, a
+// composition branch, inside a Catch) keeps the call off the pool; the
+// library's own validators do not.
+func TestZZUserValidatorsAndPooling(t *testing.T) {
+	user := func(v any, u *Update, s *State) bool { return true }
+	if MustShape([]any{Number, Check(user)}).isNoUser() {
+		t.Fatal("tuple position")
+	}
+	if MustShape(One(Check(user), Number)).isNoUser() {
+		t.Fatal("composition branch")
+	}
+	if MustShape(map[string]any{"a": Catch(0.0, Before(user, Number))}).isNoUser() {
+		t.Fatal("inside a Catch")
+	}
+	if !MustShape(map[string]any{"a": Max(3, Min(1, Number)), "b": Catch(0.0, Min(1, Number))}).isNoUser() {
+		t.Fatal("built-in validators only")
+	}
+
+	// A pooled call on a schema with built-in validators leaks nothing between
+	// calls: verdicts, produced values and errors are the same every time.
+	s := MustShape(map[string]any{"n": Max(3, Min(1, Number)), "s": Min(2, String), "d": "dflt"})
+	for i := 0; i < 3; i++ {
+		if !s.Valid(map[string]any{"n": 2.0, "s": "ab"}) || s.Valid(map[string]any{"n": 5.0, "s": "ab"}) || s.Valid(map[string]any{"n": 2.0, "s": "a"}) {
+			t.Fatal("pooled verdicts")
+		}
+		out, err := s.Validate(map[string]any{"n": 2.0, "s": "ab"})
+		if err != nil || out.(map[string]any)["d"] != "dflt" {
+			t.Fatal("pooled produce", out, err)
+		}
+		errs := s.Error(map[string]any{"n": 5.0, "s": "a"})
+		if len(errs) != 2 || errs[0].Path != "n" || errs[1].Path != "s" {
+			t.Fatal("pooled errors", errs)
+		}
+	}
+}
+
+// The bounds and Exact build no message on a verdict, and their message
+// assembled directly is the one the template gave, the two cases the
+// template's replacement order shows through included: a key named
+// "$VALUE" and a literal holding a "$".
+func TestZZBoundTexts(t *testing.T) {
+	for _, c := range []struct {
+		spec any
+		in   any
+		path string
+		text string
+	}{
+		{map[string]any{"$VALUE": Min(3, Number)}, map[string]any{"$VALUE": 1.0}, "$VALUE", `Value "1" for property "1" must be a minimum of 3 (was 1).`},
+		{map[string]any{"$VALUE": Len(2, String)}, map[string]any{"$VALUE": "abc"}, "$VALUE", `Value "abc" for property "abc" must be exactly 2 in length (was 3).`},
+		{map[string]any{"k": Exact("$PATH", "y")}, map[string]any{"k": "x"}, "k", `Value "x" for property "k" must be exactly one of: k, y`},
+		{map[string]any{"k": Exact(1, "a", true)}, map[string]any{"k": 2.0}, "k", `Value "2" for property "k" must be exactly one of: 1, a, true`},
+		{map[string]any{"k": Above(3, Number)}, map[string]any{"k": 2.0}, "k", `Value "2" for property "k" must be above 3 (was 2).`},
+		{map[string]any{"k": Below(3, String)}, map[string]any{"k": "abcd"}, "k", `Value "abcd" for property "k" must have length below 3 (was 4).`},
+		{map[string]any{"k": Len(2, String)}, map[string]any{"k": "abc"}, "k", `Value "abc" for property "k" must be exactly 2 in length (was 3).`},
+		{map[string]any{"a": map[string]any{"k": Max(3, Number)}}, map[string]any{"a": map[string]any{"k": 5.0}}, "a.k", `Value "5" for property "a.k" must be a maximum of 3 (was 5).`},
+	} {
+		s := MustShape(c.spec)
+		errs := s.Error(c.in)
+		if len(errs) != 1 || errs[0].Path != c.path || errs[0].Text != c.text {
+			t.Fatalf("bound text: got %v, want %q", errs, c.text)
+		}
+		// The verdict counts the failure without the message.
+		if s.Valid(c.in) {
+			t.Fatalf("bound verdict for %v", c.in)
+		}
+	}
+	// Exact's direct comparisons: strings, booleans and floats of the same
+	// kind, and the rational path for the rest.
+	s := MustShape(map[string]any{"k": Exact("a", true, 2.0, 3)})
+	for _, ok := range []any{"a", true, 2.0, 3.0, 3, int64(2)} {
+		if !s.Valid(map[string]any{"k": ok}) {
+			t.Fatalf("exact accepts %v", ok)
+		}
+	}
+	for _, bad := range []any{"b", false, 2.5, "true", 4} {
+		if s.Valid(map[string]any{"k": bad}) {
+			t.Fatalf("exact rejects %v", bad)
+		}
+	}
 }

@@ -30,10 +30,15 @@ const { execFileSync } = require('node:child_process')
 // run whose file cannot be found has no case hashes, and its rows are
 // compared by the file hash alone. A case that borrows another's schema
 // ({"$ref": "#name"}) is hashed with the schema it borrows, so a change to
-// the schema changes the hash of every case that measures it.
+// the schema changes the hash of every case that measures it. A run that
+// records a harness version (the language's harness changed what it
+// measures, as the TypeScript one did on 2026-09-03) has that version
+// folded into every hash, so its rows are never compared with the runs
+// before the change; a run without one is version 1.
 const caseHashCache = {}
-function caseHashes(resultsDir, commit, inputHash, currentHash) {
-  if (inputHash in caseHashCache) return caseHashCache[inputHash]
+function caseHashes(resultsDir, commit, inputHash, currentHash, harness) {
+  const cacheKey = inputHash + '/' + harness
+  if (cacheKey in caseHashCache) return caseHashCache[cacheKey]
   let raw = null
   if (commit) {
     try {
@@ -53,10 +58,11 @@ function caseHashes(resultsDir, commit, inputHash, currentHash) {
     for (const c of all) {
       const ref = c.jsonSchema && typeof c.jsonSchema.$ref === 'string' && c.jsonSchema.$ref.startsWith('#') ? byName[c.jsonSchema.$ref.slice(1)] : null
       const resolved = ref ? { ...c, jsonSchema: ref.jsonSchema } : c
-      hashes[c.name] = crypto.createHash('sha256').update(JSON.stringify(resolved)).digest('hex').slice(0, 12)
+      const hashed = harness > 1 ? { ...resolved, harness } : resolved
+      hashes[c.name] = crypto.createHash('sha256').update(JSON.stringify(hashed)).digest('hex').slice(0, 12)
     }
   }
-  caseHashCache[inputHash] = hashes
+  caseHashCache[cacheKey] = hashes
   return hashes
 }
 function currentCasesRaw(resultsDir) {
@@ -92,7 +98,8 @@ function build(resultsDir) {
 
   for (const r of runs) {
     const h = r.host
-    const hashes = caseHashes(resultsDir, r.run.source.commit, r.input_hash, currentHash)
+    const harness = r.harness || 1
+    const hashes = caseHashes(resultsDir, r.run.source.commit, r.input_hash, currentHash, harness)
     hosts[h.id] = hosts[h.id] || { ...h, runs: 0, first: r.run.at, last: r.run.at }
     hosts[h.id].runs++
     hosts[h.id].last = r.run.at
@@ -108,6 +115,7 @@ function build(resultsDir) {
       runtime: r.runtime,
       versions: r.versions,
       input_hash: r.input_hash,
+      harness,
       policy: r.policy,
       cases: r.benchmarks.length,
     })

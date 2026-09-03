@@ -130,13 +130,11 @@ pub(crate) fn make_err(at: &At<'_>, why: &str, mark: i64, text: &str) -> FieldEr
         mark
     };
     if at.terse {
+        // Counted, never read: nothing of the key, the value or the
+        // check is kept.
         return FieldError {
-            key: at.key.to_string(),
             kind: at.kind,
-            value: at.value.clone(),
-            why: why.to_string(),
             mark,
-            check: at.check.to_string(),
             terse: true,
             ..Default::default()
         };
@@ -177,51 +175,59 @@ pub(crate) fn expand_err_text(text: &str, path: &str, val: &Value, absent: bool)
 
 /// The text of a structural error, as TypeScript renders it.
 pub(crate) fn default_err_text(e: &FieldError) -> String {
-    let mut valstr = value_to_string(&e.value);
-    let mut valkind = value_kind(&e.value);
-    if e.absent {
-        valstr = "undefined".to_string();
-        valkind = "value";
-    }
+    let (valstr, valkind) = if e.absent {
+        ("undefined".to_string(), "value")
+    } else {
+        (value_to_string(&e.value), value_kind(&e.value))
+    };
     // "index" when the value renders as an array or its parent is one.
     let propkind = if e.parent_arr || valstr.starts_with('[') {
         "index"
     } else {
         "property"
     };
-    let path_part = if e.path.is_empty() {
-        String::new()
-    } else {
-        format!("{} \"{}\" with ", propkind, e.path)
-    };
-    let head = format!(
-        "Validation failed for {}{} \"{}\"",
-        path_part, valkind, valstr
-    );
+    // A property that is not there is named, not rendered.
+    if e.why == WHY_REQUIRED && e.absent && !e.path.is_empty() {
+        let noun = if propkind == "index" {
+            "element"
+        } else {
+            "property"
+        };
+        return format!(
+            "Validation failed for {} \"{}\" because the {} is missing.",
+            propkind, e.path, noun
+        );
+    }
+    // Written once into one buffer: the head, then the clause of the why.
+    let mut out = String::with_capacity(96 + e.path.len() + valstr.len() + e.key.len());
+    out.push_str("Validation failed for ");
+    if !e.path.is_empty() {
+        out.push_str(propkind);
+        out.push_str(" \"");
+        out.push_str(&e.path);
+        out.push_str("\" with ");
+    }
+    out.push_str(valkind);
+    out.push_str(" \"");
+    out.push_str(&valstr);
+    out.push_str("\" because ");
     match e.why.as_str() {
-        WHY_TYPE => format!(
-            "{} because the {} is not of type {}.",
-            head, valkind, e.kind
-        ),
+        WHY_TYPE => {
+            out.push_str("the ");
+            out.push_str(valkind);
+            out.push_str(" is not of type ");
+            out.push_str(e.kind.as_str());
+            out.push('.');
+        }
         WHY_REQUIRED => {
-            // A property that is not there is named, not rendered.
-            if e.absent && !e.path.is_empty() {
-                let noun = if propkind == "index" {
-                    "element"
-                } else {
-                    "property"
-                };
-                return format!(
-                    "Validation failed for {} \"{}\" because the {} is missing.",
-                    propkind, e.path, noun
-                );
-            }
             if matches!(e.value, Value::Str(ref s) if s.is_empty()) {
-                format!("{} because an empty string is not allowed.", head)
+                out.push_str("an empty string is not allowed.");
             } else if e.value.is_null() || e.absent {
-                format!("{} because the value is required.", head)
+                out.push_str("the value is required.");
             } else {
-                format!("{} because the {} is required.", head, valkind)
+                out.push_str("the ");
+                out.push_str(valkind);
+                out.push_str(" is required.");
             }
         }
         WHY_CLOSED => {
@@ -230,25 +236,34 @@ pub(crate) fn default_err_text(e: &FieldError) -> String {
             } else {
                 (propkind, "is")
             };
-            format!(
-                "{} because the {} \"{}\" {} not allowed.",
-                head, noun, e.key, verb
-            )
+            out.push_str("the ");
+            out.push_str(noun);
+            out.push_str(" \"");
+            out.push_str(&e.key);
+            out.push_str("\" ");
+            out.push_str(verb);
+            out.push_str(" not allowed.");
         }
-        WHY_NEVER => format!("{} because no value is allowed.", head),
-        WHY_REGEXP => format!(
-            "{} because the {} did not match {}.",
-            head, valkind, e.regexp_src
-        ),
+        WHY_NEVER => out.push_str("no value is allowed."),
+        WHY_REGEXP => {
+            out.push_str("the ");
+            out.push_str(valkind);
+            out.push_str(" did not match ");
+            out.push_str(&e.regexp_src);
+            out.push('.');
+        }
         _ => {
             let name = if e.check.is_empty() {
                 e.why.as_str()
             } else {
                 e.check.as_str()
             };
-            format!("{} because check \"{}\" failed.", head, name)
+            out.push_str("check \"");
+            out.push_str(name);
+            out.push_str("\" failed.");
         }
     }
+    out
 }
 
 #[cfg(test)]
