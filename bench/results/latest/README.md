@@ -1,6 +1,6 @@
 # Latest measurements
 
-Generated 2026-09-03T15:32:48.004Z from 76 run(s). Times are median nanoseconds per operation; lower is better.
+Generated 2026-09-03T15:49:08.616Z from 79 run(s). Times are median nanoseconds per operation; lower is better.
 
 ## go on github:windows-x64
 
@@ -21,12 +21,12 @@ Host `80bb4b189998`: Intel(R) Xeon(R) Processor @ 2.10GHz, 4 cores, linux/x64. L
 
 | case | shape | validator | jsonschema | gojsonschema | shape / fastest |
 |---|---:|---:|---:|---:|---:|
-| flat | 180 ns | 312 ns | 1.9 µs | 5.9 µs | 1.0× |
-| nested | 337 ns | 952 ns | 3.6 µs | 9.3 µs | 1.0× |
-| array | 3.9 µs | 13.7 µs | 62.6 µs | 183.5 µs | 1.0× |
-| bounds | 415 ns | 660 ns | 3.2 µs | 5.8 µs | 1.0× |
-| invalid | 1.5 µs | – | 4.6 µs | 11.7 µs | 1.0× |
-| large | 922 ns | 2.1 µs | 18.5 µs | 64.3 µs | 1.0× |
+| flat | 172 ns | 300 ns | 1.6 µs | 5.7 µs | 1.0× |
+| nested | 334 ns | 947 ns | 4.2 µs | 9.5 µs | 1.0× |
+| array | 3.8 µs | 13.8 µs | 64.0 µs | 190.7 µs | 1.0× |
+| bounds | 405 ns | 656 ns | 3.0 µs | 5.8 µs | 1.0× |
+| invalid | 1.5 µs | – | 4.9 µs | 11.2 µs | 1.0× |
+| large | 858 ns | 2.1 µs | 17.5 µs | 64.7 µs | 1.0× |
 
 ## go on linux-xeon-sandbox
 
@@ -86,12 +86,12 @@ Host `80bb4b189998`: Intel(R) Xeon(R) Processor @ 2.10GHz, 4 cores, linux/x64. L
 
 | case | shape | garde | validator | jsonschema | shape / fastest |
 |---|---:|---:|---:|---:|---:|
-| flat | 50 ns | 11 ns | 20 ns | 144 ns | 4.4× |
-| nested | 102 ns | 41 ns | 107 ns | 296 ns | 2.5× |
-| array | 1.2 µs | 199 ns | 591 ns | 4.0 µs | 6.0× |
-| bounds | 239 ns | 28 ns | 28 ns | 166 ns | 8.6× |
-| invalid | 797 ns | – | – | 104 ns | 7.6× |
-| large | 278 ns | 56 ns | 97 ns | 1.4 µs | 4.9× |
+| flat | 49 ns | 11 ns | 20 ns | 142 ns | 4.3× |
+| nested | 101 ns | 42 ns | 106 ns | 299 ns | 2.4× |
+| array | 1.2 µs | 211 ns | 585 ns | 4.3 µs | 5.8× |
+| bounds | 237 ns | 29 ns | 29 ns | 176 ns | 8.3× |
+| invalid | 885 ns | – | – | 106 ns | 8.4× |
+| large | 285 ns | 63 ns | 97 ns | 1.5 µs | 4.5× |
 
 ## rs on linux-xeon-sandbox
 
@@ -151,12 +151,12 @@ Host `80bb4b189998`: Intel(R) Xeon(R) Processor @ 2.10GHz, 4 cores, linux/x64. L
 
 | case | shape | zod | ajv | joi | valibot | shape / fastest |
 |---|---:|---:|---:|---:|---:|---:|
-| flat | 219 ns | 78 ns | 29 ns | 1.7 µs | 564 ns | 7.6× |
-| nested | 726 ns | 214 ns | 57 ns | 5.7 µs | 1.2 µs | 12.7× |
-| array | 8.1 µs | 4.1 µs | 822 ns | 79.6 µs | 18.5 µs | 9.8× |
-| bounds | 894 ns | 574 ns | 75 ns | 2.6 µs | 689 ns | 11.9× |
-| invalid | 1.9 µs | 2.9 µs | 47 ns | 2.7 µs | 1.9 µs | 39.3× |
-| large | 1.5 µs | 2.3 µs | 451 ns | 21.7 µs | 8.7 µs | 3.3× |
+| flat | 209 ns | 81 ns | 28 ns | 1.7 µs | 636 ns | 7.6× |
+| nested | 814 ns | 244 ns | 60 ns | 6.2 µs | 1.3 µs | 13.6× |
+| array | 8.3 µs | 4.5 µs | 833 ns | 92.6 µs | 20.9 µs | 10.0× |
+| bounds | 1.0 µs | 584 ns | 76 ns | 2.7 µs | 740 ns | 13.4× |
+| invalid | 1.8 µs | 2.6 µs | 36 ns | 2.5 µs | 1.9 µs | 49.9× |
+| large | 1.5 µs | 2.5 µs | 446 ns | 22.3 µs | 9.1 µs | 3.3× |
 
 ## ts on linux-xeon-sandbox
 
@@ -224,6 +224,7 @@ Shape's median per case on every run, with the 95th percentile after it, newest 
 | 2026-09-02 15:13 | `424ec5a` (dirty) | 0.3.0 | 448 ns · 530 ns | 1.9 µs · 3.2 µs | 40.2 µs · 49.5 µs | 1.5 µs · 4.4 µs | 2.6 µs · 9.8 µs | 8.7 µs · 10.6 µs |
 | 2026-09-02 15:14 | `424ec5a` (dirty) | 0.3.0 | 453 ns · 544 ns | 1.9 µs · 3.2 µs | 34.9 µs · 61.4 µs | 2.1 µs · 3.0 µs | 3.0 µs · 6.1 µs | 5.5 µs · 23.0 µs |
 | 2026-09-03 15:31 | `a4f13a2` | 0.5.1 | 180 ns · 208 ns | 337 ns · 367 ns | 3.9 µs · 4.4 µs | 415 ns · 457 ns | 1.5 µs · 2.6 µs | 922 ns · 1.0 µs |
+| 2026-09-03 15:48 | `ca16e3c` | 0.5.2 | 172 ns · 186 ns | 334 ns · 373 ns | 3.8 µs · 4.1 µs | 405 ns · 448 ns | 1.5 µs · 3.0 µs | 858 ns · 956 ns |
 
 ## go on linux-xeon-sandbox
 
@@ -271,6 +272,7 @@ Shape's median per case on every run, with the 95th percentile after it, newest 
 | run | commit | shape | flat | nested | array | bounds | invalid | large |
 |---|---|---|---:|---:|---:|---:|---:|---:|
 | 2026-09-03 15:32 | `a4f13a2` | 0.1.1 | 50 ns · 53 ns | 102 ns · 108 ns | 1.2 µs · 1.3 µs | 239 ns · 263 ns | 797 ns · 869 ns | 278 ns · 298 ns |
+| 2026-09-03 15:49 | `ca16e3c` | 0.2.0 | 49 ns · 53 ns | 101 ns · 119 ns | 1.2 µs · 1.4 µs | 237 ns · 260 ns | 885 ns · 1.0 µs | 285 ns · 300 ns |
 
 ## rs on linux-xeon-sandbox
 
@@ -308,6 +310,7 @@ Shape's median per case on every run, with the 95th percentile after it, newest 
 | run | commit | shape | flat | nested | array | bounds | invalid | large |
 |---|---|---|---:|---:|---:|---:|---:|---:|
 | 2026-09-03 15:31 | `a4f13a2` | 11.3.1 | 219 ns · 275 ns | 726 ns · 857 ns | 8.1 µs · 10.1 µs | 894 ns · 1.2 µs | 1.9 µs · 2.4 µs | 1.5 µs · 1.9 µs |
+| 2026-09-03 15:47 | `ca16e3c` | 11.3.2 | 209 ns · 261 ns | 814 ns · 1.0 µs | 8.3 µs · 11.4 µs | 1.0 µs · 1.3 µs | 1.8 µs · 2.2 µs | 1.5 µs · 1.9 µs |
 
 ## ts on linux-xeon-sandbox
 
