@@ -100,8 +100,11 @@ fn run(n: &Node, val: Value, key: &str, is_match: bool) -> (Value, ValidationErr
         terse: is_match,
         ..Default::default()
     };
+    // An argument list is compiled from its own nodes: no definitions.
+    let defs = std::collections::HashMap::new();
     let mut w = Walk {
         ctx: &mut ctx,
+        defs: &defs,
         is_match,
         path: if key.is_empty() {
             Vec::new()

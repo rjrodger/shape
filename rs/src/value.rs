@@ -155,6 +155,10 @@ pub fn js_number(x: f64) -> String {
     if x.is_infinite() {
         return if x > 0.0 { "Infinity" } else { "-Infinity" }.to_string();
     }
+    // A whole number below 2^53 is exact, and prints as its digits.
+    if x.abs() < 9007199254740992.0 && x == x.trunc() {
+        return (x as i64).to_string();
+    }
     let neg = x < 0.0;
     // Shortest round-trip digits, in scientific form: "d.ddde±x".
     let sci = format!("{:e}", x.abs());
@@ -301,7 +305,31 @@ pub fn value_to_string(v: &Value) -> String {
     match v {
         Value::Undefined => "undefined".to_string(),
         Value::Null => "null".to_string(),
-        Value::Str(s) => truncate_text(&json_text(s).replace('"', ""), ERR_VALUE_LIMIT),
+        Value::Str(s) => {
+            // json_text's escapes with every quote removed, in one pass: an
+            // escaped quote leaves its backslash.
+            let mut out = String::with_capacity(s.len());
+            for c in s.chars() {
+                match c {
+                    '"' => out.push('\\'),
+                    '\\' => out.push_str("\\\\"),
+                    '\n' => out.push_str("\\n"),
+                    '\r' => out.push_str("\\r"),
+                    '\t' => out.push_str("\\t"),
+                    c => match c as u32 {
+                        8 => out.push_str("\\b"),
+                        12 => out.push_str("\\f"),
+                        n if n < 0x20 => out.push_str(&format!("\\u{:04x}", n)),
+                        _ => out.push(c),
+                    },
+                }
+            }
+            if out.chars().count() <= ERR_VALUE_LIMIT {
+                out
+            } else {
+                truncate_text(&out, ERR_VALUE_LIMIT)
+            }
+        }
         Value::Num(n) => js_number(*n),
         Value::Bool(b) => b.to_string(),
         Value::BigInt(b) => b.to_string(),
@@ -337,7 +365,9 @@ impl fmt::Display for Value {
 
 /// Whether a number is an integer as `Number.isInteger` judges it.
 pub fn is_integer(x: f64) -> bool {
-    x.is_finite() && x == x.trunc()
+    // Past 2^53 every finite double is whole; below it the i64 round trip
+    // is exact, and cheaper than trunc.
+    x.is_finite() && (x.abs() >= 9007199254740992.0 || (x as i64) as f64 == x)
 }
 
 #[cfg(feature = "serde")]
@@ -405,10 +435,15 @@ mod tests {
 
     #[test]
     fn numbers_print_as_javascript_does() {
-        let cases: [(f64, &str); 14] = [
+        let cases: [(f64, &str); 19] = [
             (0.0, "0"),
             (1.0, "1"),
             (-1.0, "-1"),
+            (-1.5, "-1.5"),
+            (-1e21, "-1e+21"),
+            (-2.5e-7, "-2.5e-7"),
+            (9007199254740993.0, "9007199254740992"),
+            (4503599627370496.5, "4503599627370496"),
             (1.5, "1.5"),
             (0.1, "0.1"),
             (100.0, "100"),
@@ -450,6 +485,15 @@ mod tests {
     fn strings_render_with_json_escapes_and_no_quotes() {
         assert_eq!(json_text("a\"b\\c\n\u{1}"), "\"a\\\"b\\\\c\\n\\u0001\"");
         assert_eq!(value_to_string(&Value::from("a\"b\\c")), "a\\b\\\\c");
+        // The other escapes, as json_text writes them.
+        assert_eq!(
+            value_to_string(&Value::from("r\rt\tb\u{8}f\u{c}c\u{1}x")),
+            "r\\rt\\tb\\bf\\fc\\u0001x"
+        );
+        assert_eq!(
+            value_to_string(&Value::from("r\rt\tb\u{8}f\u{c}c\u{1}x")),
+            json_text("r\rt\tb\u{8}f\u{c}c\u{1}x").replace('"', "")
+        );
         let long = "x".repeat(200);
         let t = value_to_string(&Value::from(long.as_str()));
         assert_eq!(t.len(), ERR_VALUE_LIMIT);

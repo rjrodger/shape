@@ -132,10 +132,10 @@ impl Schema {
         let mut value = input;
         let mut verr = ValidationError::default();
         ctx.terse = false;
-        ctx.defs = Arc::clone(&self.defs);
         let kept = {
             let mut w = Walk {
                 ctx,
+                defs: &self.defs,
                 is_match: false,
                 path: Vec::new(),
                 paths: true,
@@ -156,13 +156,13 @@ impl Schema {
     pub fn valid(&self, input: &Value) -> bool {
         let mut ctx = Context::new();
         ctx.terse = true;
-        ctx.defs = Arc::clone(&self.defs);
         let mut verr = ValidationError {
             terse: true,
             ..Default::default()
         };
         let mut w = Walk {
             ctx: &mut ctx,
+            defs: &self.defs,
             is_match: true,
             path: Vec::new(),
             paths: !self.pure,
@@ -179,10 +179,10 @@ impl Schema {
     /// The errors of validating the value; empty when it validates.
     pub fn error(&self, input: &Value) -> Vec<FieldError> {
         let mut ctx = Context::new();
-        ctx.defs = Arc::clone(&self.defs);
         let mut verr = ValidationError::default();
         let mut w = Walk {
             ctx: &mut ctx,
+            defs: &self.defs,
             is_match: true,
             path: Vec::new(),
             paths: true,
