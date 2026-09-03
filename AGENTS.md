@@ -157,7 +157,9 @@ then publishes npm with OpenID Connect trusted publishing (no token: npmjs.com
 lists this repository and workflow as the package's trusted publisher), commits
 and tags `ts/vX.Y.Z`, tags `go/vX.Y.Z` for the Go module, and publishes the
 crate to crates.io with trusted publishing too (crates.io lists this
-repository and workflow for the `shape-schema` crate), committing and tagging
+repository and workflow for the `shape-schema` crate; a crate not yet on
+crates.io has no publisher to configure, so that step may fail and the publish
+falls back to the `CARGO_REGISTRY_TOKEN` secret), committing and tagging
 `rs/vX.Y.Z`, pushing all to `main`. A run that failed after `npm publish` is re-run with the same inputs:
 a version already on the registry is not published again, and the tag, push and
 release are each done only if missing. The Makefile `publish` targets are the
