@@ -219,10 +219,12 @@ gives, as the other two harnesses decode theirs. A run records the version
 of its harness and the report folds it into the case hash, so runs from
 before and after the correction are never drawn on one line.
 
-Measured on the reference host (`e39798b4ebbc`, the host of the baseline
-runs) with the harness at a 200 ms warm-up and a 600 ms budget per
+Measured on the host of the second round (`80bb4b189998`, the 2.10 GHz
+Xeon) with the harness at a 200 ms warm-up and a 600 ms budget per
 benchmark, from clean trees: before is `c9fff39`, the corrected harness
-on the code of the second round, and after is `beee5ac`. Median per call.
+on the code of the second round, and after is `beee5ac`. Median per call;
+the runs recorded with the full budget at `a4f13a2` are under
+`bench/results/runs/` and on the report's History table for that host.
 The TypeScript before column is therefore not the second round's after
 column, which measured `any` leaves.
 

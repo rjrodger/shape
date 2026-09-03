@@ -343,8 +343,8 @@ magnitude ahead, as they are of the typed Go and TypeScript validators.
 #### A third pass
 
 The third performance round (2026-09-03) took the Rust port along with
-the other two. Measured on the reference host (`e39798b4ebbc`) with the
-harness at a 200 ms warm-up and a 600 ms budget, and in instructions per
+the other two. Measured on the host of the earlier passes (`80bb4b189998`)
+with the harness at a 200 ms warm-up and a 600 ms budget, and in instructions per
 `valid()` call under callgrind, one binary built against each tree; the
 before column is the tree at `c9fff39`, the after column `9dadba7`.
 
