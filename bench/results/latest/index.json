@@ -1833,6 +1833,36 @@
   "cases": 22
  },
  {
+  "id": "20260903T095654Z-e39798b4ebbc-rs",
+  "at": "2026-09-03T09:56:54.737Z",
+  "lang": "rs",
+  "host": "e39798b4ebbc",
+  "commit": "f82adf1b53aa0e59edbf85f75722133012d98b11",
+  "dirty": false,
+  "ref": "claude/pr-13-handover-comment-or1izw",
+  "runtime": {
+   "rustc": "rustc 1.94.1 (e408947bf 2026-03-25)",
+   "os": "linux",
+   "arch": "x86_64",
+   "profile": "release"
+  },
+  "versions": {
+   "garde": "0.23.0",
+   "jsonschema": "0.52.1",
+   "shape": "0.1.1",
+   "validator": "0.21.0"
+  },
+  "input_hash": "233e564a2bd4",
+  "policy": {
+   "warmup_ms": 300,
+   "time_ms": 2000,
+   "batch_ms": 1,
+   "min_batches": 10,
+   "sample_points": 128
+  },
+  "cases": 22
+ },
+ {
   "id": "20260903T095654Z-f2c2ec319f42-ts",
   "at": "2026-09-03T09:56:54.856Z",
   "lang": "ts",
