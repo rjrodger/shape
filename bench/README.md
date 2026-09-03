@@ -46,6 +46,17 @@ schema; the shape specs and the other libraries' schemas are code in
 the same values (closed objects, the same bounds). Every library's verdict is checked
 against the case before anything is timed.
 
+Until 2026-09-03 the TypeScript specs took `String`, `Number` and
+`Boolean` from the shape module, which exports none of them, so every
+such leaf was `undefined`: an optional `any` node that never takes the
+inline leaf path, and the `invalid` case raised one error rather than two.
+The TypeScript runs recorded before that date measured that slower shape
+and are not comparable with the runs after it; the sanity check now
+refuses a spec with an untyped leaf. The same change gives the `large`
+input the fast-mode object `JSON.parse` produces (fifty keyed stores had
+left it in V8's dictionary mode), as the Go and Rust harnesses decode
+theirs.
+
 | case      | input                                                                       |
 |-----------|-----------------------------------------------------------------------------|
 | `flat`    | five primitive properties                                                    |
