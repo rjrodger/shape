@@ -1,6 +1,6 @@
 # Latest measurements
 
-Generated 2026-09-03T09:25:56.407Z from 63 run(s). Times are median nanoseconds per operation; lower is better.
+Generated 2026-09-03T09:56:55.167Z from 64 run(s). Times are median nanoseconds per operation; lower is better.
 
 ## go on github:windows-x64
 
@@ -79,6 +79,19 @@ Host `1fee8adaf205`: AMD EPYC 9V74 80-Core Processor, 4 cores, win32/x64. Last r
 | bounds | 422 ns | 36 ns | 36 ns | 235 ns | 11.7× |
 | invalid | 2.7 µs | – | – | 157 ns | 17.2× |
 | large | 448 ns | 34 ns | 56 ns | 1.9 µs | 13.2× |
+
+## rs on linux-xeon-sandbox
+
+Host `e39798b4ebbc`: Intel(R) Xeon(R) Processor @ 2.80GHz, 4 cores, linux/x64. Last run 2026-09-03 (cases `233e564a2bd4`).
+
+| case | shape | garde | validator | jsonschema | shape / fastest |
+|---|---:|---:|---:|---:|---:|
+| flat | 115 ns | 10 ns | 23 ns | 186 ns | 11.6× |
+| nested | 187 ns | 40 ns | 126 ns | 393 ns | 4.6× |
+| array | 1.8 µs | 258 ns | 745 ns | 6.1 µs | 6.8× |
+| bounds | 409 ns | 40 ns | 44 ns | 238 ns | 10.3× |
+| invalid | 2.4 µs | – | – | 157 ns | 15.3× |
+| large | 462 ns | 57 ns | 80 ns | 2.2 µs | 8.1× |
 
 ## rs on github:macos-arm64
 
@@ -234,6 +247,12 @@ Shape's median per case on every run, with the 95th percentile after it, newest 
 |---|---|---|---:|---:|---:|---:|---:|---:|
 | 2026-09-02 19:34 | `0b07d91` | 0.1.0 | 219 ns · 232 ns | 422 ns · 450 ns | 5.4 µs · 5.5 µs | 424 ns · 440 ns | 3.0 µs · 6.5 µs | 1.3 µs · 1.4 µs |
 | 2026-09-03 09:25 | `e07fe77` | 0.1.0 | 130 ns · 136 ns | 189 ns · 198 ns | 1.6 µs · 1.7 µs | 422 ns · 435 ns | 2.7 µs · 2.8 µs | 448 ns · 477 ns |
+
+## rs on linux-xeon-sandbox
+
+| run | commit | shape | flat | nested | array | bounds | invalid | large |
+|---|---|---|---:|---:|---:|---:|---:|---:|
+| 2026-09-03 09:56 | `f82adf1` | 0.1.1 | 115 ns · 140 ns | 187 ns · 200 ns | 1.8 µs · 1.9 µs | 409 ns · 459 ns | 2.4 µs · 2.8 µs | 462 ns · 508 ns |
 
 ## rs on github:macos-arm64
 
