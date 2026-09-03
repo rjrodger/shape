@@ -26,7 +26,8 @@ fn round_trip(spec: impl Into<Spec>, want: &str, vals: &[serde_json::Value]) {
     let got = json_of(&s);
     assert_eq!(got, canon(want));
     let parsed: serde_json::Value = serde_json::from_str(&got).unwrap();
-    let b = Schema::new(build(&Value::from(parsed)).unwrap_or_else(|e| panic!("build {}: {}", got, e)));
+    let b =
+        Schema::new(build(&Value::from(parsed)).unwrap_or_else(|e| panic!("build {}: {}", got, e)));
     assert_eq!(json_of(&b), got, "not a fixed point");
     for v in vals {
         agree(&s, &b, v);
@@ -44,7 +45,12 @@ fn agree(s: &Schema, b: &Schema, v: &serde_json::Value) {
             v
         ),
         (Err(se), Err(be)) => assert_eq!(se.to_string(), be.to_string(), "errors differ for {}", v),
-        (so, bo) => panic!("verdicts differ for {}: {:?} {:?}", v, so.is_ok(), bo.is_ok()),
+        (so, bo) => panic!(
+            "verdicts differ for {}: {:?} {:?}",
+            v,
+            so.is_ok(),
+            bo.is_ok()
+        ),
     }
 }
 
@@ -97,7 +103,12 @@ fn scalars() {
             ("d", required(5)),
         ]),
         r#"{"a: String.Optional":"","b: Skip":0,"c: Integer.Optional":0,"d: Required":5}"#,
-        &[v("{}"), v(r#"{"a":""}"#), v(r#"{"c":1.5}"#), v(r#"{"d":1}"#)],
+        &[
+            v("{}"),
+            v(r#"{"a":""}"#),
+            v(r#"{"c":1.5}"#),
+            v(r#"{"d":1}"#),
+        ],
     );
     round_trip(
         obj([
@@ -118,7 +129,13 @@ fn scalars() {
             ("e", len(3, "abc")),
         ]),
         r#"{"a: String.Min(2)":"","b: Max(3)":0,"c: Number.Above(1.5)":0,"d":"Any.Below(-2)","e: Len(3)":"abc"}"#,
-        &[v("{}"), v(r#"{"a":"a"}"#), v(r#"{"b":4}"#), v(r#"{"c":1.5}"#), v(r#"{"e":"abcd"}"#)],
+        &[
+            v("{}"),
+            v(r#"{"a":"a"}"#),
+            v(r#"{"b":4}"#),
+            v(r#"{"c":1.5}"#),
+            v(r#"{"e":"abcd"}"#),
+        ],
     );
     round_trip(
         obj([
@@ -128,7 +145,11 @@ fn scalars() {
             ("d", fault("bad", Token::String)),
         ]),
         r#"{"a: String.Email":"","b: Number.Coerce":0,"c: Number.Describe(\"desc\")":0,"d: String.Fault(\"bad\")":""}"#,
-        &[v(r#"{"a":"a@b.co","b":"1"}"#), v(r#"{"a":"nope"}"#), v(r#"{"d":1}"#)],
+        &[
+            v(r#"{"a":"a@b.co","b":"1"}"#),
+            v(r#"{"a":"nope"}"#),
+            v(r#"{"d":1}"#),
+        ],
     );
     // Order is kept: Coerce goes ahead of the bound it converts for.
     round_trip(
@@ -146,15 +167,48 @@ fn scalars() {
 #[test]
 fn value_form() {
     round_trip(arr([skip(0)]), r#"["Skip(0)"]"#, &[v("[1]"), v(r#"["x"]"#)]);
-    round_trip(arr([min(2, 0)]), r#"["Optional(0).Min(2)"]"#, &[v("[3]"), v("[1]")]);
-    round_trip(arr([required(5)]), r#"["Required(5)"]"#, &[v("[5]"), v("[]")]);
-    round_trip(arr([optional(Token::String)]), r#"["String.Optional"]"#, &[v(r#"[""]"#), v("[1]")]);
-    round_trip(arr([optional(Token::Integer)]), r#"["Integer.Optional"]"#, &[v("[1]"), v("[1.5]")]);
-    round_trip(arr([Spec::from("x")]), r#"["\"x\""]"#, &[v(r#"["y"]"#), v("[1]")]);
-    round_trip(arr([Spec::from("")]), r#"["\"\""]"#, &[v(r#"[""]"#), v("[1]")]);
-    round_trip(arr([empty("x")]), r#"["Optional(\"x\").Empty"]"#, &[v(r#"[""]"#), v("[1]")]);
     round_trip(
-        arr([exact([Value::from(1), Value::from("a"), Value::Null, Value::from(true)])]),
+        arr([min(2, 0)]),
+        r#"["Optional(0).Min(2)"]"#,
+        &[v("[3]"), v("[1]")],
+    );
+    round_trip(
+        arr([required(5)]),
+        r#"["Required(5)"]"#,
+        &[v("[5]"), v("[]")],
+    );
+    round_trip(
+        arr([optional(Token::String)]),
+        r#"["String.Optional"]"#,
+        &[v(r#"[""]"#), v("[1]")],
+    );
+    round_trip(
+        arr([optional(Token::Integer)]),
+        r#"["Integer.Optional"]"#,
+        &[v("[1]"), v("[1.5]")],
+    );
+    round_trip(
+        arr([Spec::from("x")]),
+        r#"["\"x\""]"#,
+        &[v(r#"["y"]"#), v("[1]")],
+    );
+    round_trip(
+        arr([Spec::from("")]),
+        r#"["\"\""]"#,
+        &[v(r#"[""]"#), v("[1]")],
+    );
+    round_trip(
+        arr([empty("x")]),
+        r#"["Optional(\"x\").Empty"]"#,
+        &[v(r#"[""]"#), v("[1]")],
+    );
+    round_trip(
+        arr([exact([
+            Value::from(1),
+            Value::from("a"),
+            Value::Null,
+            Value::from(true),
+        ])]),
         r#"["Any.Exact(1,\"a\",null,true)"]"#,
         &[v(r#"["a"]"#), v("[2]")],
     );
@@ -221,7 +275,11 @@ fn objects() {
         &[v(r#"{"a":"x","z":1}"#)],
     );
     round_trip(obj::<&str, Spec>([]), "{}", &[v(r#"{"z":1}"#)]);
-    round_trip(closed(obj::<&str, Spec>([])), r#"{"$$":"Closed"}"#, &[v("{}"), v(r#"{"z":1}"#)]);
+    round_trip(
+        closed(obj::<&str, Spec>([])),
+        r#"{"$$":"Closed"}"#,
+        &[v("{}"), v(r#"{"z":1}"#)],
+    );
 }
 
 #[test]
@@ -250,7 +308,10 @@ fn arrays() {
     );
     round_trip(
         obj([
-            ("a", rest(Token::Number, arr([Token::String, Token::Number]))),
+            (
+                "a",
+                rest(Token::Number, arr([Token::String, Token::Number])),
+            ),
             ("b", rest(Token::Number, closed(arr([Token::String])))),
             ("c", rest(Token::Number, arr::<Spec>([]))),
         ]),
@@ -270,7 +331,12 @@ fn arrays() {
             ("d", min(1, closed(arr([Token::String])))),
         ]),
         r#"{"a: Min(2)":["String"],"b: Required":["Number"],"c: Skip":["Number"],"d":{"$$":"Min(1,Closed($$0))","$$0":["String"]}}"#,
-        &[v(r#"{"a":["x","y"],"b":[],"d":["x"]}"#), v(r#"{"a":["x"]}"#), v("{}"), v(r#"{"d":[]}"#)],
+        &[
+            v(r#"{"a":["x","y"],"b":[],"d":["x"]}"#),
+            v(r#"{"a":["x"]}"#),
+            v("{}"),
+            v(r#"{"d":[]}"#),
+        ],
     );
     // A rest replaces a plain element shape, so nothing of the String is
     // left to write.
@@ -294,12 +360,18 @@ fn lists() {
         &[v(r#"{"a":1}"#), v(r#"{"a":true}"#)],
     );
     round_trip(
-        obj([("a", some([obj([("x", 1)]), Spec::Arr(vec![Spec::from(Token::String)])]))]),
+        obj([(
+            "a",
+            some([obj([("x", 1)]), Spec::Arr(vec![Spec::from(Token::String)])]),
+        )]),
         r#"{"a":{"$$":"Some($$0,$$1)","$$0":{"x":1},"$$1":["String"]}}"#,
         &[v(r#"{"a":{"x":2}}"#), v(r#"{"a":["y"]}"#)],
     );
     round_trip(
-        obj([("a", all([Spec::from(Token::Number), Spec::from(min(1, any()))]))]),
+        obj([(
+            "a",
+            all([Spec::from(Token::Number), Spec::from(min(1, any()))]),
+        )]),
         r#"{"a":"All(Number,Any.Min(1))"}"#,
         &[v(r#"{"a":1}"#), v(r#"{"a":0}"#)],
     );
@@ -314,7 +386,10 @@ fn lists() {
     round_trip(
         obj([
             ("a", one([skip(0)])),
-            ("b", one([Spec::from(min(2, 0).ignore()), Spec::from(Token::String)])),
+            (
+                "b",
+                one([Spec::from(min(2, 0).ignore()), Spec::from(Token::String)]),
+            ),
         ]),
         r#"{"a":"One(Skip(0))","b":"One(Skip(0).Min(2).Ignore,String)"}"#,
         &[v("{}"), v(r#"{"a":1}"#), v(r#"{"b":1}"#), v(r#"{"b":"x"}"#)],
@@ -332,12 +407,19 @@ fn lists() {
                 "k",
                 [
                     ("x", obj([("a", Token::Number)])),
-                    ("y", obj([("b", Spec::from(Token::String)), ("k", Spec::from("y"))])),
+                    (
+                        "y",
+                        obj([("b", Spec::from(Token::String)), ("k", Spec::from("y"))]),
+                    ),
                 ],
             ),
         )]),
         r#"{"a":{"$$":"Discriminated(\"k\",$$0)","$$0":{"x":{"a: Number":0},"y":{"b: String":""}}}}"#,
-        &[v(r#"{"a":{"k":"x","a":1}}"#), v(r#"{"a":{"k":"y","b":1}}"#), v(r#"{"a":{"k":"z"}}"#)],
+        &[
+            v(r#"{"a":{"k":"x","a":1}}"#),
+            v(r#"{"a":{"k":"y","b":1}}"#),
+            v(r#"{"a":{"k":"z"}}"#),
+        ],
     );
     // A branch that is not an object has no tag property to drop.
     round_trip(
@@ -427,7 +509,10 @@ fn checks() {
             ("d", rename("z", Token::Number)),
         ]),
         r#"{"a: String.Define(\"d\")":"","b":"Any.Refer(\"d\")","c: String.Rename(\"z\")":"","d: Number.Rename(\"z\")":0}"#,
-        &[v(r#"{"a":"x","b":"y","c":"q","d":1}"#), v(r#"{"a":"x","b":1}"#)],
+        &[
+            v(r#"{"a":"x","b":"y","c":"q","d":1}"#),
+            v(r#"{"a":"x","b":1}"#),
+        ],
     );
     round_trip(
         obj([
@@ -470,8 +555,14 @@ fn names() {
 #[test]
 fn refusals() {
     let re = |s: &str| regex::Regex::new(s).unwrap();
-    cannot(obj([("a", check(|_s, _u| true, any()))]), "cannot express a check function");
-    cannot(obj([("a", any().check(|_s, _u| true))]), "cannot express a check function");
+    cannot(
+        obj([("a", check(|_s, _u| true, any()))]),
+        "cannot express a check function",
+    );
+    cannot(
+        obj([("a", any().check(|_s, _u| true))]),
+        "cannot express a check function",
+    );
     cannot(
         obj([("a", any().before(|_s, _u| true))]),
         "cannot express a custom check Before",
@@ -495,21 +586,42 @@ fn refusals() {
     cannot(
         obj([(
             "a",
-            rename_with("b", RenameOptions { keep: true, ..Default::default() }, Token::Number),
+            rename_with(
+                "b",
+                RenameOptions {
+                    keep: true,
+                    ..Default::default()
+                },
+                Token::Number,
+            ),
         )]),
         "cannot express the options of Rename",
     );
     cannot(
         obj([(
             "a",
-            refer_with("d", ReferOptions { fill: true, strict: false }, any()),
+            refer_with(
+                "d",
+                ReferOptions {
+                    fill: true,
+                    strict: false,
+                },
+                any(),
+            ),
         )]),
         "cannot express the options of Refer",
     );
     cannot(
         obj([(
             "a",
-            refer_with("d", ReferOptions { fill: false, strict: true }, any()),
+            refer_with(
+                "d",
+                ReferOptions {
+                    fill: false,
+                    strict: true,
+                },
+                any(),
+            ),
         )]),
         "cannot express the options of Refer",
     );
@@ -526,14 +638,26 @@ fn refusals() {
         "cannot express an object default",
     );
     cannot(
-        obj([("a", default(Value::from(vec![Value::from(1)]), child(Token::Number, any())))]),
+        obj([(
+            "a",
+            default(
+                Value::from(vec![Value::from(1)]),
+                child(Token::Number, any()),
+            ),
+        )]),
         "cannot express an object default",
     );
     cannot(
-        obj([("a", default(Value::from(vec![Value::from(1)]), arr([Token::Number])))]),
+        obj([(
+            "a",
+            default(Value::from(vec![Value::from(1)]), arr([Token::Number])),
+        )]),
         "cannot express an array default",
     );
-    cannot(obj([("a", Spec::Value(Value::Date(0)))]), "cannot express a date default");
+    cannot(
+        obj([("a", Spec::Value(Value::Date(0)))]),
+        "cannot express a date default",
+    );
     cannot(
         obj([("a", Spec::Value(Value::Func(1)))]),
         "cannot express a function default",
@@ -585,16 +709,36 @@ fn refusals() {
 
 #[test]
 fn reader() {
-    let b = |src: &str| Schema::new(build(&Value::from(v(src))).unwrap_or_else(|e| panic!("{}: {}", src, e)));
-    let ok = |s: &Schema, input: &str| s.validate(Value::from(v(input))).unwrap_or_else(|e| panic!("{}", e));
+    let b = |src: &str| {
+        Schema::new(build(&Value::from(v(src))).unwrap_or_else(|e| panic!("{}: {}", src, e)))
+    };
+    let ok = |s: &Schema, input: &str| {
+        s.validate(Value::from(v(input)))
+            .unwrap_or_else(|e| panic!("{}", e))
+    };
     let bad = |s: &Schema, input: &str, want: &str| {
-        let e = s.validate(Value::from(v(input))).expect_err("expected an error");
-        assert!(e.to_string().contains(want), "want {:?}, got {:?}", want, e.to_string());
+        let e = s
+            .validate(Value::from(v(input)))
+            .expect_err("expected an error");
+        assert!(
+            e.to_string().contains(want),
+            "want {:?}, got {:?}",
+            want,
+            e.to_string()
+        );
     };
     // The key form keeps the kind the chain names; the example is the
     // default alone.
-    bad(&b(r#"{"a: String":""}"#), r#"{"a":""}"#, "empty string is not allowed");
-    bad(&b(r#"{"a: Integer.Min(2)":0}"#), r#"{"a":2.5}"#, "not of type integer");
+    bad(
+        &b(r#"{"a: String":""}"#),
+        r#"{"a":""}"#,
+        "empty string is not allowed",
+    );
+    bad(
+        &b(r#"{"a: Integer.Min(2)":0}"#),
+        r#"{"a":2.5}"#,
+        "not of type integer",
+    );
     assert_eq!(
         serde_json::Value::from(ok(&b(r#"{"a: Number.Optional":5}"#), "{}")),
         v(r#"{"a":5}"#)
@@ -607,20 +751,40 @@ fn reader() {
         serde_json::Value::from(ok(&b(r#"{"a: String.Skip":""}"#), "{}")),
         v("{}")
     );
-    bad(&b(r#"{"a: String.Skip":""}"#), r#"{"a":""}"#, "empty string is not allowed");
+    bad(
+        &b(r#"{"a: String.Skip":""}"#),
+        r#"{"a":""}"#,
+        "empty string is not allowed",
+    );
     ok(&b(r#"{"a: Skip":""}"#), r#"{"a":""}"#);
     // The kind of a chain that names none is the example's.
-    bad(&b(r#"{"a: Min(2)":0}"#), r#"{"a":"x"}"#, "not of type number");
+    bad(
+        &b(r#"{"a: Min(2)":0}"#),
+        r#"{"a":"x"}"#,
+        "not of type number",
+    );
     ok(&b(r#"{"a: Child(Number)":[]}"#), r#"{"a":[1]}"#);
     ok(&b(r#"{"a: Object":{"b":"String"}}"#), r#"{"a":{"b":"x"}}"#);
-    bad(&b(r#"{"a: Object":{"b":"String"}}"#), r#"{"a":{"b":"x","z":1}}"#, r#""z" is not allowed"#);
+    bad(
+        &b(r#"{"a: Object":{"b":"String"}}"#),
+        r#"{"a":{"b":"x","z":1}}"#,
+        r#""z" is not allowed"#,
+    );
     ok(&b(r#"{"a: Array":["String"]}"#), r#"{"a":["x"]}"#);
     // A fraction is one token.
     ok(&Schema::new(expr("Min(1.5)").unwrap()), "1.6");
-    bad(&Schema::new(expr("Min(1.5)").unwrap()), "1.4", "minimum of 1.5");
+    bad(
+        &Schema::new(expr("Min(1.5)").unwrap()),
+        "1.4",
+        "minimum of 1.5",
+    );
     ok(&Schema::new(expr("Max(-2.5e1)").unwrap()), "-30");
     assert_eq!(
-        serde_json::Value::from(Schema::new(expr("Optional(1.5)").unwrap()).validate(Value::Undefined).unwrap()),
+        serde_json::Value::from(
+            Schema::new(expr("Optional(1.5)").unwrap())
+                .validate(Value::Undefined)
+                .unwrap()
+        ),
         v("1.5")
     );
     // Len holds to whole numbers, as it does in every language.
@@ -633,8 +797,15 @@ fn reader() {
         )),
         v(r#"{"a":1,"z":1}"#)
     );
-    ok(&b(r#"{"$$":"Min(2,$$0).Skip","$$0":["String"]}"#), r#"["a","b"]"#);
-    bad(&b(r#"{"$$":"Min(2,$$0).Skip","$$0":["String"]}"#), r#"["a"]"#, "minimum length of 2");
+    ok(
+        &b(r#"{"$$":"Min(2,$$0).Skip","$$0":["String"]}"#),
+        r#"["a","b"]"#,
+    );
+    bad(
+        &b(r#"{"$$":"Min(2,$$0).Skip","$$0":["String"]}"#),
+        r#"["a"]"#,
+        "minimum length of 2",
+    );
     assert_eq!(
         json_of(&b(r#"{"$$":"Min(2,$$0).Skip","$$0":["String"]}"#)),
         r#"{"$$":"Skip($$0).Min(2)","$$0":["String"]}"#
@@ -655,7 +826,11 @@ fn reader() {
         r#"{"a":["("]}"#,
         r#"{"a: Open":{"b":"("}}"#,
     ] {
-        assert!(build(&Value::from(v(src))).is_err(), "{} should not build", src);
+        assert!(
+            build(&Value::from(v(src))).is_err(),
+            "{} should not build",
+            src
+        );
     }
 }
 
@@ -709,10 +884,12 @@ fn corpus() {
             let text = serde_json::Value::from(json).to_string();
             let parsed: serde_json::Value = serde_json::from_str(&text).unwrap();
             let b = Schema::new(
-                build(&Value::from(parsed)).unwrap_or_else(|e| panic!("{}: build {}: {}", name, text, e)),
+                build(&Value::from(parsed))
+                    .unwrap_or_else(|e| panic!("{}: build {}: {}", name, text, e)),
             );
-            let back = serde_json::Value::from(b.json().unwrap_or_else(|e| panic!("{}: {}", name, e)))
-                .to_string();
+            let back =
+                serde_json::Value::from(b.json().unwrap_or_else(|e| panic!("{}: {}", name, e)))
+                    .to_string();
             assert_eq!(back, text, "{}: not a fixed point", name);
             agree(&s, &b, &input);
             count += 1;

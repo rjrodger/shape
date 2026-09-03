@@ -204,7 +204,9 @@ fn required_calls(n: &Node, head_required: bool) -> Vec<Call> {
 /// first.
 fn flag_calls(n: &Node, literal_head: bool) -> R<Vec<Call>> {
     let mut calls = Vec::new();
-    if n.kind == Kind::String && n.empty && !(literal_head && n.default == Value::Str(String::new()))
+    if n.kind == Kind::String
+        && n.empty
+        && !(literal_head && n.default == Value::Str(String::new()))
     {
         calls.push(call("Empty"));
     }
@@ -437,7 +439,8 @@ fn key_form(n: &Node) -> R<Option<(String, Value)>> {
 /// Whether a name has to be quoted in a key expression.
 fn needs_quote(k: &str) -> bool {
     k.is_empty()
-        || k.chars().any(|c| c.is_whitespace() || c == '"' || c == '\\')
+        || k.chars()
+            .any(|c| c.is_whitespace() || c == '"' || c == '\\')
         || crate::expr::split_key_expr(k).is_some()
 }
 
@@ -724,11 +727,13 @@ pub fn node_json(n: &Node) -> R<Value> {
             let mut calls = flag_calls(n, true)?;
             calls.extend(validator_calls(n, None)?);
             calls.extend(tail_calls(n));
-            Ok(Value::Str(if calls.is_empty() && !n.required && !n.skippable {
-                "NaN".to_string()
-            } else {
-                chain_text(&literal_head(n, "NaN"), &calls, &mut Vec::new())
-            }))
+            Ok(Value::Str(
+                if calls.is_empty() && !n.required && !n.skippable {
+                    "NaN".to_string()
+                } else {
+                    chain_text(&literal_head(n, "NaN"), &calls, &mut Vec::new())
+                },
+            ))
         }
 
         // The rest are a call that names the kind, then the chain.
@@ -774,7 +779,12 @@ pub fn node_json(n: &Node) -> R<Value> {
                     if n.has_default && !n.default.is_undefined() {
                         return cannot(format!("a {} default", n.kind));
                     }
-                    if n.kind == Kind::Date { "Date" } else { "Function" }.to_string()
+                    if n.kind == Kind::Date {
+                        "Date"
+                    } else {
+                        "Function"
+                    }
+                    .to_string()
                 }
                 Kind::Check => {
                     // Check is the first call, and says required.
