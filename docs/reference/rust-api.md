@@ -55,6 +55,7 @@ let s = Schema::new(shape!({
 | `validate_into::<T>(impl Into<Value>)` | `Result<T, IntoError>` | produce, then deserialize into `T` by serde (feature `serde`, on by default) |
 | `valid(&Value)` / `matches(&Value)` | `bool` | a verdict, nothing produced or rendered |
 | `error(&Value)` | `Vec<FieldError>` | every issue, empty when valid |
+| `json()` | `Result<Value, JsonError>` | the declarative JSON, read back by `build` |
 | `json_schema()` | `Value` | the JSON Schema export (draft 2020-12) |
 | `standard()` | `StandardSchema` | the Standard Schema V1 surface: `version` 1, `vendor` `"shape"`, and `validate(Value)`, a `StandardResult` of the value or the issues, never failing |
 | `node()` | `&Node` | the compiled tree |

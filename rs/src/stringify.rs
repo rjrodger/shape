@@ -206,7 +206,7 @@ mod tests {
             stringify_node(&all([Spec::from(Token::Number)]), false),
             "All(Number)"
         );
-        assert_eq!(stringify_node(&buildize(Token::Array), false), "[Any]");
+        assert_eq!(stringify_node(&buildize(Token::Array), false), "[]");
         assert_eq!(
             stringify_node(
                 &buildize(arr([Spec::from(1), Spec::from(Token::String)])),

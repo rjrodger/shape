@@ -23,6 +23,7 @@ pub mod error;
 pub mod expr;
 pub mod format;
 pub mod isolate;
+pub mod json;
 pub mod jsonschema;
 pub mod jsonschema_import;
 mod macros;
@@ -43,6 +44,8 @@ pub use discriminated::{discriminated, Disc};
 pub use error::{FieldError, ValidationError};
 pub use expr::{expr, expr_apply, ExprError};
 pub use isolate::{Inner, TransformFn};
+pub use expr::build;
+pub use json::{node_json, JsonError};
 pub use jsonschema::json_schema;
 pub use jsonschema_import::{from_json_schema, JsonSchemaError};
 pub use node::{Kind, ListMode, Node, Token, Validator, ValidatorFn};
@@ -97,6 +100,12 @@ impl Schema {
     }
 
     /// The schema as a JSON Schema document (draft 2020-12).
+    /// The declarative JSON of the shape, which [`crate::expr::build`]
+    /// reads back.
+    pub fn json(&self) -> Result<Value, crate::json::JsonError> {
+        crate::json::node_json(self.node())
+    }
+
     pub fn json_schema(&self) -> Value {
         json_schema(&self.root)
     }

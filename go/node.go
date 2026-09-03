@@ -19,6 +19,10 @@ type node struct {
 
 	required    bool
 	requiredSet bool
+	// kindSet marks a kind the spec named (a type token, Type, Any), as
+	// against one a value implied: a key expression's example keeps the
+	// named kind and supplies the default alone.
+	kindSet bool
 	open        bool
 	openSet    bool
 	skippable   bool // p in TS: optional and no default-injection
@@ -73,9 +77,10 @@ type node struct {
 	objKeysAny []any
 
 	// Define / Refer name (also stored on validator closures via befores).
-	defineName string
-	referName  string
-	referFill  bool
+	defineName  string
+	referName   string
+	referFill   bool
+	referStrict bool
 
 	// Rename info.
 	renameTo   string

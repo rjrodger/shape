@@ -54,7 +54,8 @@ let name = shape::buildize(Token::String).min(3).max(40);
 
 `validate` produces the value with defaults injected; `valid` gives a
 verdict without producing; `error` lists every issue; `validate_into::<T>`
-deserializes the produced value with serde; `json_schema` exports a JSON
+deserializes the produced value with serde; `json` writes the shape as
+declarative JSON and `build` reads it back; `json_schema` exports a JSON
 Schema and `from_json_schema` imports one; `Schema::parse` reads the string
 form (`"String.Min(2)"`).
 

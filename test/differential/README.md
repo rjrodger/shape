@@ -6,9 +6,11 @@ validated nothing and a `Rest()` that validated nothing, because the only rows
 for those builders used valid inputs.
 
 This harness is the wide net. It generates thousands of `(spec, input)` pairs,
-runs every one through **all three** implementations, and diffs four things:
+runs every one through **all three** implementations, and diffs six things:
 
 - the JSON Schema export of the spec,
+- the declarative JSON export, and the export of the shape that JSON reads
+  back as,
 - the verdict (pass vs fail),
 - the produced value,
 - the **exact** error message — not a substring.

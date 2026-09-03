@@ -176,7 +176,7 @@ absent; it is not put to its branches.
 | `Open(spec?)` | Allow unknown object properties. (An empty `{}` is already open.) |
 | `Closed(spec?)` | Forbid unknown properties; makes a single-shape array a fixed tuple-of-one. |
 | `Child(child, spec?)` | Default shape for every unknown object value (or array element). |
-| `Rest(child, spec?)` | Tail shape for array elements past the fixed tuple positions: `Rest(Number, [String, Boolean])`. A single-shape array is an element shape, not a tuple, so a one-element prefix is `Rest(Number, Closed([String]))`; bare `Rest(Number)` is the same as `[Number]`. |
+| `Rest(child, spec?)` | Tail shape for array elements past the fixed tuple positions: `Rest(Number, [String, Boolean])`. A single-shape array is an element shape, not a tuple, so a one-element prefix is `Rest(Number, Closed([String]))`, and `Rest(Number, [String])` is an array of numbers — the rest replaces a plain element shape. Bare `Rest(Number)` is the same as `[Number]`. |
 
 ## Object algebra
 

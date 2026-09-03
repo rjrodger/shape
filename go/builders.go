@@ -327,14 +327,20 @@ func Type(kind any, spec ...any) *Node {
 		return nb
 	}
 
+	// Any keeps the value it is given as its default, as TS Any(0) does;
+	// the other tokens bring their own.
+	keep := tn.kind == KindAny && nb.n.hasDefault && nb.n.defaultValue != nil
 	nb.n.kind = tn.kind
+	nb.n.kindSet = true
 	nb.n.required = tn.required
 	nb.n.requiredSet = tn.requiredSet
 	nb.n.skippable = tn.skippable
-	nb.n.hasDefault = tn.hasDefault
-	nb.n.defaultValue = cloneAny(tn.defaultValue)
-	nb.n.hasLiteral = tn.hasLiteral
-	nb.n.literal = tn.literal
+	if !keep {
+		nb.n.hasDefault = tn.hasDefault
+		nb.n.defaultValue = cloneAny(tn.defaultValue)
+		nb.n.hasLiteral = tn.hasLiteral
+		nb.n.literal = tn.literal
+	}
 
 	return nb
 }
@@ -954,6 +960,10 @@ func Rest(child any, spec ...any) *Node {
 	if nb.n.kind != KindArray {
 		nb.n.kind = KindArray
 	}
+	// The rest replaces a plain element shape, as it does in TS, where Rest
+	// sets the one child an array has: Rest(Number, [String]) is an array of
+	// numbers. Fixed positions are a tuple, and are kept.
+	nb.n.arrChild = nil
 	nb.n.arrRest = cn
 	return nb
 }
@@ -1019,6 +1029,7 @@ func (n *Node) Rest(child any) *Node {
 	if n.n.kind != KindArray {
 		n.n.kind = KindArray
 	}
+	n.n.arrChild = nil
 	n.n.arrRest = cn
 	return n
 }
@@ -1038,6 +1049,7 @@ func Define(name string, spec ...any) *Node {
 	captured := nb.n
 	v := validator{
 		name: "Define",
+		args: []any{name},
 		fn: func(val any, update *Update, state *State) bool {
 			if state.Ctx == nil {
 				state.Ctx = newContext(nil)
@@ -1083,8 +1095,10 @@ func ReferWith(name string, opts ReferOptions, spec ...any) *Node {
 	}
 	nb.n.referName = name
 	nb.n.referFill = opts.Fill
+	nb.n.referStrict = opts.Strict
 	v := validator{
 		name: "Refer",
+		args: []any{name},
 		fn: func(val any, update *Update, state *State) bool {
 			if state.Ctx == nil {
 				return true
@@ -1198,6 +1212,7 @@ func Key(args ...any) *Node {
 	}
 	v := validator{
 		name: "Key",
+		args: append([]any{}, args...),
 		fn: func(val any, update *Update, state *State) bool {
 			// TS state.path is [nil, k1, ..., kn]; replicate the leading nil root so
 			// the index/slice math matches exactly.

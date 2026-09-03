@@ -35,8 +35,10 @@ nothing and a `Rest()` that validated nothing passed it.
 
 [`test/differential/`](../../test/differential/README.md) is the wider net. It
 generates thousands of `(spec, input)` pairs, runs every one through all
-three implementations, and diffs the JSON Schema export, verdict, produced
-value and exact error text, each port against the canonical build:
+three implementations, and diffs the JSON Schema export, the declarative JSON
+export, the export of the shape that JSON reads back as, the verdict, the
+produced value and the exact error text, each port against the canonical
+build:
 
 ```sh
 make diff        # sampled report, both ports
@@ -59,6 +61,11 @@ row so the committed gate keeps it closed.
   (`Catch`, `Transform`, `Ignore`), discriminated unions and the object
   algebra (`Pick`, `Omit`, `Partial`, `Extend`).
 - The JSON Schema export: the same shape renders the same document.
+- The declarative JSON export: the same shape writes the same JSON, that JSON
+  reads back as the same shape in every language, and each language reads what
+  the others wrote. See [Serialize a shape](../how-to/serialize-a-shape.md);
+  the differential harness compares both the export and the export of what it
+  reads back, on every case.
 
 ## Intentional divergences
 

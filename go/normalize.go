@@ -113,6 +113,7 @@ func typeTokenNode(k Kind) *node {
 		// an unrequired node, so { a: Any } accepts an object without "a".
 		required:     k != KindAny,
 		requiredSet:  true,
+		kindSet:      true,
 		hasDefault:   true,
 		defaultValue: zeroForKind(k),
 	}
@@ -121,9 +122,10 @@ func typeTokenNode(k Kind) *node {
 		n.open = true
 		n.openSet = true
 		n.objRest = &node{kind: KindAny}
-	case KindArray:
-		n.arrChild = &node{kind: KindAny}
 	}
+	// The Array token has no element shape, as it has none in TS: an array
+	// with no shape for its elements accepts them all, which is what the
+	// token says.
 	return n
 }
 
@@ -309,6 +311,30 @@ func buildExprWithDefault(src string, dflt any) (*Node, error) {
 	ex, err := normalize(dflt)
 	if err != nil {
 		return nil, err
+	}
+
+	// A chain that names its kind (String, Integer.Min(2), Optional(Number),
+	// Any) keeps it: the example is the value and the default, nothing more.
+	// Without this the example's own kind won ("a: Integer.Min(2)" with 0
+	// read as a number) and so did what its value implied ("a: String" with
+	// "" allowed the empty string). (ts/src/shape.ts keyExprNode.)
+	if bareErr == nil && bare.n.kindSet {
+		b := bare.n
+		b.hasDefault, b.defaultValue = ex.hasDefault, ex.defaultValue
+		b.hasLiteral, b.literal = ex.hasLiteral, ex.literal
+		if b.kind == KindObject && ex.kind == KindObject {
+			b.objChildren, b.objKeys = ex.objChildren, ex.objKeys
+			if b.objRest == nil {
+				b.objRest = ex.objRest
+			}
+		}
+		if b.kind == KindArray && ex.kind == KindArray {
+			b.arrChildren = ex.arrChildren
+			if b.arrChild == nil && b.arrRest == nil {
+				b.arrChild = ex.arrChild
+			}
+		}
+		return bare, nil
 	}
 
 	// The example value is appended as the innermost builder call's final

@@ -92,6 +92,15 @@ const files = {
     ['array-rest-null-element', { $expr: 'Rest(Number)' }, [1, null]],
     ['array-rest-string', { $expr: 'Rest(String)' }, ['a', 'b']],
     ['array-rest-string-bad', { $expr: 'Rest(String)' }, ['a', 2]],
+    // A rest replaces a plain element shape: Rest(Number, [String]) is an
+    // array of numbers, and the String is gone. Fixed positions are a tuple,
+    // and are kept.
+    ['rest-replaces-element-shape', CALL('Rest', N, [T]), [1, 2]],
+    ['rest-replaces-element-shape-bad', CALL('Rest', N, [T]), ['x']],
+    ['rest-keeps-tuple-positions', CALL('Rest', N, [T, N]), ['a', 1, 2]],
+    ['rest-keeps-tuple-positions-bad', CALL('Rest', N, [T, N]), [1, 1]],
+    ['rest-over-closed-one-tuple', CALL('Rest', N, { $closed: [T] }), ['a', 1]],
+    ['rest-over-closed-one-tuple-bad', CALL('Rest', N, { $closed: [T] }), [1]],
     ['array-ignore-drops-bad', [{ $expr: 'Ignore(Number)' }], [1, 'x']],
     ['array-ignore-keeps-good', [{ $expr: 'Ignore(Number)' }], [1, 2]],
     ['array-ignore-bound', [{ $expr: 'Ignore(Min(2,Number))' }], [1, 3]],

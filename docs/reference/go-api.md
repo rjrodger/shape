@@ -23,6 +23,7 @@ func (s *Schema) Error(input any) []FieldError          // nil when valid
 func (s *Schema) Spec() any                             // JSON-friendly
 func (s *Schema) Node() *node                           // introspection
 func (s *Schema) String() string                        // debug render
+func (s *Schema) JSON() (any, error)                    // declarative JSON, read back by Build
 func (s *Schema) JSONSchema() map[string]any            // JSON Schema, draft 2020-12
 func (s *Schema) ValidateInto(input any, out any) error // fill a struct with the result
 func (s *Schema) Standard() StandardSchema              // Standard Schema V1-style interface

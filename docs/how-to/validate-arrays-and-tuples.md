@@ -57,7 +57,10 @@ shape(['a', 1, 2, 3])   // OK: 'a', 1, then any number of numbers
 shape(['a', 1, 'x'])    // throws: index 2 is not of type number
 ```
 
-Without a tuple, `Rest(Number)` is a tail only — the same as `[Number]`.
+Without a tuple, `Rest(Number)` is a tail only — the same as `[Number]`. The
+rest replaces a plain element shape, so `Rest(Number, [String])` is an array
+of numbers; to keep the `String` as a first position, close it first:
+`Rest(Number, Closed([String]))`.
 
 **Go**
 

@@ -103,6 +103,8 @@ pub fn decode_spec(v: &serde_json::Value) -> Result<Spec, Unsupported> {
                                     shape::omit(names, spec)
                                 }))
                             }
+                            "Rest" => Ok(Spec::from(shape::rest(decode_spec(&arr[1])?, spec))),
+                            "Child" => Ok(Spec::from(shape::child(decode_spec(&arr[1])?, spec))),
                             "Partial" => Ok(Spec::from(shape::partial(decode_spec(&arr[1])?))),
                             "Extend" => Ok(Spec::from(shape::extend(decode_spec(&arr[1])?, spec))),
                             other => Err(Unsupported(format!("$call {}", other))),

@@ -89,7 +89,7 @@ func TestFuncAndTypeForms(t *testing.T) {
 func TestArguRestAndSkip(t *testing.T) {
 	a := MakeArgu("z")
 
-	// Rest with no trailing args → single undefined slot (TS parity).
+	// Rest with no trailing args → an empty slot (TS parity).
 	got, err := a.Validate([]any{1.0}, "sig", map[string]any{
 		"a": Number,
 		"b": Rest(Number),
@@ -120,13 +120,18 @@ func TestExprBuildEdges(t *testing.T) {
 	// Build with nested array + $$ passthrough + non-string leaves.
 	bs, err := Build(map[string]any{
 		"a":  []any{"Number", map[string]any{"deep": "Min(1,String)"}},
-		"$$": "keep-me",
+		"$$": "Open",
 		"n":  true,
 	})
 	if err != nil {
 		t.Fatalf("Build nested: %v", err)
 	}
 	_ = bs
+
+	// The mark is an expression, so one that does not parse is an error.
+	if _, err := Build(map[string]any{"$$": "keep-me"}); err == nil {
+		t.Fatal("Build: a mark that does not parse should error")
+	}
 
 	// Expr error branches.
 	for _, bad := range []string{"Min(1", "Min 1)", "(", ")", "Min(1,)junk", ".Foo"} {

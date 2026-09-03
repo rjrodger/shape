@@ -165,14 +165,16 @@ pub(crate) fn type_token_node(kind: Kind) -> Node {
     let mut n = Node {
         required: kind != Kind::Any,
         required_set: true,
+        kind_set: true,
         has_default: true,
         default: Node::zero_for(kind),
         ..Node::of(kind)
     };
-    match kind {
-        Kind::Object => n.obj_rest = Some(Box::new(Node::of(Kind::Any))),
-        Kind::Array => n.arr_child = Some(Box::new(Node::of(Kind::Any))),
-        _ => {}
+    // The Object token is open, as it is in TypeScript. The Array token has
+    // no element shape, as it has none there either: an array with no shape
+    // for its elements accepts them all, which is what the token says.
+    if kind == Kind::Object {
+        n.obj_rest = Some(Box::new(Node::of(Kind::Any)));
     }
     n
 }
@@ -317,8 +319,10 @@ mod tests {
         assert!(!normalize(Spec::from(Token::Any)).required);
         let o = normalize(Spec::from(Token::Object));
         assert!(o.is_open());
+        // The Array token has no element shape: an array that says nothing
+        // about its elements accepts them all.
         let a = normalize(Spec::from(Token::Array));
-        assert!(a.arr_child.is_some());
+        assert!(a.arr_child.is_none() && a.arr_children.is_empty());
         let n: Node = Token::Number.into();
         assert_eq!(n.kind, Kind::Number);
         let r = normalize(Spec::from(Regex::new("^a$").unwrap()));

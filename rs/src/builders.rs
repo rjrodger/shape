@@ -837,6 +837,10 @@ impl Node {
 
     pub fn rest(mut self, child: impl Into<Spec>) -> Node {
         self.kind = Kind::Array;
+        // The rest replaces a plain element shape, as it does in TypeScript,
+        // where Rest sets the one child an array has: Rest(Number, [String])
+        // is an array of numbers. Fixed positions are a tuple, and are kept.
+        self.arr_child = None;
         self.arr_rest = Some(Box::new(buildize(child)));
         self
     }
@@ -866,13 +870,19 @@ impl Node {
             TypeRef::Kind(k) => type_token_node(k),
             TypeRef::Node(n) => *n,
         };
+        // Any keeps the value it is given as its default, as `Any(0)` does
+        // in TypeScript; the other tokens bring their own.
+        let keep = tn.kind == Kind::Any && self.has_default && !self.default.is_undefined();
         self.kind = tn.kind;
+        self.kind_set = true;
         self.required = tn.required;
         self.required_set = tn.required_set;
         self.skippable = tn.skippable;
-        self.has_default = tn.has_default;
-        self.default = tn.default;
-        self.literal = tn.literal;
+        if !keep {
+            self.has_default = tn.has_default;
+            self.default = tn.default;
+            self.literal = tn.literal;
+        }
         self
     }
 
@@ -1071,6 +1081,7 @@ impl Node {
         }
         self.refer_name = Some(name.clone());
         self.refer_fill = opts.fill;
+        self.refer_strict = opts.strict;
         let suffix = format!("Refer({})", json_text(&name));
         self.befores.push(validator(
             "Refer",

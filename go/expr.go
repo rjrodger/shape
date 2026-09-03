@@ -3,6 +3,7 @@ package shape
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"regexp"
 	"strings"
 	"sync"
@@ -41,38 +42,55 @@ func MustExpr(src string) *Node {
 	return n
 }
 
-// Build is the convenience wrapper used by TS to expand JSON-shaped specs.
-// Strings are parsed via Expr; everything else is normalized as-is.
+// Build reads the declarative JSON of a shape, what JSON() writes: every
+// string is an expression (the example of a key expression is a value, so
+// a string there is the string itself), and a "$$" key applies an
+// expression to the object that holds it, with the "$$0", "$$1", ...
+// sidecars beside it as the arguments an expression cannot spell inline.
 func Build(spec any) (*Schema, error) {
-	v, err := buildValue(spec)
+	v, err := buildValue(spec, false)
 	if err != nil {
 		return nil, err
 	}
 	return Shape(v)
 }
 
-func buildValue(spec any) (any, error) {
+// buildValue expands one value; example is true for the value of a key
+// expression, which a string is the literal of.
+func buildValue(spec any, example bool) (any, error) {
 	switch v := spec.(type) {
 	case string:
+		// The empty string is the empty example, as a required string's
+		// example is ("a: String" with "").
+		if example || v == "" {
+			return v, nil
+		}
 		return Expr(v)
 	case map[string]any:
 		out := map[string]any{}
+		mark, hasMark := "", false
 		for k, sv := range v {
-			if k == "$$" {
-				out[k] = sv
-				continue
+			if k == jsonMark {
+				if s, ok := sv.(string); ok {
+					mark, hasMark = s, true
+					continue
+				}
 			}
-			converted, err := buildValue(sv)
+			_, str := sv.(string)
+			converted, err := buildValue(sv, str && isKeyExpr(k))
 			if err != nil {
 				return nil, err
 			}
 			out[k] = converted
 		}
+		if hasMark {
+			return buildMark(mark, out)
+		}
 		return out, nil
 	case []any:
 		out := make([]any, len(v))
 		for i, sv := range v {
-			converted, err := buildValue(sv)
+			converted, err := buildValue(sv, false)
 			if err != nil {
 				return nil, err
 			}
@@ -84,9 +102,51 @@ func buildValue(spec any) (any, error) {
 	}
 }
 
+// buildMark applies the expression under the mark to the object that holds
+// it. The sidecars are its arguments; the object's own keys are the shape a
+// chained builder takes, but a composition (One, Exact, ...) has no slot for
+// a carrier and is read on its own, as it is in TypeScript, where the
+// carrier is the node the composition becomes.
+func buildMark(src string, carrier map[string]any) (any, error) {
+	refs := map[string]any{}
+	for k, sv := range carrier {
+		if strings.HasPrefix(k, jsonMark) {
+			refs[k] = sv
+			delete(carrier, k)
+		}
+	}
+	tokens, err := tokenize(src)
+	if err != nil {
+		return nil, fmt.Errorf("value expression %q: %w", src, err)
+	}
+	p := &exprParser{tokens: tokens, src: src, refs: refs}
+	var val any
+	if exprComposition[tokens[0]] {
+		return p.parseFull()
+	}
+	val = carrier
+	for p.peek() != "" {
+		if p.peek() == "." {
+			p.take()
+		}
+		next, err := p.parseChained(val)
+		if err != nil {
+			return nil, fmt.Errorf("value expression %q: %w", src, err)
+		}
+		val = next
+	}
+	return val, nil
+}
+
+// The builders that read every argument for themselves.
+var exprComposition = map[string]bool{
+	"One": true, "Some": true, "All": true, "Exact": true, "Discriminated": true,
+}
+
 // Tokenization --------------------------------------------------------
 
-var exprTokenRE = regexp.MustCompile(`\s*,?\s*([)(\.]|"(?:\\.|[^"\\])*"|/(?:\\.|[^/\\])*/[a-z]?|[^)(,.\s]+)\s*`)
+// A number with a fraction (1.5) is one token, not 1 . 5.
+var exprTokenRE = regexp.MustCompile(`\s*,?\s*(-?\d+\.\d+(?:[eE][+-]?\d+)?|[)(\.]|"(?:\\.|[^"\\])*"|/(?:\\.|[^/\\])*/[a-z]?|[^)(,.\s]+)\s*`)
 
 func tokenize(src string) ([]string, error) {
 	if strings.TrimSpace(src) == "" {
@@ -113,6 +173,9 @@ type exprParser struct {
 	tokens []string
 	src    string
 	i      int
+	// refs are the sidecars of a value expression ("$$0"), specs that an
+	// expression cannot spell inline, by their keys.
+	refs map[string]any
 }
 
 // builderRegistry maps builder names to a function that takes parsed args and returns a *Node.
@@ -235,6 +298,19 @@ func (p *exprParser) parseChained(carrier any) (*Node, error) {
 	if head == "" {
 		return buildize(carrier), nil
 	}
+	if ref, ok := p.refs[head]; ok {
+		return buildize(ref), nil
+	}
+	// Chained onto a node, Exact applies its values to it, since every
+	// argument of the call is a value. A carrier that is a value is the
+	// example of a key expression, which is an argument as any other.
+	if node, ok := carrier.(*Node); ok && head == "Exact" {
+		args, err := p.parseArgs()
+		if err != nil {
+			return nil, err
+		}
+		return node.Exact(args...), nil
+	}
 	if fn, ok := getExprBuilders()[head]; ok {
 		args, err := p.parseArgs()
 		if err != nil {
@@ -307,6 +383,9 @@ func (p *exprParser) parseArg() (any, error) {
 		return nil, fmt.Errorf("Shape: unexpected end of expression %q", p.src)
 	}
 
+	if ref, ok := p.refs[head]; ok {
+		return ref, nil
+	}
 	if fn, ok := getExprBuilders()[head]; ok {
 		args, err := p.parseArgs()
 		if err != nil {
@@ -327,7 +406,7 @@ func (p *exprParser) parseArg() (any, error) {
 		return chainContinuation(p, Type(tok, exprShapes(args)...))
 	}
 	if head == "NaN" {
-		return chainContinuation(p, newNodeWrap(nanNode()))
+		return math.NaN(), nil
 	}
 	if head == "undefined" || head == "null" {
 		return nil, nil
@@ -528,8 +607,8 @@ func buildExprBuilders() map[string]exprBuilderFn {
 			return nil, fmt.Errorf("Len: missing length")
 		}
 		n, ok := toInt(args[0])
-		if !ok {
-			return nil, fmt.Errorf("Len: length must be integer")
+		if f, isFloat := toFloat64(args[0]); !ok || (isFloat && f != math.Trunc(f)) {
+			return nil, fmt.Errorf("Shape: Len needs a whole number of zero or more")
 		}
 		return Len(n, exprShapes(args[1:])...), nil
 	},
@@ -592,6 +671,17 @@ func buildExprBuilders() map[string]exprBuilderFn {
 	},
 		"Key": func(args []builderArg) (*Node, error) {
 			return Key(args...), nil
+		},
+		"Discriminated": func(args []builderArg) (*Node, error) {
+			if len(args) < 2 {
+				return nil, fmt.Errorf("Discriminated: missing tag or branches")
+			}
+			tag, ok := args[0].(string)
+			branches, bok := args[1].(map[string]any)
+			if !ok || !bok {
+				return nil, fmt.Errorf("Discriminated: needs a tag name and an object of branches")
+			}
+			return Discriminated(tag, branches), nil
 		},
 	}
 }

@@ -161,6 +161,10 @@ pub struct Node {
     pub kind: Kind,
     pub required: bool,
     pub required_set: bool,
+    /// The kind was named by the spec (a type token, `type_`), as against
+    /// implied by a value: a key expression's example keeps the named kind
+    /// and supplies the default alone.
+    pub kind_set: bool,
     /// Optional and no default injection (`p` in TypeScript).
     pub skippable: bool,
     /// Errors raised on or below this node are dropped (`e: false`).
@@ -223,6 +227,7 @@ pub struct Node {
     pub define_name: Option<String>,
     pub refer_name: Option<String>,
     pub refer_fill: bool,
+    pub refer_strict: bool,
 
     pub rename_to: Option<String>,
     pub rename_keep: bool,

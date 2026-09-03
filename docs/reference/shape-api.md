@@ -40,6 +40,8 @@ s := shape.MustShapeWith(spec, options)
 | `shape.stringify(...)` | `s.String()` | DSL-ish string rendering. |
 | `shape.jsonify()` | — | JSON form used by `stringify`. |
 | `shape.toString()` | — | `[Shape <name> <stringify>]`, also used by `util.inspect`. |
+| `shape.json()` | `s.JSON()` | the declarative JSON of the shape, which `build` reads back — see [Serialize a shape](../how-to/serialize-a-shape.md). |
+| `build(json)` | `Build(json)` | the shape that JSON describes. |
 | `shape.jsonSchema()` | `s.JSONSchema()` | a JSON Schema (draft 2020-12) for the values accepted — see [the how-to](../how-to/export-json-schema.md). |
 | `fromJsonSchema(schema)` | `FromJSONSchema(schema)` | a spec built from a JSON Schema, to compile with `Shape` — see [the how-to](../how-to/export-json-schema.md#import). |
 | `Shape.isShape(v)` | `shape.IsShape(v)` | is `v` a compiled shape? |
@@ -99,9 +101,13 @@ shape.ShapeWith(spec, shape.ShapeOptions{
 | `build(value, options?)` | `shape.Build(value)` |
 
 `expr` compiles one expression string into a node, to compile with `Shape`;
-`build` walks a JSON structure, compiles every string leaf as an expression
-(a `$$` key is left as a value expression), and returns the **compiled shape**.
-See [Use the string DSL](../how-to/use-the-string-dsl.md).
+`build` walks a JSON structure and compiles it, reading every string as an
+expression, the example of a key expression as a value, and a `$$` key as an
+expression applied to the object that holds it, with its `$$0`, `$$1`, ...
+sidecars as arguments. It returns the **compiled shape**. This is the dialect
+`json()` writes, so `build(shape.json())` is the shape again. See
+[Use the string DSL](../how-to/use-the-string-dsl.md) and
+[Serialize a shape](../how-to/serialize-a-shape.md).
 
 ## Argument validation
 

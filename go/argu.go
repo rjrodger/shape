@@ -77,20 +77,13 @@ func (a Argu) run(args []any, whence string, keys []string, nodes []*node) (map[
 		n := nodes[kI]
 		switch {
 		case isRestNode(n):
-			// Capture remaining args; if none remain and there are unfilled later
-			// keys, leave undefined slots so semantics match TS Rest().
-			rem := []any{}
-			rest := args[argIdx:]
-			if len(rest) == 0 {
-				// Need at least one undefined to mirror TS behaviour: bar(f0) => d=[undefined]
-				rem = []any{nil}
-			} else {
-				rem = append(rem, rest...)
-			}
-			child := n.arrChild
-			if child == nil {
-				child = &node{kind: KindAny}
-			}
+			// The arguments that remain, which is none at all when the rest
+			// comes last and the caller stopped: the canonical Argu leaves
+			// the slot an empty list rather than one undefined.
+			rem := append([]any{}, args[argIdx:]...)
+			// The rest shape is the element shape of what follows; a Rest
+			// node is one with a rest, so it always has that shape.
+			child := n.arrRest
 			validated := make([]any, len(rem))
 			for i, v := range rem {
 				sub := &ValidationError{}
