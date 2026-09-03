@@ -132,12 +132,10 @@ impl Signature {
         };
         for (key, n) in self.keys.iter().zip(self.nodes.iter()) {
             if is_rest(n) {
-                // The remaining arguments; none at all is one undefined, as
-                // the canonical Rest leaves it.
-                let mut rem: Vec<Value> = args[idx.min(args.len())..].to_vec();
-                if rem.is_empty() {
-                    rem.push(Value::Undefined);
-                }
+                // The arguments that remain, which is none at all when the
+                // rest comes last and the caller stopped: the canonical Argu
+                // leaves the slot an empty list.
+                let rem: Vec<Value> = args[idx.min(args.len())..].to_vec();
                 let child = n.arr_rest.as_deref().unwrap();
                 let mut validated = Vec::with_capacity(rem.len());
                 for v in rem {
@@ -289,7 +287,7 @@ mod tests {
             .unwrap();
         assert_eq!(
             serde_json::Value::from(Value::Obj(out)),
-            serde_json::json!({"a": 1, "d": [null]})
+            serde_json::json!({"a": 1, "d": []})
         );
         assert!(argu
             .validate(

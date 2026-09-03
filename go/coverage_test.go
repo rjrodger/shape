@@ -353,7 +353,7 @@ func TestExprAndBuild(t *testing.T) {
 	bs, err := Build(map[string]any{
 		"a": "Min(2,String)",
 		"b": []any{"Number"},
-		"c": map[string]any{"$$": "passthrough"},
+		"c": map[string]any{"$$": "Open"},
 		"n": 1.0,
 	})
 	if err != nil {

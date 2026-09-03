@@ -312,11 +312,24 @@ impl<'a> Import<'a> {
         {
             return import_string(m, path);
         }
+        // Beside a numeric exclusive bound the length keywords are that bound
+        // written for strings, arrays and objects (Above(1) exports minLength
+        // 2), so only a plain minimum or maximum is a second bound there.
         let mut view = Map::new();
-        if let Some(v) = first_number(m, &["minimum", "minLength", "minItems", "minProperties"]) {
+        let lo = if as_f64(m.get("exclusiveMinimum")).is_some() {
+            as_f64(m.get("minimum"))
+        } else {
+            first_number(m, &["minimum", "minLength", "minItems", "minProperties"])
+        };
+        if let Some(v) = lo {
             view.insert("minimum".to_string(), Value::Num(v));
         }
-        if let Some(v) = first_number(m, &["maximum", "maxLength", "maxItems", "maxProperties"]) {
+        let hi = if as_f64(m.get("exclusiveMaximum")).is_some() {
+            as_f64(m.get("maximum"))
+        } else {
+            first_number(m, &["maximum", "maxLength", "maxItems", "maxProperties"])
+        };
+        if let Some(v) = hi {
             view.insert("maximum".to_string(), Value::Num(v));
         }
         for k in ["exclusiveMinimum", "exclusiveMaximum"] {
@@ -536,10 +549,10 @@ fn import_string(m: &Map, path: &str) -> Res<Spec> {
     let mut spec = Spec::from(Token::String);
     let mut plain = true;
     if let Some(p) = as_str(m.get("pattern")) {
-        match Regex::new(p) {
-            Ok(re) => spec = Spec::Regex(re),
-            Err(_) => return fault(format!("bad pattern {:?}", p), path),
+        if crate::regexp::canonical_regexp(p).is_err() {
+            return fault(format!("bad pattern {:?}", p), path);
         }
+        spec = Spec::Regexp(p.to_string());
         plain = false;
     }
     let min_length = as_f64(m.get("minLength"));
@@ -566,9 +579,12 @@ fn import_string(m: &Map, path: &str) -> Res<Spec> {
 fn import_number(spec: Option<Spec>, m: &Map) -> Option<Spec> {
     let mut spec = spec;
     let base = |s: Option<Spec>| s.unwrap_or_else(|| Spec::from(any()));
+    // A numeric exclusive bound and a plain bound are independent keywords,
+    // so both apply; the boolean form makes the plain bound exclusive.
     if let Some(v) = as_f64(m.get("exclusiveMinimum")) {
         spec = Some(Spec::from(above(v, base(spec))));
-    } else if let Some(v) = as_f64(m.get("minimum")) {
+    }
+    if let Some(v) = as_f64(m.get("minimum")) {
         spec = Some(Spec::from(
             if as_bool(m.get("exclusiveMinimum")) == Some(true) {
                 above(v, base(spec))
@@ -579,7 +595,8 @@ fn import_number(spec: Option<Spec>, m: &Map) -> Option<Spec> {
     }
     if let Some(v) = as_f64(m.get("exclusiveMaximum")) {
         spec = Some(Spec::from(below(v, base(spec))));
-    } else if let Some(v) = as_f64(m.get("maximum")) {
+    }
+    if let Some(v) = as_f64(m.get("maximum")) {
         spec = Some(Spec::from(
             if as_bool(m.get("exclusiveMaximum")) == Some(true) {
                 below(v, base(spec))

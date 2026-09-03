@@ -45,6 +45,26 @@ for (const c of cases) {
     rec.reimport = 'ERR: ' + e.message
   }
 
+  // The declarative JSON, and the export of the shape it reads back: one
+  // spec writes one JSON, and that JSON reads back the same everywhere.
+  let wrote = false
+  try {
+    rec.json = JSON.parse(JSON.stringify(schema.json()))
+    wrote = true
+  }
+  catch (e) {
+    rec.json = 'ERR: ' + e.message
+  }
+
+  if (wrote) {
+    try {
+      rec.rejson = JSON.parse(JSON.stringify(Shape.build(rec.json).json()))
+    }
+    catch (e) {
+      rec.rejson = 'ERR: ' + e.message
+    }
+  }
+
   try {
     const out = schema(structuredClone(c.input))
     rec.ok = true

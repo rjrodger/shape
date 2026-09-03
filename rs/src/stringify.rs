@@ -48,7 +48,7 @@ pub fn stringify_node(n: &Node, inline: bool) -> String {
         }
         Kind::Never => suffix("Never".to_string(), n),
         Kind::Regexp => match &n.regexp {
-            Some(re) => suffix(format!("/{}/", re.as_str()), n),
+            Some(_) => suffix(format!("/{}/", n.regexp_src), n),
             None => suffix("Regexp".to_string(), n),
         },
         Kind::Check => suffix("Check".to_string(), n),
@@ -206,7 +206,7 @@ mod tests {
             stringify_node(&all([Spec::from(Token::Number)]), false),
             "All(Number)"
         );
-        assert_eq!(stringify_node(&buildize(Token::Array), false), "[Any]");
+        assert_eq!(stringify_node(&buildize(Token::Array), false), "[]");
         assert_eq!(
             stringify_node(
                 &buildize(arr([Spec::from(1), Spec::from(Token::String)])),

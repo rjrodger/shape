@@ -1,4 +1,5 @@
 name	spec	input	output	error
+check-regexp-absent	{"a":{"$expr":"Check(/^x/)"}}	{}		"Validation failed for property \"a\" because the property is missing."
 regexp-ok	{"a":{"$expr":"Check(/^a.+/)"}}	{"a":"abc"}	{"a":"abc"}	
 regexp-fail	{"a":{"$expr":"Check(/^a.+/)"}}	{"a":"zzz"}		"Validation failed for property \"a\" with string \"zzz\" because check \"/^a.+/\" failed."
 regexp-check-nonstring	{"a":{"$expr":"Check(/^a.+/)"}}	{"a":1}		"Validation failed for property \"a\" with number \"1\" because check \"/^a.+/\" failed."

@@ -43,12 +43,13 @@ different:
 - **vs `Object.assign` / spread** — Shape fills defaults to *any depth*, not just
   the top level, and it validates types while doing so.
 
-## Two implementations, one behaviour
+## Three implementations, one behaviour
 
-Shape runs in TypeScript/JavaScript and in Go. The TypeScript implementation is
-**canonical**: it defines the behaviour, and the Go port is verified against it
-by a [shared conformance corpus](../../test/README.md). See
-[TypeScript ↔ Go parity](ts-go-parity.md).
+Shape runs in TypeScript/JavaScript, in Go and in Rust. The TypeScript
+implementation is **canonical**: it defines the behaviour, and the Go and Rust
+ports are verified against it by a
+[shared conformance corpus](../../test/README.md). See
+[TypeScript ↔ Go ↔ Rust parity](ts-go-parity.md).
 
 ## Read next
 

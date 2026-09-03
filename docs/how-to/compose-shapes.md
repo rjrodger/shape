@@ -8,7 +8,7 @@ a fixed set of literal values.
 **TS**
 
 ```js
-const { Shape, One, Number, String } = require('shape')
+const { Shape, One } = require('shape')   // Number and String are the JS globals
 const id = Shape({ id: One(Number, String) })
 
 id({ id: 42 })     // OK
@@ -97,6 +97,11 @@ pet := shape.MustShape(shape.Discriminated("kind", map[string]any{
 - `One` stops at the **first** matching branch and uses that branch's output.
 - `Some` and `All` evaluate **every** branch (no short-circuit), so default
   injection from any branch is never skipped.
+- No branch changes the value it was given: each matches and produces from a
+  copy. `Some` takes the last matching branch's result (`Some(Open({a:1}),
+  Open({b:2}))` on `{}` gives `{b:2}`), `All` threads the result from branch
+  to branch (`{a:1,b:2}`), and a failing composition leaves the input as it
+  was.
 - `Exact` also matches when the value is absent but the node's default equals one
   of the listed literals.
 - These builders are not chainable methods — call them as top-level builders.

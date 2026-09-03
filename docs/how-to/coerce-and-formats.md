@@ -21,11 +21,14 @@ const shape = Shape({
   since:   Coerce(Date),
 })
 
-shape({ port: '8080', retries: '3', debug: 'true', since: '2020-01-01T00:00:00Z' })
+const ok = { port: '8080', retries: '3', debug: 'true', since: '2020-01-01T00:00:00Z' }
+shape({ ...ok })
 // → { port: 8080, retries: 3, debug: true, since: Date(2020-01-01T00:00:00Z) }
 
-shape({ port: '0x10' })   // throws: "0x10" is not of type number
-shape({ retries: '2.5' }) // throws: 2.5 is not of type integer
+shape({ ...ok, port: '0x10' })
+// throws: Validation failed for property "port" with string "0x10" because the string is not of type number.
+shape({ ...ok, retries: '2.5' })
+// throws: Validation failed for property "retries" with number "2.5" because the number is not of type integer.
 ```
 
 **Go**
@@ -58,7 +61,15 @@ const shape = Shape({
   long:    Email(Min(10, String)),   // the bound is checked first
 })
 
-shape({ email: 'nope' })
+const valid = {
+  email:   'ann@example.com',
+  id:      '123e4567-e89b-12d3-a456-426614174000',
+  created: '2020-01-01T00:00:00Z',
+  addr:    '::1',
+  long:    'long.name@example.com',
+}
+shape({ ...valid })                   // OK
+shape({ ...valid, email: 'nope' })
 // throws: Value "nope" for property "email" is not a valid email address.
 ```
 

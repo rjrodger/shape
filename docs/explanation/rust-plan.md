@@ -78,7 +78,7 @@ validator after the fact: the generation counters both other ports needed
 have nothing to detect. And the producing walk takes its input by value
 (`validate(input: Value) -> Result<Value, ValidationError>`), so it produces
 in place like TypeScript with no copy and no copy-on-write. `valid(&Value)`
-and `match(&Value)` borrow and run terse, recording errors without text as
+and `matches(&Value)` borrow and run terse, recording errors without text as
 the other ports' boolean calls now do; `error(&Value)` borrows too but
 runs the full diagnostic path, since its whole purpose is the rendered
 errors.
@@ -87,12 +87,14 @@ errors.
 
 ```
 rs/
-  Cargo.toml            shape, edition 2021, MSRV pinned; features: serde, regex
+  Cargo.toml            shape-schema (library shape), edition 2021, MSRV 1.75; feature: serde
   src/
-    lib.rs              re-exports; Shape(), ShapeOptions; Version
+    lib.rs              re-exports; shape(), Schema, validate_into::<T> (serde feature); VERSION
+    spec.rs             Spec: the forms a schema is compiled from (obj, arr, the conversions)
+    macros.rs           the shape! macro
     value.rs            Value, Map, conversions, JS-compatible number and date rendering
     node.rs             Node: kind, required, skippable, children, befores/afters, meta
-    normalize.rs        spec → Node (the example rules: literal = default, token = required)
+    normalize.rs        spec → Node (the example rules: literal = default, token = required); Options
     builders.rs         every builder as a function and as a chain method
     validate.rs         the walk: objects, arrays, leaves, defaults, closed/open, Child/Rest
     error.rs            FieldError, ValidationError, the default texts, $PATH/$VALUE expansion
@@ -107,12 +109,12 @@ rs/
     coerce.rs           Coerce
     argu.rs             MakeArgu (positional arguments)
     stringify.rs        node → spec text (the .String() / describe rendering)
-    derive.rs           ValidateInto<T: DeserializeOwned> (serde feature; the struct story)
     standard.rs         the Standard Schema surface (a non-throwing result: value or issues with array paths), as go/standard.go
   tests/
+    common/             the sentinel decoder both runners share
     compat_tsv.rs       the corpus runner (test/*.tsv, every sentinel)
     difftool.rs         the differential runner, gated on DIFF_IN / DIFF_OUT
-    ...                 unit tests per module, as go/*_test.go
+                        (the unit tests are inline per module, as go/*_test.go are per file)
   README.md             the crate's README (docs.rs front page)
 ```
 
@@ -127,7 +129,7 @@ The Go port writes a spec as `map[string]any{"name": shape.String}`. Rust
 has no untyped literal, so the plan gives three ways to say a spec, all
 producing the same `Node`:
 
-1. **Builders**, the primary form: `Shape::new(obj([("name", String),
+1. **Builders**, the primary form: `Schema::new(obj([("name", String),
    ("age", Min(0, Integer))]))`.
 2. **A `shape!` macro** in the style of `serde_json::json!`, so a spec reads
    like the TypeScript one: `shape!({ "name": String, "age": Min(0,
@@ -135,7 +137,7 @@ producing the same `Node`:
    required kinds, nested braces become objects, brackets arrays; builders
    are ordinary expressions inside it.
 3. **The string DSL**, which is part of the contract anyway, for a single
-   expression: `Shape::parse("Min(0, Integer)")`, and inside a key
+   expression: `Schema::parse("Min(0, Integer)")`, and inside a key
    expression of the structured forms (`"age: Min(0)": 18`). The DSL has
    no object-literal grammar in TypeScript or Go, and Rust adds none; an
    object is written with the builders or the macro.
@@ -157,10 +159,10 @@ Go; the entry becomes "Go and Rust".
 ### Custom validators
 
 `Before(|state: &mut State, update: &mut Update| -> bool)` and `After`,
-`Check`, with `State` exposing `path`, `key`, `value`, `parent`, `node` and
-`ctx.custom` as the other ports do. `custom` is type-erased
-(`HashMap<String, Box<dyn Any + Send + Sync>>`, with typed `get`/`insert`
-helpers), not a map of `Value`: TypeScript takes any property and Go uses
+`Check`, with `State` exposing `path_arr` (and `path_str()`), `key`, `value`,
+`parent_is_array`, `node` and `ctx.custom` as the other ports do. `custom` is
+type-erased (`HashMap<String, Box<dyn Any + Send + Sync>>`, with typed
+`get`/`set` helpers), not a map of `Value`: TypeScript takes any property and Go uses
 `map[string]any`, and a validator may keep a counter, a handle or a domain
 object there. Closures must be `Send + Sync` for the `Schema` to be; that
 is the one constraint the Go port did not have, and it is the right one.
@@ -242,10 +244,10 @@ in phase 5 and stays on.
 | 0 | **Scaffold.** Crate, `Value` and `Map`, JS-compatible number/string/date rendering, `Node`, the corpus runner that decodes every sentinel and skips what it cannot build yet, `make test-rs`, the CI job. | – | the runner reads all ten files and reports per-row skips; rendering has unit tests for the JS rules |
 | 1 | **Core walk.** `normalize` (literal → default, token → required), objects (closed, open, `Child`, `Rest`), arrays (tuples, child shape, `Rest`), leaves (`String`, `Number`, `Integer`, `Boolean`, `Date`, `Any`, `Null`, `Never`), `Required`/`Optional`/`Default`/`Skip`/`Empty`/`Nullable`, defaults injected, `valid`/`validate`/`error`, the default error texts. | the rows of `defaults`, `objects` and `arrays` with no sentinel but `$type`, `$open`, `$closed`, `$required`, `$optional` | every claimed row passes, none skipped |
 | 2 | **Builders.** Bounds (`Min`/`Max`/`Above`/`Below`/`Len`/`Exact`), `Check`/`Before`/`After`, `Fault`, `Describe`, `Type`, `Rename` (with claim), `Define`/`Refer` (with `strict`), `Catch`/`Ignore`/`Transform`, `Key`, `Closed`/`Open`, the format builders, `Coerce`, `One`/`Some`/`All`; builder argument checks as fault nodes; the unit tests for `BigInt` and `Exact`. | the same sentinels in `builders`, `checks`, `composition`, `misc` | every claimed row passes, none skipped; `docs/reference/builders.md` has nothing the crate lacks |
-| 3 | **The string DSL and expressions.** `expr`, key expressions (`"a: Min(1)"`), value expressions, meta keys; the `shape!` macro. | `keyexpr`, and every `$expr` row of the files above | every claimed row passes, none skipped; `Shape::parse` round-trips `stringify` on every expression in the corpus |
-| 4 | **Schema and structure.** JSON Schema export and import, `Pick`/`Omit`/`Partial`/`Extend`, `Discriminated`, `MakeArgu`, `ValidateInto<T>` by serde, the Standard Schema surface with its unit tests. | `jsonschema`, `algebra`, and every `$discriminated`, `$call` and `$jsonschema` row | every corpus row passes, none skipped |
+| 3 | **The string DSL and expressions.** `expr`, key expressions (`"a: Min(1)"`), value expressions, meta keys; the `shape!` macro. | `keyexpr`, and every `$expr` row of the files above | every claimed row passes, none skipped; `Schema::parse` round-trips `stringify` on every expression in the corpus |
+| 4 | **Schema and structure.** JSON Schema export and import, `Pick`/`Omit`/`Partial`/`Extend`, `Discriminated`, `MakeArgu`, `validate_into::<T>` by serde, the Standard Schema surface with its unit tests. | `jsonschema`, `algebra`, and every `$discriminated`, `$call` and `$jsonschema` row | every corpus row passes, none skipped |
 | 5 | **The wide net.** `rs/tests/difftool.rs`, `make diff-rs`, `compare.js` with Rust as a second port, exact error order; coverage to 100%; parity page entries for Rust. | – | `make diff` agrees on every case for both ports; CI `parity` runs both |
-| 6 | **Bench, docs, publish.** `bench/rs`, the report and site with three languages, `rust-api.md` and the how-to, the crate README, trusted publishing and the `rust` input on Publish. | – | a Measure run records Rust on three platforms; `cargo publish --dry-run` passes; `shape` on crates.io at `0.1.0` |
+| 6 | **Bench, docs, publish.** `bench/rs`, the report and site with three languages, `rust-api.md` and the how-to, the crate README, trusted publishing and the `rust` input on Publish. | – | a Measure run records Rust on three platforms; `cargo publish --dry-run` passes; `shape-schema` on crates.io at `0.1.0` |
 
 Phase 1 is the largest single step and the one that decides the walk's
 shape; phases 2 and 4 are wide but each builder is small and has its rows;
@@ -308,6 +310,35 @@ any error text (the corpus and the differential harness gate it):
 `bounds` and `invalid` gain least because neither is dominated by the
 walk: the first spends its time in the bound validators, and the second
 renders an error message, both of which the pass left alone.
+
+#### A second pass
+
+A callgrind profile of `valid()` on the `array` case, taken the same day,
+put half of the instructions in the general walk's bookkeeping for leaves
+that had nothing to do but a type check: `validate_node_with`, the
+structural check's preamble, and the drop of the scratch values they keep.
+So the tree is prepared with a `plain` flag, true of a node with no
+validator, rename, regexp or silence, and a read-only walk judges a plain
+scalar child in place and descends into a plain object or array child
+directly. The index key of an element is written without a UTF-8 check,
+since the buffer holds digits only. Same host and budget; before is the
+end of the first pass.
+
+| case | before | after | gain | jsonschema crate |
+| ---- | -----: | ----: | ---: | ---------------: |
+| `flat` | 135 ns | 70 ns | 1.9× | 122 ns |
+| `nested` | 282 ns | 118 ns | 2.4× | 275 ns |
+| `array` | 3.8 µs | 1.15 µs | 3.3× | 3.5 µs |
+| `bounds` | 306 ns | 248 ns | 1.2× | 145 ns |
+| `large` | 885 ns | 279 ns | 3.2× | 1.34 µs |
+| `invalid` | 2.25 µs | 1.69 µs | 1.3× | 96 ns |
+
+Against the end of phase 6 the walk is now 5 to 16 times faster, and
+ahead of the jsonschema crate on every case but the two it never
+targeted: `bounds`, where the validators run through the general path
+with a `State` each, and `invalid`, where the message is rendered
+eagerly. The typed validators (garde, validator) remain an order of
+magnitude ahead, as they are of the typed Go and TypeScript validators.
 
 ## Order of work
 

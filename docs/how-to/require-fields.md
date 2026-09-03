@@ -8,8 +8,11 @@ A literal value is optional; a *type marker* is required.
 
 | Language | Required markers |
 | -------- | ---------------- |
-| TS/JS    | `String`, `Number`, `Boolean`, `Object`, `Array`, `Function`, `Symbol` |
-| Go       | `shape.String`, `shape.Number`, `shape.Boolean`, `shape.Object`, `shape.Array`, `shape.Function`, `shape.Any` |
+| TS/JS    | `String`, `Number`, `Boolean`, `Object`, `Array`, `Function`, `Symbol`, `Date` (the globals) and `Integer` (from `shape`) |
+| Go       | `shape.String`, `shape.Number`, `shape.Boolean`, `shape.Object`, `shape.Array`, `shape.Function`, `shape.Integer`, `shape.Date` |
+
+`Any` / `shape.Any` is **not** a required marker — it accepts an absent value.
+To require a value of any type use `Required(Any)` (or bare `Required()`).
 
 **TS**
 
@@ -35,7 +38,7 @@ A missing required field fails with `… because the property is missing`.
 
 ## Require a shape that already has a builder
 
-Wrap it with [`Required`](../reference/builders.md#required):
+Wrap it with [`Required`](../reference/builders.md#required--optional--defaults):
 
 ```js
 Shape({
@@ -47,13 +50,13 @@ Shape({
 ## The inverse: force optional
 
 If a value would otherwise be required (e.g. under a `Check`), use
-[`Optional`](../reference/builders.md#optional), or use
-[`Skip`](../reference/builders.md#skip) to make it optional **and** skip
+[`Optional`](../reference/builders.md#required--optional--defaults), or use
+[`Skip`](../reference/builders.md#required--optional--defaults) to make it optional **and** skip
 default injection entirely.
 
 ```js
-Shape({ note: Optional(String) })  // may be absent
-Shape({ note: Skip(String) })      // absent → key omitted, not defaulted
+Shape({ note: Optional(String) })({})  // → { note: '' }: absent is allowed, the empty value is injected
+Shape({ note: Skip(String) })({})      // → {}: absent → key omitted, not defaulted
 ```
 
 ## Make every property optional at once
@@ -80,4 +83,4 @@ Shape({ note: Nullable(String) })({})               // throws: required
 
 - Required fields never have a default — there is nothing to default to.
 - An empty string fails a required (or any) string field unless
-  [`Empty`](../reference/builders.md#empty) is used.
+  [`Empty`](../reference/builders.md#required--optional--defaults) is used.

@@ -3,6 +3,7 @@ package shape
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"regexp"
 	"strings"
 	"sync"
@@ -41,38 +42,55 @@ func MustExpr(src string) *Node {
 	return n
 }
 
-// Build is the convenience wrapper used by TS to expand JSON-shaped specs.
-// Strings are parsed via Expr; everything else is normalized as-is.
+// Build reads the declarative JSON of a shape, what JSON() writes: every
+// string is an expression (the example of a key expression is a value, so
+// a string there is the string itself), and a "$$" key applies an
+// expression to the object that holds it, with the "$$0", "$$1", ...
+// sidecars beside it as the arguments an expression cannot spell inline.
 func Build(spec any) (*Schema, error) {
-	v, err := buildValue(spec)
+	v, err := buildValue(spec, false)
 	if err != nil {
 		return nil, err
 	}
 	return Shape(v)
 }
 
-func buildValue(spec any) (any, error) {
+// buildValue expands one value; example is true for the value of a key
+// expression, which a string is the literal of.
+func buildValue(spec any, example bool) (any, error) {
 	switch v := spec.(type) {
 	case string:
+		// The empty string is the empty example, as a required string's
+		// example is ("a: String" with "").
+		if example || v == "" {
+			return v, nil
+		}
 		return Expr(v)
 	case map[string]any:
 		out := map[string]any{}
+		mark, hasMark := "", false
 		for k, sv := range v {
-			if k == "$$" {
-				out[k] = sv
-				continue
+			if k == jsonMark {
+				if s, ok := sv.(string); ok {
+					mark, hasMark = s, true
+					continue
+				}
 			}
-			converted, err := buildValue(sv)
+			_, str := sv.(string)
+			converted, err := buildValue(sv, str && isKeyExpr(k))
 			if err != nil {
 				return nil, err
 			}
 			out[k] = converted
 		}
+		if hasMark {
+			return buildMark(mark, out)
+		}
 		return out, nil
 	case []any:
 		out := make([]any, len(v))
 		for i, sv := range v {
-			converted, err := buildValue(sv)
+			converted, err := buildValue(sv, false)
 			if err != nil {
 				return nil, err
 			}
@@ -84,9 +102,51 @@ func buildValue(spec any) (any, error) {
 	}
 }
 
+// buildMark applies the expression under the mark to the object that holds
+// it. The sidecars are its arguments; the object's own keys are the shape a
+// chained builder takes, but a composition (One, Exact, ...) has no slot for
+// a carrier and is read on its own, as it is in TypeScript, where the
+// carrier is the node the composition becomes.
+func buildMark(src string, carrier map[string]any) (any, error) {
+	refs := map[string]any{}
+	for k, sv := range carrier {
+		if strings.HasPrefix(k, jsonMark) {
+			refs[k] = sv
+			delete(carrier, k)
+		}
+	}
+	tokens, err := tokenize(src)
+	if err != nil {
+		return nil, fmt.Errorf("value expression %q: %w", src, err)
+	}
+	p := &exprParser{tokens: tokens, src: src, refs: refs}
+	var val any
+	if exprComposition[tokens[0]] {
+		return p.parseFull()
+	}
+	val = carrier
+	for p.peek() != "" {
+		if p.peek() == "." {
+			p.take()
+		}
+		next, err := p.parseChained(val)
+		if err != nil {
+			return nil, fmt.Errorf("value expression %q: %w", src, err)
+		}
+		val = next
+	}
+	return val, nil
+}
+
+// The builders that read every argument for themselves.
+var exprComposition = map[string]bool{
+	"One": true, "Some": true, "All": true, "Exact": true, "Discriminated": true,
+}
+
 // Tokenization --------------------------------------------------------
 
-var exprTokenRE = regexp.MustCompile(`\s*,?\s*([)(\.]|"(?:\\.|[^"\\])*"|/(?:\\.|[^/\\])*/[a-z]?|[^)(,.\s]+)\s*`)
+// A number with a fraction (1.5) is one token, not 1 . 5.
+var exprTokenRE = regexp.MustCompile(`\s*,?\s*(-?\d+\.\d+(?:[eE][+-]?\d+)?|[)(\.]|"(?:\\.|[^"\\])*"|/(?:\\.|[^/\\])*/[a-z]?|[^)(,.\s]+)\s*`)
 
 func tokenize(src string) ([]string, error) {
 	if strings.TrimSpace(src) == "" {
@@ -113,6 +173,9 @@ type exprParser struct {
 	tokens []string
 	src    string
 	i      int
+	// refs are the sidecars of a value expression ("$$0"), specs that an
+	// expression cannot spell inline, by their keys.
+	refs map[string]any
 }
 
 // builderRegistry maps builder names to a function that takes parsed args and returns a *Node.
@@ -176,7 +239,7 @@ func (p *exprParser) parseTerm(top bool) (*Node, error) {
 		if err != nil {
 			return nil, err
 		}
-		return fn(args)
+		return callExprBuilder(fn, args)
 	}
 	if tok, ok := exprTypeTokens[head]; ok {
 		args, err := p.parseArgs()
@@ -202,14 +265,17 @@ func (p *exprParser) parseTerm(top bool) (*Node, error) {
 		nb.n.hasDefault = true
 		return nb, nil
 	}
-	if strings.HasPrefix(head, "/") && strings.HasSuffix(head, "/") && len(head) >= 2 {
-		re, err := regexp.Compile(head[1 : len(head)-1])
-		if err != nil {
-			return nil, fmt.Errorf("Shape: invalid regexp %q: %w", head, err)
+	if body, flagged, ok := regexpHead(head); ok {
+		if flagged {
+			return nil, regexpFault(body, "flags are not supported")
 		}
 		// A bare /re/ is a type, not a check: a non-string fails as a type
 		// error. Check(/re/) is the explicit-check form and reports as one.
-		return newNodeWrap(regexpNode(re)), nil
+		n, err := regexpNode(body)
+		if err != nil {
+			return nil, err
+		}
+		return newNodeWrap(n), nil
 	}
 	// JSON literal
 	var lit any
@@ -232,6 +298,19 @@ func (p *exprParser) parseChained(carrier any) (*Node, error) {
 	if head == "" {
 		return buildize(carrier), nil
 	}
+	if ref, ok := p.refs[head]; ok {
+		return buildize(ref), nil
+	}
+	// Chained onto a node, Exact applies its values to it, since every
+	// argument of the call is a value. A carrier that is a value is the
+	// example of a key expression, which is an argument as any other.
+	if node, ok := carrier.(*Node); ok && head == "Exact" {
+		args, err := p.parseArgs()
+		if err != nil {
+			return nil, err
+		}
+		return node.Exact(args...), nil
+	}
 	if fn, ok := getExprBuilders()[head]; ok {
 		args, err := p.parseArgs()
 		if err != nil {
@@ -239,7 +318,7 @@ func (p *exprParser) parseChained(carrier any) (*Node, error) {
 		}
 		// Chain: append carrier as final arg unless explicitly provided as the last.
 		args = append(args, carrier)
-		return fn(args)
+		return callExprBuilder(fn, args)
 	}
 	// A type token in chain position sets the type on the carrier, mirroring TS
 	// (".Array" is Type('Array') applied to the current node).
@@ -304,12 +383,15 @@ func (p *exprParser) parseArg() (any, error) {
 		return nil, fmt.Errorf("Shape: unexpected end of expression %q", p.src)
 	}
 
+	if ref, ok := p.refs[head]; ok {
+		return ref, nil
+	}
 	if fn, ok := getExprBuilders()[head]; ok {
 		args, err := p.parseArgs()
 		if err != nil {
 			return nil, err
 		}
-		node, err := fn(args)
+		node, err := callExprBuilder(fn, args)
 		if err != nil {
 			return nil, err
 		}
@@ -324,17 +406,19 @@ func (p *exprParser) parseArg() (any, error) {
 		return chainContinuation(p, Type(tok, exprShapes(args)...))
 	}
 	if head == "NaN" {
-		return chainContinuation(p, newNodeWrap(nanNode()))
+		return math.NaN(), nil
 	}
 	if head == "undefined" || head == "null" {
 		return nil, nil
 	}
-	if strings.HasPrefix(head, "/") && strings.HasSuffix(head, "/") && len(head) >= 2 {
-		re, err := regexp.Compile(head[1 : len(head)-1])
-		if err != nil {
-			return nil, fmt.Errorf("Shape: invalid regexp %q: %w", head, err)
+	if body, flagged, ok := regexpHead(head); ok {
+		if flagged {
+			return nil, regexpFault(body, "flags are not supported")
 		}
-		return re, nil
+		if _, err := canonicalRegexp(body); err != nil {
+			return nil, err
+		}
+		return regexp.MustCompile(body), nil
 	}
 	// JSON literal
 	var lit any
@@ -384,6 +468,28 @@ func getExprBuilders() map[string]exprBuilderFn {
 		exprBuilders = buildExprBuilders()
 	})
 	return exprBuilders
+}
+
+// callExprBuilder calls a builder from the string form. A builder given a
+// wrong argument returns a fault node that reports at validation; here that
+// is a parse error, as the builder throws in TypeScript.
+func callExprBuilder(fn exprBuilderFn, args []builderArg) (*Node, error) {
+	n, err := fn(args)
+	if err == nil && n != nil && n.n.argFault {
+		return nil, fmt.Errorf("%s", n.n.faultMsg)
+	}
+	return n, err
+}
+
+// regexpHead reads a /re/ token: its body, and whether a flag letter follows.
+func regexpHead(head string) (body string, flagged bool, ok bool) {
+	if len(head) >= 3 && strings.HasPrefix(head, "/") && 'a' <= head[len(head)-1] && head[len(head)-1] <= 'z' && head[len(head)-2] == '/' {
+		return head[1 : len(head)-2], true, true
+	}
+	if len(head) >= 2 && strings.HasPrefix(head, "/") && strings.HasSuffix(head, "/") {
+		return head[1 : len(head)-1], false, true
+	}
+	return "", false, false
 }
 
 func buildExprBuilders() map[string]exprBuilderFn {
@@ -501,8 +607,8 @@ func buildExprBuilders() map[string]exprBuilderFn {
 			return nil, fmt.Errorf("Len: missing length")
 		}
 		n, ok := toInt(args[0])
-		if !ok {
-			return nil, fmt.Errorf("Len: length must be integer")
+		if f, isFloat := toFloat64(args[0]); !ok || (isFloat && f != math.Trunc(f)) {
+			return nil, fmt.Errorf("Shape: Len needs a whole number of zero or more")
 		}
 		return Len(n, exprShapes(args[1:])...), nil
 	},
@@ -565,6 +671,17 @@ func buildExprBuilders() map[string]exprBuilderFn {
 	},
 		"Key": func(args []builderArg) (*Node, error) {
 			return Key(args...), nil
+		},
+		"Discriminated": func(args []builderArg) (*Node, error) {
+			if len(args) < 2 {
+				return nil, fmt.Errorf("Discriminated: missing tag or branches")
+			}
+			tag, ok := args[0].(string)
+			branches, bok := args[1].(map[string]any)
+			if !ok || !bok {
+				return nil, fmt.Errorf("Discriminated: needs a tag name and an object of branches")
+			}
+			return Discriminated(tag, branches), nil
 		},
 	}
 }

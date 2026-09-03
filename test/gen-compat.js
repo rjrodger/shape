@@ -92,11 +92,23 @@ const files = {
     ['array-rest-null-element', { $expr: 'Rest(Number)' }, [1, null]],
     ['array-rest-string', { $expr: 'Rest(String)' }, ['a', 'b']],
     ['array-rest-string-bad', { $expr: 'Rest(String)' }, ['a', 2]],
+    // A rest replaces a plain element shape: Rest(Number, [String]) is an
+    // array of numbers, and the String is gone. Fixed positions are a tuple,
+    // and are kept.
+    ['rest-replaces-element-shape', CALL('Rest', N, [T]), [1, 2]],
+    ['rest-replaces-element-shape-bad', CALL('Rest', N, [T]), ['x']],
+    ['rest-keeps-tuple-positions', CALL('Rest', N, [T, N]), ['a', 1, 2]],
+    ['rest-keeps-tuple-positions-bad', CALL('Rest', N, [T, N]), [1, 1]],
+    ['rest-over-closed-one-tuple', CALL('Rest', N, { $closed: [T] }), ['a', 1]],
+    ['rest-over-closed-one-tuple-bad', CALL('Rest', N, { $closed: [T] }), [1]],
     ['array-ignore-drops-bad', [{ $expr: 'Ignore(Number)' }], [1, 'x']],
     ['array-ignore-keeps-good', [{ $expr: 'Ignore(Number)' }], [1, 2]],
     ['array-ignore-bound', [{ $expr: 'Ignore(Min(2,Number))' }], [1, 3]],
   ],
   builders: [
+    // A bound on a missing required value stands aside for the missing error.
+    ['min-under-missing', { a: { $expr: 'Min(2,String)' } }, {}],
+    ['max-number-under-missing', { a: { $expr: 'Max(2,Number)' } }, {}],
     ['dsl-type-chain-fail', { a: { $expr: 'Min(2).Array' } }, { a: [1] }],
     ['dsl-type-chain-ok', { a: { $expr: 'Min(2).Array' } }, { a: [1, 2] }],
     ['min-number-ok', { a: { $expr: 'Min(3,Number)' } }, { a: 5 }],
@@ -215,6 +227,33 @@ const files = {
     ['one-optional-absent', { a: { $expr: 'Optional(One(String,Number))' } }, {}],
   ],
   composition: [
+    // One, Some and All never change the value they are given: every branch
+    // sees the original, and Some takes the last matching branch's result.
+    ['some-open-defaults-first-wins', CALL('Some', { $open: { a: 1 } }, { $open: { a: 2 } }), {}],
+    ['some-open-defaults-both', CALL('Some', { $open: { a: 1 } }, { $open: { b: 2 } }), {}],
+    ['some-open-defaults-present', CALL('Some', { $open: { a: 1 } }, { $open: { a: 2 } }), { a: 5, q: 9 }],
+    ['some-scalar-original', CALL('Some', { $expr: 'Coerce(Number)' }, { $expr: 'Max(2)' }), '12'],
+    ['some-scalar-last-wins', CALL('Some', { $expr: 'Max(2)' }, { $expr: 'Coerce(Number)' }), '12'],
+    // A branch that replaces the value leaves the next branch the original.
+    ['some-replace-then-open', CALL('Some', { $expr: 'Catch(1,Number)' }, { $open: { a: 1 } }), {}],
+    ['some-replace-then-open-present', CALL('Some', { $expr: 'Catch(1,Number)' }, { $open: { a: 1 } }), { a: 5 }],
+    ['some-replace-then-open-scalar', CALL('Some', { $expr: 'Catch(1,Number)' }, { $open: { a: 1 } }), 3],
+    // All threads the result from branch to branch; One takes its branch's.
+    ['all-open-defaults', CALL('All', { $open: { a: 1 } }, { $open: { b: 2 } }), {}],
+    ['all-coerce-then-min', { a: { $expr: 'All(Coerce(Number),Min(2))' } }, { a: '5' }],
+    ['all-coerce-then-min-fail', { a: { $expr: 'All(Coerce(Number),Min(2))' } }, { a: '1' }],
+    ['one-open-default', CALL('One', { $open: { a: 1 } }, { $expr: 'String' }), {}],
+    ['all-absent-required', { a: CALL('All', { $open: { x: 1 } }, { $open: { y: 'a' } }) }, {}],
+    ['some-absent-required', { a: CALL('Some', { $open: { x: 1 } }, { $expr: 'String' }) }, {}],
+    ['one-absent-no-match', { a: { $expr: 'One(String,Number)' } }, {}],
+    ['some-absent-no-match', { a: { $expr: 'Some(String,Number)' } }, {}],
+    ['all-absent-fail', { a: { $expr: 'All(String,Number)' } }, {}],
+    ['one-skip-branch-absent', { a: { $expr: 'One(Skip(Number))' } }, {}],
+    ['some-skip-branch-absent', { a: { $expr: 'Some(Skip(Number))' } }, {}],
+    ['all-skip-branch-absent', { a: { $expr: 'All(Skip(Number))' } }, {}],
+    ['one-skip-branch-present', { a: { $expr: 'One(Skip(Number))' } }, { a: 1 }],
+    ['one-absent-default-branch', { a: { $expr: 'One(String,Number)' }, b: CALL('One', { $expr: 'Number' }, { $open: { x: 1 } }) }, { a: 'x' }],
+    ['some-failing-branch-leaks-nothing', CALL('Some', { x: { $expr: 'Number' }, y: 1 }, { $open: { z: 3 } }), {}],
     // Default over an untyped shape takes the default's kind and keeps the
     // shape's builders, description and fault.
     ['default-untyped-kind', { a: { $expr: 'Default(2,Required())' } }, { a: 'x' }],
@@ -236,6 +275,8 @@ const files = {
     ['all-of-ignore-branch', { a: { $expr: 'All(Ignore(Min(2,Number)),Number)' } }, { a: 1 }],
   ],
   checks: [
+    // A Check is not called for an absent value; the required check speaks.
+    ['check-regexp-absent', { a: { $expr: 'Check(/^x/)' } }, {}],
     ['regexp-ok', { a: { $expr: 'Check(/^a.+/)' } }, { a: 'abc' }],
     ['regexp-fail', { a: { $expr: 'Check(/^a.+/)' } }, { a: 'zzz' }],
     ['regexp-check-nonstring', { a: { $expr: 'Check(/^a.+/)' } }, { a: 1 }],
@@ -314,6 +355,14 @@ const files = {
   // Specs built from a JSON Schema, {"$jsonschema": …}: the import must read
   // the same shape in both languages.
   jsonschema: [
+    // A numeric exclusive bound and a plain bound both apply.
+    ['js-number-min-and-exclusive-ok', { $jsonschema: { type: 'number', minimum: 1, exclusiveMinimum: 0 } }, 1],
+    ['js-number-min-and-exclusive-low', { $jsonschema: { type: 'number', minimum: 1, exclusiveMinimum: 0 } }, 0.5],
+    ['js-number-max-and-exclusive-high', { $jsonschema: { type: 'number', maximum: 1, exclusiveMaximum: 2 } }, 1.5],
+    // Untyped, where the length keywords beside an exclusive bound are that bound.
+    ['js-untyped-min-and-exclusive-low', { $jsonschema: { minimum: 1, exclusiveMinimum: 0 } }, 0.5],
+    ['js-untyped-max-and-exclusive-high', { $jsonschema: { maximum: 1, exclusiveMaximum: 2 } }, 1.5],
+    ['js-untyped-exclusive-lengths', { $jsonschema: { exclusiveMinimum: 1, minLength: 2, minItems: 2, minProperties: 2 } }, 'ab'],
     ['js-object-required', { $jsonschema: { type: 'object', properties: { name: { type: 'string' }, age: { type: 'integer', minimum: 0, default: 1 } }, required: ['name'] } }, { name: 'a', extra: 1 }],
     ['js-object-required-missing', { $jsonschema: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] } }, {}],
     ['js-object-closed', { $jsonschema: { type: 'object', properties: { a: { type: 'number' } }, additionalProperties: false } }, { a: 1, b: 2 }],
@@ -351,6 +400,35 @@ const files = {
     ['js-describe', { $jsonschema: { type: 'object', properties: { a: { type: 'string', description: 'd' } }, required: ['a'] } }, { a: 1 }],
     ['js-any-empty', { $jsonschema: {} }, { anything: [1] }],
     ['js-ip', { $jsonschema: { type: 'string', anyOf: [{ format: 'ipv4' }, { format: 'ipv6' }] } }, 'x'],
+  ],
+  // The shared regexp subset (docs/reference/regexp.md): the same pattern
+  // matches the same strings in every engine. \d, \w and \s are ASCII, .
+  // stops at a newline only, and a whole character is one unit.
+  regexp: [
+    ['re-digit-ascii-ok', { a: { $expr: '/^\\d+$/' } }, { a: '12' }],
+    ['re-digit-ascii-arabic', { a: { $expr: '/^\\d+$/' } }, { a: '\u0661\u0662' }],
+    ['re-word-ascii-ok', { a: { $expr: '/^\\w+$/' } }, { a: 'ab_1' }],
+    ['re-word-ascii-accent', { a: { $expr: '/^\\w+$/' } }, { a: 'é' }],
+    ['re-space-ascii-ok', { a: { $expr: '/^\\s+$/' } }, { a: ' \t' }],
+    ['re-space-ascii-nbsp', { a: { $expr: '/^\\s+$/' } }, { a: '\u00a0' }],
+    ['re-negated-shorthand-ok', { a: { $expr: '/^\\D+$/' } }, { a: 'ab' }],
+    ['re-negated-shorthand-fail', { a: { $expr: '/^\\D+$/' } }, { a: 'a1' }],
+    ['re-class-shorthands', { a: { $expr: '/^[\\s\\d]+$/' } }, { a: ' 1' }],
+    ['re-dot-newline', { a: { $expr: '/^a.b$/' } }, { a: 'a\nb' }],
+    ['re-dot-return', { a: { $expr: '/^a.b$/' } }, { a: 'a\rb' }],
+    ['re-dot-astral', { a: { $expr: '/^a.b$/' } }, { a: 'a\u{1F600}b' }],
+    ['re-anchor-trailing-newline', { a: { $expr: '/^a$/' } }, { a: 'a\n' }],
+    ['re-boundary-ok', { a: { $expr: '/\\bx\\b/' } }, { a: 'a x b' }],
+    ['re-boundary-fail', { a: { $expr: '/\\bx\\b/' } }, { a: 'axb' }],
+    ['re-lazy-brace', { a: { $expr: '/^x{2,3}?$/' } }, { a: 'xx' }],
+    ['re-noncapturing', { a: { $expr: '/^(?:a|b)+$/' } }, { a: 'abab' }],
+    ['re-escaped-slash', { a: { $expr: '/^\\/$/' } }, { a: '/' }],
+    ['re-hex-escape', { a: { $expr: '/^\\x41$/' } }, { a: 'A' }],
+    ['re-class-trailing-dash', { a: { $expr: '/^[a-c-]+$/' } }, { a: 'a-c' }],
+    ['re-literal-unicode', { a: { $expr: '/^é+$/' } }, { a: 'éé' }],
+    ['re-check-form-arabic', { a: { $expr: 'Check(/^\\d+$/)' } }, { a: '\u0661' }],
+    ['re-jsonschema-pattern-arabic', { $jsonschema: { type: 'object', properties: { a: { type: 'string', pattern: '^\\d+$' } } } }, { a: '\u0661\u0662' }],
+    ['re-jsonschema-pattern-ok', { $jsonschema: { type: 'object', properties: { a: { type: 'string', pattern: '^\\d+$' } } } }, { a: '12' }],
   ],
   misc: [
     // Refer: a name that no Define supplies does nothing, unless strict.

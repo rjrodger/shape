@@ -19,6 +19,10 @@ type node struct {
 
 	required    bool
 	requiredSet bool
+	// kindSet marks a kind the spec named (a type token, Type, Any), as
+	// against one a value implied: a key expression's example keeps the
+	// named kind and supplies the default alone.
+	kindSet bool
 	open        bool
 	openSet    bool
 	skippable   bool // p in TS: optional and no default-injection
@@ -47,9 +51,14 @@ type node struct {
 
 	// Compiled pattern for a KindRegexp node (a bare /re/ in the string DSL).
 	regexpVal *regexp.Regexp
+	// The pattern as written, in the shared subset: what renders and exports.
+	regexpSrc string
 
 	// Custom Fault message overrides default error text.
 	faultMsg string
+	// argFault marks a node a builder made when its argument was wrong, as
+	// against a deliberate Fault: the string form refuses the former.
+	argFault bool
 
 	// Composition: if listMode != listNone, branches define alternate shapes.
 	listMode listMode
@@ -68,9 +77,10 @@ type node struct {
 	objKeysAny []any
 
 	// Define / Refer name (also stored on validator closures via befores).
-	defineName string
-	referName  string
-	referFill  bool
+	defineName  string
+	referName   string
+	referFill   bool
+	referStrict bool
 
 	// Rename info.
 	renameTo   string

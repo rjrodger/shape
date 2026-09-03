@@ -35,11 +35,12 @@ pub fn any() -> Node {
 pub(crate) fn fault_node(msg: impl Into<String>) -> Node {
     let mut n = Node::of(Kind::Never);
     n.fault_msg = Some(msg.into());
+    n.arg_fault = true;
     n
 }
 
-fn is_fault(n: &Node) -> bool {
-    n.kind == Kind::Never && n.fault_msg.is_some()
+pub(crate) fn is_fault(n: &Node) -> bool {
+    n.arg_fault
 }
 
 fn validator(
@@ -198,13 +199,18 @@ where
 /// A regexp check: the value must be a string matching it. A failure reads
 /// `check "/re/" failed`.
 pub fn check_re(re: Regex, spec: impl Into<Spec>) -> Node {
+    check_re_src(re.as_str(), spec)
+}
+
+/// `check_re` from a pattern text.
+pub(crate) fn check_re_src(src: &str, spec: impl Into<Spec>) -> Node {
     let mut n = buildize(spec);
     if n.kind == Kind::Any {
         n.kind = Kind::Check;
     }
     n.required = true;
     n.required_set = true;
-    n.check_re(re)
+    n.check_re_src(src)
 }
 
 /// A custom validator run before the structural check.
@@ -722,6 +728,7 @@ impl Node {
         if is_fault(&other) {
             self.kind = Kind::Never;
             self.fault_msg = other.fault_msg;
+            self.arg_fault = true;
             return self;
         }
         self.befores.extend(other.befores);
@@ -760,6 +767,7 @@ impl Node {
             base.nullable = self.nullable;
             base.silent = self.silent;
             base.fault_msg = self.fault_msg.take();
+            base.arg_fault = self.arg_fault;
             base.meta.extend(std::mem::take(&mut self.meta));
             self = base;
         }
@@ -829,6 +837,10 @@ impl Node {
 
     pub fn rest(mut self, child: impl Into<Spec>) -> Node {
         self.kind = Kind::Array;
+        // The rest replaces a plain element shape, as it does in TypeScript,
+        // where Rest sets the one child an array has: Rest(Number, [String])
+        // is an array of numbers. Fixed positions are a tuple, and are kept.
+        self.arr_child = None;
         self.arr_rest = Some(Box::new(buildize(child)));
         self
     }
@@ -858,13 +870,19 @@ impl Node {
             TypeRef::Kind(k) => type_token_node(k),
             TypeRef::Node(n) => *n,
         };
+        // Any keeps the value it is given as its default, as `Any(0)` does
+        // in TypeScript; the other tokens bring their own.
+        let keep = tn.kind == Kind::Any && self.has_default && !self.default.is_undefined();
         self.kind = tn.kind;
+        self.kind_set = true;
         self.required = tn.required;
         self.required_set = tn.required_set;
         self.skippable = tn.skippable;
-        self.has_default = tn.has_default;
-        self.default = tn.default;
-        self.literal = tn.literal;
+        if !keep {
+            self.has_default = tn.has_default;
+            self.default = tn.default;
+            self.literal = tn.literal;
+        }
         self
     }
 
@@ -963,19 +981,32 @@ impl Node {
             "Check",
             Some("Check()".to_string()),
             Vec::new(),
-            f,
+            // An absent value is left to the required check, as in TypeScript.
+            move |state: &mut State<'_>, update: &mut Update| state.absent || f(state, update),
         ));
         self
     }
 
-    pub fn check_re(mut self, re: Regex) -> Node {
-        let name = format!("/{}/", re.as_str());
+    pub fn check_re(self, re: Regex) -> Node {
+        self.check_re_src(re.as_str())
+    }
+
+    pub(crate) fn check_re_src(mut self, src: &str) -> Node {
+        let src = src.to_string();
+        let re = match crate::regexp::compile_regexp(&src) {
+            Ok(engine) => engine,
+            Err(msg) => return self.adopt(fault_node(msg)),
+        };
+        let name = format!("/{}/", src);
         let suffix = format!("Check({})", name);
         self.befores.push(validator(
             &name,
             Some(suffix),
             Vec::new(),
             move |state, update| {
+                if state.absent {
+                    return true;
+                }
                 if let Value::Str(s) = state.value {
                     if re.is_match(s) {
                         return true;
@@ -1050,6 +1081,7 @@ impl Node {
         }
         self.refer_name = Some(name.clone());
         self.refer_fill = opts.fill;
+        self.refer_strict = opts.strict;
         let suffix = format!("Refer({})", json_text(&name));
         self.befores.push(validator(
             "Refer",
@@ -1355,10 +1387,10 @@ mod tests {
             run(&s, &a("1")),
             "ERR Validation failed for property \"a\" with number \"1\" because check \"Check\" failed."
         );
-        // A required check sees the absent value.
+        // A check is not called for an absent value: the required check speaks.
         assert_eq!(
             run(&s, "{}"),
-            "ERR Validation failed for property \"a\" with value \"undefined\" because check \"Check\" failed."
+            "ERR Validation failed for property \"a\" because the property is missing."
         );
         let s = at_a(check(|_, _| true, Token::Number));
         assert_eq!(
@@ -1505,18 +1537,20 @@ mod tests {
             run(&s, &a("\"5\"")),
             "ERR Value \"5\" for property \"a\" does not satisfy all of: Number, Min(9)"
         );
-        // A branch that produces nothing leaves the key out.
+        // A branch that produces nothing leaves a required composition with
+        // no value, so the missing property is reported.
+        let missing = "ERR Validation failed for property \"a\" because the property is missing.";
         assert_eq!(
             run(&at_a(one([Spec::from(skip(Token::Number))])), "{}"),
-            "{}"
+            missing
         );
         assert_eq!(
             run(&at_a(some([Spec::from(skip(Token::Number))])), "{}"),
-            "{}"
+            missing
         );
         assert_eq!(
             run(&at_a(all([Spec::from(skip(Token::Number))])), "{}"),
-            "{}"
+            missing
         );
         let mut quiet = one_ns();
         quiet.silent = true;

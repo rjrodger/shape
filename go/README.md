@@ -7,9 +7,9 @@ validator. Your schema looks (almost) exactly like your data.
 import "github.com/rjrodger/shape/go"
 
 s := shape.MustShape(map[string]any{
-    "port":  8080,          // optional, defaults to 8080, must be a number
-    "host":  "localhost",   // optional, defaults to "localhost", must be a string
-    "debug": shape.Boolean, // required, must be a boolean
+	"port":  8080,          // optional, defaults to 8080, must be a number
+	"host":  "localhost",   // optional, defaults to "localhost", must be a string
+	"debug": shape.Boolean, // required, must be a boolean
 })
 
 out, err := s.Validate(map[string]any{"debug": true})
@@ -90,9 +90,9 @@ tags the key expressions:
 
 ```go
 type Config struct {
-    Host  string `shape:"Min(1)"`
-    Port  int    `shape:"Min(1).Max(65535)"`
-    Debug bool   `shape:"Boolean"` // required
+	Host  string `shape:"Min(1)"`
+	Port  int    `shape:"Min(1).Max(65535)"`
+	Debug bool   `shape:"Boolean"` // required
 }
 s := shape.MustShape(Config{Host: "localhost", Port: 8080})
 
@@ -129,16 +129,19 @@ shape.IsShape(v)                       // is v a *Schema?
 ### Validation
 
 ```go
-out, err := s.Validate(input)          // returns the (defaults-injected) value plus *ValidationError
-out, err := s.ValidateCtx(input, ctx)  // pass a *shape.Context for custom validators
-ok       := s.Match(input)             // bool, no errors collected
-ok       := s.Valid(input)             // alias of Match
-issues   := s.Error(input)             // []FieldError, nil when valid
-spec     := s.Spec()                   // structural snapshot of the compiled schema
-str      := s.String()                 // debug rendering
-schema   := s.JSONSchema()             // a JSON Schema (draft 2020-12), as map[string]any
-spec, _  := shape.FromJSONSchema(doc)  // and back: a spec built from a JSON Schema
-err      := s.ValidateInto(input, &out) // validate, then decode the result into a struct
+out, err := s.Validate(input)         // returns the (defaults-injected) value plus *ValidationError
+out, err := s.ValidateCtx(input, ctx) // pass a *shape.Context for custom validators
+ok := s.Match(input)                  // bool, no errors collected
+ok := s.Valid(input)                  // alias of Match
+issues := s.Error(input)              // []FieldError, nil when valid
+spec := s.Spec()                      // structural snapshot of the compiled schema
+str := s.String()                     // debug rendering
+j, _ := s.JSON()                      // the shape as declarative JSON
+back, _ := shape.Build(j)             // and back: the same shape again
+schema := s.JSONSchema()              // a JSON Schema (draft 2020-12), as map[string]any
+spec, _ := shape.FromJSONSchema(doc)  // and back: a spec built from a JSON Schema
+err := s.ValidateInto(input, &out)    // validate, then decode the result into a struct
+std := s.Standard()                   // Standard Schema V1-style interface: Version, Vendor, Validate
 ```
 
 `Validate` and `Error` never change their input. The value `Validate`
@@ -165,9 +168,9 @@ TypeScript implementation's.
 
 ```go
 shape.ShapeOptions{
-    KeyExpr: shape.KeyExprOptions{Disable: false}, // "x: Min(1)" key parsing — on
-    Meta:    shape.MetaOptions{Active: false, Suffix: "$$"},
-    ValExpr: shape.ValExprOptions{Active: false, KeyMark: "$$"},
+	KeyExpr: shape.KeyExprOptions{Disable: false}, // "x: Min(1)" key parsing — on
+	Meta:    shape.MetaOptions{Active: false, Suffix: "$$"},
+	ValExpr: shape.ValExprOptions{Active: false, KeyMark: "$$"},
 }
 ```
 
@@ -176,10 +179,10 @@ builders, and the value is the example the builder works on:
 
 ```go
 shape.MustShape(map[string]any{
-    "name: Min(1)":       shape.String,
-    "tags: Max(10)":      []any{shape.String},
-    "port: Optional(Number)": 8080,                    // optional, defaults to 8080
-    `user: Pick(["id"])`: map[string]any{"id": shape.Number, "name": shape.String},
+	"name: Min(1)":           shape.String,
+	"tags: Max(10)":          []any{shape.String},
+	"port: Optional(Number)": 8080, // optional, defaults to 8080
+	`user: Pick(["id"])`:     map[string]any{"id": shape.Number, "name": shape.String},
 })
 ```
 
@@ -208,7 +211,7 @@ detail; the tables here list the Go signatures.
 | Builder                          | Effect                                                             |
 | -------------------------------- | ------------------------------------------------------------------ |
 | `Type(kind, spec?)`              | force a `Kind`, `TypeToken`, kind name or node's type on the node  |
-| `Exact(values...)`               | require equality with one of the listed literals (top-level only)  |
+| `Exact(values...)`               | require equality with one of the listed literals (numbers by value, so `Exact(1)` matches `1.0`; the rest by `reflect.DeepEqual`) |
 | `Never(spec?)`                   | always fails to match                                              |
 | `Func(spec?)`                    | a function-typed value; optional of itself (the `Function` token is required) |
 | `Coerce(spec?)`                  | convert a string/number/bool to the node's kind first, where unambiguous |
@@ -303,25 +306,25 @@ string DSL, `Expr` returns the error.
 
 ```go
 s := shape.MustShape(map[string]any{
-    "name":   shape.Min(1, shape.String),
-    "age":    shape.Coerce(shape.Min(0, shape.Max(120, shape.Integer))),
-    "email":  shape.Email(),
-    "role":   shape.Exact("admin", "user"),
-    "tags":   shape.Optional([]any{shape.String}),
-    "addr":   shape.Open(map[string]any{
-        "city": shape.String,
-    }),
-    "pet": shape.Discriminated("kind", map[string]any{
-        "dog":  map[string]any{"bark": shape.Boolean},
-        "fish": map[string]any{"fins": shape.Number},
-    }),
+	"name":  shape.Min(1, shape.String),
+	"age":   shape.Coerce(shape.Min(0, shape.Max(120, shape.Integer))),
+	"email": shape.Email(),
+	"role":  shape.Exact("admin", "user"),
+	"tags":  shape.Optional([]any{shape.String}),
+	"addr": shape.Open(map[string]any{
+		"city": shape.String,
+	}),
+	"pet": shape.Discriminated("kind", map[string]any{
+		"dog":  map[string]any{"bark": shape.Boolean},
+		"fish": map[string]any{"fins": shape.Number},
+	}),
 })
 
 out, err := s.Validate(input)
 if verr, ok := err.(*shape.ValidationError); ok {
-    for _, issue := range verr.Issues {
-        fmt.Printf("%s [%s]: %s\n", issue.Path, issue.Why, issue.Text)
-    }
+	for _, issue := range verr.Issues {
+		fmt.Printf("%s [%s]: %s\n", issue.Path, issue.Why, issue.Text)
+	}
 }
 ```
 
@@ -344,5 +347,5 @@ checklist, and [`PLAN.md`](PLAN.md) for the original porting plan.
 ## Version
 
 ```go
-const Version = "0.2.0"
+const Version = "0.5.0"
 ```

@@ -1,0 +1,25 @@
+name	spec	input	output	error
+re-digit-ascii-ok	{"a":{"$expr":"/^\\d+$/"}}	{"a":"12"}	{"a":"12"}	
+re-digit-ascii-arabic	{"a":{"$expr":"/^\\d+$/"}}	{"a":"١٢"}		"Validation failed for property \"a\" with string \"١٢\" because the string did not match /^\\d+$/."
+re-word-ascii-ok	{"a":{"$expr":"/^\\w+$/"}}	{"a":"ab_1"}	{"a":"ab_1"}	
+re-word-ascii-accent	{"a":{"$expr":"/^\\w+$/"}}	{"a":"é"}		"Validation failed for property \"a\" with string \"é\" because the string did not match /^\\w+$/."
+re-space-ascii-ok	{"a":{"$expr":"/^\\s+$/"}}	{"a":" \t"}	{"a":" \t"}	
+re-space-ascii-nbsp	{"a":{"$expr":"/^\\s+$/"}}	{"a":" "}		"Validation failed for property \"a\" with string \" \" because the string did not match /^\\s+$/."
+re-negated-shorthand-ok	{"a":{"$expr":"/^\\D+$/"}}	{"a":"ab"}	{"a":"ab"}	
+re-negated-shorthand-fail	{"a":{"$expr":"/^\\D+$/"}}	{"a":"a1"}		"Validation failed for property \"a\" with string \"a1\" because the string did not match /^\\D+$/."
+re-class-shorthands	{"a":{"$expr":"/^[\\s\\d]+$/"}}	{"a":" 1"}	{"a":" 1"}	
+re-dot-newline	{"a":{"$expr":"/^a.b$/"}}	{"a":"a\nb"}		"Validation failed for property \"a\" with string \"a\\nb\" because the string did not match /^a.b$/."
+re-dot-return	{"a":{"$expr":"/^a.b$/"}}	{"a":"a\rb"}	{"a":"a\rb"}	
+re-dot-astral	{"a":{"$expr":"/^a.b$/"}}	{"a":"a😀b"}	{"a":"a😀b"}	
+re-anchor-trailing-newline	{"a":{"$expr":"/^a$/"}}	{"a":"a\n"}		"Validation failed for property \"a\" with string \"a\\n\" because the string did not match /^a$/."
+re-boundary-ok	{"a":{"$expr":"/\\bx\\b/"}}	{"a":"a x b"}	{"a":"a x b"}	
+re-boundary-fail	{"a":{"$expr":"/\\bx\\b/"}}	{"a":"axb"}		"Validation failed for property \"a\" with string \"axb\" because the string did not match /\\bx\\b/."
+re-lazy-brace	{"a":{"$expr":"/^x{2,3}?$/"}}	{"a":"xx"}	{"a":"xx"}	
+re-noncapturing	{"a":{"$expr":"/^(?:a|b)+$/"}}	{"a":"abab"}	{"a":"abab"}	
+re-escaped-slash	{"a":{"$expr":"/^\\/$/"}}	{"a":"/"}	{"a":"/"}	
+re-hex-escape	{"a":{"$expr":"/^\\x41$/"}}	{"a":"A"}	{"a":"A"}	
+re-class-trailing-dash	{"a":{"$expr":"/^[a-c-]+$/"}}	{"a":"a-c"}	{"a":"a-c"}	
+re-literal-unicode	{"a":{"$expr":"/^é+$/"}}	{"a":"éé"}	{"a":"éé"}	
+re-check-form-arabic	{"a":{"$expr":"Check(/^\\d+$/)"}}	{"a":"١"}		"Validation failed for property \"a\" with string \"١\" because check \"/^\\d+$/\" failed."
+re-jsonschema-pattern-arabic	{"$jsonschema":{"type":"object","properties":{"a":{"type":"string","pattern":"^\\d+$"}}}}	{"a":"١٢"}		"Validation failed for property \"a\" with string \"١٢\" because the string did not match /^\\d+$/."
+re-jsonschema-pattern-ok	{"$jsonschema":{"type":"object","properties":{"a":{"type":"string","pattern":"^\\d+$"}}}}	{"a":"12"}	{"a":"12"}	

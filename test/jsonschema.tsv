@@ -1,4 +1,10 @@
 name	spec	input	output	error
+js-number-min-and-exclusive-ok	{"$jsonschema":{"type":"number","minimum":1,"exclusiveMinimum":0}}	1	1	
+js-number-min-and-exclusive-low	{"$jsonschema":{"type":"number","minimum":1,"exclusiveMinimum":0}}	0.5		"Value \"0.5\" for property \"\" must be a minimum of 1 (was 0.5)."
+js-number-max-and-exclusive-high	{"$jsonschema":{"type":"number","maximum":1,"exclusiveMaximum":2}}	1.5		"Value \"1.5\" for property \"\" must be a maximum of 1 (was 1.5)."
+js-untyped-min-and-exclusive-low	{"$jsonschema":{"minimum":1,"exclusiveMinimum":0}}	0.5		"Value \"0.5\" for property \"\" must be a minimum of 1 (was 0.5)."
+js-untyped-max-and-exclusive-high	{"$jsonschema":{"maximum":1,"exclusiveMaximum":2}}	1.5		"Value \"1.5\" for property \"\" must be a maximum of 1 (was 1.5)."
+js-untyped-exclusive-lengths	{"$jsonschema":{"exclusiveMinimum":1,"minLength":2,"minItems":2,"minProperties":2}}	"ab"	"ab"	
 js-object-required	{"$jsonschema":{"type":"object","properties":{"name":{"type":"string"},"age":{"type":"integer","minimum":0,"default":1}},"required":["name"]}}	{"name":"a","extra":1}	{"name":"a","extra":1,"age":1}	
 js-object-required-missing	{"$jsonschema":{"type":"object","properties":{"name":{"type":"string"}},"required":["name"]}}	{}		"Validation failed for property \"name\" because the property is missing."
 js-object-closed	{"$jsonschema":{"type":"object","properties":{"a":{"type":"number"}},"additionalProperties":false}}	{"a":1,"b":2}		"Validation failed for object \"{a:1,b:2}\" because the property \"b\" is not allowed."

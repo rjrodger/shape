@@ -22,6 +22,10 @@ struct DiffResult {
     #[serde(skip_serializing_if = "Option::is_none")]
     reimport: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    json: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    rejson: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     ok: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     out: Option<serde_json::Value>,
@@ -35,6 +39,8 @@ fn run_case(name: &str, spec: &serde_json::Value, input: &serde_json::Value) -> 
         build: None,
         schema: None,
         reimport: None,
+        json: None,
+        rejson: None,
         ok: None,
         out: None,
         err: None,
@@ -56,6 +62,21 @@ fn run_case(name: &str, spec: &serde_json::Value, input: &serde_json::Value) -> 
         Err(e) => serde_json::Value::String(format!("ERR: {}", e)),
     });
     res.schema = Some(exported);
+
+    // The declarative JSON, and the export of the shape it reads back.
+    match schema.json() {
+        Err(e) => res.json = Some(serde_json::Value::String(format!("ERR: {}", e))),
+        Ok(j) => {
+            res.json = Some(serde_json::Value::from(j.clone()));
+            res.rejson = Some(match shape::build(&j) {
+                Err(e) => serde_json::Value::String(format!("ERR: {}", e)),
+                Ok(spec) => match Schema::new(spec).json() {
+                    Err(e) => serde_json::Value::String(format!("ERR: {}", e)),
+                    Ok(back) => serde_json::Value::from(back),
+                },
+            });
+        }
+    }
 
     match schema.validate(Value::from(input.clone())) {
         Ok(out) => {
@@ -94,6 +115,8 @@ fn differential() {
                     build: Some(format!("PANIC: {}", msg)),
                     schema: None,
                     reimport: None,
+                    json: None,
+                    rejson: None,
                     ok: None,
                     out: None,
                     err: None,

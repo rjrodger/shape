@@ -85,6 +85,31 @@ function build() {
   // Integer and Date kinds. No battery holds a Date instance, so every Date
   // case here is a failure and is comparable across the JSON boundary.
   add('token-Integer', I, SCALARS)
+  // A builder called wrongly in the string form is a build error.
+  add('expr-fault-arg', E('String.Min("x")'), SCALARS)
+  add('expr-fault-nested', E('Open(Define(""))'), SCALARS)
+  // A deliberate Fault on a Never node is a valid expression.
+  add('expr-fault-deliberate', E('Never.Fault("f")'), SCALARS)
+  // The shared regexp subset refuses the same patterns with the same text.
+  for (const [name, src] of [
+    ['flags', '/^a$/i'], ['lookahead', '/(?=a)/'], ['backref', '/(a)\\1/'], ['empty-class', '/[^]/'],
+    ['u-escape', '/\\u00e9/'], ['inline-flag', '/(?i)a/'], ['posix', '/[[:alpha:]]/'], ['p-class', '/\\p{L}/'],
+    ['set-op', '/[a&&b]/'], ['repeat', '/a**/'], ['unterminated', '/[/'], ['empty', '//'], ['brace', '/a{/'],
+    ['unknown-escape', '/\\q/'], ['shorthand-range', '/[\\d-z]/'], ['dash-escape', '/\\-/'],
+    ['unbalanced', '/(a/'], ['stray-paren', '/a)/'], ['stray-bracket', '/a]/'], ['class-bracket', '/[a[b]/'],
+    ['class-negated-shorthand', '/[\\D]/'], ['class-boundary', '/[\\b]/'], ['bad-hex', '/\\x4/'],
+    ['trailing-backslash', '/a\\/'],
+  ]) add('re-reject-' + name, E(src), ['a'])
+  // What the subset does accept, on the inputs the engines used to differ on.
+  add('re-digit', E('/^\\d+$/'), ['12', '\u0661\u0662', 'a'])
+  add('re-word', E('/^\\w+$/'), ['ab_1', 'é'])
+  add('re-space', E('/^\\s+$/'), [' \t', '\u00a0'])
+  add('re-dot', E('/^a.b$/'), ['a\nb', 'a\rb', 'a\u{1F600}b', 'ab'])
+  // Some: an object threads through its matching branches, a scalar does not.
+  // Passing inputs only: the message for a failing one lists object branches,
+  // whose rendering the ports do not yet share (see the parity page).
+  add('some-open-defaults', CALL('Some', { $open: { a: 1 } }, { $open: { a: 2 } }), [{}, { a: 5, q: 9 }, { a: 1 }])
+  add('some-scalar-coerce', CALL('Some', E('Coerce(Number)'), E('Max(2)')), ['12', 5, '7', 1, 99])
   add('token-obj-Integer', { a: I }, OBJS)
   add('int-optional', E('Optional(Integer)'), SCALARS)
   add('int-min', E('Min(2,Integer)'), SCALARS)

@@ -161,6 +161,10 @@ pub struct Node {
     pub kind: Kind,
     pub required: bool,
     pub required_set: bool,
+    /// The kind was named by the spec (a type token, `type_`), as against
+    /// implied by a value: a key expression's example keeps the named kind
+    /// and supplies the default alone.
+    pub kind_set: bool,
     /// Optional and no default injection (`p` in TypeScript).
     pub skippable: bool,
     /// Errors raised on or below this node are dropped (`e: false`).
@@ -186,6 +190,10 @@ pub struct Node {
     /// The declared keys in order, shared with the paths that name them.
     /// Set when the tree is prepared.
     pub obj_keys: Vec<Arc<str>>,
+    /// Nothing but the structural check applies to a present value: no
+    /// validator, rename, regexp or silence. Set when the tree is prepared,
+    /// and lets a walk judge such a value in place.
+    pub plain: bool,
 
     /// The fixed positions of a tuple.
     pub arr_children: Vec<Node>,
@@ -199,8 +207,13 @@ pub struct Node {
 
     /// The pattern of a `Regexp` node.
     pub regexp: Option<Regex>,
+    /// The pattern as written, in the shared subset: what renders and exports.
+    pub regexp_src: String,
     /// A `Fault` message overriding the structural text.
     pub fault_msg: Option<String>,
+    /// Made by a builder given a wrong argument, as against a deliberate
+    /// `fault`: the string form refuses such a node.
+    pub arg_fault: bool,
 
     pub list_mode: ListMode,
     pub list: Vec<Node>,
@@ -214,6 +227,7 @@ pub struct Node {
     pub define_name: Option<String>,
     pub refer_name: Option<String>,
     pub refer_fill: bool,
+    pub refer_strict: bool,
 
     pub rename_to: Option<String>,
     pub rename_keep: bool,

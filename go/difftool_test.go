@@ -27,6 +27,8 @@ type diffResult struct {
 	Build    string `json:"build,omitempty"`
 	Schema   any    `json:"schema,omitempty"`
 	Reimport any    `json:"reimport,omitempty"`
+	JSON     any    `json:"json,omitempty"`
+	ReJSON   any    `json:"rejson,omitempty"`
 	OK       *bool  `json:"ok,omitempty"`
 	Out      any    `json:"out,omitempty"`
 	Err      string `json:"err,omitempty"`
@@ -71,7 +73,13 @@ func runDiffCase(c diffCase) (res diffResult) {
 
 	defer func() {
 		if r := recover(); r != nil {
-			res.Build = "PANIC: " + fmt.Sprint(r)
+			// A builder or the string form refusing a spec is a build error,
+			// as it is in TypeScript; anything else is a real panic.
+			if err, ok := r.(error); ok {
+				res.Build = "ERR: " + err.Error()
+			} else {
+				res.Build = "PANIC: " + fmt.Sprint(r)
+			}
 		}
 	}()
 
@@ -85,6 +93,14 @@ func runDiffCase(c diffCase) (res diffResult) {
 	// of what the import reads back from it.
 	res.Schema = jsonNorm(s.JSONSchema())
 	res.Reimport = reimportSchema(res.Schema)
+
+	// The declarative JSON, and the export of the shape it reads back.
+	if j, err := s.JSON(); err != nil {
+		res.JSON = "ERR: " + err.Error()
+	} else {
+		res.JSON = jsonNorm(j)
+		res.ReJSON = rebuildJSON(res.JSON)
+	}
 
 	// A JSON null is a value that is present and null. Go reads a plain nil as
 	// "no value supplied", so hand the sentinel over instead.
@@ -103,6 +119,25 @@ func runDiffCase(c diffCase) (res diffResult) {
 	yes := true
 	res.OK, res.Out = &yes, jsonNorm(out)
 	return
+}
+
+// rebuildJSON exports the shape the declarative JSON reads back as, or the
+// error that stopped it.
+func rebuildJSON(j any) (out any) {
+	defer func() {
+		if r := recover(); r != nil {
+			out = "PANIC: " + fmt.Sprint(r)
+		}
+	}()
+	s, err := Build(j)
+	if err != nil {
+		return "ERR: " + err.Error()
+	}
+	back, err := s.JSON()
+	if err != nil {
+		return "ERR: " + err.Error()
+	}
+	return jsonNorm(back)
 }
 
 // reimportSchema exports the shape the import builds from a schema, or the

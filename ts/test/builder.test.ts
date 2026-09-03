@@ -295,7 +295,7 @@ describe('builder', () => {
     throws(() => g4({}), 'is missing')
     throws(() => g4(), 'is missing')
 
-    let g5 = Shape(Check(/ul/i))
+    let g5 = Shape(Check(/[uU][lL]/))
     deepEqual(g5('*UL*'), '*UL*')
     throws(() => g5(), 'required')
     throws(() => g5(undefined), 'required')

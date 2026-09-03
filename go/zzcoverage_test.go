@@ -355,12 +355,12 @@ func TestZZExprArgs(t *testing.T) {
 	if _, err := Expr("Min(Default)"); err == nil {
 		t.Fatal("expected builder arg construction error")
 	}
-	// NaN arg (286-291).
-	if _, err := Expr("Min(NaN)"); err != nil {
+	// NaN arg (286-291): Min faults on it, and the string form reports that.
+	if _, err := Expr("Min(NaN)"); err == nil || err.Error() != "Shape: Min needs a number" {
 		t.Fatalf("Min(NaN) err: %v", err)
 	}
-	// null/undefined arg -> nil (292-294).
-	if _, err := Expr("Min(null)"); err != nil {
+	// null/undefined arg -> nil (292-294), which Min faults on too.
+	if _, err := Expr("Min(null)"); err == nil || err.Error() != "Shape: Min needs a number" {
 		t.Fatalf("Min(null) err: %v", err)
 	}
 	// Bad regexp as an arg (297-299).

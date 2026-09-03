@@ -91,6 +91,11 @@ impl ValidationError {
     pub fn has_any(&self) -> bool {
         self.n > 0 || !self.issues.is_empty()
     }
+
+    /// How many errors were added, counted or stored.
+    pub(crate) fn count(&self) -> usize {
+        self.n + self.issues.len()
+    }
 }
 
 impl fmt::Display for ValidationError {

@@ -21,7 +21,8 @@ const applyOptions = Shape({
 })
 
 applyOptions({ port: 9090, verbose: true })
-// → { port: 9090, host: 'localhost', retries: 3, verbose: true }
+// → { port: 9090, verbose: true, host: 'localhost', retries: 3 }
+//   (injected defaults follow the keys you passed)
 ```
 
 **Go**
@@ -44,9 +45,9 @@ out, _ := s.Validate(map[string]any{"port": 9090, "verbose": true})
 - Nested option objects fill out recursively — declare them inline.
 - Shape **mutates** the input to inject defaults (TS). If you need to keep the
   original untouched, clone it first. See
-  [How validation works](../explanation/how-validation-works.md#mutation).
+  [How validation works](../explanation/how-validation-works.md#default-injection-and-mutation).
 - The empty string is not a valid value for a string field by default. Use
-  [`Empty`](../reference/builders.md#empty) to allow `""`.
+  [`Empty`](../reference/builders.md#required--optional--defaults) to allow `""`.
 
 ## Make some options required
 

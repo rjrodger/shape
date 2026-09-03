@@ -3,6 +3,7 @@ package shape
 import (
 	"fmt"
 	"math"
+	"math/big"
 	"reflect"
 	"regexp"
 	"strconv"
@@ -326,14 +327,20 @@ func Type(kind any, spec ...any) *Node {
 		return nb
 	}
 
+	// Any keeps the value it is given as its default, as TS Any(0) does;
+	// the other tokens bring their own.
+	keep := tn.kind == KindAny && nb.n.hasDefault && nb.n.defaultValue != nil
 	nb.n.kind = tn.kind
+	nb.n.kindSet = true
 	nb.n.required = tn.required
 	nb.n.requiredSet = tn.requiredSet
 	nb.n.skippable = tn.skippable
-	nb.n.hasDefault = tn.hasDefault
-	nb.n.defaultValue = cloneAny(tn.defaultValue)
-	nb.n.hasLiteral = tn.hasLiteral
-	nb.n.literal = tn.literal
+	if !keep {
+		nb.n.hasDefault = tn.hasDefault
+		nb.n.defaultValue = cloneAny(tn.defaultValue)
+		nb.n.hasLiteral = tn.hasLiteral
+		nb.n.literal = tn.literal
+	}
 
 	return nb
 }
@@ -367,7 +374,7 @@ func Exact(vals ...any) *Node {
 		args: append([]any{}, vals...),
 		fn: func(val any, update *Update, state *State) bool {
 			for _, want := range vals {
-				if reflect.DeepEqual(val, want) {
+				if exactEqual(val, want) {
 					return true
 				}
 			}
@@ -375,7 +382,7 @@ func Exact(vals ...any) *Node {
 			// is a value in its own right (TS: undefined === val).
 			if state.absent && state.Node.hasDefault {
 				for _, want := range vals {
-					if reflect.DeepEqual(state.Node.defaultValue, want) {
+					if exactEqual(state.Node.defaultValue, want) {
 						return true
 					}
 				}
@@ -410,8 +417,38 @@ func (n *Node) Exact(vals ...any) *Node {
 // fault is what a builder returns when called wrongly: a node that
 // accepts nothing and says why at validation, since a Go builder cannot
 // throw as the TypeScript one does (see the parity page).
+// exactEqual is Exact's comparison: numbers by value whatever their kind, so
+// an int literal in the spec matches the float64 a JSON decoder produces, as
+// one JavaScript number type would; anything else structurally. Numbers are
+// compared as exact rationals, so large integers keep their precision.
+func exactEqual(val, want any) bool {
+	if reflect.DeepEqual(val, want) {
+		return true
+	}
+	if !isNumber(val) || !isNumber(want) {
+		return false
+	}
+	a, b := exactRat(val), exactRat(want)
+	return a != nil && b != nil && a.Cmp(b) == 0
+}
+
+// exactRat is a number as an exact rational; NaN and the infinities, which
+// equal nothing, are nil.
+func exactRat(v any) *big.Rat {
+	rv := reflect.ValueOf(v)
+	switch rv.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return new(big.Rat).SetInt64(rv.Int())
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		return new(big.Rat).SetUint64(rv.Uint())
+	case reflect.Float32, reflect.Float64:
+		return new(big.Rat).SetFloat64(rv.Float())
+	}
+	return nil
+}
+
 func fault(msg string) *Node {
-	return newNodeWrap(&node{kind: KindNever, faultMsg: msg})
+	return newNodeWrap(&node{kind: KindNever, faultMsg: msg, argFault: true})
 }
 
 // boundArg reports whether a bound is a finite number: a numeric value, a
@@ -483,7 +520,7 @@ func (n *Node) Min(min any) *Node {
 	other := Min(min)
 	if other.n.kind == KindNever && other.n.faultMsg != "" {
 		// The argument was wrong: this node becomes the fault.
-		n.n.kind, n.n.faultMsg = KindNever, other.n.faultMsg
+		n.n.kind, n.n.faultMsg, n.n.argFault = KindNever, other.n.faultMsg, other.n.argFault
 		return n
 	}
 	n.n.befores = append(n.n.befores, other.n.befores...)
@@ -538,7 +575,7 @@ func (n *Node) Max(max any) *Node {
 	other := Max(max)
 	if other.n.kind == KindNever && other.n.faultMsg != "" {
 		// The argument was wrong: this node becomes the fault.
-		n.n.kind, n.n.faultMsg = KindNever, other.n.faultMsg
+		n.n.kind, n.n.faultMsg, n.n.argFault = KindNever, other.n.faultMsg, other.n.argFault
 		return n
 	}
 	n.n.befores = append(n.n.befores, other.n.befores...)
@@ -593,7 +630,7 @@ func (n *Node) Above(above any) *Node {
 	other := Above(above)
 	if other.n.kind == KindNever && other.n.faultMsg != "" {
 		// The argument was wrong: this node becomes the fault.
-		n.n.kind, n.n.faultMsg = KindNever, other.n.faultMsg
+		n.n.kind, n.n.faultMsg, n.n.argFault = KindNever, other.n.faultMsg, other.n.argFault
 		return n
 	}
 	n.n.befores = append(n.n.befores, other.n.befores...)
@@ -648,7 +685,7 @@ func (n *Node) Below(below any) *Node {
 	other := Below(below)
 	if other.n.kind == KindNever && other.n.faultMsg != "" {
 		// The argument was wrong: this node becomes the fault.
-		n.n.kind, n.n.faultMsg = KindNever, other.n.faultMsg
+		n.n.kind, n.n.faultMsg, n.n.argFault = KindNever, other.n.faultMsg, other.n.argFault
 		return n
 	}
 	n.n.befores = append(n.n.befores, other.n.befores...)
@@ -703,7 +740,7 @@ func (n *Node) Len(length int) *Node {
 	other := Len(length)
 	if other.n.kind == KindNever && other.n.faultMsg != "" {
 		// The argument was wrong: this node becomes the fault.
-		n.n.kind, n.n.faultMsg = KindNever, other.n.faultMsg
+		n.n.kind, n.n.faultMsg, n.n.argFault = KindNever, other.n.faultMsg, other.n.argFault
 		return n
 	}
 	n.n.befores = append(n.n.befores, other.n.befores...)
@@ -725,20 +762,31 @@ func Check(check any, spec ...any) *Node {
 		nb.n.kind = KindCheck
 		nb.n.required = true
 		nb.n.requiredSet = true
-		v := validator{name: "Check", fn: c, stringify: func() string { return "Check()" }}
+		// An absent value is left to the required check, as in TypeScript.
+		fn := func(val any, update *Update, state *State) bool {
+			return state.absent || c(val, update, state)
+		}
+		v := validator{name: "Check", fn: fn, stringify: func() string { return "Check()" }}
 		nb.n.befores = append(nb.n.befores, v)
 		bumpValidatorGen()
 	case *regexp.Regexp:
-		re := c
+		src := c.String()
+		re, err := compileRegexp(src)
+		if err != nil {
+			return fault(err.Error())
+		}
 		nb.n.kind = KindCheck
 		nb.n.required = true
 		nb.n.requiredSet = true
 		// The check name is the /pattern/ form so failures read
 		// `check "/re/" failed`, mirroring TS Check(RegExp).
-		reName := "/" + re.String() + "/"
+		reName := "/" + src + "/"
 		v := validator{
 			name: reName,
 			fn: func(val any, update *Update, state *State) bool {
+				if state.absent {
+					return true
+				}
 				if s, ok := val.(string); ok && re.MatchString(s) {
 					return true
 				}
@@ -748,7 +796,7 @@ func Check(check any, spec ...any) *Node {
 				update.Mark = markCheckType
 				return false
 			},
-			stringify: func() string { return fmt.Sprintf("Check(/%s/)", re.String()) },
+			stringify: func() string { return fmt.Sprintf("Check(/%s/)", src) },
 		}
 		nb.n.befores = append(nb.n.befores, v)
 		bumpValidatorGen()
@@ -912,6 +960,10 @@ func Rest(child any, spec ...any) *Node {
 	if nb.n.kind != KindArray {
 		nb.n.kind = KindArray
 	}
+	// The rest replaces a plain element shape, as it does in TS, where Rest
+	// sets the one child an array has: Rest(Number, [String]) is an array of
+	// numbers. Fixed positions are a tuple, and are kept.
+	nb.n.arrChild = nil
 	nb.n.arrRest = cn
 	return nb
 }
@@ -977,6 +1029,7 @@ func (n *Node) Rest(child any) *Node {
 	if n.n.kind != KindArray {
 		n.n.kind = KindArray
 	}
+	n.n.arrChild = nil
 	n.n.arrRest = cn
 	return n
 }
@@ -996,6 +1049,7 @@ func Define(name string, spec ...any) *Node {
 	captured := nb.n
 	v := validator{
 		name: "Define",
+		args: []any{name},
 		fn: func(val any, update *Update, state *State) bool {
 			if state.Ctx == nil {
 				state.Ctx = newContext(nil)
@@ -1041,8 +1095,10 @@ func ReferWith(name string, opts ReferOptions, spec ...any) *Node {
 	}
 	nb.n.referName = name
 	nb.n.referFill = opts.Fill
+	nb.n.referStrict = opts.Strict
 	v := validator{
 		name: "Refer",
+		args: []any{name},
 		fn: func(val any, update *Update, state *State) bool {
 			if state.Ctx == nil {
 				return true
@@ -1156,6 +1212,7 @@ func Key(args ...any) *Node {
 	}
 	v := validator{
 		name: "Key",
+		args: append([]any{}, args...),
 		fn: func(val any, update *Update, state *State) bool {
 			// TS state.path is [nil, k1, ..., kn]; replicate the leading nil root so
 			// the index/slice math matches exactly.

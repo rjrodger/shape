@@ -22,6 +22,9 @@ pub enum Spec {
     Arr(Vec<Spec>),
     /// A regular expression: a required string matching it.
     Regex(Regex),
+    /// A regexp as its pattern text, in the shared subset: what the string
+    /// form reads, and what a JSON Schema pattern imports.
+    Regexp(String),
 }
 
 impl From<Node> for Spec {

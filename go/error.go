@@ -90,6 +90,11 @@ type ValidationError struct {
 	n      int
 }
 
+// count is how many errors were added, counted or stored.
+func (e *ValidationError) count() int {
+	return len(e.Issues) + e.n
+}
+
 func (e *ValidationError) Error() string {
 	if e == nil || len(e.Issues) == 0 {
 		return ""
@@ -147,7 +152,7 @@ func makeErr(s *State, why string, mark int, text string) FieldError {
 	if s != nil {
 		err.node = s.Node
 		if s.Node != nil && s.Node.regexpVal != nil {
-			err.regexpSrc = "/" + s.Node.regexpVal.String() + "/"
+			err.regexpSrc = "/" + s.Node.regexpSrc + "/"
 		}
 	}
 	if text != "" {

@@ -10,7 +10,7 @@
   - composable builders (`One`, `Min`, `Max`, etc.)
 
 ## Current TS behaviors to preserve
-From `src/shape.ts` and README:
+From `ts/src/shape.ts` and README:
 - Wrapper constructors (`String`, `Number`, `Boolean`, etc.) are interpreted as required type markers, while literal values become optional defaults.
 - Constructor names are normalized through a type-native mapping and turned into internal node types.
 - Rich builder map is exposed and attached onto the main `Shape` function.
@@ -39,10 +39,10 @@ go/
 ## Go API design (schema-by-example)
 Primary API:
 ```go
-compiled := shape.Shape(map[string]any{
-  "port": 8080,         // optional + default
-  "host": "localhost", // optional + default
-  "debug": shape.Boolean, // required bool
+compiled, err := shape.Shape(map[string]any{
+	"port":  8080,          // optional + default
+	"host":  "localhost",   // optional + default
+	"debug": shape.Boolean, // required bool
 })
 
 out, err := compiled.Validate(input)

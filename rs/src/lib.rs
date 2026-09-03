@@ -23,11 +23,13 @@ pub mod error;
 pub mod expr;
 pub mod format;
 pub mod isolate;
+pub mod json;
 pub mod jsonschema;
 pub mod jsonschema_import;
 mod macros;
 pub mod node;
 pub mod normalize;
+mod regexp;
 pub mod spec;
 pub mod standard;
 pub mod stringify;
@@ -40,8 +42,10 @@ pub use builders::*;
 pub use context::{Context, PathPart, State, Update, UpdateErr};
 pub use discriminated::{discriminated, Disc};
 pub use error::{FieldError, ValidationError};
+pub use expr::build;
 pub use expr::{expr, expr_apply, ExprError};
 pub use isolate::{Inner, TransformFn};
+pub use json::{node_json, JsonError};
 pub use jsonschema::json_schema;
 pub use jsonschema_import::{from_json_schema, JsonSchemaError};
 pub use node::{Kind, ListMode, Node, Token, Validator, ValidatorFn};
@@ -96,6 +100,12 @@ impl Schema {
     }
 
     /// The schema as a JSON Schema document (draft 2020-12).
+    /// The declarative JSON of the shape, which [`crate::expr::build`]
+    /// reads back.
+    pub fn json(&self) -> Result<Value, crate::json::JsonError> {
+        crate::json::node_json(self.node())
+    }
+
     pub fn json_schema(&self) -> Value {
         json_schema(&self.root)
     }
@@ -193,6 +203,13 @@ pub(crate) fn prepare_node(n: &mut Node) {
 /// is collected by name. Reports whether the tree has no validator at all.
 fn prepare(n: &mut Node, defs: &mut HashMap<String, Arc<Node>>) -> bool {
     let mut pure = n.befores.is_empty() && n.afters.is_empty();
+    n.plain = pure
+        && !n.silent
+        && n.rename_to.is_none()
+        && n.rename_claim.is_empty()
+        && n.regexp.is_none()
+        && n.list_mode == ListMode::None
+        && n.disc.is_none();
     if n.kind == Kind::Object {
         n.obj_keys = n
             .obj_children

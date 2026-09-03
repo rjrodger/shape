@@ -1,4 +1,6 @@
 name	spec	input	output	error
+min-under-missing	{"a":{"$expr":"Min(2,String)"}}	{}		"Validation failed for property \"a\" because the property is missing."
+max-number-under-missing	{"a":{"$expr":"Max(2,Number)"}}	{}		"Validation failed for property \"a\" because the property is missing."
 dsl-type-chain-fail	{"a":{"$expr":"Min(2).Array"}}	{"a":[1]}		"Value \"[1]\" for property \"a\" must be a minimum length of 2 (was 1)."
 dsl-type-chain-ok	{"a":{"$expr":"Min(2).Array"}}	{"a":[1,2]}	{"a":[1,2]}	
 min-number-ok	{"a":{"$expr":"Min(3,Number)"}}	{"a":5}	{"a":5}	

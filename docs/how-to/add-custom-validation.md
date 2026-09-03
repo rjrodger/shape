@@ -27,8 +27,10 @@ s := shape.MustShape(map[string]any{
 })
 ```
 
-> Go uses the RE2 engine; TypeScript uses the JavaScript engine. Stick to
-> portable patterns if a schema must behave identically in both.
+> A pattern is held to the shared [regexp subset](../reference/regexp.md):
+> what the JavaScript, RE2 and regex-crate engines all read the same way,
+> with `\d`, `\w` and `\s` ASCII and no flags, lookaround or backreferences.
+> Inside it a shape behaves identically in every language.
 
 ## A custom predicate
 
@@ -70,16 +72,20 @@ The validator signature is the same in both languages:
 
 ## Before and after the structural checks
 
-- [`Before`](../reference/builders.md#before) runs **before** the type check —
+- [`Before`](../reference/builders.md#custom-checks) runs **before** the type check —
   use it to coerce or substitute a value.
-- [`After`](../reference/builders.md#after) runs **after** — use it to validate
+- [`After`](../reference/builders.md#custom-checks) runs **after** — use it to validate
   the produced value.
 
 ```js
 Shape({
-  id: Before((val, update) => (update.val = String(val), true), String),
+  id: Before((val, update) => (undefined !== val && (update.val = String(val)), true), String),
 })
 ```
+
+A `Before` also runs when the property is **absent** (`val` is `undefined`), so
+leave an absent value alone or the required check never sees it — without the
+guard above, a missing `id` would become the string `'undefined'`.
 
 ## Coerce, repair or rewrite the value
 
@@ -95,7 +101,7 @@ For the common cases there is no need to write a validator:
 
 ## Replace the message
 
-Wrap any shape in [`Fault`](../reference/builders.md#fault) to override the
+Wrap any shape in [`Fault`](../reference/builders.md#required--optional--defaults) to override the
 *structural* error text (custom-check messages are controlled by the check
 itself):
 

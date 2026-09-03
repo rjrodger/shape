@@ -44,7 +44,7 @@ Notes:
 
 | Builder | Effect |
 | ------- | ------ |
-| `Type(kind, spec?)` | Force a specific type/kind, adopting its required/default state. TS accepts a wrapper (`Number`) or name; Go accepts a `Kind`, `TypeToken`, kind name, or an already-built node. Structural children are not carried across, so `Type(Object)` is a closed object and `Type(Array)` accepts any elements. |
+| `Type(kind, spec?)` | Force a specific type/kind, adopting its required/default state. TS accepts a wrapper (`Number`), a name (`'Number'`, `'Integer'`) or a sample value (`null`, an object); Go accepts a `Kind`, `TypeToken`, kind name, or an already-built node. Structural children are not carried across, so `Type(Object)` is a closed object and `Type(Array)` accepts any elements. |
 | `Integer(spec?)` | A number with no fractional part. Behaves as a type token: required, with the latent default `0`, so `Optional(Integer)` injects `0`. TS: a builder, usable bare (`{ n: Integer }`) or called; Go: the `Integer` token, `Type(Integer, spec)` or `.Integer()`. |
 | `Date` | A date value. TS: the `Date` constructor as a type marker (a `Date` instance); Go: the `Date` token (a `time.Time`). `.Date()` chains in both. A `Date` instance / `time.Time` in a spec is an optional date with that default. |
 | `Exact(values…)` | Require equality with one of the listed literals. Also matches from the node default. |
@@ -92,7 +92,9 @@ wrongly-typed value still gets the required or type error, and a bound on the
 same node (`Email(Min(10, String))`) is checked first. A format failure keeps its
 own message — `Value "nope" for property "a" is not a valid email address.` —
 under `Fault` too, which replaces structural text only. Every pattern is written
-for the RE2 and JavaScript engines alike; IPv6 is checked algorithmically.
+for the RE2 and JavaScript engines alike; IPv6 is checked algorithmically. A
+pattern of your own (`/re/`, `Check(/re/)`) is held to the shared
+[regexp subset](regexp.md), so it matches the same strings in every language.
 
 ## Bounds
 
@@ -111,13 +113,17 @@ For numbers these bound the **value**; for strings/arrays/objects they bound the
 
 | Builder | Effect |
 | ------- | ------ |
-| `Check(fn or RegExp, spec?)` | Custom predicate, or a regular-expression match. |
+| `Check(fn or RegExp, spec?)` | Custom predicate, or a regular-expression match. `fn` is not called for an absent value; the node is required. TS also takes a type name, `Check('number')`, which only sets the node's type. |
 | `Before(fn, spec?)` | Run `fn` **before** the structural type check (coerce/substitute). |
 | `After(fn, spec?)` | Run `fn` **after** the structural type check (validate the result). |
 
 Validator signature (all three): `(val, update, state) => boolean`. Return
 `true` to pass. Use `update.val` to replace the value, `update.err` to set a
-message, `update.done` to stop further checks. See [Shape nodes](nodes.md).
+message (`$VALUE` and `$PATH` are expanded), `update.done` to skip the node's
+structural check. In TypeScript a validator that throws fails with the
+exception's message appended; in Go a panic and in Rust an unwinding panic
+escape the call (see the [parity page](../explanation/ts-go-parity.md)). See
+[Shape nodes](nodes.md).
 
 A bare regular expression in a spec (`{ a: /^a/ }`) is a **type**: a string that
 must match, so a non-string fails as a type error. `Check(/^a/)` is the explicit
@@ -141,9 +147,14 @@ A bound outside the isolation still applies to what comes out:
 
 | Builder | Effect |
 | ------- | ------ |
-| `One(shapes…)` | Passes on the first matching branch (its output is used). |
-| `Some(shapes…)` | Passes if at least one branch matches; all branches are evaluated. |
-| `All(shapes…)` | Passes only if every branch matches; the value is threaded through each. |
+| `One(shapes…)` | Passes on the first matching branch, whose output is the result. |
+| `Some(shapes…)` | Passes if at least one branch matches; all branches are evaluated, and the last matching branch's result stands. Every branch sees the value as it was given, never one another branch changed (`Some(Open({a:1}), Open({b:2}))` on `{}` gives `{b:2}`). |
+| `All(shapes…)` | Passes only if every branch matches; the value is threaded through each, so later branches see what earlier ones produced (`All(Open({a:1}), Open({b:2}))` on `{}` gives `{a:1,b:2}`). |
+
+None of the three changes the value it was given: each branch matches and
+produces from a copy, and the composition's result replaces the value only
+when it passes, so a failing `One`, `Some` or `All` leaves the input as it
+was.
 | `Discriminated(tag, { name: shape, … })` | A tagged union: the branch is chosen by the string value of the `tag` property and the value validated against that branch **alone**, so the errors are its own rather than a list of every alternative. |
 
 `Discriminated` adds the tag property to an object-shaped branch that does not
@@ -165,7 +176,7 @@ absent; it is not put to its branches.
 | `Open(spec?)` | Allow unknown object properties. (An empty `{}` is already open.) |
 | `Closed(spec?)` | Forbid unknown properties; makes a single-shape array a fixed tuple-of-one. |
 | `Child(child, spec?)` | Default shape for every unknown object value (or array element). |
-| `Rest(child, spec?)` | Tail shape for array elements past the fixed tuple positions. |
+| `Rest(child, spec?)` | Tail shape for array elements past the fixed tuple positions: `Rest(Number, [String, Boolean])`. A single-shape array is an element shape, not a tuple, so a one-element prefix is `Rest(Number, Closed([String]))`, and `Rest(Number, [String])` is an array of numbers — the rest replaces a plain element shape. Bare `Rest(Number)` is the same as `[Number]`. |
 
 ## Object algebra
 
@@ -211,7 +222,7 @@ key expression, whose example is the shape:
 
 | Builder | Effect |
 | ------- | ------ |
-| `Key(depth?, sep?)` | Replace the value with its key (or a path slice). |
+| `Key(depth?, sep?)` | Replace the value with its key (or a path slice). `Key()` is the parent key; `Key(n)` the `n` keys ending at the parent, as an array (`Key(2)` under `x.y.k` is `['x', 'y']`), `Key(n, sep)` the same joined by `sep`; TS `Key(fn)` is `fn(path, state)`'s result. |
 
 ---
 
@@ -264,11 +275,13 @@ declared. `Skip` still means no injection at all, and a bare literal expression
 ## Ordering within a node
 
 `Coerce` runs first. Then a size bound (`Min`, `Max`, `Above`, `Below`, `Len`)
-stands aside when the node declares a type the value does not have, so
-`Min(2, String)` against `1` reports that `1` is not a string rather than that it
-is below 2. A bound that does fail short-circuits the rest of the node's checks,
-so it is the only error reported. Every other before and after runs even after
-one has failed, so a failing format and a failing custom check both report.
+or a format stands aside when the node declares a type the value does not have,
+so `Min(2, String)` against `1` reports that `1` is not a string rather than
+that it is below 2. A check that fails skips the node's own structural check,
+so `Min(2, String)` against `""` reports only the bound, not the empty string
+too. Every before and after still runs after one has failed, so a failing bound
+and a failing format (`Min(10, Email)` against `"nope"`), or a failing format
+and a failing custom check, both report.
 
 A failed container type check ends the descent: validating `{ a: String }`
 against `1` reports one error, not a type error plus "property a is required"

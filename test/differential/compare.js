@@ -51,7 +51,7 @@ const cases = Object.fromEntries(
 const ts = loadJsonl(process.argv[3])
 const go = loadJsonl(process.argv[4])
 
-const buckets = { build: [], schema: [], reimport: [], verdict: [], output: [], errtext: [] }
+const buckets = { build: [], schema: [], reimport: [], json: [], rejson: [], verdict: [], output: [], errtext: [] }
 
 for (const name of Object.keys(ts)) {
   const t = ts[name]
@@ -75,6 +75,11 @@ for (const name of Object.keys(ts)) {
   // The export of the shape each import reads back from that schema.
   if (J(t.reimport) !== J(g.reimport)) { buckets.reimport.push(row); continue }
 
+  // The declarative JSON, and the JSON of the shape built from it: one spec
+  // writes one JSON, and reads it back the same way.
+  if (J(t.json) !== J(g.json)) { buckets.json.push(row); continue }
+  if (J(t.rejson) !== J(g.rejson)) { buckets.rejson.push(row); continue }
+
   if (t.ok !== g.ok) { buckets.verdict.push(row); continue }
 
   if (t.ok) {
@@ -88,7 +93,9 @@ for (const name of Object.keys(ts)) {
 const total = Object.keys(ts).length
 const failed = Object.values(buckets).reduce((a, b) => a + b.length, 0)
 
-const side = (r, kind) => 'schema' === kind ? 'SCHEMA ' + J(r.schema)
+const side = (r, kind) => 'json' === kind ? 'JSON ' + J(r.json)
+  : 'rejson' === kind ? 'REJSON ' + J(r.rejson)
+  : 'schema' === kind ? 'SCHEMA ' + J(r.schema)
   : 'reimport' === kind ? 'REIMPORT ' + J(r.reimport)
   : r.ok ? 'PASS ' + J(r.out)
     : undefined !== r.build ? 'BUILD ' + r.build
@@ -99,6 +106,8 @@ console.log(`differential: ${total} cases, ${total - failed} agree, ${failed} di
 const LABEL = {
   build: 'build/compile disagreement',
   schema: 'different JSON Schema export',
+  json: 'different declarative JSON export',
+  rejson: 'different JSON for the shape built from it',
   reimport: 'different export after JSON Schema import',
   verdict: 'pass-vs-fail disagreement',
   output: 'different produced value',

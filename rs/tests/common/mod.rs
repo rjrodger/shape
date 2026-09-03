@@ -40,7 +40,8 @@ pub fn decode_spec(v: &serde_json::Value) -> Result<Spec, Unsupported> {
                     "$optional" => return Ok(Spec::from(shape::optional(decode_spec(sv)?))),
                     "$expr" => {
                         let src = sv.as_str().unwrap_or("");
-                        let node = expr(src).unwrap_or_else(|e| panic!("{}: {}", src, e));
+                        // A refused expression is a build error, as in TypeScript.
+                        let node = expr(src).map_err(|e| Unsupported(e.0))?;
                         return Ok(Spec::from(node));
                     }
                     "$call" => {
@@ -81,6 +82,17 @@ pub fn decode_spec(v: &serde_json::Value) -> Result<Spec, Unsupported> {
                                 }
                                 _ => Err(Unsupported("$call Refer".into())),
                             },
+                            "Some" | "One" | "All" => {
+                                let branches = arr[1..]
+                                    .iter()
+                                    .map(decode_spec)
+                                    .collect::<Result<Vec<_>, _>>()?;
+                                Ok(Spec::from(match name {
+                                    "Some" => shape::some(branches),
+                                    "One" => shape::one(branches),
+                                    _ => shape::all(branches),
+                                }))
+                            }
                             "Pick" | "Omit" => {
                                 let names =
                                     shape::Names::from_value(&Value::from(arr[1].clone()), name)
@@ -91,6 +103,8 @@ pub fn decode_spec(v: &serde_json::Value) -> Result<Spec, Unsupported> {
                                     shape::omit(names, spec)
                                 }))
                             }
+                            "Rest" => Ok(Spec::from(shape::rest(decode_spec(&arr[1])?, spec))),
+                            "Child" => Ok(Spec::from(shape::child(decode_spec(&arr[1])?, spec))),
                             "Partial" => Ok(Spec::from(shape::partial(decode_spec(&arr[1])?))),
                             "Extend" => Ok(Spec::from(shape::extend(decode_spec(&arr[1])?, spec))),
                             other => Err(Unsupported(format!("$call {}", other))),

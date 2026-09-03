@@ -15,7 +15,8 @@ const { Shape, expr } = require('shape')
 
 const shape = Shape(expr('String.Min(2).Max(10)'))
 shape('hi')     // OK
-shape('h')      // throws: minimum length of 2
+shape('h')
+// throws: Value "h" for property "" must be a minimum length of 2 (was 1).
 ```
 
 **Go**
@@ -73,19 +74,40 @@ shape({ name: 'a', age: 3, tags: ['x'] })   // OK
 s, _ := shape.Build(map[string]any{
     "name": "Min(1,String)",
     "age":  "Min(0,Number)",
-    "tags": []any{"Number"},
+    "tags": []any{"String"},
 })
 ```
 
-Non-string leaves (numbers, booleans) are kept as literal defaults. A key that
-is exactly `$$` is passed through unchanged (reserved for value expressions).
+Non-string leaves (numbers, booleans, `null`) are kept as literal defaults.
+A key that is exactly `$$` is a value expression, applied to the object that
+holds it; the `$$0`, `$$1`, ... keys beside it are the shapes that expression
+takes as arguments. The example of a key expression is a value, so a string
+there is that string rather than an expression.
+
+**Rust**
+
+```rust
+use shape::{build, Schema, Value};
+
+let spec = build(&Value::from(serde_json::json!({
+    "name": "Min(1,String)",
+    "tags": ["String"],
+})))
+.expect("reads");
+let s = Schema::new(spec);
+```
 
 ## Round-tripping a compiled shape
 
-`shape.stringify()` (TS) / `s.String()` (Go) renders a compiled shape back to a
-DSL-ish form for logging and serialization.
+`shape.json()` (TS) / `s.JSON()` (Go) / `s.json()` (Rust) writes a compiled
+shape back as the JSON `build` reads, so a shape survives being stored or
+sent. See [Serialize a shape](serialize-a-shape.md).
+
+`shape.stringify()` (TS) / `s.String()` (Go) renders a shape in a DSL-ish
+form for logging, which is not read back.
 
 ## See also
 
 - [Builder reference](../reference/builders.md) — the builders the DSL exposes.
 - [Key and value expressions](use-key-and-value-expressions.md).
+- [Serialize a shape](serialize-a-shape.md) — the JSON `build` reads back.

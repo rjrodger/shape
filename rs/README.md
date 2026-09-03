@@ -46,7 +46,7 @@ Every builder of the canonical implementation is here as a function taking
 the spec it applies to last, and as a chain method:
 
 ```rust
-use shape::{min, max, optional, Token};
+use shape::{max, min, optional, Token};
 
 let port = optional(max(65535, min(1, Token::Integer)));
 let name = shape::buildize(Token::String).min(3).max(40);
@@ -54,7 +54,8 @@ let name = shape::buildize(Token::String).min(3).max(40);
 
 `validate` produces the value with defaults injected; `valid` gives a
 verdict without producing; `error` lists every issue; `validate_into::<T>`
-deserializes the produced value with serde; `json_schema` exports a JSON
+deserializes the produced value with serde; `json` writes the shape as
+declarative JSON and `build` reads it back; `json_schema` exports a JSON
 Schema and `from_json_schema` imports one; `Schema::parse` reads the string
 form (`"String.Min(2)"`).
 

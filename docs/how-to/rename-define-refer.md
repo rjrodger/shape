@@ -10,7 +10,7 @@ reference it elsewhere (including recursively).
 **TS**
 
 ```js
-const { Shape, Rename, Number } = require('shape')
+const { Shape, Rename } = require('shape')   // Number is the JS global
 const shape = Shape({ id: Rename({ name: 'userId' }, Number) })
 
 shape({ id: 7 })   // → { userId: 7 }

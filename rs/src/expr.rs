@@ -4,8 +4,8 @@
 
 use crate::algebra::{extend_node, omit_node, partial_node, pick_node, Names};
 use crate::builders::*;
-use crate::node::{Node, Token};
-use crate::normalize::{literal_node, nan_node, normalize, regexp_node};
+use crate::node::{Kind, Node, Token};
+use crate::normalize::{literal_node, nan_node, normalize, regexp_node_src};
 use crate::spec::Spec;
 use crate::value::Value;
 use regex::Regex;
@@ -31,7 +31,7 @@ fn err<T>(msg: String) -> Result<T, ExprError> {
 /// Parse an expression into a node.
 pub fn expr(src: &str) -> Result<Node, ExprError> {
     let tokens = tokenize(src)?;
-    let mut p = Parser { tokens, src, i: 0 };
+    let mut p = Parser::new(tokens, src);
     p.parse_full()
 }
 
@@ -40,7 +40,7 @@ pub fn expr(src: &str) -> Result<Node, ExprError> {
 /// rather than replacing it. What value expressions and key expressions do.
 pub fn expr_apply(src: &str, carrier: Spec) -> Result<Node, ExprError> {
     let tokens = tokenize(src)?;
-    let mut p = Parser { tokens, src, i: 0 };
+    let mut p = Parser::new(tokens, src);
     let mut val = carrier;
     while !p.peek().is_empty() {
         if p.peek() == "." {
@@ -54,8 +54,10 @@ pub fn expr_apply(src: &str, carrier: Spec) -> Result<Node, ExprError> {
 fn token_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
-        Regex::new(r#"\s*,?\s*([)(.]|"(?:\\.|[^"\\])*"|/(?:\\.|[^/\\])*/[a-z]?|[^)(,.\s]+)\s*"#)
-            .unwrap()
+        Regex::new(
+            r#"\s*,?\s*(-?\d+\.\d+(?:[eE][+-]?\d+)?|[)(.]|"(?:\\.|[^"\\])*"|/(?:\\.|[^/\\])*/[a-z]?|[^)(,.\s]+)\s*"#,
+        )
+        .unwrap()
     })
 }
 
@@ -89,6 +91,20 @@ struct Parser<'s> {
     tokens: Vec<String>,
     src: &'s str,
     i: usize,
+    /// The sidecars of a value expression ("$$0"), specs an expression
+    /// cannot spell inline, by their keys.
+    refs: std::collections::HashMap<String, Spec>,
+}
+
+impl<'s> Parser<'s> {
+    fn new(tokens: Vec<String>, src: &'s str) -> Parser<'s> {
+        Parser {
+            tokens,
+            src,
+            i: 0,
+            refs: std::collections::HashMap::new(),
+        }
+    }
 }
 
 fn type_token(name: &str) -> Option<Token> {
@@ -107,7 +123,7 @@ fn type_token(name: &str) -> Option<Token> {
     })
 }
 
-const BUILDERS: [&str; 44] = [
+const BUILDERS: [&str; 45] = [
     "Required",
     "Optional",
     "Open",
@@ -152,6 +168,7 @@ const BUILDERS: [&str; 44] = [
     "Rename",
     "Key",
     "Transform",
+    "Discriminated",
 ];
 
 fn is_builder(name: &str) -> bool {
@@ -166,11 +183,29 @@ fn type_node(tok: Token, args: Vec<Spec>) -> Node {
     type_(tok, spec)
 }
 
-fn regexp_token(head: &str) -> Option<Result<Regex, ExprError>> {
+/// A `/re/` token: held to the shared subset here, so that a pattern
+/// outside it is a parse error, as in TypeScript. A flag letter after the
+/// closing slash is refused the same way. The body is carried as text; the
+/// node compiles the engine form.
+fn regexp_token(head: &str) -> Option<Result<String, ExprError>> {
+    let bytes = head.as_bytes();
+    if head.len() >= 3
+        && head.starts_with('/')
+        && bytes[head.len() - 1].is_ascii_lowercase()
+        && bytes[head.len() - 2] == b'/'
+    {
+        let body = &head[1..head.len() - 2];
+        return Some(Err(ExprError(crate::regexp::regexp_fault(
+            body,
+            "flags are not supported",
+        ))));
+    }
     if head.len() >= 2 && head.starts_with('/') && head.ends_with('/') {
+        let body = &head[1..head.len() - 1];
         Some(
-            Regex::new(&head[1..head.len() - 1])
-                .map_err(|e| ExprError(format!("Shape: invalid regexp {:?}: {}", head, e))),
+            crate::regexp::canonical_regexp(body)
+                .map(|_| body.to_string())
+                .map_err(ExprError),
         )
     } else {
         None
@@ -243,7 +278,7 @@ impl<'s> Parser<'s> {
         if let Some(re) = regexp_token(&head) {
             // A bare /re/ is a type, not a check: a non-string fails as a
             // type error. Check(/re/) is the explicit-check form.
-            return Ok(regexp_node(re?));
+            return Ok(regexp_node_src(&re?));
         }
         if let Some(lit) = json_literal(&head) {
             return Ok(default_of(lit));
@@ -255,6 +290,18 @@ impl<'s> Parser<'s> {
         let head = self.take();
         if head.is_empty() {
             return Ok(normalize(carrier));
+        }
+        if let Some(r) = self.refs.get(&head) {
+            return Ok(normalize(r.clone()));
+        }
+        // Chained onto a node, Exact applies its values to it, since every
+        // argument of the call is a value. A carrier that is a value is the
+        // example of a key expression, which is an argument as any other.
+        if head == "Exact" {
+            if let Spec::Node(n) = carrier {
+                let args = self.parse_args()?;
+                return Ok(n.exact(exact_vals(args)?));
+            }
         }
         if is_builder(&head) {
             let mut args = self.parse_args()?;
@@ -298,6 +345,9 @@ impl<'s> Parser<'s> {
     /// not yet closed, so there is a token.
     fn parse_arg(&mut self) -> Result<Spec, ExprError> {
         let head = self.take();
+        if let Some(r) = self.refs.get(&head) {
+            return Ok(r.clone());
+        }
         if is_builder(&head) {
             let args = self.parse_args()?;
             let node = call_builder(&head, args)?;
@@ -308,13 +358,14 @@ impl<'s> Parser<'s> {
             return self.chain_continuation(type_node(tok, args));
         }
         if head == "NaN" {
-            return self.chain_continuation(nan_node());
+            // NaN in an argument is the value, so Exact(NaN) reads it as one.
+            return Ok(Spec::Value(Value::Num(f64::NAN)));
         }
         if head == "undefined" || head == "null" {
             return Ok(Spec::Value(Value::Null));
         }
         if let Some(re) = regexp_token(&head) {
-            return Ok(Spec::Regex(re?));
+            return Ok(Spec::Regexp(re?));
         }
         if let Some(lit) = json_literal(&head) {
             return Ok(Spec::Value(lit));
@@ -356,7 +407,30 @@ fn string_at(name: &str, what: &str, args: &[Spec], i: usize) -> Result<String, 
 }
 
 /// A builder by name with its parsed arguments.
-fn call_builder(name: &str, mut args: Vec<Spec>) -> Result<Node, ExprError> {
+/// A builder call. A builder given a wrong argument makes a fault node that
+/// reports at validation; in the string form that is an error here, as the
+/// builder throws in TypeScript.
+fn call_builder(name: &str, args: Vec<Spec>) -> Result<Node, ExprError> {
+    let node = build_call(name, args)?;
+    if crate::builders::is_fault(&node) {
+        return err(node.fault_msg.clone().unwrap_or_default());
+    }
+    Ok(node)
+}
+
+/// The values of an Exact call: every argument is one.
+fn exact_vals(args: Vec<Spec>) -> Result<Vec<Value>, ExprError> {
+    let mut vals = Vec::with_capacity(args.len());
+    for a in args {
+        match a {
+            Spec::Value(v) => vals.push(v),
+            _ => return err("Exact: values expected".to_string()),
+        }
+    }
+    Ok(vals)
+}
+
+fn build_call(name: &str, mut args: Vec<Spec>) -> Result<Node, ExprError> {
     let any_spec = || Spec::from(any());
     let unary =
         |args: &mut Vec<Spec>, f: fn(Spec) -> Node| Ok(f(shape_at(args, 0, Spec::from(any()))));
@@ -422,15 +496,16 @@ fn call_builder(name: &str, mut args: Vec<Spec>) -> Result<Node, ExprError> {
                 _ => normalize(spec),
             })
         }
-        "Exact" => {
-            let mut vals = Vec::with_capacity(args.len());
-            for a in args {
-                match a {
-                    Spec::Value(v) => vals.push(v),
-                    _ => return err("Exact: values expected".to_string()),
-                }
+        "Exact" => Ok(exact(exact_vals(args)?)),
+        "Discriminated" => {
+            if args.len() < 2 {
+                return err("Discriminated: missing tag or branches".to_string());
             }
-            Ok(exact(vals))
+            let tag = string_at("Discriminated", "tag", &args, 0)?;
+            let Spec::Obj(branches) = args.remove(1) else {
+                return err("Discriminated: branches must be an object".to_string());
+            };
+            Ok(crate::discriminated::discriminated(tag, branches))
         }
         "Min" | "Max" | "Above" | "Below" => {
             if args.is_empty() {
@@ -454,7 +529,10 @@ fn call_builder(name: &str, mut args: Vec<Spec>) -> Result<Node, ExprError> {
             let Some(Value::Num(f)) = value_at(&args, 0) else {
                 return err("Len: length must be integer".to_string());
             };
-            Ok(len(f.trunc(), shape_at(&mut args, 1, any_spec())))
+            if f != f.trunc() {
+                return err("Shape: Len needs a whole number of zero or more".to_string());
+            }
+            Ok(len(f, shape_at(&mut args, 1, any_spec())))
         }
         "Check" => {
             if args.is_empty() {
@@ -463,7 +541,7 @@ fn call_builder(name: &str, mut args: Vec<Spec>) -> Result<Node, ExprError> {
             let checker = args.remove(0);
             let spec = shape_at(&mut args, 0, any_spec());
             Ok(match checker {
-                Spec::Regex(re) => check_re(re, spec),
+                Spec::Regexp(src) => check_re_src(&src, spec),
                 // Not a check the string form can express: the shape alone.
                 _ => normalize(spec),
             })
@@ -587,6 +665,33 @@ pub(crate) fn key_expr_node(src: &str, example: Spec) -> Node {
         return or_fault(bare);
     }
     let ex = normalize(example.clone());
+
+    // A chain that names its kind (String, Integer.Min(2), Optional(Number),
+    // Any) keeps it: the example is the value and the default, nothing more.
+    // Without this the example's own kind won (`"a: Integer.Min(2)"` with 0
+    // read as a number) and so did what its value implied (`"a: String"`
+    // with "" allowed the empty string).
+    if let Ok(bare) = &bare {
+        if bare.kind_set {
+            let mut b = bare.clone();
+            b.has_default = ex.has_default;
+            b.default = ex.default;
+            b.literal = ex.literal;
+            if b.kind == Kind::Object && ex.kind == Kind::Object {
+                b.obj_children = ex.obj_children;
+                if b.obj_rest.is_none() {
+                    b.obj_rest = ex.obj_rest;
+                }
+            } else if b.kind == Kind::Array && ex.kind == Kind::Array {
+                b.arr_children = ex.arr_children;
+                if b.arr_child.is_none() && b.arr_rest.is_none() {
+                    b.arr_child = ex.arr_child;
+                }
+            }
+            return b;
+        }
+    }
+
     let Ok(mut node) = expr_apply(src, example.clone()) else {
         // Not a builder chain at all, a bare literal such as `a: 5`, so
         // there is nothing to hand the example to and the expression's own
@@ -631,6 +736,89 @@ pub(crate) fn split_key_expr(key: &str) -> Option<(String, String)> {
     Some((name, src.to_string()))
 }
 
+// The reader of declarative JSON
+// ==============================
+
+/// The builders that read every argument for themselves, so a mark of one
+/// is the whole node rather than a chain around the object holding it.
+const COMPOSITION: [&str; 5] = ["One", "Some", "All", "Exact", "Discriminated"];
+
+/// Read the declarative JSON of a shape, what `Schema::json` writes: every
+/// string is an expression (the example of a key expression is a value, so
+/// a string there is the string itself), and a `"$$"` key applies an
+/// expression to the object that holds it, with the `"$$0"`, `"$$1"`, ...
+/// sidecars beside it as the arguments an expression cannot spell inline.
+pub fn build(v: &Value) -> Result<Spec, ExprError> {
+    build_value(v, false)
+}
+
+/// One value; `example` is true for the value of a key expression, which a
+/// string is the literal of.
+fn build_value(v: &Value, example: bool) -> Result<Spec, ExprError> {
+    match v {
+        // The empty string is the empty example, as a required string's
+        // example is (`"a: String"` with "").
+        Value::Str(s) if example || s.is_empty() => Ok(Spec::Value(Value::Str(s.clone()))),
+        Value::Str(s) => expr(s).map(Spec::from),
+        Value::Obj(m) => {
+            let mut pairs: Vec<(String, Spec)> = Vec::with_capacity(m.len());
+            let mut mark: Option<String> = None;
+            for (k, sv) in m {
+                if k == "$$" {
+                    if let Value::Str(src) = sv {
+                        mark = Some(src.clone());
+                        continue;
+                    }
+                }
+                let is_key_expr = matches!(sv, Value::Str(_)) && split_key_expr(k).is_some();
+                pairs.push((k.clone(), build_value(sv, is_key_expr)?));
+            }
+            match mark {
+                Some(src) => build_mark(&src, pairs),
+                None => Ok(Spec::Obj(pairs)),
+            }
+        }
+        Value::Arr(a) => {
+            let mut out = Vec::with_capacity(a.len());
+            for sv in a {
+                out.push(build_value(sv, false)?);
+            }
+            Ok(Spec::Arr(out))
+        }
+        other => Ok(Spec::Value(other.clone())),
+    }
+}
+
+/// The expression under the mark applies to the object that holds it. The
+/// sidecars are its arguments; the object's own keys are the shape a chained
+/// builder takes, but a composition has no slot for a carrier and is read on
+/// its own, the node it becomes being the whole shape.
+fn build_mark(src: &str, pairs: Vec<(String, Spec)>) -> Result<Spec, ExprError> {
+    let mut refs = std::collections::HashMap::new();
+    let mut rest = Vec::with_capacity(pairs.len());
+    for (k, v) in pairs {
+        if k.starts_with("$$") {
+            refs.insert(k, v);
+        } else {
+            rest.push((k, v));
+        }
+    }
+    let tokens = tokenize(src)?;
+    let mut p = Parser::new(tokens, src);
+    p.refs = refs;
+    if COMPOSITION.contains(&p.peek()) {
+        return p.parse_full().map(Spec::from);
+    }
+    let mut val = Spec::Obj(rest);
+    while !p.peek().is_empty() {
+        if p.peek() == "." {
+            p.take();
+        }
+        val = Spec::from(p.parse_chained(val)?);
+    }
+    Ok(val)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -647,6 +835,20 @@ mod tests {
 
     fn fails(src: &str) -> String {
         expr(src).unwrap_err().0
+    }
+
+    #[test]
+    fn a_wrong_builder_argument_is_a_parse_error() {
+        assert_eq!(fails("String.Min(\"x\")"), "Shape: Min needs a number");
+        assert_eq!(
+            fails("Len(-1)"),
+            "Shape: Len needs a whole number of zero or more"
+        );
+        assert_eq!(fails("Open(Define(\"\"))"), "Shape: Define needs a name");
+        assert_eq!(fails("Min(Number)"), "Shape: Min needs a number");
+        // A deliberate fault is not a wrong argument.
+        assert!(expr("Never.Fault(\"f\")").is_ok());
+        assert!(expr("Fault(\"f\", Never)").is_ok());
     }
 
     #[test]
@@ -679,7 +881,8 @@ mod tests {
             ("Closed", "Any"),
             ("Child(Number)", "{}.Child(Number)"),
             ("Rest(Number)", "[...Number]"),
-            ("Rest(Number, [1])", "[1, ...Number]"),
+            // The rest replaces a plain element shape, as it does in TypeScript.
+            ("Rest(Number, [1])", "[...Number]"),
             ("Type(Number)", "Number"),
             ("Type(\"String\")", "String"),
             ("Type(Min(2))", "Any"),
@@ -712,7 +915,6 @@ mod tests {
             ("Refer(\"d\")", "Refer(\"d\")"),
             ("Rename(\"b\")", "Any"),
             ("Min(\"2\")", "Min(2)"),
-            ("Min(Number)", "Never"),
             ("Above(1).Below(3)", "Above(1).Below(3)"),
             ("Max(3, Integer)", "Integer.Max(3)"),
             ("Object", "{}"),
@@ -732,14 +934,10 @@ mod tests {
         for (src, want) in cases {
             assert_eq!(render(src), want, "{}", src);
         }
-        // A fractional length is truncated, as a call sees it; the string
-        // form cannot write one, since a dot chains.
+        // A fractional length is refused, as it is in every language.
         assert_eq!(
-            stringify_node(
-                &call_builder("Len", vec![Spec::Value(Value::Num(2.7))]).unwrap(),
-                false
-            ),
-            "Len(2)"
+            call_builder("Len", vec![Spec::Value(Value::Num(2.7))]).unwrap_err(),
+            ExprError("Shape: Len needs a whole number of zero or more".to_string())
         );
         // Type from a token, as a builder call sees it.
         assert_eq!(
@@ -805,10 +1003,7 @@ mod tests {
                 "Min(",
                 "Shape: unclosed argument list in expression \"Min(\"",
             ),
-            (
-                "/a/i",
-                "Shape: unexpected token /a/i in builder expression /a/i",
-            ),
+            ("/a/i", "Shape: invalid regexp /a/: flags are not supported"),
             ("Min()", "Min: missing limit"),
             ("Max()", "Max: missing limit"),
             ("Above()", "Above: missing limit"),
@@ -850,8 +1045,14 @@ mod tests {
         for (src, want) in cases {
             assert_eq!(fails(src), want, "{}", src);
         }
-        assert!(fails("/[/").starts_with("Shape: invalid regexp \"/[/\":"));
-        assert!(fails("Min(2, /[/)").starts_with("Shape: invalid regexp \"/[/\":"));
+        assert_eq!(
+            fails("/[/"),
+            "Shape: invalid regexp /[/: unterminated character class"
+        );
+        assert_eq!(
+            fails("Min(2, /[/)"),
+            "Shape: invalid regexp /[/: unterminated character class"
+        );
     }
 
     #[test]

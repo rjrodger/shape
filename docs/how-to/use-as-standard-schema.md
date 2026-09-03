@@ -21,7 +21,7 @@ std.version   // 1
 std.vendor    // 'shape'
 
 const ok = std.validate({ host: 'localhost' })
-// { value: { port: 8080, host: 'localhost' } }
+// { value: { host: 'localhost', port: 8080 } }
 
 const bad = std.validate({ host: 123 })
 // { issues: [ { message: '…', path: ['host'] } ] }

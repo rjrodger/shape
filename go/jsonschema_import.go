@@ -350,11 +350,22 @@ func (c *jsonSchemaImport) untyped(m map[string]any, path string) (any, error) {
 	if hasPattern || jsonSchemaFormatBuilder[format] != nil || isIpFormats(m["anyOf"]) {
 		return importString(m, path)
 	}
+	// Beside a numeric exclusive bound the length keywords are that bound
+	// written for strings, arrays and objects (Above(1) exports minLength 2),
+	// so only a plain minimum or maximum is a second bound there.
 	view := map[string]any{}
-	if v, ok := firstNumber(m, "minimum", "minLength", "minItems", "minProperties"); ok {
+	if _, exclusive := m["exclusiveMinimum"].(float64); exclusive {
+		if v, ok := m["minimum"].(float64); ok {
+			view["minimum"] = v
+		}
+	} else if v, ok := firstNumber(m, "minimum", "minLength", "minItems", "minProperties"); ok {
 		view["minimum"] = v
 	}
-	if v, ok := firstNumber(m, "maximum", "maxLength", "maxItems", "maxProperties"); ok {
+	if _, exclusive := m["exclusiveMaximum"].(float64); exclusive {
+		if v, ok := m["maximum"].(float64); ok {
+			view["maximum"] = v
+		}
+	} else if v, ok := firstNumber(m, "maximum", "maxLength", "maxItems", "maxProperties"); ok {
 		view["maximum"] = v
 	}
 	view["exclusiveMinimum"] = m["exclusiveMinimum"]
@@ -380,11 +391,11 @@ func importString(m map[string]any, path string) (any, error) {
 	var spec any = String
 	plain := true
 	if p, ok := m["pattern"].(string); ok {
-		re, err := regexp.Compile(p)
+		n, err := regexpNode(p)
 		if err != nil {
 			return nil, jsonSchemaFault(fmt.Sprintf("bad pattern %q", p), path)
 		}
-		spec = re
+		spec = newNodeWrap(n)
 		plain = false
 	}
 
@@ -410,9 +421,12 @@ func importString(m map[string]any, path string) (any, error) {
 }
 
 func importNumber(spec any, m map[string]any) any {
+	// A numeric exclusive bound and a plain bound are independent keywords,
+	// so both apply; the boolean form makes the plain bound exclusive.
 	if v, ok := m["exclusiveMinimum"].(float64); ok {
 		spec = Above(v, spec)
-	} else if v, ok := m["minimum"].(float64); ok {
+	}
+	if v, ok := m["minimum"].(float64); ok {
 		if b, _ := m["exclusiveMinimum"].(bool); b {
 			spec = Above(v, spec)
 		} else {
@@ -421,7 +435,8 @@ func importNumber(spec any, m map[string]any) any {
 	}
 	if v, ok := m["exclusiveMaximum"].(float64); ok {
 		spec = Below(v, spec)
-	} else if v, ok := m["maximum"].(float64); ok {
+	}
+	if v, ok := m["maximum"].(float64); ok {
 		if b, _ := m["exclusiveMaximum"].(bool); b {
 			spec = Below(v, spec)
 		} else {

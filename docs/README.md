@@ -42,6 +42,7 @@ Goal-oriented recipes for a task you already have.
 - [Use key and value expressions](how-to/use-key-and-value-expressions.md)
 - [Use the string DSL (`expr` / `build`)](how-to/use-the-string-dsl.md)
 - [Use Shape as a Standard Schema](how-to/use-as-standard-schema.md)
+- [Serialize a shape](how-to/serialize-a-shape.md)
 - [Export and import a JSON Schema](how-to/export-json-schema.md)
 - [Use Shape in Go](how-to/use-shape-in-go.md)
 - [Use Shape in Rust](how-to/use-shape-in-rust.md)
@@ -51,9 +52,12 @@ Goal-oriented recipes for a task you already have.
 
 Dry, complete, look-it-up material.
 
-- [Builder reference](reference/builders.md) — every builder, both languages.
+- [Builder reference](reference/builders.md) — every builder, in TypeScript
+  and Go (the Rust forms are in the [Rust API](reference/rust-api.md)).
 - [Shape API](reference/shape-api.md) — compiling, validating, options.
 - [Errors](reference/errors.md) — error objects and message format.
+- [The regexp subset](reference/regexp.md) — what a pattern may use, and how
+  every engine is made to read it the same way.
 - [Shape nodes](reference/nodes.md) — the compiled node model.
 - [TypeScript types](reference/typescript-types.md)
 - [Go API](reference/go-api.md) — the Go surface and its idioms.
@@ -92,7 +96,8 @@ Design decisions that are expensive to revisit, with the reasoning behind them.
   shown and the other languages differ only in syntax (see the
   [Go API](reference/go-api.md) and [Rust API](reference/rust-api.md) for the
   mapping).
-- Runnable examples assume `const { Shape } = require('shape')` (TS/JS) or
-  `import "github.com/rjrodger/shape/go"` (Go).
+- Runnable examples assume `const { Shape } = require('shape')` (TS/JS),
+  `import "github.com/rjrodger/shape/go"` (Go) or `use shape::{shape, Schema}`
+  (Rust, from the `shape-schema` crate).
 - The canonical behaviour is defined by the TypeScript implementation and pinned
   by the shared corpus in [`test/`](../test/README.md).
