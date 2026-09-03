@@ -17,7 +17,7 @@ let out = s.validate(Value::from(serde_json::json!({ "debug": true })))?;
 ```
 
 The TypeScript implementation in [`../ts`](../ts/README.md) is canonical: this
-port matches it for validation outcomes, produced values and exact error
+port matches it for validation outcomes, produced values, and exact error
 text, and a [shared conformance corpus](../test/README.md) plus a
 [differential harness](../test/differential/README.md) keep it that way. The
 full documentation is in [`../docs`](../docs/README.md); the Rust surface is

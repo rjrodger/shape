@@ -1,7 +1,7 @@
 # Builder reference
 
 Builders wrap a shape to add behaviour. Every builder exists as a **top-level
-function** and — in TypeScript, and for most in Go — as a **chainable method** on
+function** and—in TypeScript, and for most in Go—as a **chainable method** on
 a node. Most take an optional trailing `spec` that they narrow or wrap.
 
 - **TS:** `const { Min } = require('shape')` then `Min(2, String)` or
@@ -18,11 +18,11 @@ chainable).
 
 | Builder | Effect |
 | ------- | ------ |
-| `Required(spec?)` | Mark required — no default injection. Bare `Required()` is a required `Any`. |
+| `Required(spec?)` | Mark required—no default injection. Bare `Required()` is a required `Any`. |
 | `Optional(spec?)` | Mark optional. |
 | `Default(value, spec?)` | Optional with an explicit default `value`. |
-| `Skip(spec?)` | Optional **and** skip default injection — an absent value leaves the key out. |
-| `Ignore(spec?)` | Like `Skip`, and drop the value (and its errors) if it fails to match — anywhere in its subtree. |
+| `Skip(spec?)` | Optional **and** skip default injection—an absent value leaves the key out. |
+| `Ignore(spec?)` | Like `Skip`, and drop the value (and its errors) if it fails to match—anywhere in its subtree. |
 | `Empty(spec?)` | Allow the empty string `""` for a `String` shape. |
 | `Nullable(spec?)` | Accept an explicit `null` as the value. Absent is still governed by required/optional. |
 | `Fault(message, spec?)` | Override the **structural** error message for this node (a check's own message is kept). |
@@ -48,7 +48,7 @@ Notes:
 | `Integer(spec?)` | A number with no fractional part. Behaves as a type token: required, with the latent default `0`, so `Optional(Integer)` injects `0`. TS: a builder, usable bare (`{ n: Integer }`) or called; Go: the `Integer` token, `Type(Integer, spec)` or `.Integer()`. |
 | `Date` | A date value. TS: the `Date` constructor as a type marker (a `Date` instance); Go: the `Date` token (a `time.Time`). `.Date()` chains in both. A `Date` instance / `time.Time` in a spec is an optional date with that default. |
 | `Exact(values…)` | Require equality with one of the listed literals. Also matches from the node default. |
-| `Never(spec?)` | Never matches — always fails. |
+| `Never(spec?)` | Never matches—always fails. |
 | `Func(spec?)` | A function value. A builder, not a type marker, so it is optional of itself: `Function` is the required form. |
 | `Any(spec?)` | Match any value (optionally carrying a default). |
 
@@ -66,9 +66,9 @@ The conversions, identical in both languages:
 | | boolean | `true` → `1`, `false` → `0` |
 | `String` | number | a finite number, rendered as JavaScript prints it (`1e21`, `1e-7`, `0.000001`) |
 | | boolean | `"true"` / `"false"` |
-| `Boolean` | string | `"true"`, `"false"`, `"1"`, `"0"` — trimmed, case-insensitive |
+| `Boolean` | string | `"true"`, `"false"`, `"1"`, `"0"`—trimmed, case-insensitive |
 | | number | `1` → `true`, `0` → `false` |
-| `Date` | string | a strict ISO 8601 / RFC 3339 date-time (`2020-01-01T00:00:00Z`, `2020-01-01T12:30:00.5+02:00`), with calendar checks — `2021-02-29` is rejected rather than rolled over |
+| `Date` | string | a strict ISO 8601 / RFC 3339 date-time (`2020-01-01T00:00:00Z`, `2020-01-01T12:30:00.5+02:00`), with calendar checks—`2021-02-29` is rejected rather than rolled over |
 | | number | milliseconds since the epoch |
 
 `Coerce(Any)` converts nothing. Bare `Coerce` is an untyped node, so it converts
@@ -88,9 +88,9 @@ Each requires a **string** in the given format; bare, it is a required string.
 | `Ipv4(spec?)` / `Ipv6(spec?)` | one family only (`::ffff:192.168.1.1` is IPv6) |
 
 A format only speaks for a present string of the node's kind: a missing or
-wrongly-typed value still gets the required or type error, and a bound on the
+wrongly typed value still gets the required or type error, and a bound on the
 same node (`Email(Min(10, String))`) is checked first. A format failure keeps its
-own message — `Value "nope" for property "a" is not a valid email address.` —
+own message (`Value "nope" for property "a" is not a valid email address.`)
 under `Fault` too, which replaces structural text only. Every pattern is written
 for the RE2 and JavaScript engines alike; IPv6 is checked algorithmically. A
 pattern of your own (`/re/`, `Check(/re/)`) is held to the shared
@@ -131,8 +131,8 @@ check form and reports as a failed check.
 
 ## Isolation: Catch, Transform, Describe
 
-These judge the node as a whole — its own checks, its type, every descendant —
-before the node proceeds.
+These judge the node as a whole—its own checks, its type, every
+descendant—before the node proceeds.
 
 | Builder | Effect |
 | ------- | ------ |
@@ -141,14 +141,14 @@ before the node proceeds.
 | `Describe(text, spec?)` | Attach a description, read back as `node.m.description` (TS) or `n.Meta()["description"]` (Go). No effect on validation. |
 
 A bound outside the isolation still applies to what comes out:
-`Min(2, Catch(0, Number))` against `"x"` reports that `0` is below 2.
+`Min(2, Catch(0, Number))` against `"x"` reports that `0` is under the bound of 2.
 
 ## Composition
 
 | Builder | Effect |
 | ------- | ------ |
 | `One(shapes…)` | Passes on the first matching branch, whose output is the result. |
-| `Some(shapes…)` | Passes if at least one branch matches; all branches are evaluated, and the last matching branch's result stands. Every branch sees the value as it was given, never one another branch changed (`Some(Open({a:1}), Open({b:2}))` on `{}` gives `{b:2}`). |
+| `Some(shapes…)` | Passes if at least one branch matches; all branches are evaluated, and the last matching branch's result stands. Every branch is handed the value as it was given, never one another branch changed (`Some(Open({a:1}), Open({b:2}))` on `{}` gives `{b:2}`). |
 | `All(shapes…)` | Passes only if every branch matches; the value is threaded through each, so later branches see what earlier ones produced (`All(Open({a:1}), Open({b:2}))` on `{}` gives `{a:1,b:2}`). |
 
 None of the three changes the value it was given: each branch matches and
@@ -176,7 +176,7 @@ absent; it is not put to its branches.
 | `Open(spec?)` | Allow unknown object properties. (An empty `{}` is already open.) |
 | `Closed(spec?)` | Forbid unknown properties; makes a single-shape array a fixed tuple-of-one. |
 | `Child(child, spec?)` | Default shape for every unknown object value (or array element). |
-| `Rest(child, spec?)` | Tail shape for array elements past the fixed tuple positions: `Rest(Number, [String, Boolean])`. A single-shape array is an element shape, not a tuple, so a one-element prefix is `Rest(Number, Closed([String]))`, and `Rest(Number, [String])` is an array of numbers — the rest replaces a plain element shape. Bare `Rest(Number)` is the same as `[Number]`. |
+| `Rest(child, spec?)` | Tail shape for array elements past the fixed tuple positions: `Rest(Number, [String, Boolean])`. A single-shape array is an element shape, not a tuple, so a one-element prefix is `Rest(Number, Closed([String]))`, and `Rest(Number, [String])` is an array of numbers—the rest replaces a plain element shape. Bare `Rest(Number)` is the same as `[Number]`. |
 
 ## Object algebra
 
@@ -188,7 +188,7 @@ or a list of them.
 | ------- | ------ |
 | `Pick(names, spec?)` | Keep only the named properties. Naming one the shape does not declare is an error. |
 | `Omit(names, spec?)` | Drop the named properties. A name the shape does not declare is simply not there to drop. |
-| `Partial(spec?)` | Make every declared property optional, as `Optional` would: a type token then injects its empty value, a literal its own. Shallow — a nested object keeps its own required properties. |
+| `Partial(spec?)` | Make every declared property optional, as `Optional` would: a type token then injects its empty value, a literal its own. Shallow—a nested object keeps its own required properties. |
 | `Extend(extra, spec?)` | Add the properties of `extra`, an object shape; a property both declare takes the extension's. Only its properties are taken: the result stays open or closed as the base was, and keeps the base's checks. |
 
 ```js
@@ -243,7 +243,7 @@ key expression, whose example is the shape:
   return a `*Node` and cannot, so the fault surfaces at validation, as it does
   for any bad spec, with the same message. In the string DSL both fail at
   build, since `expr` throws and `Expr` returns an error.
-- Go has no `Symbol` token and no `.String()` chain shortcut — see the
+- Go has no `Symbol` token and no `.String()` chain shortcut—see the
   [parity page](../explanation/ts-go-parity.md#intentional-divergences).
 
 ## Key expressions
@@ -253,13 +253,13 @@ value as an **example**. The example is appended as the innermost builder call's
 final argument, so a builder that takes a shape consumes it:
 
 ```js
-{ 'a: Min(2)': 0 }          // a bounded number — the example gives the kind
-{ 'a: Child(Number)': [] }  // an array of numbers — the example gives the kind
+{ 'a: Min(2)': 0 }          // a bounded number; the example gives the kind
+{ 'a: Child(Number)': [] }  // an array of numbers; the example gives the kind
 { 'u: Pick(["a"])': { a: 1, b: 2 } }  // the example is the shape picked from
 ```
 
-A builder whose arity is already satisfied has no room for it — `Optional(Number)`
-already has its one argument — so there the example is applied as the value and
+A builder whose arity is already satisfied has no room for it—`Optional(Number)`
+already has its one argument—so there the example is applied as the value and
 default instead:
 
 ```js
@@ -277,7 +277,7 @@ declared. `Skip` still means no injection at all, and a bare literal expression
 `Coerce` runs first. Then a size bound (`Min`, `Max`, `Above`, `Below`, `Len`)
 or a format stands aside when the node declares a type the value does not have,
 so `Min(2, String)` against `1` reports that `1` is not a string rather than
-that it is below 2. A check that fails skips the node's own structural check,
+that it breaks the bound. A check that fails skips the node's own structural check,
 so `Min(2, String)` against `""` reports only the bound, not the empty string
 too. Every before and after still runs after one has failed, so a failing bound
 and a failing format (`Min(10, Email)` against `"nope"`), or a failing format

@@ -48,7 +48,7 @@ sentinels for each kind:
 | `shape.Number`    | any numeric kind (`int*`, `uint*`, `float*`)             |
 | `shape.Integer`   | a number with no fractional part                         |
 | `shape.Boolean`   | booleans                                                 |
-| `shape.Object`    | `map[string]any` — open, as a token                      |
+| `shape.Object`    | `map[string]any`—open, as a token                      |
 | `shape.Array`     | `[]any` (typed slices are accepted and converted)        |
 | `shape.Function`  | `reflect.Func` values                                    |
 | `shape.Date`      | `time.Time` values                                       |
@@ -59,14 +59,14 @@ aliases are provided for every token and builder: `GString`, `GNumber`,
 
 ### Absent versus null
 
-Go has no `undefined`. A **missing** map key is absent — it may be defaulted or
+Go has no `undefined`. A **missing** map key is absent—it may be defaulted or
 flagged required. An explicit `nil` value is a present null, a type error
 against a typed shape. At the top level `Validate(nil)` means "no value
 supplied" and fills defaults; pass `shape.Null` to mean a present null there.
 
 ### Objects
 
-Objects are **closed by default** — extra keys cause a validation error. An
+Objects are **closed by default**—extra keys cause a validation error. An
 empty `map[string]any{}` is open. Use `shape.Open(...)` to allow unknown
 properties, or `shape.Child(...)` to declare a shape for unknown values.
 
@@ -219,7 +219,7 @@ detail; the tables here list the Go signatures.
 
 ### String formats
 
-`Email`, `Url`, `Uuid`, `DateTime`, `Ip`, `Ipv4`, `Ipv6` — each `(spec?)`,
+`Email`, `Url`, `Uuid`, `DateTime`, `Ip`, `Ipv4`, `Ipv6`—each `(spec?)`,
 each requiring a string in that format; bare, a required string.
 
 ### Bounds
@@ -297,8 +297,8 @@ Each returns a **new** node, leaving the source unchanged. `names` is a
 
 ### Construction faults
 
-A builder called wrongly — `Discriminated` without a branch, `Pick` of an
-unknown property — returns a node that fails at validation with the message
+A builder called wrongly—`Discriminated` without a branch, `Pick` of an
+unknown property—returns a node that fails at validation with the message
 TypeScript would have thrown, since a `*Node` cannot carry an error. In the
 string DSL, `Expr` returns the error.
 
@@ -338,7 +338,7 @@ The package is held at **100% statement coverage**, and Go has no coverage
 pragma: anything new is covered by a test or removed. `go test` also runs the
 shared corpus in `../test/*.tsv`; `make diff` from the repository root runs the
 differential harness against the TypeScript build. `expr.go` and `node.go`
-carry original-port formatting that is not gofmt-clean — leave their unrelated
+carry original-port formatting that is not gofmt-clean—leave their unrelated
 regions as they are; every other file is gofmt-clean.
 
 See [`../AGENTS.md`](../AGENTS.md) for the parity rules and the change

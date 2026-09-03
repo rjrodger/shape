@@ -2,7 +2,7 @@
 
 ## Compiling a shape
 
-**TS** — `Shape(spec, options?)` returns a validator function that also carries
+**TS**—`Shape(spec, options?)` returns a validator function that also carries
 methods. A bad spec (`Min('x')`, `Pick` of an unknown property) throws here, at
 compile time. The validator **mutates** the value it is given to inject
 defaults.
@@ -12,7 +12,7 @@ const { Shape } = require('shape')
 const shape = Shape(spec, options)
 ```
 
-**Go** — compilation returns a `*Schema`.
+**Go**—compilation returns a `*Schema`.
 
 ```go
 s, err := shape.Shape(spec)
@@ -26,10 +26,10 @@ s := shape.MustShapeWith(spec, options)
 | TS | Go | Result |
 | -- | -- | ------ |
 | `shape(value, ctx?)` | `s.Validate(value)` / `s.ValidateCtx(value, ctx)` | produced value (defaults injected). TS **throws** on failure; Go returns an `error`. |
-| `shape.match(value, ctx?)` | `s.Match(value)` | `boolean` — no mutation, no error building. |
-| `shape.valid(value, ctx?)` | `s.Valid(value)` | `boolean` — alias-style validity check; in TS a type guard, and a `ctx` you pass collects the errors in `ctx.err`. |
-| `shape.error(value, ctx?)` | `s.Error(value)` | list of issues — TS `ErrDesc[]`, Go `[]FieldError` — empty/`nil` when valid. |
-| `shape['~standard'].validate(value)` | `s.Standard().Validate(value)` | `{ value }` or `{ issues }`, never throws — see [Standard Schema](../how-to/use-as-standard-schema.md). |
+| `shape.match(value, ctx?)` | `s.Match(value)` | `boolean`—no mutation, no error building. |
+| `shape.valid(value, ctx?)` | `s.Valid(value)` | `boolean`—alias-style validity check; in TS a type guard, and a `ctx` you pass collects the errors in `ctx.err`. |
+| `shape.error(value, ctx?)` | `s.Error(value)` | list of issues—TS `ErrDesc[]`, Go `[]FieldError`—empty/`nil` when valid. |
+| `shape['~standard'].validate(value)` | `s.Standard().Validate(value)` | `{ value }` or `{ issues }`, never throws—see [Standard Schema](../how-to/use-as-standard-schema.md). |
 
 ## Introspection
 
@@ -38,12 +38,12 @@ s := shape.MustShapeWith(spec, options)
 | `shape.spec()` | `s.Spec()` | JSON-friendly structural description. |
 | `shape.node()` | `s.Node()` | the compiled root node. |
 | `shape.stringify(...)` | `s.String()` | DSL-ish string rendering. |
-| `shape.jsonify()` | — | JSON form used by `stringify`. |
-| `shape.toString()` | — | `[Shape <name> <stringify>]`, also used by `util.inspect`. |
-| `shape.json()` | `s.JSON()` | the declarative JSON of the shape, which `build` reads back — see [Serialize a shape](../how-to/serialize-a-shape.md). |
+| `shape.jsonify()` | n/a | JSON form used by `stringify`. |
+| `shape.toString()` | n/a | `[Shape <name> <stringify>]`, also used by `util.inspect`. |
+| `shape.json()` | `s.JSON()` | the declarative JSON of the shape, which `build` reads back—see [Serialize a shape](../how-to/serialize-a-shape.md). |
 | `build(json)` | `Build(json)` | the shape that JSON describes. |
-| `shape.jsonSchema()` | `s.JSONSchema()` | a JSON Schema (draft 2020-12) for the values accepted — see [the how-to](../how-to/export-json-schema.md). |
-| `fromJsonSchema(schema)` | `FromJSONSchema(schema)` | a spec built from a JSON Schema, to compile with `Shape` — see [the how-to](../how-to/export-json-schema.md#import). |
+| `shape.jsonSchema()` | `s.JSONSchema()` | a JSON Schema (draft 2020-12) for the values accepted—see [the how-to](../how-to/export-json-schema.md). |
+| `fromJsonSchema(schema)` | `FromJSONSchema(schema)` | a spec built from a JSON Schema, to compile with `Shape`—see [the how-to](../how-to/export-json-schema.md#import). |
 | `Shape.isShape(v)` | `shape.IsShape(v)` | is `v` a compiled shape? |
 
 ## The validation context
@@ -54,9 +54,9 @@ Pass a context object to influence a run and to collect errors.
 
 | Field | Meaning |
 | ----- | ------- |
-| `err` | an array to collect errors into (instead of throwing), or `false` to suppress — the run then returns the value as far as it got |
+| `err` | an array to collect errors into (instead of throwing), or `false` to suppress—the run then returns the value as far as it got |
 | `log(point, state)` | traversal callback for debugging; `point` is `so`/`eo` (start/end object), `sa`/`ea` (start/end array) or `kv` (a value) |
-| `skip` | `{ depth, keys }` — treat the nodes at a depth (a number or a list; the root is 0) or the top-level properties named in `keys` as `Skip`: optional, no default injected |
+| `skip` | `{ depth, keys }`—treat the nodes at a depth (a number or a list; the root is 0) or the top-level properties named in `keys` as `Skip`: optional, no default injected |
 | `prefix` / `suffix` | text wrapped around a thrown error message, as `prefix: message suffix` |
 | (your own) | any extra keys are visible to custom validators via `state.ctx` |
 
@@ -69,7 +69,7 @@ Passed as the second argument to `Shape`/`ShapeWith`. Defaults shown.
 
 | Concept | TS | Go | Default |
 | ------- | -- | -- | ------- |
-| Name (for error prefixes) | `name` | — (uses `MakeArgu` name) | random `G$…` — a name not starting with `G$` is prepended to thrown messages as `name: …` |
+| Name (for error prefixes) | `name` |—(uses `MakeArgu` name) | random `G$…`—a name not starting with `G$` is prepended to thrown messages as `name: …` |
 | Key expressions (`"x: Min(1)"`) | `keyexpr.active` | `KeyExpr.Disable` | **on** |
 | Meta sidecar keys | `meta.active`, `meta.suffix` | `Meta.Active`, `Meta.Suffix` | off, `$$` |
 | Value expressions | `valexpr.active`, `valexpr.keymark` | `ValExpr.Active`, `ValExpr.KeyMark` | off, `$$` |
@@ -112,8 +112,8 @@ sidecars as arguments. It returns the **compiled shape**. This is the dialect
 ## Argument validation
 
 `MakeArgu(name)` builds a positional-argument validator, `Argu(args, whence?,
-spec)`, which validates an arguments array (or `arguments`) against `spec` — an
-object whose properties are the positions, in order — and returns the produced
+spec)`, which validates an arguments array (or `arguments`) against `spec`—an
+object whose properties are the positions, in order—and returns the produced
 object; `whence` names the call site in errors. `Argu(whence, spec)` without
 `args` returns a reusable `(args) => object`. See
 [Go API: Argu](go-api.md#positional-arguments-argu) and the

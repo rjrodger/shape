@@ -26,7 +26,7 @@ shape([1, 2, 3])  // OK
 shape([1, 'x'])   // throws: index 1 is not of type number
 ```
 
-Element error paths use the index, e.g. `tags.1`.
+Element error paths use the index, for example `tags.1`.
 
 ## A fixed-length tuple
 
@@ -57,7 +57,7 @@ shape(['a', 1, 2, 3])   // OK: 'a', 1, then any number of numbers
 shape(['a', 1, 'x'])    // throws: index 2 is not of type number
 ```
 
-Without a tuple, `Rest(Number)` is a tail only — the same as `[Number]`. The
+Without a tuple, `Rest(Number)` is a tail only—the same as `[Number]`. The
 rest replaces a plain element shape, so `Rest(Number, [String])` is an array
 of numbers; to keep the `String` as a first position, close it first:
 `Rest(Number, Closed([String]))`.
@@ -79,5 +79,5 @@ Shape(Closed([Number]))   // exactly one number
 ## See also
 
 - [Builder reference: `Rest`, `Child`, `Closed`](../reference/builders.md#objects--arrays)
-- Positional **function arguments** are validated with `MakeArgu` — see the
+- Positional **function arguments** are validated with `MakeArgu`—see the
   [Go API](../reference/go-api.md#argu) / TS `MakeArgu`.

@@ -7,7 +7,7 @@ differently (`\d` is ASCII in JavaScript and RE2 but Unicode in the regex
 crate; `\s` is ASCII in RE2 and Unicode elsewhere). So a shape holds every
 pattern to one subset, checks it at build, and rewrites it for the engine at
 hand. The same pattern then matches the same strings in every language, and
-the text as written is what renders, exports to JSON Schema and appears in
+the text as written is what renders, exports to JSON Schema, and appears in
 messages.
 
 This applies wherever a pattern enters a shape: a `/re/` in the string form,
@@ -24,7 +24,7 @@ JSON Schema `pattern` on import.
 | `.` | any character but a newline (`\n`) |
 | `\d` `\w` `\s` | `[0-9]`, `[A-Za-z0-9_]`, `[ \t\n\r\f\v]`: ASCII, whatever the engine's default |
 | `\D` `\W` `\S` | the negations, outside a character class only |
-| `[abc]` `[a-z]` `[^abc]` | a character class, with ranges; `\d` `\w` `\s` and the escapes above inside it; a `-` first or last is literal |
+| `[abc]` `[a-z]` `[^abc]` | a character class, with ranges; `\d` `\w` `\s` and the preceding escapes inside it; a `-` first or last is literal |
 | `^` `$` | the start and end of the whole string (no multi-line mode) |
 | `\b` `\B` | an ASCII word boundary, and not one; outside a class only |
 | `( )` `(?: )` | a capturing and a non-capturing group |
@@ -35,7 +35,7 @@ JSON Schema `pattern` on import.
 
 | construct | refused as |
 | --- | --- |
-| flags (`/re/i`, `new RegExp(re, 'g')`, `(?i)`) | `flags are not supported`; inline flags as below |
+| flags (`/re/i`, `new RegExp(re, 'g')`, `(?i)`) | `flags are not supported`; inline flags are rejected too, in the next table |
 | `(?=` `(?!` `(?<=` `(?<!` `(?<name>` `(?P<name>` `(?i)` | `lookaround, named groups and inline flags are not in the subset` (RE2 has no lookaround or backreferences) |
 | `\1` and other escapes: `\u`, `\p`, `\a`, `\e`, `\0`, `\c`, `\Q`, `\A`, `\z` | `escape \X is not in the subset` |
 | `[[:alpha:]]` | `POSIX classes are not in the subset` (JavaScript reads it as a class of characters) |

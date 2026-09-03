@@ -10,8 +10,8 @@
 
 A schema validator in the tradition of [Joi](https://joi.dev) or
 [JSON-Schema](https://json-schema.org/), but with a much nicer developer
-experience. It runs in JavaScript and TypeScript — in the browser and on the
-backend — in [Go](go/README.md) and in [Rust](rs/README.md).
+experience. It runs in JavaScript and TypeScript—in the browser and on the
+backend—in [Go](go/README.md) and in [Rust](rs/README.md).
 
 > **The big idea: your schema looks (almost) exactly like your data.**
 
@@ -78,9 +78,9 @@ lives in **[`docs/`](docs/README.md)** and is published at
 a [performance report](https://rjrodger.github.io/shape/perf/) comparing
 shape to other validators across hosts and versions:
 
-- **[Getting started](docs/tutorials/getting-started.md)** — build your first
+- **[Getting started](docs/tutorials/getting-started.md)**—build your first
   shape, step by step (TS and Go; Rust in its [how-to](docs/how-to/use-shape-in-rust.md)).
-- **How-to guides** — [validate options](docs/how-to/validate-options-with-defaults.md),
+- **How-to guides**—[validate options](docs/how-to/validate-options-with-defaults.md),
   [require fields](docs/how-to/require-fields.md),
   [objects](docs/how-to/validate-objects.md),
   [arrays & tuples](docs/how-to/validate-arrays-and-tuples.md),
@@ -90,14 +90,14 @@ shape to other validators across hosts and versions:
   [errors](docs/how-to/handle-and-collect-errors.md),
   [JSON Schema export and import](docs/how-to/export-json-schema.md), and
   [more](docs/README.md#how-to-guides).
-- **Reference** — [builders](docs/reference/builders.md),
+- **Reference**—[builders](docs/reference/builders.md),
   [Shape API](docs/reference/shape-api.md),
   [errors](docs/reference/errors.md),
   [nodes](docs/reference/nodes.md),
   [TypeScript types](docs/reference/typescript-types.md),
   [Go API](docs/reference/go-api.md),
   [Rust API](docs/reference/rust-api.md).
-- **Explanation** — [schema by example](docs/explanation/schema-by-example.md),
+- **Explanation**—[schema by example](docs/explanation/schema-by-example.md),
   [how validation works](docs/explanation/how-validation-works.md),
   [TS ↔ Go ↔ Rust parity](docs/explanation/ts-go-parity.md).
 
@@ -145,28 +145,29 @@ shape to other validators across hosts and versions:
 (including the shared corpus); `make diff` runs the differential parity
 harness, which puts thousands of generated cases through all three and
 compares exact error text.
-TypeScript is canonical — behaviour changes start there and are mirrored in Go
+TypeScript is canonical—behaviour changes start there and are mirrored in Go
 and Rust.
 See **[AGENTS.md](AGENTS.md)**.
 
 ## Credits
 
-This module is inspired by [Joi](https://joi.dev), which I used for many years.
-It also draws from the way [Vue](https://vuejs.com) does property validation.
+This module is inspired by [Joi](https://joi.dev), which Richard Rodger used for
+many years. It also draws from the way [Vue](https://vuejs.com) does property
+validation.
 
 ## SHAPE
 
 The name comes from a sort of in-joke in Irish politics. It is
 [grotesque, unbelievable, bizarre and
-unprecedented](https://en.wikipedia.org/wiki/SHAPE), that anyone would write yet
-another validation library for JavaScript, let alone a third one! (See
+unprecedented](https://en.wikipedia.org/wiki/SHAPE) that anyone would write yet
+another validation library for JavaScript, let alone a third one. (See
 [parambulator](https://github.com/rjrodger/parambulator) and
-[norma](https://github.com/rjrodger/norma) — but don't use those, *Shape* is
-better!). Also I like short names.
+[norma](https://github.com/rjrodger/norma)—but don't use those; *Shape* is the
+one that is maintained.) Short names help, too.
 
 ## License
 
-Copyright (c) 2021-2024, Richard Rodger and other contributors.
+Copyright (c) 2021-2024 Richard Rodger and other contributors.
 Licensed under [MIT](./LICENSE).
 
 | ![Voxgig](https://www.voxgig.com/res/img/vgt01r.png) | This open source module is sponsored and supported by [Voxgig](https://www.voxgig.com). |

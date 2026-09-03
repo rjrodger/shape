@@ -2,8 +2,8 @@
 
 By the end of this tutorial you will have built a real configuration validator,
 starting from a single default and growing it into a nested schema with required
-fields, arrays and custom rules. Everything here works the same way in
-TypeScript/JavaScript and in Go.
+fields, arrays, and custom rules. Everything here works the same way in
+TypeScript/JavaScript, in Go, and in Rust.
 
 ## 1. Install
 
@@ -61,7 +61,7 @@ out, _ := s.Validate(map[string]any{"port": 9090})
 ```
 
 Missing fields are filled in from the defaults. This is the most common case for
-options objects — everything optional, the default defines the type.
+options objects—everything optional, the default defines the type.
 
 ## 3. Nesting just works
 
@@ -115,7 +115,7 @@ s.Validate(map[string]any{"debug": true})
 // error: Validation failed for property "message" because the property is missing.
 ```
 
-Required fields have no default — you only declare the type.
+Required fields have no default—you only declare the type.
 
 ## 5. Validate an array
 
@@ -134,7 +134,7 @@ shape({ tags: [1] })
 ```
 
 A single-element array means "zero or more of this shape". Multiple elements
-make a fixed-length tuple — see
+make a fixed-length tuple—see
 [Validate arrays and tuples](../how-to/validate-arrays-and-tuples.md).
 
 ## 6. Add a constraint

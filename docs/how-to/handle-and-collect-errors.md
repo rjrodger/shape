@@ -1,6 +1,6 @@
 # How to handle and collect errors
 
-**Goal:** react to validation failures — as an exception, a boolean, or a full
+**Goal:** react to validation failures—as an exception, a boolean, or a full
 list of every problem.
 
 ## Default: fail fast
@@ -43,7 +43,7 @@ s.Valid(map[string]any{"age": 21.0})   // alias of Match
 
 ## Collect every error
 
-**TS** — pass a context whose `err` is an array; Shape fills it instead of
+**TS**—pass a context whose `err` is an array; Shape fills it instead of
 throwing. Or call `shape.error(value)`.
 
 ```js
@@ -59,7 +59,7 @@ const errs2 = shape.error({ a: 'x' })
 
 Set `{ err: false }` to suppress errors entirely (no throw, no collect).
 
-**Go** — call `Error`, or pass a `*Context` to `ValidateCtx`.
+**Go**—call `Error`, or pass a `*Context` to `ValidateCtx`.
 
 ```go
 issues := s.Error(map[string]any{"a": "x"})   // []shape.FieldError, nil when valid

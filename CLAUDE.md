@@ -23,6 +23,10 @@ The full guide is **[AGENTS.md](AGENTS.md)** — read it. The essentials:
    binaries); restructure an unreachable arm rather than leave it.
 5. **Document divergences** in `docs/explanation/ts-go-parity.md`; don't add
    silent ones.
+6. **Prose has a gate too.** `docs/STYLE-GUIDE.md` is normative for `docs/`
+   and the four READMEs; `make lint-docs` (Vale) and the `docs-style` block
+   of `ts/test/docs.test.ts` both run in CI. Plans and other working
+   documents go under `docs/design/`, and no documentation page cites one.
 
 ## Commands
 
@@ -31,6 +35,7 @@ make build          # build ts + go + rs
 make test           # test ts + go + rs (includes the shared corpus)
 make diff           # differential parity harness (make diff-full for detail)
 make lint-rs cover-rs   # clippy -D warnings and the 100% line gate for rs
+make lint-docs      # the prose gate (Vale 3.14.0 + one `vale sync`)
 cd go && go vet ./... && go test -cover .
 cd ts && node --test --experimental-test-coverage dist-test/**/*.test.js
 cd rs && cargo test --all-features
@@ -38,7 +43,8 @@ cd rs && cargo test --all-features
 
 ## Layout
 
-`ts/` canonical TypeScript · `go/` Go port · `rs/` Rust port · `docs/` Diátaxis docs ·
+`ts/` canonical TypeScript · `go/` Go port · `rs/` Rust port · `docs/` Diátaxis docs
+(plus `adr/`, `design/` plans, `STYLE-GUIDE.md`) ·
 `test/` shared conformance corpus · `bench/` benchmarks and recorded runs ·
 `site/` site generator (docs + perf report) · `AGENTS.md` full guide.
 

@@ -1,7 +1,7 @@
 # How to use key and value expressions
 
 **Goal:** attach builders to a property directly in its key, or drive a whole
-object/array from an expression — without importing builder functions.
+object/array from an expression—without importing builder functions.
 
 ## Key expressions (on by default)
 

@@ -1,6 +1,6 @@
 # How validation works
 
-This page explains the model behind the behaviour — useful when a result
+This page explains the model behind the behaviour—useful when a result
 surprises you.
 
 ## Specs become nodes
@@ -22,15 +22,16 @@ An empty object `{}` is treated as **open** (matches any object), and a required
 
 Three independent ideas:
 
-- **required** — the value must be present; a missing value is an error and no
+- **required**—the value must be present; a missing value is an error and no
   default is injected.
-- **optional** — a missing value is filled from the node's default (if any).
-- **skippable** (`Skip`) — optional *and* no default injection; a missing value
+- **optional**—a missing value is filled from the node's default (if any).
+- **skippable** (`Skip`)—optional *and* no default injection; a missing value
   simply leaves the key out.
 
 A type marker carries the type's empty value as a latent default (`""`, `0`,
-`false`, `{}`, `[]`). Requiredness gates whether that default is ever injected —
-so `Optional(String)` fills in `""`, while a bare `String` errors when missing.
+`false`, `{}`, `[]`). Requiredness gates whether that default is ever
+injected—so `Optional(String)` fills in `""`, while a bare `String` errors when
+missing.
 
 ## `undefined` vs `null`
 
@@ -47,7 +48,7 @@ When an optional value is missing, its default is injected into the output.
 
 - **TS** does this by **mutating the input** object in place. Cloning arbitrary
   JavaScript values is [famously fiddly](https://www.digitalocean.com/community/tutorials/copying-objects-in-javascript),
-  so Shape leaves that choice to you — pass a fresh object if you must preserve
+  so Shape leaves that choice to you—pass a fresh object if you must preserve
   the original.
 - **Go** never changes its input: `Validate` returns the input's own object or
   array where nothing changed and a copy where something did (a default
@@ -70,7 +71,7 @@ thrown error (TS) or a returned error (Go and Rust), but you can
 ## Empty strings
 
 The empty string is treated as "no value" for a string shape and is rejected by
-default — even for an optional string that is *present* as `""`. Use `Empty` to
+default—even for an optional string that is *present* as `""`. Use `Empty` to
 allow it. (An optional string that is *absent* is still defaulted to `""`.)
 
 ## References and recursion

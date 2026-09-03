@@ -22,7 +22,7 @@ the node tree.
 | `k` | final property keys, in order |
 | `e` | whether match failures are reported as errors (`false` under `Ignore`) |
 | `b` / `a` | before / after validator lists |
-| `u` / `m` | user data / metadata — `u.nullable` for `Nullable`, `u.empty` for `Empty`, `u.list` and `u.discriminated` for a composition's branches, `m.description` for `Describe`, `m.rest` for `Rest` |
+| `u` / `m` | user data / metadata—`u.nullable` for `Nullable`, `u.empty` for `Empty`, `u.list` and `u.discriminated` for a composition's branches, `m.description` for `Describe`, `m.rest` for `Rest` |
 | `z` | custom (Fault) message |
 
 The remaining keys are the chainable builder methods (`node.Min(2)`).
@@ -30,7 +30,7 @@ The remaining keys are the chainable builder methods (`node.Min(2)`).
 Go stores the equivalent on an unexported `node`; use `s.Spec()` for a
 JSON-friendly view, or `Node.Inner()` / `Node.Kind()` for a compiled builder.
 
-## `Update` — what a validator returns through
+## `Update`—what a validator returns through
 
 A custom validator (`Check`/`Before`/`After`) fills in an `update`:
 
@@ -38,39 +38,39 @@ A custom validator (`Check`/`Before`/`After`) fills in an `update`:
 | ----------- | ----------- | ------- |
 | `done` | `Done` | stop running further checks on this node |
 | `val` | `Val` (+ `HasVal`) | replace the value |
-| `uval` | — | replace with `undefined`/`NaN` (TS) |
+| `uval` | n/a | replace with `undefined`/`NaN` (TS) |
 | `node` | `Node` | swap in a different node (used by `Refer`) |
-| `type` | — | override the type (TS) |
+| `type` | n/a | override the type (TS) |
 | `err` | `Err` | a message string, an error object, or a list of them |
 | `why` | `Why` | why-code for the failure |
-| `fatal` | — | force the error to be reported even under `Ignore` (TS) |
-| `nI` / `sI` / `pI` | — | traversal cursor overrides; internal (TS) |
+| `fatal` | n/a | force the error to be reported even under `Ignore` (TS) |
+| `nI` / `sI` / `pI` | n/a | traversal cursor overrides; internal (TS) |
 
 Return `true` to pass, `false` to fail. Setting `update.err` implies failure,
 and a failed check also sets `done` unless the validator set it itself, so the
-node's structural check is skipped — the other validators on the node still run.
+node's structural check is skipped—the other validators on the node still run.
 A `Check` validator is not called for an absent (`undefined`) value; `Before`
 and `After` validators are.
 
-## `State` — the current cursor
+## `State`—the current cursor
 
 Read-only context for a validator:
 
 | TS `State` | Go `State` | Meaning |
 | ---------- | ---------- | ------- |
 | `val` | `Value` | current value |
-| `valType` | — | the type name of `val` as Shape sees it (TS) |
+| `valType` | n/a | the type name of `val` as Shape reads it (TS) |
 | `key` | `Key` | current key/index |
 | `path` | `Path` | path stack from the root |
 | `node` | `Node` | current node |
 | `parent` | `Parent` | parent container |
-| `root` | — | the value passed to the shape (TS) |
-| `ancestors` | — | the nodes from the root down to the current one (TS) |
+| `root` | n/a | the value passed to the shape (TS) |
+| `ancestors` | n/a | the nodes from the root down to the current one (TS) |
 | `match` | `Match` | true during `match`/`Match` (no mutation) |
-| `fromDflt` | — | true when `val` was just injected from a default (TS) |
+| `fromDflt` | n/a | true when `val` was just injected from a default (TS) |
 | `ctx` | `Ctx` | the validation context (your custom fields live here) |
-| `curerr` | — | errors accumulated for the current node (TS) |
-| `err` | — | errors accumulated for the whole run so far (TS) |
+| `curerr` | n/a | errors accumulated for the current node (TS) |
+| `err` | n/a | errors accumulated for the whole run so far (TS) |
 
 ## Example
 

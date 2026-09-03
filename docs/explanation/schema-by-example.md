@@ -4,8 +4,8 @@
 
 > Your schema looks (almost) exactly like your data.
 
-Most validators ask you to learn a second language — a JSON-Schema dialect, a
-fluent builder chain, a DSL — and then describe your data in it. Shape inverts
+Most validators ask you to learn a second language—a JSON-Schema dialect, a
+fluent builder chain, a DSL—and then describe your data in it. Shape inverts
 that: you write an **example of the data** and it becomes the schema.
 
 ```js
@@ -38,14 +38,14 @@ Shape is in the tradition of [Joi](https://joi.dev) and
 [JSON-Schema](https://json-schema.org), but the developer experience is
 different:
 
-- **vs JSON-Schema** — no separate meta-language; the spec mirrors the data.
-- **vs Joi** — no long builder chains for the common case; a literal is enough.
-- **vs `Object.assign` / spread** — Shape fills defaults to *any depth*, not just
-  the top level, and it validates types while doing so.
+- **vs JSON-Schema**—no separate meta-language; the spec mirrors the data.
+- **vs Joi**—no long builder chains for the common case; a literal is enough.
+- **vs `Object.assign` / spread**—Shape fills defaults at *any depth*,
+  not only at the top level, and it validates types while doing so.
 
 ## Three implementations, one behaviour
 
-Shape runs in TypeScript/JavaScript, in Go and in Rust. The TypeScript
+Shape runs in TypeScript/JavaScript, in Go, and in Rust. The TypeScript
 implementation is **canonical**: it defines the behaviour, and the Go and Rust
 ports are verified against it by a
 [shared conformance corpus](../../test/README.md). See
@@ -53,5 +53,5 @@ ports are verified against it by a
 
 ## Read next
 
-- [How validation works](how-validation-works.md) — the mechanics.
-- [Getting started](../tutorials/getting-started.md) — build one.
+- [How validation works](how-validation-works.md)—the mechanics.
+- [Getting started](../tutorials/getting-started.md)—build one.

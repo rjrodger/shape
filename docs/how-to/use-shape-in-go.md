@@ -26,7 +26,7 @@ package exports sentinel tokens:
 | `shape.String`    | strings                                       |
 | `shape.Number`    | any numeric kind (`int*`, `uint*`, `float*`)  |
 | `shape.Boolean`   | booleans                                      |
-| `shape.Object`    | `map[string]any` (or a struct, see below)     |
+| `shape.Object`    | `map[string]any` (or a struct, see [Structs](#structs)) |
 | `shape.Array`     | `[]any`                                       |
 | `shape.Function`  | any `reflect.Func` value                      |
 | `shape.Integer`   | a number with no fractional part              |
@@ -52,8 +52,8 @@ std := s.Standard()                   // Standard Schema V1-style interface
 
 ## Values are JSON-shaped
 
-Validate `map[string]any`, `[]any`, `string`, `bool` and numeric values —
-typically the result of `json.Unmarshal`. Numbers compare as `float64`. Typed
+Validate `map[string]any`, `[]any`, `string`, `bool` and numeric
+values—typically the result of `json.Unmarshal`. Numbers compare as `float64`. Typed
 slices are accepted and coerced to `[]any`.
 
 ## Structs
@@ -113,7 +113,7 @@ args, err := argu.Validate(
 ```
 
 Because Go maps are unordered, argument specs are ordered **alphabetically** by
-key — use `a`, `b`, `c`, … to fix positions. `argu.Partial(...)` returns a
+key—use `a`, `b`, `c`, … to fix positions. `argu.Partial(...)` returns a
 reusable closure.
 
 ## Differences to keep in mind

@@ -8,20 +8,20 @@
   `[]shape.FieldError` from `Error`.
 - `shape.error(value)` (TS) returns the issues themselves, `ErrDesc[]`, and
   `~standard.validate(value)` returns them as `{ issues: [{ message, path }] }`
-  (`text` and `pathArr`) — see [Standard Schema](../how-to/use-as-standard-schema.md).
+  (`text` and `pathArr`)—see [Standard Schema](../how-to/use-as-standard-schema.md).
 
 ## `ShapeError` (TS)
 
 | Member | Meaning |
 | ------ | ------- |
-| `message` | human-readable, all issues' `text` joined by newline, as `<shape name>: <ctx.prefix>: <issues> <ctx.suffix>` — each part only when set (a default `G$…` name is not shown) |
+| `message` | human-readable, all issues' `text` joined by newline, as `<shape name>: <ctx.prefix>: <issues> <ctx.suffix>`—each part only when set (a default `G$…` name is not shown) |
 | `name` | `"ShapeError"` |
 | `code` | error code (`"shape"`) |
 | `gname` | the shape's name, as prefixed to `message` |
 | `shape` | `true` |
 | `props` | `[{ path, what, type, value }]` summary per issue (`what` is the why-code) |
 | `desc()` | `{ name, code, err, ctx }` where `err` is the full `ErrDesc[]` |
-| `toJSON()` | JSON-serializable form: the fields above plus `err`, `name` and `message` |
+| `toJSON()` | JSON-serializable form: the preceding fields plus `err`, `name` and `message` |
 
 ## `ValidationError` (Go)
 
@@ -39,11 +39,11 @@ not exported); Go calls it `FieldError`. The fields line up:
 | ------------ | --------------- | ------- |
 | `key`   | `Key`   | the immediate key/index that failed |
 | `node`  | —       | the failing node (TS) |
-| `path`  | `Path`  | dot-notation path from the root (e.g. `users.0.email`) |
-| `pathArr` | `PathArr` | path as an array (array indices as numbers, keys as strings) — unambiguous for keys containing dots |
+| `path`  | `Path`  | dot-notation path from the root, such as `users.0.email` |
+| `pathArr` | `PathArr` | path as an array (array indices as numbers, keys as strings)—unambiguous for keys containing dots |
 | `type`  | `Type`  | the node's type/kind |
 | `value` | `Value` | the failing value |
-| `why`   | `Why`   | why-code — see below |
+| `why`   | `Why`   | why-code—see [Why-codes](#why-codes) |
 | `check` | `Check` | the name of the check/builder that was running (`none` for a structural error before any ran) |
 | `mark`  | `Mark`  | numeric mark for pinpointing the source call site |
 | `text`  | `Text`  | the rendered message |

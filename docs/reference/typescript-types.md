@@ -11,7 +11,7 @@ types are:
 | `Builder` | a node builder: `(opts?, ...vals) => Node` |
 | `Node` | a compiled shape node |
 | `State` | the traversal state passed to validators |
-| `ShapeShape` | the return type of `Shape(...)` — the validator function plus its methods |
+| `ShapeShape` | the return type of `Shape(...)`—the validator function plus its methods |
 | `StandardSchemaV1` | the [Standard Schema](https://standardschema.dev/) interface every shape implements at runtime through `shape['~standard']`; the type `Shape(...)` returns does not declare it, so hand a shape over as `shape as unknown as StandardSchemaV1` |
 | `StandardSchemaV1Props`, `StandardSchemaV1Result`, `StandardSchemaV1Issue`, `StandardSchemaV1PathSegment`, `StandardSchemaV1Types` | the parts of that interface |
 
@@ -29,21 +29,21 @@ their shape.
 | ----------- | -------- |
 | `String`, `Number`, `Boolean`, `Date` | `string`, `number`, `boolean`, `Date` |
 | `Array`, `Object`, `Function`, `Symbol` | `any[]`, `any`, `Function`, `symbol` |
-| a literal (`8080`, `'x'`, `true`, a `Date`) | its primitive (`number`, `string`, `boolean`, `Date`) — the literal is a default, not the only value |
+| a literal (`8080`, `'x'`, `true`, a `Date`) | its primitive (`number`, `string`, `boolean`, `Date`)—the literal is a default, not the only value |
 | `null`, `/re/` | `null`, `string` |
 | a nested object | recursively inferred |
 | `[X]` | `X[]`; `[X, Y]` a tuple `[X, Y]`; `[]` `any[]` |
-| `'name: expr'` key | the property `name` — the expression text is not in the result |
+| `'name: expr'` key | the property `name`—the expression text is not in the result |
 | a builder wrapping a spec (`Min(1, Number)`, `Required(...)`, `Describe(...)`, `Coerce(...)`, …) | the spec's type |
-| `Optional(X)`, `Default(v, X)` | `X` — an absent value is filled from the default |
+| `Optional(X)`, `Default(v, X)` | `X`—an absent value is filled from the default |
 | `Skip(X)`, `Ignore(X)` | `X \| undefined` |
 | `Nullable(X)` | `X \| null` |
-| `Integer` — bare or called | `number` |
-| `Email`, `Url`, `Uuid`, `DateTime`, `Ip`, `Ipv4`, `Ipv6` — bare or called | `string` |
-| `Never`, `Any`, `Func` — bare or called | `never`, `any`, `Function` |
+| `Integer`—bare or called | `number` |
+| `Email`, `Url`, `Uuid`, `DateTime`, `Ip`, `Ipv4`, `Ipv6`—bare or called | `string` |
+| `Never`, `Any`, `Func`—bare or called | `never`, `any`, `Function` |
 | `Key()`; `Key(n)`; `Key(n, sep)`; `Key(fn)` | `string`; `string[]`; `string`; `fn`'s return type |
 | `Exact(a, b, …)` | the union of the literals, `'a' \| 'b'` |
-| `One(A, B)`, `Some(A, B)`, `All(A, B)` | `A \| B` — a branch with no spec of its own (`Min(2)`) is `any`, which absorbs the union |
+| `One(A, B)`, `Some(A, B)`, `All(A, B)` | `A \| B`—a branch with no spec of its own (`Min(2)`) is `any`, which absorbs the union |
 | `Discriminated('kind', { dog: {…}, fish: {…} })` | a union of the branches, each with `kind: 'dog'` or `kind: 'fish'` |
 | `Child(X)` | `{ [key: string]: X }`; `Rest(X)` `X[]` |
 | `Pick(names, X)`, `Omit(names, X)`, `Extend(extra, X)`, `Partial(X)` | the reshaped object |

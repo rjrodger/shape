@@ -2,15 +2,15 @@
 
 Shape is a **schema-by-example** validator: your schema looks (almost) exactly
 like your data. It runs in JavaScript/TypeScript (browser and backend), in Go
-and in Rust, with the three implementations kept at behavioural parity —
-TypeScript is the canonical reference.
+and in Rust, with the three implementations kept at behavioural
+parity—TypeScript is the canonical reference.
 
 These docs follow the [Diátaxis](https://diataxis.fr) system and are published
 at [rjrodger.github.io/shape](https://rjrodger.github.io/shape/), where a
 [performance report](https://rjrodger.github.io/shape/perf/) compares shape to
 other validators. Pick the column that matches what you need right now:
 
-| I want to…                                   | Go to            |
+| You want to…                                 | Go to            |
 | -------------------------------------------- | ---------------- |
 | **learn** Shape by building something        | [Tutorials](#tutorials) |
 | **solve a specific problem** step by step    | [How-to guides](#how-to-guides) |
@@ -23,7 +23,7 @@ other validators. Pick the column that matches what you need right now:
 
 Start here if you are new. Learning-oriented, worked end-to-end.
 
-- [Getting started](tutorials/getting-started.md) — build and grow your first
+- [Getting started](tutorials/getting-started.md)—build and grow your first
   shape, in both TypeScript and Go.
 
 ## How-to guides
@@ -52,40 +52,35 @@ Goal-oriented recipes for a task you already have.
 
 Dry, complete, look-it-up material.
 
-- [Builder reference](reference/builders.md) — every builder, in TypeScript
+- [Builder reference](reference/builders.md)—every builder, in TypeScript
   and Go (the Rust forms are in the [Rust API](reference/rust-api.md)).
-- [Shape API](reference/shape-api.md) — compiling, validating, options.
-- [Errors](reference/errors.md) — error objects and message format.
-- [The regexp subset](reference/regexp.md) — what a pattern may use, and how
+- [Shape API](reference/shape-api.md)—compiling, validating, options.
+- [Errors](reference/errors.md)—error objects and message format.
+- [The regexp subset](reference/regexp.md)—what a pattern may use, and how
   every engine is made to read it the same way.
-- [Shape nodes](reference/nodes.md) — the compiled node model.
+- [Shape nodes](reference/nodes.md)—the compiled node model.
 - [TypeScript types](reference/typescript-types.md)
-- [Go API](reference/go-api.md) — the Go surface and its idioms.
-- [Rust API](reference/rust-api.md) — the Rust surface and its idioms.
+- [Go API](reference/go-api.md)—the Go surface and its idioms.
+- [Rust API](reference/rust-api.md)—the Rust surface and its idioms.
 
 ## Explanation
 
 Background and design discussion.
 
-- [Schema by example](explanation/schema-by-example.md) — the core idea.
-- [How validation works](explanation/how-validation-works.md) — defaults,
+- [Schema by example](explanation/schema-by-example.md)—the core idea.
+- [How validation works](explanation/how-validation-works.md)—defaults,
   mutation, traversal, required/optional semantics.
-- [TypeScript ↔ Go ↔ Rust parity](explanation/ts-go-parity.md) — the parity
+- [TypeScript ↔ Go ↔ Rust parity](explanation/ts-go-parity.md)—the parity
   contract, the shared conformance corpus, and known divergences.
-- [Performance review](explanation/performance.md) — where validation spends
+- [Performance review](explanation/performance.md)—where validation spends
   its time in each language, and what would make it faster.
-- [Performance plan](explanation/performance-plan.md) — the phases, targets
-  and measurement protocol for making it faster.
-- [Rust implementation plan](explanation/rust-plan.md) — how the third port
-  in `rs/` was planned: the value type, the crate layout, how it joins the
-  gates, and the phases.
 
 ## Decision records
 
 Design decisions that are expensive to revisit, with the reasoning behind them.
 
 - [ADR index](adr/README.md)
-  - [0001 — Validation is synchronous, in both languages](adr/0001-validation-is-synchronous.md)
+  - [0001—Validation is synchronous, in both languages](adr/0001-validation-is-synchronous.md)
 
 ---
 
@@ -101,3 +96,6 @@ Design decisions that are expensive to revisit, with the reasoning behind them.
   (Rust, from the `shape-schema` crate).
 - The canonical behaviour is defined by the TypeScript implementation and pinned
   by the shared corpus in [`test/`](../test/README.md).
+- These pages are written to a
+  [style guide](STYLE-GUIDE.md), which two gates enforce: `make lint-docs`
+  and the `docs-style` block of `ts/test/docs.test.ts`.

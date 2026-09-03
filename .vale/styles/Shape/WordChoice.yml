@@ -1,0 +1,28 @@
+# The parts of Google.WordListCase that are right for this project,
+# carried as our own rule so they can sit at error level.
+#
+# Google.WordListCase itself is a WARNING here (see .vale.ini): it maps
+# `touch` to `tap`, a mobile-UI rule, and `application` to `app`, which
+# is wrong in a sentence about the application holding the schema. These
+# substitutions have no such collision.
+extends: substitution
+message: "Use '%s' instead of '%s'."
+link: 'https://developers.google.com/style/word-list'
+level: error
+# CASE-SENSITIVE, unlike the jostraca rule this is ported from, and the
+# reason is `Above`. It is a builder here -- `Above(n, spec?)`, one of
+# five bounds -- and it is named in prose as often as it is written in a
+# code span. `ignorecase: true` turns every one of those into "use
+# 'preceding' instead of 'Above'", which is the class of false positive
+# that gets a gate switched off. The entries that DO want both casings
+# carry `(?i)` themselves.
+ignorecase: false
+action:
+  name: replace
+swap:
+  # "above" and "below" assume the reader sees a visual layout; a screen
+  # reader does not. Google's accessibility guidance, and it is right.
+  (?:the )?above: preceding
+  (?:the )?below: following
+  (?i)file names: filenames
+  (?i)file name: filename

@@ -18,7 +18,7 @@ const validate = Shape({ name: Min(1, String) })
 Type markers (`String`, `Number`, `Boolean`, …) are the built-in constructors,
 not exports of the package.
 
-This is the same API as on the backend — everything in these docs applies.
+This is the same API as on the backend—everything in these docs applies.
 The package's `browser` field swaps Node's `util` (the one Node module
 `shape.js` touches, only for `inspect`) for a one-line stub, so no polyfill is
 needed.

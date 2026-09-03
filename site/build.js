@@ -88,7 +88,11 @@ function collect() {
   const walk = (dir) => {
     for (const e of fs.readdirSync(path.join(ROOT, dir), { withFileTypes: true })) {
       const rel = path.posix.join(dir, e.name)
-      if (e.isDirectory()) walk(rel)
+      // docs/design/ holds the plans: working documents for maintainers,
+      // written to be revised, and not part of the published site. They
+      // sit under docs/ so one directory holds everything written about
+      // this project, which means the exclusion has to happen here.
+      if (e.isDirectory()) { if ('docs/design' !== rel) walk(rel) }
       else if (e.name.endsWith('.md')) {
         const out = e.name === 'README.md' ? rel.replace(/README\.md$/, 'index.html') : rel.replace(/\.md$/, '.html')
         pages.push({ src: rel, out })

@@ -1,6 +1,6 @@
 # How to add custom validation
 
-**Goal:** enforce a rule that the built-in builders don't cover — a regular
+**Goal:** enforce a rule that the built-in builders don't cover—a regular
 expression, or arbitrary logic.
 
 ## Regular expressions
@@ -72,10 +72,10 @@ The validator signature is the same in both languages:
 
 ## Before and after the structural checks
 
-- [`Before`](../reference/builders.md#custom-checks) runs **before** the type check —
-  use it to coerce or substitute a value.
-- [`After`](../reference/builders.md#custom-checks) runs **after** — use it to validate
-  the produced value.
+- [`Before`](../reference/builders.md#custom-checks) runs **before** the type
+  check: use it to coerce or substitute a value.
+- [`After`](../reference/builders.md#custom-checks) runs **after**: use it to
+  validate the produced value.
 
 ```js
 Shape({
@@ -84,8 +84,8 @@ Shape({
 ```
 
 A `Before` also runs when the property is **absent** (`val` is `undefined`), so
-leave an absent value alone or the required check never sees it — without the
-guard above, a missing `id` would become the string `'undefined'`.
+leave an absent value alone or the required check never runs—without the
+preceding guard, a missing `id` would become the string `'undefined'`.
 
 ## Coerce, repair or rewrite the value
 
@@ -113,7 +113,7 @@ Shape({ port: Fault('port must be a number', Number) })
 
 Validation is synchronous by design (see
 [ADR 0001](../adr/0001-validation-is-synchronous.md)). An `async` validator
-returns a promise, a promise is truthy, and a truthy return means "passed" — so
+returns a promise, a promise is truthy, and a truthy return means "passed"—so
 the check **silently succeeds** no matter what it would have decided:
 
 ```js
@@ -132,6 +132,6 @@ if (await emailTaken(user.email)) {
 
 ## See also
 
-- [ADR 0001 — validation is synchronous](../adr/0001-validation-is-synchronous.md).
+- [ADR 0001—validation is synchronous](../adr/0001-validation-is-synchronous.md).
 - [Compose shapes](compose-shapes.md) for `One` / `Some` / `All` / `Exact`.
 - [Handle and collect errors](handle-and-collect-errors.md).

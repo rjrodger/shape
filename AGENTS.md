@@ -13,7 +13,7 @@ behavioural parity**:
 | `ts/`     | **Canonical** TypeScript implementation (`ts/src/shape.ts`) + tests. |
 | `go/`     | Go port (`go/*.go`) + tests. |
 | `rs/`     | Rust port (`rs/src/*.rs`) + tests. |
-| `docs/`   | [Diátaxis](https://diataxis.fr) documentation (tutorials / how-to / reference / explanation). |
+| `docs/`   | [Diátaxis](https://diataxis.fr) documentation (tutorials / how-to / reference / explanation), plus `adr/` decision records, `design/` plans, and `STYLE-GUIDE.md`. |
 | `test/`   | Shared, language-neutral conformance corpus (`*.tsv`) run by all three languages. |
 | `bench/`  | Benchmarks against other validators (`bench/ts`, `bench/go`, `bench/rs`) and the immutable recorded runs (`bench/results/`). See `bench/README.md`. |
 | `site/`   | Static site generator (`site/build.js`) for the docs and the performance report, deployed by the Pages workflow. |
@@ -177,6 +177,26 @@ The docs are published by `.github/workflows/pages.yml`, which runs
 `site/build.js` (Markdown → HTML, links between pages rewritten, broken
 links fail the build) and deploys `site/dist` to GitHub Pages together with
 the performance report read from `bench/results/latest/`.
+`docs/design/` is the exception: plans and other working documents live
+there, the site skips the directory, and no documentation page may cite one.
+
+**How the prose is written is normative too**, in
+[`docs/STYLE-GUIDE.md`](docs/STYLE-GUIDE.md): the Diátaxis kinds, the voice,
+the banned-phrase list, the punctuation rulings and the terminology. Two
+gates enforce it, and both run in CI:
+
+```sh
+make lint-docs        # Vale: spelling, Google's rules, the banned list
+make lint-docs-full   # the same, with warnings and suggestions
+cd ts && npm test     # ts/test/docs.test.ts, the docs-style block
+```
+
+`make lint-docs` needs Vale 3.14.0 on the path plus one `vale sync` to fetch
+the pinned Google package; `.github/workflows/docs.yml` does both. Levels
+are set in `.vale.ini` and every demotion there records what the rule
+produced on a clean run. The banned list is
+`.vale/styles/config/vocabularies/Shape/reject.txt`, read by both gates so
+they cannot drift.
 
 ## Benchmarks
 
@@ -197,5 +217,6 @@ correct. See `bench/README.md`.
 4. `make test` — all three languages green, including the corpus.
 5. `make diff` — both ports agree with TypeScript on every generated case.
 6. Keep coverage at the bar; run `go vet` and `make lint-rs cover-rs`.
-7. Update `docs/` (and the parity page if relevant).
+7. Update `docs/` (and the parity page if relevant), to
+   `docs/STYLE-GUIDE.md`; run `make lint-docs` and `npm test`.
 8. Commit with a message that says which language(s) changed and why.
