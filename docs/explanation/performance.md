@@ -5,7 +5,12 @@ would make it faster.** *The recommendations that follow were carried out;
 the figures here are the ones the review was written from, and the
 [benchmark report](https://rjrodger.github.io/shape/perf/) carries the
 current numbers. The review predates the Rust port, which the benchmarks
-and the report now measure too but which was not profiled here.* Measured with the [benchmarks](../../bench/README.md)
+and the report now measure too but which was not profiled here. The
+TypeScript figures here, and every TypeScript run recorded before
+2026-09-03, measured a benchmark whose `String`, `Number` and `Boolean`
+leaves were undefined, which shape reads as an optional `any`: a slower
+shape than the Go and Rust benchmarks measure, so the TypeScript runs
+after the correction are not comparable with the ones before it.* Measured with the [benchmarks](../../bench/README.md)
 in `bench/` and CPU and allocation profiles of the `flat`, `nested` and
 `array` cases; the numbers are from one Linux host and will differ elsewhere,
 but the proportions are what matter. The live comparison with other
