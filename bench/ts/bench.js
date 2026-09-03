@@ -19,7 +19,8 @@ const versionOf = (name) =>
   JSON.parse(require('node:fs').readFileSync(require('node:path').join(__dirname, 'node_modules', name, 'package.json'), 'utf8')).version
 const versions = { shape: versionOf('shape'), zod: versionOf('zod'), ajv: versionOf('ajv'), joi: versionOf('joi'), valibot: versionOf('valibot') }
 
-const { String: S, Number: N, Boolean: B, Integer, Min, Max } = Shape
+const { Integer, Min, Max } = Shape
+const S = String, N = Number, B = Boolean
 
 // Shape specs by case name, closed objects like the JSON Schemas.
 const shapes = {
@@ -136,7 +137,15 @@ function main() {
       valibot: () => v.safeParse(vb, input),
     }
 
-    // Sanity: every library agrees on the verdict before it is timed.
+    // Sanity: the spec has the leaves it says (an undefined leaf would
+    // read as an optional `any` and measure a different shape), and every
+    // library agrees on the verdict before it is timed.
+    for (const f of [S, N, B, Integer, Min, Max]) {
+      if (typeof f !== 'function') throw new Error(`case ${c.name}: a spec leaf is not a function`)
+    }
+    if (/"t":"any"/.test(JSON.stringify(shape.node().v))) {
+      throw new Error(`case ${c.name}: the shape has an untyped leaf`)
+    }
     const verdicts = {
       shape: shape.valid(input),
       zod: zod.safeParse(input).success,
