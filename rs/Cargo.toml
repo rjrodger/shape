@@ -2,7 +2,7 @@
 # crates.io already has an unrelated `shape`; the package is shape-schema and
 # the library is still `shape`, so `use shape::…` reads as the docs say.
 name = "shape-schema"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 rust-version = "1.75"
 description = "Schema-by-example validation: your schema looks like your data. The Rust port of shape, held to the canonical TypeScript by a shared corpus."
