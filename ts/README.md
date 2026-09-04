@@ -43,7 +43,7 @@ const { Shape, Min, Optional } = require('shape')   // CommonJS
 import { Shape, Min, Optional } from 'shape'         // ESM / TypeScript
 ```
 
-Node 24+. Type declarations ship with the package. Bundlers pick up
+Node 20+. Type declarations ship with the package. Bundlers pick up
 the CommonJS build, with Node's `util` swapped for a stub by the `browser`
 field; a minified standalone bundle, `dist/shape.min.js`, exposes a global
 `Shape` for a plain script tag. See
@@ -155,7 +155,7 @@ npm install
 npm run build      # tsc: src → dist, test → dist-test (both git-ignored), then the browser bundle
 npm run build-web  # esbuild: src/shape.web.js → dist/shape.min.js (a global Shape)
 npm test           # node --test over dist-test
-node --test --experimental-test-coverage dist-test/**/*.test.js
+node --test --experimental-test-coverage dist-test/*.test.js   # the coverage gate, Node 22+
 ```
 
 `src/shape.ts` is the whole library. The suite is held at **100% line

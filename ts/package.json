@@ -1,6 +1,6 @@
 {
   "name": "shape",
-  "version": "11.3.2",
+  "version": "11.4.0",
   "description": "An object shape validation utility.",
   "main": "dist/shape.js",
   "browser": {
@@ -20,8 +20,8 @@
     "url": "git://github.com/rjrodger/shape.git"
   },
   "scripts": {
-    "test": "node --enable-source-maps --test dist-test/**/*.test.js",
-    "test-some": "node --enable-source-maps --test --test-name-pattern",
+    "test": "node test/run.js",
+    "test-some": "node test/run.js --test-name-pattern",
     "build": "npm run version && tsc --build src test && npm run build-web",
     "build-web": "esbuild src/shape.web.js --bundle --minify --keep-names --format=iife --global-name=Shape --platform=browser --alias:util=./src/web/util.js --footer:js=\"if(typeof module!=='undefined'&&module.exports)module.exports=Shape;\" --outfile=dist/shape.min.js --log-level=warning",
     "watch": "npm run version && tsc --build src test -w",
@@ -34,7 +34,7 @@
   },
   "license": "MIT",
   "engines": {
-    "node": ">=24"
+    "node": ">=20"
   },
   "files": [
     "README.md",

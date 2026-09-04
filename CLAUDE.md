@@ -37,7 +37,7 @@ make diff           # differential parity harness (make diff-full for detail)
 make lint-rs cover-rs   # clippy -D warnings and the 100% line gate for rs
 make lint-docs      # the prose gate (Vale 3.14.0 + one `vale sync`)
 cd go && go vet ./... && go test -cover .
-cd ts && node --test --experimental-test-coverage dist-test/**/*.test.js
+cd ts && node --test --experimental-test-coverage dist-test/*.test.js
 cd rs && cargo test --all-features
 ```
 

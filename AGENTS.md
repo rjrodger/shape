@@ -47,7 +47,7 @@ Direct commands:
 ```sh
 # TypeScript (from ts/)
 npm install && npm run build
-node --test dist-test/**/*.test.js
+node --test dist-test/*.test.js
 
 # Go (from go/)
 go build ./... && go vet ./... && go test ./...
@@ -56,7 +56,7 @@ go build ./... && go vet ./... && go test ./...
 cargo test --all-features && cargo clippy --all-targets --all-features -- -D warnings
 ```
 
-Toolchain: Node 24+ (works on 22), Go 1.22+, Rust 1.75+ (stable). TypeScript compiles to
+Toolchain: Node 20+, Go 1.22+, Rust 1.75+ (stable). TypeScript compiles to
 `ts/dist/` and tests to `ts/dist-test/` (both git-ignored) — **always rebuild
 after editing `ts/src`**. `npm run build` also bundles `dist/shape.min.js`, the
 package's browser entry, with esbuild (`npm run build-web`).
@@ -106,8 +106,9 @@ Aim for **100% line coverage** in every language.
 
 ```sh
 # TypeScript — measure on the executed dist/shape.js (source maps mis-attribute
-# the non-executable export{} block):
-cd ts && node --test --experimental-test-coverage dist-test/**/*.test.js
+# the non-executable export{} block). Needs Node 22 or later: the coverage
+# reporter throws on Node 20, which the package still supports:
+cd ts && node --test --experimental-test-coverage dist-test/*.test.js
 
 # Go:
 cd go && go test -cover .
