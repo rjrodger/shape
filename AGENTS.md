@@ -47,7 +47,7 @@ Direct commands:
 ```sh
 # TypeScript (from ts/)
 npm install && npm run build
-node --test dist-test/*.test.js
+node test/run.js        # the whole suite; a bare glob needs Node 21+ to expand
 
 # Go (from go/)
 go build ./... && go vet ./... && go test ./...
