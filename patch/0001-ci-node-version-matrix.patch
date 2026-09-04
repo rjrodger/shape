@@ -1,0 +1,37 @@
+From e203e617974371c14f5aaa8b36bfa4c1794bb8e8 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Fri, 4 Sep 2026 07:44:16 +0000
+Subject: [PATCH] ci: run the TypeScript job on Node 20, 22 and 24
+
+The build-and-test matrix pinned 24 alone. That is what let the package's
+declared engines floor drift away from the tested one unnoticed: `engines`
+said 24 for no reason anyone could point at, and nothing in CI would have
+noticed had it said 20 all along.
+
+It now spans the supported range, so the floor the package declares is the
+floor CI proves. Node 20 is the floor because a negated character class under
+the `u` flag does not match an astral character before V8 11, which breaks
+TypeScript-to-port regexp parity on Node 18.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01LN5qWCMeZPzvMqXsj1Veoi
+---
+ .github/workflows/ci.yml | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index 2e908bb..a388d84 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -10,7 +10,7 @@ jobs:
+       fail-fast: false
+       matrix:
+         os: [ubuntu-latest, windows-latest, macos-latest]
+-        node-version: [24.x]
++        node-version: [20.x, 22.x, 24.x]
+ 
+     runs-on: ${{ matrix.os }}
+ 
+-- 
+2.43.0
+
