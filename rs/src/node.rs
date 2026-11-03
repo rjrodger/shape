@@ -131,6 +131,8 @@ pub enum ListMode {
     One,
     Some,
     All,
+    /// A count of the branches the value satisfies.
+    Nof,
 }
 
 /// The function of a custom validator: the current state and an update to
@@ -220,6 +222,12 @@ pub struct Node {
     /// A Discriminated union: the tag it chooses by, and its branch names,
     /// which are the list in that order.
     pub disc: Option<crate::discriminated::Disc>,
+    /// A `Nof`'s count: a whole number (`nof_exact`), or a shape the number
+    /// of satisfied branches must satisfy (`nof_count`), and the counts it
+    /// admits, from none of the branches to all of them.
+    pub nof_exact: f64,
+    pub nof_count: Option<Box<Node>>,
+    pub nof_ok: Vec<bool>,
 
     pub exact_vals: Vec<Value>,
     pub has_exact: bool,

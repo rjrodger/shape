@@ -4,7 +4,7 @@ import { equal, deepEqual, throws } from 'node:assert'
 import {
   Shape, fromJsonSchema, Min, Max, Above, Below, Len, Empty, Optional, Skip, Exact, One, All, Nullable,
   Never, Any, Describe, Discriminated, Define, Refer, Child, Rest, Closed, Open, Email, Url, Uuid, DateTime,
-  Ipv4, Ipv6, Ip, Integer, Required, Default,
+  Ipv4, Ipv6, Ip, Integer, Required, Default, Nof,
 } from '../dist/shape'
 
 
@@ -48,6 +48,22 @@ describe('jsonschema-import', () => {
   roundTrip('exact', { a: Exact('x', 'y'), b: Exact(1), c: Exact(true, false) })
   roundTrip('one', One(String, Number))
   roundTrip('all', All(Number, Min(1, Number)))
+  // Every count JSON Schema has a keyword for comes back as it went.
+  roundTrip('nof-one', Nof(1, String, Number))
+  roundTrip('nof-none', Nof(0, String))
+  roundTrip('nof-none-of-many', Nof(0, String, Number))
+  roundTrip('nof-every', Nof(2, String, Number))
+  roundTrip('nof-some', Nof(Min(1), String, Number))
+  roundTrip('nof-not-every', Nof(Max(1), String, Number))
+  roundTrip('nof-property', { a: Optional(Nof(1, String, Number)) })
+
+  // A count bounded on both sides exports anyOf and not, and comes back as
+  // an allOf of the two.
+  test('round-trip-nof-bounded', () => {
+    const a = Shape(Nof(Max(2, Min(1)), String, Number, Boolean)).jsonSchema()
+    const b = Shape(fromJsonSchema(a)).jsonSchema()
+    deepEqual(b.allOf, [{ not: a.not }, { anyOf: a.anyOf }])
+  })
   roundTrip('nullable', { a: Nullable(Number), b: Nullable(Empty(String)) })
   roundTrip('never', { a: Never })
   roundTrip('any', { a: Any })
@@ -181,7 +197,12 @@ describe('jsonschema-import', () => {
     throws(() => v({ type: 'array', maxItems: 1 }, [1, 2]), /maximum length of 1/)
 
     // Compositions.
-    throws(() => v({ oneOf: [{ type: 'string' }, { type: 'number' }] }, true), /does not satisfy one of/)
+    // A oneOf is a count of exactly one: two branches satisfied is a failure.
+    throws(() => v({ oneOf: [{ type: 'string' }, { type: 'number' }] }, true),
+      /satisfies 0 of: String, Number; the count must be 1\.$/)
+    throws(() => v({ oneOf: [{ type: 'number' }, { type: 'integer' }] }, 1),
+      /satisfies 2 of: Number, Integer; the count must be 1\.$/)
+    equal(v({ oneOf: [{ type: 'number' }, { type: 'integer' }] }, 1.5), 1.5)
     throws(() => v({ allOf: [{ type: 'number' }, { minimum: 1 }] }, 0), /does not satisfy all of: Number, Min\(1\)/)
     throws(() => v({ minLength: 2 }, 'a'), /minimum length of 2/)
     throws(() => v({ maxItems: 1 }, [1, 2]), /maximum length of 1/)
@@ -197,8 +218,19 @@ describe('jsonschema-import', () => {
     throws(() => v({ type: 'array', prefixItems: [{ type: 'string' }], items: false }, ['a', 'b']), /not allowed/)
     throws(() => v({ not: {} }, 1), /no value is allowed/)
     equal(v({ not: { type: 'string' } }, 1), 1)
+    // Any other not is a count of none, and holds beside the other keywords.
+    throws(() => v({ not: { type: 'string' } }, 'x'), /satisfies 1 of: String; the count must be 0\.$/)
+    throws(() => v({ not: true }, 1), /satisfies 1 of: Any; the count must be 0\.$/)
+    equal(v({ type: 'string', not: { pattern: '^a' } }, 'b'), 'b')
+    throws(() => v({ type: 'string', not: { pattern: '^a' } }, 'ab'), /does not satisfy all of: Nof\(0,\/\^a\/\), String/)
+    throws(() => v({ type: 'string', not: { pattern: '^a' } }, 1), /does not satisfy all of/)
+    throws(() => v({ enum: ['a', 'b'], not: {} }, 'a'), /no value is allowed/)
+    // Not sees the value as given, before a default fills it.
+    deepEqual(v({ type: 'object', properties: { a: { default: 1 } }, not: { required: ['a'] } }, {}), { a: 1 })
+    throws(() => v({ type: 'object', properties: { a: { default: 1 } }, not: { required: ['a'] } }, { a: 2 }),
+      /does not satisfy all of/)
 
-    // A discriminated oneOf, and a oneOf that is not one.
+    // A discriminated oneOf, and a oneOf whose branches overlap.
     const disc = Shape(fromJsonSchema({
       oneOf: [
         { type: 'object', properties: { k: { const: 'a' }, x: { type: 'number' } }, required: ['k', 'x'] },
@@ -214,7 +246,8 @@ describe('jsonschema-import', () => {
         { type: 'object', properties: { k: { const: 'a' } }, required: ['k'] },
       ],
     }))
-    deepEqual(notDisc({ k: 'a' }), { k: 'a' })
+    // Every value satisfies both branches or neither, so none satisfies one.
+    throws(() => notDisc({ k: 'a' }), /satisfies 2 of: .*; the count must be 1\.$/)
     const noTag = Shape(fromJsonSchema({
       oneOf: [
         { type: 'object', properties: { k: { const: 'a' } }, required: ['k'] },
@@ -222,7 +255,8 @@ describe('jsonschema-import', () => {
       ],
     }))
     deepEqual(noTag({ j: 'b' }), { j: 'b' })
-    deepEqual(Shape(fromJsonSchema({ oneOf: [] })).jsonSchema().anyOf, [])
+    // Exactly one of no branches: nothing passes.
+    deepEqual(Shape(fromJsonSchema({ oneOf: [] })).jsonSchema().not, {})
     const twoTags = Shape(fromJsonSchema({
       oneOf: [
         { type: 'object', properties: { k: { const: 'a' }, j: { const: 'x' } }, required: ['j'] },
@@ -234,8 +268,10 @@ describe('jsonschema-import', () => {
     const boolBranch = Shape(fromJsonSchema({
       oneOf: [{ type: 'object', properties: { k: { const: 'a' } }, required: ['k'] }, true],
     }))
-    equal(boolBranch.jsonSchema().oneOf, undefined)
+    // Not discriminated: the branch's k is its own Exact, not an added tag.
+    deepEqual(boolBranch.jsonSchema().oneOf[0].properties.k, { enum: ['a'] })
     equal(boolBranch(1), 1)
+    throws(() => boolBranch({ k: 'a' }), /satisfies 2 of: .*, Any; the count must be 1\.$/)
     // A property before the tag in name order that is not a const.
     const skipped = Shape(fromJsonSchema({
       oneOf: [

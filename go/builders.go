@@ -933,6 +933,47 @@ func All(shapes ...any) *Node {
 	return makeListBuilder(listAll, shapes)
 }
 
+// nofFault is the message of a Nof whose count is neither a whole number of
+// zero or more nor a shape.
+const nofFault = "Shape: Nof needs a whole number of zero or more, or a shape for the count"
+
+// Nof requires the number of shapes the value satisfies to be one the count
+// admits. The count is a whole number, for exactly that many, or a shape the
+// number must satisfy: Nof(1, ...) is exactly one, Nof(Min(1), ...) at least
+// one, Nof(0, s) not s. A shape is tried only while the shapes left untried
+// could still change the verdict, and the value is never changed: Nof
+// checks, it does not produce. An absent value is not tried, so whether it
+// may be absent is the node's required or optional.
+func Nof(count any, shapes ...any) *Node {
+	exact, isNumber := toFloat64(count)
+	var counter *Schema
+	if isNumber {
+		if exact != math.Trunc(exact) || exact < 0 || math.IsInf(exact, 1) {
+			return fault(nofFault)
+		}
+	} else {
+		// A count that is itself a builder's fault is the fault: it is never
+		// validated, so its message would otherwise be lost.
+		if cn, ok := count.(*Node); ok && cn.n.argFault {
+			return cn
+		}
+		var err error
+		if counter, err = Shape(count); err != nil {
+			return fault(err.Error())
+		}
+	}
+	nb := makeListBuilder(listNof, shapes)
+	nb.n.nofExact = exact
+	for c := 0; c <= len(shapes); c++ {
+		nb.n.nofOK = append(nb.n.nofOK, (counter == nil && float64(c) == exact) ||
+			(counter != nil && counter.Match(float64(c))))
+	}
+	if counter != nil {
+		nb.n.nofCount = counter.root
+	}
+	return nb
+}
+
 func makeListBuilder(mode listMode, shapes []any) *Node {
 	nb := buildize(nil)
 	nb.n.kind = KindList
@@ -1401,6 +1442,7 @@ func GAfter(fn func(any, *Update, *State) bool, spec ...any) *Node {
 func GOne(shapes ...any) *Node               { return One(shapes...) }
 func GSome(shapes ...any) *Node              { return Some(shapes...) }
 func GAll(shapes ...any) *Node               { return All(shapes...) }
+func GNof(count any, shapes ...any) *Node    { return Nof(count, shapes...) }
 func GChild(child any, spec ...any) *Node    { return Child(child, spec...) }
 func GRest(child any, spec ...any) *Node     { return Rest(child, spec...) }
 func GDefine(name string, spec ...any) *Node { return Define(name, spec...) }

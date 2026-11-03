@@ -34,7 +34,16 @@ js-not	{"$jsonschema":{"not":{}}}	1		"Validation failed for number \"1\" because
 js-bool-schema	{"$jsonschema":{"type":"object","properties":{"a":true,"b":false}}}	{"b":1}		"Validation failed for property \"b\" with number \"1\" because no value is allowed."
 js-discriminated	{"$jsonschema":{"oneOf":[{"type":"object","properties":{"k":{"const":"a"},"x":{"type":"number"}},"required":["k","x"]},{"type":"object","properties":{"k":{"const":"b"}},"required":["k"]}]}}	{"k":"a","x":"no"}		"Validation failed for property \"x\" with string \"no\" because the string is not of type number."
 js-discriminated-unknown	{"$jsonschema":{"oneOf":[{"type":"object","properties":{"k":{"const":"a"}},"required":["k"]},{"type":"object","properties":{"k":{"const":"b"}},"required":["k"]}]}}	{"k":"c"}		"Value \"{k:c}\" for property \"\" has unknown \"k\" \"c\", expected one of: a, b."
-js-one-of-plain	{"$jsonschema":{"oneOf":[{"type":"string"},{"type":"number"}]}}	true		"Value \"true\" for property \"\" does not satisfy one of: String, Number"
+js-one-of-plain	{"$jsonschema":{"oneOf":[{"type":"string"},{"type":"number"}]}}	true		"Value \"true\" for property \"\" satisfies 0 of: String, Number; the count must be 1."
+js-one-of-two	{"$jsonschema":{"oneOf":[{"type":"number"},{"type":"integer"}]}}	1		"Value \"1\" for property \"\" satisfies 2 of: Number, Integer; the count must be 1."
+js-one-of-one	{"$jsonschema":{"oneOf":[{"type":"number"},{"type":"integer"}]}}	1.5	1.5	
+js-not-schema	{"$jsonschema":{"not":{"type":"string"}}}	"x"		"Value \"x\" for property \"\" satisfies 1 of: String; the count must be 0."
+js-not-schema-ok	{"$jsonschema":{"not":{"type":"string"}}}	1	1	
+js-not-true	{"$jsonschema":{"not":true}}	1		"Value \"1\" for property \"\" satisfies 1 of: Any; the count must be 0."
+js-not-beside-type	{"$jsonschema":{"type":"string","not":{"pattern":"^a"}}}	"ab"		"Value \"ab\" for property \"\" does not satisfy all of: Nof(0,/^a/), String"
+js-not-beside-type-ok	{"$jsonschema":{"type":"string","not":{"pattern":"^a"}}}	"b"	"b"	
+js-not-before-default	{"$jsonschema":{"type":"object","properties":{"a":{"default":1}},"not":{"required":["a"]}}}	{}	{"a":1}	
+js-not-empty-beside-enum	{"$jsonschema":{"enum":["a"],"not":{}}}	"a"		"Validation failed for string \"a\" because no value is allowed."
 js-ref	{"$jsonschema":{"$defs":{"p":{"type":"object","properties":{"n":{"type":"string"}},"required":["n"]}},"type":"object","properties":{"a":{"$ref":"#/$defs/p"},"b":{"$ref":"#/$defs/p"}},"required":["a","b"]}}	{"a":{"n":"x"},"b":{}}		"Validation failed for property \"b.n\" because the property is missing."
 js-ref-recursive	{"$jsonschema":{"$defs":{"n":{"type":"object","properties":{"v":{"type":"number"},"kids":{"type":"array","items":{"$ref":"#/$defs/n"}}},"required":["v"]}},"$ref":"#/$defs/n"}}	{"v":1,"kids":[{"v":2,"kids":[{"v":"x"}]}]}		"Validation failed for property \"kids.0.kids.0.v\" with string \"x\" because the string is not of type number."
 js-ref-root	{"$jsonschema":{"type":"object","properties":{"v":{"type":"number"},"next":{"$ref":"#"}}}}	{"v":1,"next":{"next":{"v":"x"}}}		"Validation failed for property \"next.next.v\" with string \"x\" because the string is not of type number."

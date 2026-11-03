@@ -222,12 +222,55 @@ fn list_schema(n: &Node, s: &mut Map, defs: &mut Map) {
         s.insert("oneOf".to_string(), Value::Arr(branches));
         return;
     }
-    let key = if n.list_mode == ListMode::All {
-        "allOf"
-    } else {
-        "anyOf"
+    match n.list_mode {
+        ListMode::All => {
+            s.insert("allOf".to_string(), Value::Arr(branches));
+        }
+        ListMode::Nof => nof_schema(&n.nof_ok, branches, s),
+        _ => {
+            s.insert("anyOf".to_string(), Value::Arr(branches));
+        }
+    }
+}
+
+/// A count of the shapes, as the keywords that count: none of them is not,
+/// exactly one oneOf, every one allOf. JSON Schema has no keyword for any
+/// other count, so it is bounded by what it rules out: anyOf when the count
+/// is never none, not allOf when it is never every one. That bound is exact
+/// for at least one, not every one, and both together.
+fn nof_schema(ok: &[bool], branches: Vec<Value>, s: &mut Map) {
+    let n = branches.len();
+    let only = |c: usize| ok.iter().enumerate().all(|(i, v)| *v == (i == c));
+    let keyed = |k: &str, v: Vec<Value>| {
+        let mut m = Map::new();
+        m.insert(k.to_string(), Value::Arr(v));
+        Value::Obj(m)
     };
-    s.insert(key.to_string(), Value::Arr(branches));
+    let admits = ok.iter().filter(|v| **v).count();
+    if admits == ok.len() {
+        return;
+    }
+    if admits == 0 {
+        s.insert("not".to_string(), Value::Obj(Map::new()));
+    } else if only(0) {
+        let not = if n == 1 {
+            branches[0].clone()
+        } else {
+            keyed("anyOf", branches)
+        };
+        s.insert("not".to_string(), not);
+    } else if only(1) {
+        s.insert("oneOf".to_string(), Value::Arr(branches));
+    } else if only(n) {
+        s.insert("allOf".to_string(), Value::Arr(branches));
+    } else {
+        if !ok[0] {
+            s.insert("anyOf".to_string(), Value::Arr(branches.clone()));
+        }
+        if !ok[n] {
+            s.insert("not".to_string(), keyed("allOf", branches));
+        }
+    }
 }
 
 /// The bounds a size builder puts on a value: the number family for a
@@ -338,6 +381,51 @@ mod tests {
         let mut v = serde_json::Value::from(Schema::new(spec).json_schema());
         v.as_object_mut().unwrap().remove("$schema");
         v
+    }
+
+    #[test]
+    fn renders_a_count_as_the_keywords_that_count() {
+        let three = || {
+            [
+                Spec::from(Token::String),
+                Spec::from(Token::Number),
+                Spec::from(Token::Boolean),
+            ]
+        };
+        let two = || [Spec::from(Token::String), Spec::from(Token::Number)];
+        let str_ = json!({"type": "string", "minLength": 1});
+        let num = json!({"type": "number"});
+        let all3 = json!([str_, num, {"type": "boolean"}]);
+        assert_eq!(js(nof(1, two())), json!({"oneOf": [str_, num]}));
+        assert_eq!(
+            js(nof(0, [Spec::from(Token::String)])),
+            json!({"not": str_})
+        );
+        assert_eq!(js(nof(0, two())), json!({"not": {"anyOf": [str_, num]}}));
+        assert_eq!(js(nof(2, two())), json!({"allOf": [str_, num]}));
+        assert_eq!(js(nof(min(1, any()), three())), json!({"anyOf": all3}));
+        assert_eq!(
+            js(nof(max(2, any()), three())),
+            json!({"not": {"allOf": all3}})
+        );
+        assert_eq!(
+            js(nof(max(2, min(1, any())), three())),
+            json!({"anyOf": all3, "not": {"allOf": all3}})
+        );
+        // Any other count is bounded by what it rules out, or says nothing.
+        assert_eq!(js(nof(min(2, any()), three())), json!({"anyOf": all3}));
+        assert_eq!(js(nof(exact([0, 3]), three())), json!({}));
+        // No count admitted, every count admitted, and no shapes at all.
+        assert_eq!(
+            js(nof(max(0, min(1, any())), [Spec::from(Token::String)])),
+            json!({"not": {}})
+        );
+        assert_eq!(
+            js(nof(min(0, any()), [Spec::from(Token::String)])),
+            json!({})
+        );
+        assert_eq!(js(nof(0, Vec::<Spec>::new())), json!({}));
+        assert_eq!(js(nof(1, Vec::<Spec>::new())), json!({"not": {}}));
     }
 
     #[test]

@@ -18,7 +18,7 @@ const {
   build, expr, Min, Max, Above, Below, Len, Optional, Required, Skip, Empty, Nullable, Integer,
   Open, Closed, Child, Rest, One, Some, All, Exact, Discriminated, Any, Never, Func, Check,
   Catch, Ignore, Transform, Coerce, Define, Refer, Rename, Key, Email, Describe, Fault,
-  Default, Before, After, fromJsonSchema,
+  Default, Before, After, fromJsonSchema, Nof,
 } = ShapeModule
 
 const { deepEqual, throws, equal } = assert
@@ -135,6 +135,11 @@ describe('json', () => {
     roundTrip({ a: Some({ x: 1 }, { y: 2 }) }, { a: { $$: 'Some($$0,$$1)', $$0: { x: 1 }, $$1: { y: 2 } } },
       { a: { x: 2 } }, { a: 1 })
     roundTrip({ a: All(Number, Min(1)) }, { a: 'All(Number,Any.Min(1))' }, { a: 1 }, { a: 0 })
+    // A Nof's count leads its shapes: a number inline, a shape as its value.
+    roundTrip({ a: Nof(1, String, Number), b: Optional(Nof(0, String)) },
+      { a: 'Nof(1,String,Number)', b: 'Nof(0,String).Optional' }, { a: 1 }, { a: true }, { a: 1, b: 'x' })
+    roundTrip({ a: Nof(Min(1), { x: 1 }, Number) }, { a: { $$: 'Nof(Any.Min(1),$$0,Number)', $$0: { x: 1 } } },
+      { a: 2 }, { a: true }, { a: { x: 2 } }, { a: { y: 2 } })
     roundTrip({ a: Optional(One(String, Number)), b: Skip(One(String, Number)) },
       { a: 'One(String,Number).Optional', b: 'One(String,Number).Skip' }, {}, { a: true })
     roundTrip({ a: One(Skip(0)), b: One(Min(2, 0).Ignore(), String) },

@@ -9,8 +9,8 @@ a node. Most take an optional trailing `spec` that they narrow or wrap.
 - **Go:** `shape.Min(2, shape.String)`; chainable form `buildize(shape.String).Min(2)`.
   `G`-prefixed aliases (`shape.GMin`) avoid stdlib name clashes.
 
-`One`, `Some`, `All`, `Exact` and `Discriminated` are top-level only (not
-chainable).
+`One`, `Some`, `All`, `Nof`, `Exact` and `Discriminated` are top-level only
+(not chainable).
 
 ---
 
@@ -150,12 +150,27 @@ A bound outside the isolation still applies to what comes out:
 | `One(shapes…)` | Passes on the first matching branch, whose output is the result. |
 | `Some(shapes…)` | Passes if at least one branch matches; all branches are evaluated, and the last matching branch's result stands. Every branch is handed the value as it was given, never one another branch changed (`Some(Open({a:1}), Open({b:2}))` on `{}` gives `{b:2}`). |
 | `All(shapes…)` | Passes only if every branch matches; the value is threaded through each, so later branches see what earlier ones produced (`All(Open({a:1}), Open({b:2}))` on `{}` gives `{a:1,b:2}`). |
+| `Nof(count, shapes…)` | Passes if the number of branches the value matches is one the count admits. The count is a whole number, for exactly that many (`Nof(1, …)` is exactly one, `Nof(0, s)` is not `s`), or a shape the number must satisfy (`Nof(Min(1), …)` is at least one). The value passes through unchanged. |
+| `Discriminated(tag, { name: shape, … })` | A tagged union: the branch is chosen by the string value of the `tag` property and the value validated against that branch **alone**, so the errors are its own rather than a list of every alternative. |
 
 None of the three changes the value it was given: each branch matches and
 produces from a copy, and the composition's result replaces the value only
 when it passes, so a failing `One`, `Some` or `All` leaves the input as it
 was.
-| `Discriminated(tag, { name: shape, … })` | A tagged union: the branch is chosen by the string value of the `tag` property and the value validated against that branch **alone**, so the errors are its own rather than a list of every alternative. |
+
+`Nof` produces nothing at all: it checks a copy of the value against each
+branch and leaves the value as it was given. It tries a branch only while
+the branches left untried could still change the verdict, so a failure can
+report a range of counts:
+
+```
+Value "1" for property "v" satisfies 2 of: Number, Integer; the count must be 1.
+Value "x" for property "v" satisfies 1 to 3 of: String, Number, Boolean; the count must be 0.
+```
+
+A count that is neither a whole number of zero or more nor a shape throws
+`Shape: Nof needs a whole number of zero or more, or a shape for the count`
+in TypeScript, and in Go and Rust makes a node that reports it.
 
 `Discriminated` adds the tag property to an object-shaped branch that does not
 declare it, as the literal it is keyed by, so the branch's output carries the
@@ -167,7 +182,8 @@ Value "{kind:cat}" for property "p" has unknown "kind" "cat", expected one of: d
 ```
 
 An absent optional composition (`Optional(One(String, Number))`) is simply
-absent; it is not put to its branches.
+absent; it is not put to its branches. `Nof` never puts an absent value to
+its branches: a required `Nof` given nothing reports the value missing.
 
 ## Objects / arrays
 

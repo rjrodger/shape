@@ -680,12 +680,21 @@ pub fn node_json(n: &Node) -> R<Value> {
                     args: vec![Arg::Text(json_text(&d.tag)), Arg::Side(branches(n)?)],
                 },
                 None => {
+                    let mut args = Vec::with_capacity(n.list.len() + 1);
                     let mode = match n.list_mode {
                         ListMode::Some => "Some",
                         ListMode::All => "All",
+                        ListMode::Nof => {
+                            // A Nof's count leads its shapes: a number
+                            // inline, a shape as its value.
+                            args.push(match &n.nof_count {
+                                Some(c) => arg_of(c)?,
+                                None => Arg::Text(crate::value::js_number(n.nof_exact)),
+                            });
+                            "Nof"
+                        }
                         _ => "One",
                     };
-                    let mut args = Vec::with_capacity(n.list.len());
                     for b in &n.list {
                         args.push(arg_of(b)?);
                     }

@@ -307,6 +307,27 @@ function build() {
   add('c-all-str', E('All(String,Min(2))'), SCALARS)
   add('c-one-obj', { a: E('One(String,Number)') }, OBJS)
   add('c-one-ignore', E('One(Ignore(Min(2,Number)),String)'), SCALARS)
+  // Nof: a count of the shapes the value satisfies, a number or a shape for
+  // it, tried lazily; the message names the counts still possible.
+  add('c-nof-one', E('Nof(1,Number,Integer)'), SCALARS)
+  add('c-nof-zero', E('Nof(0,String,Number)'), SCALARS)
+  add('c-nof-min', E('Nof(Min(1),String,Number,Boolean)'), SCALARS)
+  add('c-nof-min-two', E('Nof(Min(2),String,Number,Boolean)'), SCALARS)
+  add('c-nof-range', E('Nof(Min(1).Max(2),Number,Integer,Min(2))'), SCALARS)
+  add('c-nof-max', E('Nof(Max(1),String,Min(1),Number)'), SCALARS)
+  // Passing inputs only for an Exact count and an object branch: a failure
+  // names them, and the ports render both their own way (see the parity page).
+  add('c-nof-exact-set', E('Nof(Exact(0,2),Number,Integer)'), [1, 0, -1, 'x', '', true, null, [], {}])
+  add('c-nof-no-shapes', E('Nof(1)'), SCALARS)
+  add('c-nof-obj', { a: E('Nof(1,String,Number)') }, OBJS)
+  add('c-nof-optional', { a: E('Optional(Nof(0,String))') }, OBJS)
+  add('c-nof-skip-never', { a: E('Skip(Nof(0,Any))') }, OBJS)
+  add('c-nof-default', { a: E('Default("d",Nof(1,String,Number))') }, OBJS)
+  add('c-nof-in-one', E('One(Nof(0,String),String)'), SCALARS)
+  add('c-nof-in-all', E('All(Nof(0,/^a/),String)'), SCALARS)
+  add('c-nof-open', CALL('Nof', 1, { $open: { b: 2 } }, N), [{}, { a: 1 }, { b: 3 }, { a: {} }, 1, 2.5])
+  add('expr-fault-nof', E('Nof(-1,String)'), SCALARS)
+  add('expr-fault-nof-fraction', E('Nof(1.5,String)'), SCALARS)
   add('c-all-ignore', E('All(Ignore(Min(2,Number)),Number)'), SCALARS)
 
   // A bare type token in the DSL is Type(token): Object is closed there.

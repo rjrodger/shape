@@ -255,7 +255,10 @@ func TestJSONSchemaImportKeywords(t *testing.T) {
 	bad(`{"type":"array","maxItems":1}`, []any{1.0, 2.0}, "maximum length of 1")
 
 	// Compositions.
-	bad(`{"oneOf":[{"type":"string"},{"type":"number"}]}`, true, "does not satisfy one of")
+	// A oneOf is a count of exactly one: two branches satisfied is a failure.
+	bad(`{"oneOf":[{"type":"string"},{"type":"number"}]}`, true, "satisfies 0 of: String, Number; the count must be 1.")
+	bad(`{"oneOf":[{"type":"number"},{"type":"integer"}]}`, 1.0, "satisfies 2 of: Number, Integer; the count must be 1.")
+	ok(`{"oneOf":[{"type":"number"},{"type":"integer"}]}`, 1.5)
 	bad(`{"allOf":[{"type":"number"},{"minimum":1}]}`, 0.0, "does not satisfy all of: Number, Min(1)")
 	bad(`{"minLength":2}`, "a", "minimum length of 2")
 	bad(`{"maxItems":1}`, []any{1.0, 2.0}, "maximum length of 1")
@@ -271,6 +274,13 @@ func TestJSONSchemaImportKeywords(t *testing.T) {
 	bad(`{"type":"array","prefixItems":[{"type":"string"}],"items":false}`, []any{"a", "b"}, "not allowed")
 	bad(`{"not":{}}`, 1.0, "no value is allowed")
 	ok(`{"not":{"type":"string"}}`, 1.0)
+	// Any other not is a count of none, and holds beside the other keywords.
+	bad(`{"not":{"type":"string"}}`, "x", "satisfies 1 of: String; the count must be 0.")
+	bad(`{"not":true}`, 1.0, "satisfies 1 of: Any; the count must be 0.")
+	ok(`{"type":"string","not":{"pattern":"^a"}}`, "b")
+	bad(`{"type":"string","not":{"pattern":"^a"}}`, "ab", "does not satisfy all of: Nof(0,/^a/), String")
+	bad(`{"enum":["a","b"],"not":{}}`, "a", "no value is allowed")
+	importErr(t, `{"not":1}`, "JSON Schema: a schema must be an object or boolean at /not")
 
 	// A discriminated oneOf, and oneOfs that are not one.
 	disc := importShape(t, `{"oneOf":[
@@ -290,12 +300,13 @@ func TestJSONSchemaImportKeywords(t *testing.T) {
 		`{"oneOf":[{"type":"object","properties":{"k":{"const":"a"}},"required":["k"]},true]}`,
 	} {
 		s := importShape(t, doc)
-		if _, has := s.JSONSchema()["oneOf"]; has {
-			t.Fatalf("%s should not import as discriminated", doc)
+		if s.root.disc != nil || s.root.listMode != listNof {
+			t.Fatalf("%s should import as a count of exactly one, not discriminated", doc)
 		}
 	}
-	if got := importShape(t, `{"oneOf":[]}`).JSONSchema()["anyOf"]; !reflect.DeepEqual(got, []any{}) {
-		t.Fatalf("an empty oneOf is an empty One, got %v", got)
+	// Exactly one of no branches: nothing passes.
+	if got := importShape(t, `{"oneOf":[]}`).JSONSchema()["not"]; !reflect.DeepEqual(got, map[string]any{}) {
+		t.Fatalf("an empty oneOf admits nothing, got %v", got)
 	}
 	twoTags := importShape(t, `{"oneOf":[
 		{"type":"object","properties":{"k":{"const":"a"},"j":{"const":"x"}},"required":["j"]},

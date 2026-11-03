@@ -93,6 +93,13 @@ pub fn decode_spec(v: &serde_json::Value) -> Result<Spec, Unsupported> {
                                     _ => shape::all(branches),
                                 }))
                             }
+                            "Nof" => {
+                                let branches = arr[2..]
+                                    .iter()
+                                    .map(decode_spec)
+                                    .collect::<Result<Vec<_>, _>>()?;
+                                Ok(Spec::from(shape::nof(decode_spec(&arr[1])?, branches)))
+                            }
                             "Pick" | "Omit" => {
                                 let names =
                                     shape::Names::from_value(&Value::from(arr[1].clone()), name)

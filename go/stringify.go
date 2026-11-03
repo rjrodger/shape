@@ -66,15 +66,19 @@ func stringifyNode(n *node, inline bool) string {
 			return suffix("Discriminated("+n.disc.tag+","+strings.Join(n.disc.tags, ",")+")", n)
 		}
 		mode := "One"
+		parts := []string{}
 		switch n.listMode {
 		case listSome:
 			mode = "Some"
 		case listAll:
 			mode = "All"
+		case listNof:
+			// A Nof's count leads its shapes.
+			mode = "Nof"
+			parts = append(parts, nofCountText(n))
 		}
-		parts := make([]string, len(n.list))
-		for i, sn := range n.list {
-			parts[i] = stringifyNode(sn, true)
+		for _, sn := range n.list {
+			parts = append(parts, stringifyNode(sn, true))
 		}
 		return suffix(fmt.Sprintf("%s(%s)", mode, strings.Join(parts, ",")), n)
 	case KindArray:

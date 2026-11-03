@@ -965,8 +965,78 @@ func evaluateList(n *node, in any, path []string, pathArr []any, key string, par
 			return in
 		}
 		return out
+	case listNof:
+		// An absent value is not tried: the required check speaks for it.
+		if absent {
+			return in
+		}
+		// A branch is tried only while the untried could change the verdict,
+		// and the value is never changed.
+		k, tried, total := 0, 0, len(n.list)
+		for nofSpan(n.nofOK, k, total-tried) == nofSome {
+			sub := &ValidationError{}
+			validateNode(n.list[tried], branchIn, path, pathArr, key, parent, ctx, true, sub)
+			if !sub.hasAny() {
+				k++
+			}
+			tried++
+		}
+		if nofSpan(n.nofOK, k, total-tried) == nofNone {
+			state := &State{Path: path, PathArr: pathArr, Key: key, Value: in, Node: n, Match: match, Ctx: ctx, absent: absent}
+			admitted := strconv.Itoa(k)
+			if tried < total {
+				admitted += " to " + strconv.Itoa(k+total-tried)
+			}
+			err := makeErr(state, WhyNof, 4033,
+				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" satisfies %s of: %s; the count must be %s.",
+					admitted, listShapeNames(n), nofCountText(n)))
+			if n.faultMsg != "" {
+				if !err.terse {
+					err.Text = expandErrText(n.faultMsg, err.Path, in)
+				}
+			}
+			if !n.silent {
+				verr.add(err)
+			}
+		}
+		return in
 	}
 	return in
+}
+
+// The verdicts of a span of counts, for a Nof deciding whether to try
+// another branch.
+const (
+	nofNone = 0
+	nofSome = 1
+	nofAll  = 2
+)
+
+// nofSpan reports whether the counts from k to k+open are all admitted, some
+// or none: a branch is tried only while it is some.
+func nofSpan(ok []bool, k, open int) int {
+	yes := 0
+	for c := k; c <= k+open; c++ {
+		if ok[c] {
+			yes++
+		}
+	}
+	switch yes {
+	case 0:
+		return nofNone
+	case open + 1:
+		return nofAll
+	}
+	return nofSome
+}
+
+// nofCountText renders a Nof's count as TypeScript does: the whole number,
+// or the shape for it.
+func nofCountText(n *node) string {
+	if n.nofCount == nil {
+		return fmtFloat(n.nofExact)
+	}
+	return stringifyNode(n.nofCount, true)
 }
 
 func listShapeNames(n *node) string {

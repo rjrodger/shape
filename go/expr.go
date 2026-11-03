@@ -14,7 +14,7 @@ import (
 // Supported tokens:
 //   - Builder names: Required, Optional, Min, Max, Above, Below, Len, Check,
 //     Open, Closed, Skip, Ignore, Empty, Default, Fault, Never, Type, Exact,
-//     One, Some, All, Child, Rest, Define, Refer, Rename, Func, Key.
+//     One, Some, All, Nof, Child, Rest, Define, Refer, Rename, Func, Key.
 //   - Type tokens: String, Number, Boolean, Object, Array, Function, Any.
 //   - Literals: JSON values (numbers, strings, true, false, null) and undefined/NaN.
 //   - Regexp: /pattern/.
@@ -140,7 +140,7 @@ func buildMark(src string, carrier map[string]any) (any, error) {
 
 // The builders that read every argument for themselves.
 var exprComposition = map[string]bool{
-	"One": true, "Some": true, "All": true, "Exact": true, "Discriminated": true,
+	"One": true, "Some": true, "All": true, "Nof": true, "Exact": true, "Discriminated": true,
 }
 
 // Tokenization --------------------------------------------------------
@@ -627,6 +627,12 @@ func buildExprBuilders() map[string]exprBuilderFn {
 	"All": func(args []builderArg) (*Node, error) {
 		return All(exprShapes(args)...), nil
 	},
+		"Nof": func(args []builderArg) (*Node, error) {
+			if len(args) < 1 {
+				return nil, fmt.Errorf(nofFault)
+			}
+			return Nof(exprShape(args[0]), exprShapes(args[1:])...), nil
+		},
 	"Child": func(args []builderArg) (*Node, error) {
 		if len(args) < 1 {
 			return nil, fmt.Errorf("Child: missing child shape")

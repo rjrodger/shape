@@ -44,6 +44,7 @@ their shape.
 | `Key()`; `Key(n)`; `Key(n, sep)`; `Key(fn)` | `string`; `string[]`; `string`; `fn`'s return type |
 | `Exact(a, b, …)` | the union of the literals, `'a' \| 'b'` |
 | `One(A, B)`, `Some(A, B)`, `All(A, B)` | `A \| B`—a branch with no spec of its own (`Min(2)`) is `any`, which absorbs the union |
+| `Nof(1, A, B)`; `Nof(0, A)`, `Nof(Min(1), A, B)` | `A \| B` for a whole-number count other than `0`; `any` for a count of `0` or a shape for the count, which can admit none of the branches |
 | `Discriminated('kind', { dog: {…}, fish: {…} })` | a union of the branches, each with `kind: 'dog'` or `kind: 'fish'` |
 | `Child(X)` | `{ [key: string]: X }`; `Rest(X)` `X[]` |
 | `Pick(names, X)`, `Omit(names, X)`, `Extend(extra, X)`, `Partial(X)` | the reshaped object |

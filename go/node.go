@@ -2,7 +2,7 @@ package shape
 
 import "regexp"
 
-// listMode controls how a composition node (One/Some/All) evaluates its branches.
+// listMode controls how a composition node (One/Some/All/Nof) evaluates its branches.
 type listMode int
 
 const (
@@ -10,6 +10,7 @@ const (
 	listOne
 	listSome
 	listAll
+	listNof
 )
 
 // node is the internal validation tree node. Public *Node alias provides
@@ -64,6 +65,13 @@ type node struct {
 	listMode listMode
 	list     []*node
 	disc     *discriminated // a Discriminated union chooses among list by tag
+
+	// A Nof composition's count: a whole number (nofExact), or a shape the
+	// number of satisfied branches must satisfy (nofCount, nil for a whole
+	// number), and the counts it admits, from none of the branches to all.
+	nofExact float64
+	nofCount *node
+	nofOK    []bool
 
 	// Exact value match.
 	exactVals []any

@@ -123,7 +123,7 @@ fn type_token(name: &str) -> Option<Token> {
     })
 }
 
-const BUILDERS: [&str; 45] = [
+const BUILDERS: [&str; 46] = [
     "Required",
     "Optional",
     "Open",
@@ -161,6 +161,7 @@ const BUILDERS: [&str; 45] = [
     "One",
     "Some",
     "All",
+    "Nof",
     "Child",
     "Rest",
     "Define",
@@ -549,6 +550,13 @@ fn build_call(name: &str, mut args: Vec<Spec>) -> Result<Node, ExprError> {
         "One" => Ok(one(args)),
         "Some" => Ok(some(args)),
         "All" => Ok(all(args)),
+        "Nof" => {
+            if args.is_empty() {
+                return err(crate::builders::NOF_FAULT.to_string());
+            }
+            let count = args.remove(0);
+            Ok(nof(count, args))
+        }
         "Child" => {
             if args.is_empty() {
                 return err("Child: missing child shape".to_string());
@@ -741,7 +749,7 @@ pub(crate) fn split_key_expr(key: &str) -> Option<(String, String)> {
 
 /// The builders that read every argument for themselves, so a mark of one
 /// is the whole node rather than a chain around the object holding it.
-const COMPOSITION: [&str; 5] = ["One", "Some", "All", "Exact", "Discriminated"];
+const COMPOSITION: [&str; 6] = ["One", "Some", "All", "Nof", "Exact", "Discriminated"];
 
 /// Read the declarative JSON of a shape, what `Schema::json` writes: every
 /// string is an expression (the example of a key expression is a value, so
@@ -840,6 +848,9 @@ mod tests {
     #[test]
     fn a_wrong_builder_argument_is_a_parse_error() {
         assert_eq!(fails("String.Min(\"x\")"), "Shape: Min needs a number");
+        for src in ["Nof(-1,String)", "Nof(1.5,String)", "Nof()"] {
+            assert_eq!(fails(src), crate::builders::NOF_FAULT, "{}", src);
+        }
         assert_eq!(
             fails("Len(-1)"),
             "Shape: Len needs a whole number of zero or more"

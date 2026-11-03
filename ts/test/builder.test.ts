@@ -52,6 +52,7 @@ const {
   Max,
   Min,
   Never,
+  Nof,
   One,
   Open,
   Optional,
@@ -431,6 +432,89 @@ Value "{x:red,y:Y,z:YY}" for property "1" does not satisfy one of: {"x":"Exact(r
       { x: 'green', z: 'Z' },
     ]), `Value "{x:red,y:3}" for property "0" does not satisfy one of: {"x":"Exact(red)","y":"String"}, {"x":"Exact(green)","z":"Number"}
 Value "{x:green,z:Z}" for property "1" does not satisfy one of: {"x":"Exact(red)","y":"String"}, {"x":"Exact(green)","z":"Number"}`)
+  })
+
+
+  test('builder-nof', () => {
+    const Integer = Shape.Integer
+
+    // Exactly one: a value two shapes satisfy fails, as a oneOf does.
+    const one = Shape(Nof(1, Number, Integer))
+    deepEqual(one(1.5), 1.5)
+    throws(() => one(1), 'Value "1" for property "" satisfies 2 of: Number, Integer; the count must be 1.')
+    throws(() => one('x'), 'Value "x" for property "" satisfies 0 of: Number, Integer; the count must be 1.')
+
+    // None: not.
+    const not = Shape(Nof(0, String))
+    deepEqual(not(1), 1)
+    throws(() => not('x'), 'Value "x" for property "" satisfies 1 of: String; the count must be 0.')
+
+    // A shape for the count: at least one, and a range.
+    const some = Shape(Nof(Min(1), String, Number, Boolean))
+    deepEqual(some(true), true)
+    throws(() => some(null),
+      'Value "null" for property "" satisfies 0 of: String, Number, Boolean; the count must be Min(1).')
+    const range = Shape(Nof(Max(2, Min(1)), Number, Integer, Min(2)))
+    deepEqual(range(1.5), 1.5)
+    deepEqual(range(2.5), 2.5)
+    deepEqual(range('xyz'), 'xyz')
+    throws(() => range(3), 'satisfies 3 of: Number, Integer, Min(2); the count must be Min(1).Max(2).')
+    throws(() => range('x'), 'satisfies 0 of: Number, Integer, Min(2); the count must be Min(1).Max(2).')
+
+    // A shape is tried only while the untried could change the verdict, so
+    // a verdict reached early names the counts still possible.
+    throws(() => Shape(Nof(0, String, Number, Boolean))('x'),
+      'Value "x" for property "" satisfies 1 to 3 of: String, Number, Boolean; the count must be 0.')
+    throws(() => Shape(Nof(Min(2), String, Number, Boolean))(true),
+      'Value "true" for property "" satisfies 0 to 1 of: String, Number, Boolean; the count must be Min(2).')
+    let tried = 0
+    const lazy = Shape(Nof(Min(1), Number, Check(() => (tried++, true))))
+    deepEqual(lazy(1), 1)
+    deepEqual(tried, 0)
+    deepEqual(lazy('x'), 'x')
+    deepEqual(tried, 1)
+
+    // No shapes: a count of none, always or never.
+    deepEqual(Shape(Nof(0))(1), 1)
+    throws(() => Shape(Nof(1))(1), 'Value "1" for property "" satisfies 0 of: ; the count must be 1.')
+
+    // An absent value is not tried: required or optional decides.
+    throws(() => Shape({ a: Nof(1, String, Number) })({}),
+      'Validation failed for property "a" because the property is missing.')
+    deepEqual(Shape({ a: Optional(Nof(1, String, Number)) })({}), {})
+    deepEqual(Shape({ a: Default('x', Nof(1, String, Number)) })({}), { a: 'x' })
+    const absent = Shape({ a: Skip(Nof(0, Any())) })
+    deepEqual(absent({}), {})
+    throws(() => absent({ a: 1 }), 'Value "1" for property "a" satisfies 1 of: Any; the count must be 0.')
+    throws(() => Shape(Nof(1, String))(), 'Validation failed for value "undefined" because the value is required.')
+
+    // Nof checks; it does not produce: a shape's default is not taken.
+    const input = { a: 1 }
+    deepEqual(Shape(Nof(1, Open({ b: 2 }), Number))(input), { a: 1 })
+    deepEqual(input, { a: 1 })
+    deepEqual(Shape(One(Open({ b: 2 }), Number))({ a: 1 }), { a: 1, b: 2 })
+
+    // Inside an array, each element is counted.
+    const els = Shape([Nof(1, { x: Number }, { x: String })])
+    deepEqual(els([{ x: 1 }, { x: 'y' }]), [{ x: 1 }, { x: 'y' }])
+    throws(() => els([{ x: 1 }, { x: true }]),
+      'Value "{x:true}" for property "1" satisfies 0 of: {"x":"Number"}, {"x":"String"}; the count must be 1.')
+
+    // The count is a whole number or a shape.
+    const fault = 'Shape: Nof needs a whole number of zero or more, or a shape for the count'
+    throws(() => Nof(-1, String), fault)
+    throws(() => Nof(1.5, String), fault)
+    throws(() => Nof(NaN, String), fault)
+    throws(() => (Nof as any)(), fault)
+
+    // The string form, and how it renders.
+    deepEqual(Shape(Shape.expr('Nof(1,Number,String)'))('x'), 'x')
+    deepEqual(Shape(Shape.expr('Nof(Min(1).Max(2),Number,Integer,String)'))(1.5), 1.5)
+    throws(() => Shape.expr('Nof(-1,String)'), fault)
+    deepEqual(Shape(Nof(1, Number, String)).stringify(), 'Nof(1,Number,String)')
+    deepEqual(Shape(Nof(Min(1), Number, { a: String })).stringify(),
+      '{"$$":"Nof(Min(1),Number,$$ref0)","$$ref0":{"a":"String"}}')
+    deepEqual(ShapeModule.GNof, Nof)
   })
 
 

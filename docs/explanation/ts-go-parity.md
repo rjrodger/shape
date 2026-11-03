@@ -135,9 +135,11 @@ Some differences are inherent to Go and are unlikely ever to close.
   there must return `false` rather than panic.
 
 - **Composite messages render object and array branches differently.** The
-  `does not satisfy one of` list of `One`/`Some`/`All` names each branch.
-  TypeScript renders a node branch in its spec form (`{a:1,$$:Open}`,
-  `[String,Number]`, `Exact(1,x)`, and `[Number]` for a rest tuple) and a
+  `does not satisfy one of` list of `One`/`Some`/`All`, and the `satisfies 2
+  of` list of `Nof`, name each branch, and a `Nof` names its count when the
+  count is a shape. TypeScript renders a node branch in its spec form
+  (`{a:1,$$:Open}`, `[String,Number]`, `Exact(1,x)`, and `[Number]` for a
+  rest tuple) and a
   plain object or array literal as JSON (`{"b":"String","c":["Number"]}`);
   Go and Rust render every branch from the compiled node, spaced (`{a:
   1}.Open()`, `[String, Number]`, `Exact(1, x)`, `[String, ...Number]`,

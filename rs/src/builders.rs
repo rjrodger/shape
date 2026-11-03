@@ -256,6 +256,50 @@ where
     list_node(ListMode::All, shapes)
 }
 
+/// The message of a `nof` whose count is neither a whole number of zero or
+/// more nor a shape.
+pub(crate) const NOF_FAULT: &str =
+    "Shape: Nof needs a whole number of zero or more, or a shape for the count";
+
+/// The value must satisfy as many of the shapes as the count admits. The
+/// count is a whole number, for exactly that many, or a shape the number
+/// must satisfy: `nof(1, ..)` is exactly one, `nof(min(1, any()), ..)` at
+/// least one, `nof(0, [s])` not `s`. A shape is tried only while the shapes
+/// left untried could still change the verdict, and the value is never
+/// changed: `nof` checks, it does not produce. An absent value is not tried,
+/// so whether it may be absent is the node's required or optional.
+pub fn nof<C, I>(count: C, shapes: I) -> Node
+where
+    C: Into<Spec>,
+    I: IntoIterator,
+    I::Item: Into<Spec>,
+{
+    let mut n = list_node(ListMode::Nof, shapes);
+    let total = n.list.len();
+    match count.into() {
+        Spec::Value(Value::Num(f)) => {
+            if f != f.trunc() || f < 0.0 || f.is_infinite() {
+                return fault_node(NOF_FAULT);
+            }
+            n.nof_exact = f;
+            n.nof_ok = (0..=total).map(|c| c as f64 == f).collect();
+        }
+        spec => {
+            let counter = crate::Schema::new(spec);
+            // A count that is itself a builder's fault is the fault: it is
+            // never validated, so its message would otherwise be lost.
+            if is_fault(counter.node()) {
+                return counter.node().clone();
+            }
+            n.nof_ok = (0..=total)
+                .map(|c| counter.valid(&Value::Num(c as f64)))
+                .collect();
+            n.nof_count = Some(Box::new(counter.node().clone()));
+        }
+    }
+    n
+}
+
 fn list_node<I>(mode: ListMode, shapes: I) -> Node
 where
     I: IntoIterator,
@@ -1447,6 +1491,88 @@ mod tests {
             stringify_node(&after(|_, _| true, before(|_, _| true, any())), false),
             "Before().After()"
         );
+    }
+
+    #[test]
+    fn nof_counts_faults_and_renders() {
+        let s = |t: Token| Spec::from(t);
+        let ni = || nof(1, [s(Token::Number), s(Token::Integer)]);
+        assert_eq!(run(&at_a(ni()), &a("1.5")), a("1.5"));
+        assert_eq!(
+            run(&at_a(ni()), &a("1")),
+            "ERR Value \"1\" for property \"a\" satisfies 2 of: Number, Integer; the count must be 1."
+        );
+        let e = &at_a(ni()).error(&j(&a("1")))[0];
+        assert_eq!((e.why.as_str(), e.mark), ("Nof", 4033));
+        // A shape for the count, and a verdict reached early.
+        let early = nof(
+            min(2, any()),
+            [s(Token::String), s(Token::Number), s(Token::Boolean)],
+        );
+        assert_eq!(
+            run(&at_a(early), &a("true")),
+            "ERR Value \"true\" for property \"a\" satisfies 0 to 1 of: String, Number, Boolean; the count must be Min(2)."
+        );
+        // A Fault speaks for the Nof; Ignore drops it.
+        assert_eq!(
+            run(
+                &at_a(fault("not that", nof(0, [s(Token::String)]))),
+                &a("\"x\"")
+            ),
+            "ERR not that"
+        );
+        assert_eq!(
+            run(&at_a(ignore(nof(0, [s(Token::String)]))), &a("\"x\"")),
+            "{}"
+        );
+        // The value is never changed: a branch's default is not taken.
+        let open_b = open(obj([("b", Spec::from(2))]));
+        assert_eq!(
+            run(
+                &Schema::new(nof(1, [Spec::from(open_b), s(Token::Number)])),
+                "{\"a\":1}"
+            ),
+            "{\"a\":1}"
+        );
+        // A count that is not a whole number of zero or more, or that is a
+        // builder's fault, is the fault.
+        for c in [-1.0, 1.5, f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            assert_eq!(
+                run(&Schema::new(nof(c, [s(Token::String)])), "\"x\""),
+                format!("ERR {}", NOF_FAULT)
+            );
+        }
+        assert_eq!(
+            run(
+                &Schema::new(nof(min("x", any()), [s(Token::String)])),
+                "\"x\""
+            ),
+            "ERR Shape: Min needs a number"
+        );
+        // How it renders, and the declarative JSON that reads back as it.
+        assert_eq!(
+            stringify_node(&nof(1, [s(Token::Number), s(Token::String)]), true),
+            "Nof(1,Number,String)"
+        );
+        assert_eq!(
+            stringify_node(&nof(max(2, min(1, any())), [s(Token::Number)]), true),
+            "Nof(Min(1).Max(2),Number)"
+        );
+        for (spec, text) in [
+            (
+                nof(1, [s(Token::String), s(Token::Number)]),
+                "Nof(1,String,Number)",
+            ),
+            (
+                nof(min(1, any()), [s(Token::String), s(Token::Number)]),
+                "Nof(Any.Min(1),String,Number)",
+            ),
+        ] {
+            let json = Schema::new(spec).json().unwrap();
+            assert_eq!(json, Value::from(text));
+            let back = Schema::new(crate::expr::build(&json).unwrap());
+            assert_eq!(back.json().unwrap(), Value::from(text));
+        }
     }
 
     #[test]

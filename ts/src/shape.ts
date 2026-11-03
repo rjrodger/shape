@@ -373,6 +373,7 @@ const S = {
   Max: 'Max',
   Min: 'Min',
   Never: 'Never',
+  Nof: 'Nof',
   Nullable: 'Nullable',
   Catch: 'Catch',
   Coerce: 'Coerce',
@@ -3400,7 +3401,8 @@ const Some = function <const S extends readonly any[]>(this: any, ...inshapes: S
 }
 
 
-// Pass if exactly one matches. Does not short circuit (as defaults may be missed).
+// Pass on the first matching branch, whose output is the result. Use
+// Nof(1, ...) to require that exactly one matches.
 const One = function <const S extends readonly any[]>(this: any, ...inshapes: S): Node<S[number]> {
   let node = buildize(this)
   node.t = (S.list as ValType)
@@ -3421,7 +3423,6 @@ const One = function <const S extends readonly any[]>(this: any, ...inshapes: S)
       if (shape.match(clone(val), subctx)) {
         passN++
         update.val = shape(clone(val), subctx)
-        // TODO: update docs - short circuits!
         break
       }
     }
@@ -3445,6 +3446,92 @@ const One = function <const S extends readonly any[]>(this: any, ...inshapes: S)
   attach(node.b, validator)
 
   return node
+}
+
+
+// Pass if the number of shapes the value satisfies is one the count admits.
+// The count is a whole number, for exactly that many, or a shape the number
+// must satisfy: Nof(1, ...) is exactly one, Nof(Min(1), ...) at least one,
+// Nof(0, s) not s. A shape is tried on a copy of the value only while the
+// shapes left untried could still change the verdict, and the value is
+// never changed: Nof checks, it does not produce. An absent value is not
+// tried, so whether it may be absent is the node's required or optional.
+interface NofBuilder {
+  <const S extends readonly any[]>(this: any, count: 0, ...shapes: S): Node<any>
+  <const S extends readonly any[]>(this: any, count: number, ...shapes: S): Node<S[number]>
+  <const S extends readonly any[]>(this: any, count: any, ...shapes: S): Node<any>
+}
+
+const Nof = function Nof(this: any, count: any, ...inshapes: any[]): Node<any> {
+  const exact = S.number === typeof count
+  if (undefined === count || (exact && !(Number.isInteger(count) && 0 <= count))) {
+    throw new Error('Shape: Nof needs a whole number of zero or more, or a shape for the count')
+  }
+
+  const node = buildize(this)
+  node.t = (S.list as ValType)
+  node.r = true
+
+  const shapes = inshapes.map(s => Shape(s))
+  node.u.list = shapes.map(g => g.node())
+
+  // The counts the count admits, from none of the shapes to all of them.
+  const countShape = exact ? undefined : Shape(count)
+  const ok: boolean[] = []
+  for (let c = 0; c <= shapes.length; c++) {
+    ok.push(exact ? c === count : (countShape as any).match(c))
+  }
+  node.u.nof = { count: exact ? count : (countShape as any).node(), ok }
+
+  const validator = function Nof(val: any, update: Update, state: State) {
+    if (undefined === val) {
+      return true
+    }
+
+    let k = 0
+    let tried = 0
+    while (NOF_SOME === nofSpan(ok, k, shapes.length - tried)) {
+      if (shapes[tried].match(clone(val), { ...state.ctx, err: [] })) {
+        k++
+      }
+      tried++
+    }
+
+    if (NOF_NONE === nofSpan(ok, k, shapes.length - tried)) {
+      update.why = S.Nof
+      update.err = [
+        makeErr(state,
+          S.Value + ' ' + S.$VALUE + S.forprop + S.$PATH + ' satisfies ' + k +
+          (tried < shapes.length ? ' to ' + (k + shapes.length - tried) : '') + ' of: ' +
+          inshapes.map(x => stringify(x, true)).join(', ') +
+          '; the count must be ' + stringify(count, true) + '.')
+      ]
+      return false
+    }
+
+    return true
+  }
+
+  validator.n = S.Nof
+  validator.a = [count, ...inshapes]
+
+  attach(node.b, validator)
+
+  return node
+} as NofBuilder
+
+
+const NOF_NONE = 0
+const NOF_SOME = 1
+
+// Whether the counts from k to k + open are all admitted (2), some (1) or
+// none (0): a shape is tried only while it is some.
+function nofSpan(ok: boolean[], k: number, open: number): number {
+  let yes = 0
+  for (let c = k; c <= k + open; c++) {
+    yes += ok[c] ? 1 : 0
+  }
+  return 0 === yes ? NOF_NONE : open + 1 === yes ? 2 : NOF_SOME
 }
 
 
@@ -4443,8 +4530,9 @@ function node2json(n: Node<any>): any {
   else if (S.list === t) {
     let refs: any = {}
     let rI = 0
-    let list = n.u.list
-      .map((n: any) => node2json(n))
+    // A Nof's count leads its shapes.
+    let list = (undefined === n.u.nof ? n.u.list : [n.u.nof.count, ...n.u.list])
+      .map((n: any) => S.number === typeof n ? n : node2json(n))
       .map((n: any, _: any) => S.object === typeof n ? (refs[_ = '$$ref' + (rI++)] = n, _) : n)
     let s = (n.b[0].n || n.b[0].name) + '(' + list.join(',') + ')'
     return 0 === rI ? s : { $$: s, ...refs }
@@ -4600,7 +4688,8 @@ function jsonValidatorCall(v: any, calls: JsonCall[]) {
   else if (S.Exact === name) {
     calls.push({ n: name, a: args.map((a: any) => ({ x: jsonLiteral(a, 'the Exact value') })) })
   }
-  else if (S.One === name || S.Some === name || S.All === name || S.Discriminated === name) {
+  else if (S.One === name || S.Some === name || S.All === name || S.Nof === name ||
+    S.Discriminated === name) {
     // The list itself is the head of the expression.
   }
   else {
@@ -4976,8 +5065,12 @@ function nodeJson(n: Node<any>): any {
         ]
       } :
       {
-        n: n.b.find((v: any) => S.One === v.n || S.Some === v.n || S.All === v.n)?.n as string,
-        a: n.u.list.map((b: any) => jsonArg(b))
+        n: n.b.find((v: any) =>
+          S.One === v.n || S.Some === v.n || S.All === v.n || S.Nof === v.n)?.n as string,
+        // A Nof's count leads its shapes: a number inline, a shape as its value.
+        a: (undefined === n.u.nof ? [] :
+          [S.number === typeof n.u.nof.count ? { x: '' + n.u.nof.count } : jsonArg(n.u.nof.count)])
+          .concat(n.u.list.map((b: any) => jsonArg(b)))
       }
     const calls = jsonRequiredCalls(n, true)
       .concat(jsonFlagCalls(n, false), jsonValidatorCalls(n), jsonTailCalls(n))
@@ -5412,8 +5505,45 @@ function listSchema(n: Node<any>, s: any, defs: any) {
     }
     s.oneOf = branches
   }
+  else if (undefined !== n.u.nof) {
+    nofSchema(n.u.nof.ok, branches, s)
+  }
   else {
     s[S.All === n.b[0].n ? 'allOf' : 'anyOf'] = branches
+  }
+}
+
+
+// A count of the shapes, as the keywords that count: none of them is not,
+// exactly one oneOf, every one allOf. JSON Schema has no keyword for any
+// other count, so it is bounded by what it rules out: anyOf when the count
+// is never none, not allOf when it is never every one. That bound is exact
+// for at least one, not every one, and both together.
+function nofSchema(ok: boolean[], branches: any[], s: any) {
+  const n = branches.length
+  const only = (c: number) => ok.every((v: boolean, i: number) => v === (i === c))
+  if (ok.every((v: boolean) => v)) {
+    return
+  }
+  if (!ok.includes(true)) {
+    s.not = {}
+  }
+  else if (only(0)) {
+    s.not = 1 === n ? branches[0] : { anyOf: branches }
+  }
+  else if (only(1)) {
+    s.oneOf = branches
+  }
+  else if (only(n)) {
+    s.allOf = branches
+  }
+  else {
+    if (!ok[0]) {
+      s.anyOf = branches
+    }
+    if (!ok[n]) {
+      s.not = { allOf: branches }
+    }
   }
 }
 
@@ -5531,6 +5661,7 @@ const BuilderMap = {
   Max,
   Min,
   Never,
+  Nof,
   Nullable,
   Omit,
   One,
@@ -5577,7 +5708,8 @@ if (S.undefined !== typeof (window)) {
 // earlier drafts), the inverse of the export above: a type becomes a token,
 // bounds become size builders, formats and patterns their builders, enum and
 // const become Exact, properties and items become objects and arrays, the
-// compositions become One, All and Discriminated, and a definition is inlined
+// compositions become One, All, Nof and Discriminated (oneOf a count of
+// exactly one, not a count of none), and a definition is inlined
 // where it is referenced — Define and Refer only where a definition refers to
 // itself. A property that is not required and has no default is Skip. Unknown
 // keywords are ignored; an unknown type or reference is an error. The Go port
@@ -5700,16 +5832,21 @@ function importKeywords(s: any, ctx: any, path: string): any {
   }
   else if (undefined !== s.oneOf) {
     spec = importDiscriminated(importBranchList(s.oneOf, path + '/oneOf'), ctx, path + '/oneOf') ||
-      One(...importBranches(s.oneOf, ctx, path + '/oneOf'))
+      Nof(1, ...importBranches(s.oneOf, ctx, path + '/oneOf'))
   }
   else if (undefined !== s.anyOf && !isIpFormats(s.anyOf)) {
     spec = One(...importBranches(s.anyOf, ctx, path + '/anyOf'))
   }
-  else if (undefined !== s.not && isEmptyObject(s.not)) {
-    spec = Never()
-  }
   else {
     spec = importTyped(s, ctx, path)
+  }
+
+  // Not is a count of none. It holds beside the other keywords, ahead of
+  // them so that it sees the value as given; not: {} admits nothing, so it
+  // is Never whatever else the schema says.
+  if (undefined !== s.not) {
+    const not = isEmptyObject(s.not) ? undefined : Nof(0, importSchema(s.not, ctx, path + '/not'))
+    spec = undefined === not ? Never() : isBareAny(spec) ? not : All(not, spec)
   }
 
   if (undefined !== s.default) {
@@ -5739,6 +5876,13 @@ function isPlainObject(v: any): boolean {
 
 function isEmptyObject(v: any): boolean {
   return isPlainObject(v) && 0 === keys(v).length
+}
+
+
+// Whether a spec is the Any of a schema that says nothing.
+function isBareAny(spec: any): boolean {
+  const n = nodize(spec)
+  return S.any === n.t && 0 === n.b.length && 0 === n.a.length
 }
 
 
@@ -6127,6 +6271,7 @@ const GLen = Len
 const GMax = Max
 const GMin = Min
 const GNever = Never
+const GNof = Nof
 const GOne = One
 const GOpen = Open
 const GOptional = Optional
@@ -6333,6 +6478,7 @@ export {
   Max,
   Min,
   Never,
+  Nof,
   Nullable,
   One,
   Open,
@@ -6386,6 +6532,7 @@ export {
   GMax,
   GMin,
   GNever,
+  GNof,
   GNullable,
   GOne,
   GOpen,

@@ -2,8 +2,9 @@
 //! drafts), the inverse of the export: a type becomes a token, bounds become
 //! size builders, formats and patterns their builders, enum and const become
 //! Exact, properties and items become objects and arrays, the compositions
-//! become One, All and Discriminated, and a definition is inlined where it
-//! is referenced, with Define and Refer only where a definition refers to
+//! become One, All, Nof and Discriminated (oneOf a count of exactly one, not
+//! a count of none), and a definition is inlined where it is referenced,
+//! with Define and Refer only where a definition refers to
 //! itself. A property that is not required and has no default is Skip.
 //! Unknown keywords are ignored; an unknown type or reference is an error.
 
@@ -217,14 +218,27 @@ impl<'a> Import<'a> {
             let list = branch_list(one_of, &sub)?;
             match self.discriminated(list, &sub)? {
                 Some(d) => d,
-                None => Spec::from(one(self.branches(one_of, &sub)?)),
+                None => Spec::from(nof(1, self.branches(one_of, &sub)?)),
             }
         } else if let Some(any_of) = m.get("anyOf").filter(|v| !is_ip_formats(Some(v))) {
             Spec::from(one(self.branches(any_of, &format!("{}/anyOf", path))?))
-        } else if empty_object(m.get("not")) {
-            Spec::from(never(any()))
         } else {
             self.typed(m, path)?
+        };
+        // Not is a count of none. It holds beside the other keywords, ahead
+        // of them so that it sees the value as given; not: {} admits nothing,
+        // so it is Never whatever else the schema says.
+        let spec = match m.get("not") {
+            None => spec,
+            Some(not) if empty_object(Some(not)) => Spec::from(never(any())),
+            Some(not) => {
+                let none = Spec::from(nof(0, [self.schema(not, &format!("{}/not", path))?]));
+                if matches!(spec, Spec::Token(Token::Any)) {
+                    none
+                } else {
+                    Spec::from(all([none, spec]))
+                }
+            }
         };
         Ok(match m.get("default") {
             Some(d) => Spec::from(default(d.clone(), spec)),
@@ -715,12 +729,24 @@ mod tests {
             render(json!({"anyOf": [{"type": "string"}, {"type": "number"}]})),
             "One(String,Number)"
         );
+        // A oneOf is a count of exactly one; a not, a count of none that
+        // holds beside the other keywords, ahead of them.
         assert_eq!(
             render(json!({"oneOf": [{"type": "string"}, {"type": "number"}]})),
-            "One(String,Number)"
+            "Nof(1,String,Number)"
         );
         assert_eq!(render(json!({"not": {}})), "Never");
-        assert_eq!(render(json!({"not": {"type": "string"}})), "Any");
+        assert_eq!(render(json!({"enum": ["a"], "not": {}})), "Never");
+        assert_eq!(render(json!({"not": {"type": "string"}})), "Nof(0,String)");
+        assert_eq!(render(json!({"not": true})), "Nof(0,Any)");
+        assert_eq!(
+            render(json!({"type": "string", "not": {"pattern": "^a"}})),
+            "All(Nof(0,/^a/),String)"
+        );
+        assert_eq!(
+            fails(json!({"not": 1})),
+            "JSON Schema: a schema must be an object or boolean at /not"
+        );
         assert_eq!(render(json!({})), "Any");
         assert_eq!(render(json!({"minLength": 2})), "Min(2)");
         assert_eq!(
@@ -837,37 +863,37 @@ mod tests {
         );
         assert_eq!(
             plain(json!([{"type": "object"}, {"type": "object"}])),
-            "One({}.Open(),{}.Open())"
+            "Nof(1,{}.Open(),{}.Open())"
         );
         assert_eq!(
             plain(
                 json!([{"properties": {"k": {"const": "a"}}}, {"properties": {"k": {"const": "b"}}}])
             ),
-            "One({k: Exact(a)}.Open(),{k: Exact(b)}.Open())"
+            "Nof(1,{k: Exact(a)}.Open(),{k: Exact(b)}.Open())"
         );
         assert_eq!(
             plain(json!([{"properties": {"k": {"type": "string"}}, "required": ["k"]}])),
-            "One({k: String}.Open())"
+            "Nof(1,{k: String}.Open())"
         );
         assert_eq!(
             plain(
                 json!([{"properties": {"k": {"const": "a"}}, "required": ["k"]}, {"properties": {"k": {"const": "a"}}, "required": ["k"]}])
             ),
-            "One({k: Exact(a)}.Open(),{k: Exact(a)}.Open())"
+            "Nof(1,{k: Exact(a)}.Open(),{k: Exact(a)}.Open())"
         );
         assert_eq!(
             plain(
                 json!([{"properties": {"k": {"const": "a"}}, "required": ["k"]}, {"properties": {"k": {"const": "b"}}, "required": []}])
             ),
-            "One({k: Exact(a)}.Open(),{k: Exact(b)}.Open())"
+            "Nof(1,{k: Exact(a)}.Open(),{k: Exact(b)}.Open())"
         );
         assert_eq!(
             plain(
                 json!([{"properties": {"k": {"const": "a"}}, "required": ["k"]}, {"properties": {"z": {"const": "b"}}, "required": ["z"]}])
             ),
-            "One({k: Exact(a)}.Open(),{z: Exact(b)}.Open())"
+            "Nof(1,{k: Exact(a)}.Open(),{z: Exact(b)}.Open())"
         );
-        assert_eq!(plain(json!([])), "One()");
+        assert_eq!(plain(json!([])), "Nof(1)");
     }
 
     #[test]

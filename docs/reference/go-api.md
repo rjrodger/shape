@@ -148,6 +148,7 @@ func Len(length int, spec ...any) *Node
 func One(shapes ...any) *Node
 func Some(shapes ...any) *Node
 func All(shapes ...any) *Node
+func Nof(count any, shapes ...any) *Node   // count: a whole number, or a shape for it
 func Open(spec ...any) *Node
 func Closed(spec ...any) *Node
 func Child(child any, spec ...any) *Node

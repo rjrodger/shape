@@ -12,8 +12,9 @@ import (
 // drafts), the inverse of the export in jsonschema.go: a type becomes a
 // token, bounds become size builders, formats and patterns their builders,
 // enum and const become Exact, properties and items become objects and
-// arrays, the compositions become One, All and Discriminated, and a
-// definition is inlined where it is referenced — Define and Refer only where
+// arrays, the compositions become One, All, Nof and Discriminated (oneOf a
+// count of exactly one, not a count of none), and a definition is inlined
+// where it is referenced — Define and Refer only where
 // a definition refers to itself. A property that is not required and has no
 // default is Skip. Unknown keywords are ignored; an unknown type or reference
 // is an error. The canonical TypeScript builds the same spec, and the
@@ -173,7 +174,7 @@ func (c *jsonSchemaImport) keywords(m map[string]any, path string) (any, error) 
 			if err != nil {
 				return nil, err
 			}
-			spec = One(branches...)
+			spec = Nof(1, branches...)
 		}
 	} else if anyOf, ok := m["anyOf"]; ok && !isIpFormats(anyOf) {
 		branches, err := c.branches(anyOf, path+"/anyOf")
@@ -181,12 +182,29 @@ func (c *jsonSchemaImport) keywords(m map[string]any, path string) (any, error) 
 			return nil, err
 		}
 		spec = One(branches...)
-	} else if not, ok := m["not"]; ok && isEmptyObject(not) {
-		spec = Never()
 	} else {
 		spec, err = c.typed(m, path)
 		if err != nil {
 			return nil, err
+		}
+	}
+
+	// Not is a count of none. It holds beside the other keywords, ahead of
+	// them so that it sees the value as given; not: {} admits nothing, so it
+	// is Never whatever else the schema says.
+	if not, ok := m["not"]; ok {
+		if isEmptyObject(not) {
+			spec = Never()
+		} else {
+			ns, err := c.schema(not, path+"/not")
+			if err != nil {
+				return nil, err
+			}
+			if spec == Any {
+				spec = Nof(0, ns)
+			} else {
+				spec = All(Nof(0, ns), spec)
+			}
 		}
 	}
 

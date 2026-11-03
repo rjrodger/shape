@@ -254,6 +254,30 @@ const files = {
     ['one-skip-branch-present', { a: { $expr: 'One(Skip(Number))' } }, { a: 1 }],
     ['one-absent-default-branch', { a: { $expr: 'One(String,Number)' }, b: CALL('One', { $expr: 'Number' }, { $open: { x: 1 } }) }, { a: 'x' }],
     ['some-failing-branch-leaks-nothing', CALL('Some', { x: { $expr: 'Number' }, y: 1 }, { $open: { z: 3 } }), {}],
+    // Nof counts the shapes the value satisfies: exactly that many, or as
+    // many as a shape for the count admits. A shape is tried only while the
+    // rest could change the verdict, and Nof never produces.
+    ['nof-one-ok', { a: { $expr: 'Nof(1,Number,Integer)' } }, { a: 1.5 }],
+    ['nof-one-two', { a: { $expr: 'Nof(1,Number,Integer)' } }, { a: 1 }],
+    ['nof-one-none', { a: { $expr: 'Nof(1,Number,Integer)' } }, { a: 'x' }],
+    ['nof-zero-ok', { a: { $expr: 'Nof(0,String)' } }, { a: 1 }],
+    ['nof-zero-fail', { a: { $expr: 'Nof(0,String)' } }, { a: 'x' }],
+    ['nof-zero-early', { a: { $expr: 'Nof(0,String,Number,Boolean)' } }, { a: 'x' }],
+    ['nof-min-ok', { a: { $expr: 'Nof(Min(1),String,Number,Boolean)' } }, { a: true }],
+    ['nof-min-fail', { a: { $expr: 'Nof(Min(1),String,Number,Boolean)' } }, { a: null }],
+    ['nof-min-early', { a: { $expr: 'Nof(Min(2),String,Number,Boolean)' } }, { a: true }],
+    ['nof-range-ok', { a: { $expr: 'Nof(Min(1).Max(2),Number,Integer,Min(2))' } }, { a: 2.5 }],
+    ['nof-range-high', { a: { $expr: 'Nof(Min(1).Max(2),Number,Integer,Min(2))' } }, { a: 3 }],
+    ['nof-range-string', { a: { $expr: 'Nof(Min(1).Max(2),Number,Integer,Min(2))' } }, { a: 'x' }],
+    ['nof-no-shapes', { a: { $expr: 'Nof(1)' } }, { a: 1 }],
+    ['nof-no-shapes-zero', { a: { $expr: 'Nof(0)' } }, { a: 1 }],
+    ['nof-absent-required', { a: { $expr: 'Nof(1,String,Number)' } }, {}],
+    ['nof-absent-optional', { a: { $expr: 'Optional(Nof(1,String,Number))' } }, {}],
+    ['nof-skip-never-absent', { a: { $expr: 'Skip(Nof(0,Any))' } }, {}],
+    ['nof-skip-never-present', { a: { $expr: 'Skip(Nof(0,Any))' } }, { a: 1 }],
+    ['nof-no-produce', CALL('Nof', 1, { $open: { b: 2 } }, { $expr: 'Number' }), { a: 1 }],
+    ['nof-no-produce-object', { a: CALL('Nof', 1, { x: N }, { x: T }) }, { a: { x: 'y' } }],
+    ['nof-in-all', { a: CALL('All', { $expr: 'Nof(0,/^a/)' }, { $expr: 'String' }) }, { a: 'ab' }],
     // Default over an untyped shape takes the default's kind and keeps the
     // shape's builders, description and fault.
     ['default-untyped-kind', { a: { $expr: 'Default(2,Required())' } }, { a: 'x' }],
@@ -393,6 +417,17 @@ const files = {
     ['js-discriminated', { $jsonschema: { oneOf: [{ type: 'object', properties: { k: { const: 'a' }, x: { type: 'number' } }, required: ['k', 'x'] }, { type: 'object', properties: { k: { const: 'b' } }, required: ['k'] }] } }, { k: 'a', x: 'no' }],
     ['js-discriminated-unknown', { $jsonschema: { oneOf: [{ type: 'object', properties: { k: { const: 'a' } }, required: ['k'] }, { type: 'object', properties: { k: { const: 'b' } }, required: ['k'] }] } }, { k: 'c' }],
     ['js-one-of-plain', { $jsonschema: { oneOf: [{ type: 'string' }, { type: 'number' }] } }, true],
+    // A oneOf is a count of exactly one, and a not a count of none that holds
+    // beside the other keywords, ahead of them.
+    ['js-one-of-two', { $jsonschema: { oneOf: [{ type: 'number' }, { type: 'integer' }] } }, 1],
+    ['js-one-of-one', { $jsonschema: { oneOf: [{ type: 'number' }, { type: 'integer' }] } }, 1.5],
+    ['js-not-schema', { $jsonschema: { not: { type: 'string' } } }, 'x'],
+    ['js-not-schema-ok', { $jsonschema: { not: { type: 'string' } } }, 1],
+    ['js-not-true', { $jsonschema: { not: true } }, 1],
+    ['js-not-beside-type', { $jsonschema: { type: 'string', not: { pattern: '^a' } } }, 'ab'],
+    ['js-not-beside-type-ok', { $jsonschema: { type: 'string', not: { pattern: '^a' } } }, 'b'],
+    ['js-not-before-default', { $jsonschema: { type: 'object', properties: { a: { default: 1 } }, not: { required: ['a'] } } }, {}],
+    ['js-not-empty-beside-enum', { $jsonschema: { enum: ['a'], not: {} } }, 'a'],
     ['js-ref', { $jsonschema: { $defs: { p: { type: 'object', properties: { n: { type: 'string' } }, required: ['n'] } }, type: 'object', properties: { a: { $ref: '#/$defs/p' }, b: { $ref: '#/$defs/p' } }, required: ['a', 'b'] } }, { a: { n: 'x' }, b: {} }],
     ['js-ref-recursive', { $jsonschema: { $defs: { n: { type: 'object', properties: { v: { type: 'number' }, kids: { type: 'array', items: { $ref: '#/$defs/n' } } }, required: ['v'] } }, $ref: '#/$defs/n' } }, { v: 1, kids: [{ v: 2, kids: [{ v: 'x' }] }] }],
     ['js-ref-root', { $jsonschema: { type: 'object', properties: { v: { type: 'number' }, next: { $ref: '#' } } } }, { v: 1, next: { next: { v: 'x' } } }],

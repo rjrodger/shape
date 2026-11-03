@@ -631,8 +631,17 @@ func nodeJSON(n *node) any {
 				mode = "Some"
 			case listAll:
 				mode = "All"
+			case listNof:
+				// A Nof's count leads its shapes: a number inline, a shape
+				// as its value.
+				mode = "Nof"
+				if n.nofCount == nil {
+					head.a = append(head.a, jx(fmtFloat(n.nofExact)))
+				} else {
+					head.a = append(head.a, jsonArgOf(n.nofCount))
+				}
 			}
-			head = jsonCall{n: mode}
+			head.n = mode
 			for _, b := range n.list {
 				head.a = append(head.a, jsonArgOf(b))
 			}

@@ -3,7 +3,7 @@
 use crate::context::{Context, PathPart, State, Update, UpdateErr};
 use crate::error::*;
 use crate::node::{Kind, ListMode, Node, Validator};
-use crate::stringify::stringify_node;
+use crate::stringify::{nof_count_text, stringify_node};
 use crate::value::{is_integer, Map, Value};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -1026,14 +1026,49 @@ fn list_error(
     words: &str,
     fault_applies: bool,
 ) {
-    let names: Vec<String> = n.list.iter().map(|sn| stringify_node(sn, true)).collect();
-    let at = at_of(w, key, n, value, parent_is_array, "");
     let text = format!(
         "Value \"$VALUE\" for property \"$PATH\" does not satisfy {}: {}",
         words,
-        names.join(", ")
+        list_names(n)
     );
-    let mut err = make_err(&at, why, mark, &text);
+    list_error_text(
+        n,
+        silent,
+        value,
+        key,
+        parent_is_array,
+        w,
+        verr,
+        why,
+        mark,
+        &text,
+        fault_applies,
+    );
+}
+
+/// The branches of a composition, as its message names them.
+fn list_names(n: &Node) -> String {
+    let names: Vec<String> = n.list.iter().map(|sn| stringify_node(sn, true)).collect();
+    names.join(", ")
+}
+
+/// A composition's error with the text given.
+#[allow(clippy::too_many_arguments)]
+fn list_error_text(
+    n: &Node,
+    silent: bool,
+    value: &Value,
+    key: &str,
+    parent_is_array: bool,
+    w: &Walk<'_>,
+    verr: &mut ValidationError,
+    why: &str,
+    mark: i64,
+    text: &str,
+    fault_applies: bool,
+) {
+    let at = at_of(w, key, n, value, parent_is_array, "");
+    let mut err = make_err(&at, why, mark, text);
     if fault_applies && !err.terse {
         if let Some(f) = &n.fault_msg {
             err.text = expand_err_text(f, &err.path, value, at.absent);
@@ -1044,8 +1079,29 @@ fn list_error(
     }
 }
 
-/// One, Some and All. The branches see the value as the parent saw it: an
-/// absent value stays absent, so a branch that does not require one can
+/// Whether the counts a `Nof` can still reach are all admitted, some, or
+/// none: a branch is tried only while it is some.
+#[derive(PartialEq)]
+enum Admits {
+    No,
+    Some,
+    All,
+}
+
+/// The counts from `k` to `k + open`, against the counts a `Nof` admits.
+fn nof_span(ok: &[bool], k: usize, open: usize) -> Admits {
+    let yes = ok[k..=k + open].iter().filter(|v| **v).count();
+    if yes == 0 {
+        Admits::No
+    } else if yes == open + 1 {
+        Admits::All
+    } else {
+        Admits::Some
+    }
+}
+
+/// One, Some, All and Nof. The branches see the value as the parent saw it:
+/// an absent value stays absent, so a branch that does not require one can
 /// still match and supply its default.
 #[allow(clippy::too_many_arguments)]
 fn evaluate_list(
@@ -1054,11 +1110,54 @@ fn evaluate_list(
     mut cur: Cur<'_>,
     key: &str,
     parent_is_array: bool,
-    _absent: bool,
+    absent: bool,
     w: &mut Walk<'_>,
     verr: &mut ValidationError,
 ) -> bool {
     match n.list_mode {
+        ListMode::Nof => {
+            // An absent value is not tried: the required check speaks for
+            // it. A branch is tried only while the untried could change the
+            // verdict, and the value is never changed.
+            if absent {
+                return true;
+            }
+            let total = n.list.len();
+            let (mut k, mut tried) = (0, 0);
+            while nof_span(&n.nof_ok, k, total - tried) == Admits::Some {
+                if branch_passes(&n.list[tried], cur.get(), key, parent_is_array, w) {
+                    k += 1;
+                }
+                tried += 1;
+            }
+            if nof_span(&n.nof_ok, k, total - tried) == Admits::No {
+                let admitted = if tried < total {
+                    format!("{} to {}", k, k + total - tried)
+                } else {
+                    k.to_string()
+                };
+                let text = format!(
+                    "Value \"$VALUE\" for property \"$PATH\" satisfies {} of: {}; the count must be {}.",
+                    admitted,
+                    list_names(n),
+                    nof_count_text(n)
+                );
+                list_error_text(
+                    n,
+                    silent,
+                    cur.get(),
+                    key,
+                    parent_is_array,
+                    w,
+                    verr,
+                    "Nof",
+                    4033,
+                    &text,
+                    true,
+                );
+            }
+            true
+        }
         ListMode::One => {
             let winner = n
                 .list

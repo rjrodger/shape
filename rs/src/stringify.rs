@@ -5,6 +5,15 @@
 use crate::node::{Kind, ListMode, Node};
 use crate::value::{js_date_string, js_number, json_text, Value};
 
+/// A `Nof`'s count as TypeScript renders it: the whole number, or the shape
+/// for it.
+pub(crate) fn nof_count_text(n: &Node) -> String {
+    match &n.nof_count {
+        Some(c) => stringify_node(c, true),
+        None => js_number(n.nof_exact),
+    }
+}
+
 /// Render a node. `inline` is the canonical dequote flag: inside a composite
 /// message a string value is written bare, on its own it keeps its quotes.
 pub fn stringify_node(n: &Node, inline: bool) -> String {
@@ -57,12 +66,18 @@ pub fn stringify_node(n: &Node, inline: bool) -> String {
             if let Some(d) = &n.disc {
                 return suffix(format!("Discriminated({},{})", d.tag, d.tags.join(",")), n);
             }
+            let mut parts: Vec<String> = Vec::new();
             let mode = match n.list_mode {
                 ListMode::Some => "Some",
                 ListMode::All => "All",
+                ListMode::Nof => {
+                    // A Nof's count leads its shapes.
+                    parts.push(nof_count_text(n));
+                    "Nof"
+                }
                 _ => "One",
             };
-            let parts: Vec<String> = n.list.iter().map(|sn| stringify_node(sn, true)).collect();
+            parts.extend(n.list.iter().map(|sn| stringify_node(sn, true)));
             suffix(format!("{}({})", mode, parts.join(",")), n)
         }
         Kind::Array => {

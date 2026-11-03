@@ -23,6 +23,7 @@ const (
 	WhyOne           = "One"
 	WhySome          = "Some"
 	WhyAll           = "All"
+	WhyNof           = "Nof"
 	WhyExact         = "Exact"
 	WhyMin           = "Min"
 	WhyMax           = "Max"

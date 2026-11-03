@@ -256,9 +256,10 @@ A `*regexp.Regexp` anywhere in a spec is a string that must match it.
 | `One(shapes...)`                 | the first matching shape's output is used                          |
 | `Some(shapes...)`                | at least one shape must match                                      |
 | `All(shapes...)`                 | every shape must match                                             |
+| `Nof(count, shapes...)`          | the number of shapes that match must be one the count admits: a whole number, or a shape for it |
 | `Discriminated(tag, branches)`   | a tagged union: `branches` is a `map[string]any` keyed by tag value |
 
-All four are top-level only.
+All five are top-level only.
 
 ### Objects / arrays
 
