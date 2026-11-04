@@ -39,17 +39,17 @@ with `serde_json::Value` and `validate_into`.
 
 A schema is built from an example value. Literal values become **optional
 with a default**; type tokens (`Token::String`, `Token::Number`, ...) become
-**required**. Objects are closed unless opened (`open`, `child`); a
+**required**. Objects are closed unless opened (`Open`, `Child`); a
 one-element array is an element shape, a longer one a tuple.
 
-Every builder of the canonical implementation is here as a function taking
-the spec it applies to last, and as a chain method:
+Every builder of the canonical implementation is here under its canonical
+name, as a function taking the spec it applies to last and as a chain method:
 
 ```rust
-use shape::{max, min, optional, Token};
+use shape::{Max, Min, Optional, Token};
 
-let port = optional(max(65535, min(1, Token::Integer)));
-let name = shape::buildize(Token::String).min(3).max(40);
+let port = Optional(Max(65535, Min(1, Token::Integer)));
+let name = shape::buildize(Token::String).Min(3).Max(40);
 ```
 
 `validate` produces the value with defaults injected; `valid` gives a

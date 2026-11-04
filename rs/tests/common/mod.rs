@@ -34,10 +34,10 @@ pub fn decode_spec(v: &serde_json::Value) -> Result<Spec, Unsupported> {
                         };
                         return Ok(Spec::Token(t));
                     }
-                    "$open" => return Ok(Spec::from(shape::open(decode_spec(sv)?))),
-                    "$closed" => return Ok(Spec::from(shape::closed(decode_spec(sv)?))),
-                    "$required" => return Ok(Spec::from(shape::required(decode_spec(sv)?))),
-                    "$optional" => return Ok(Spec::from(shape::optional(decode_spec(sv)?))),
+                    "$open" => return Ok(Spec::from(shape::Open(decode_spec(sv)?))),
+                    "$closed" => return Ok(Spec::from(shape::Closed(decode_spec(sv)?))),
+                    "$required" => return Ok(Spec::from(shape::Required(decode_spec(sv)?))),
+                    "$optional" => return Ok(Spec::from(shape::Optional(decode_spec(sv)?))),
                     "$expr" => {
                         let src = sv.as_str().unwrap_or("");
                         // A refused expression is a build error, as in TypeScript.
@@ -54,14 +54,14 @@ pub fn decode_spec(v: &serde_json::Value) -> Result<Spec, Unsupported> {
                         let spec = rest
                             .into_iter()
                             .next()
-                            .unwrap_or_else(|| Spec::from(shape::any()));
+                            .unwrap_or_else(|| Spec::from(shape::Any()));
                         return match name {
                             "Define" => {
-                                Ok(Spec::from(shape::define(arr[1].as_str().unwrap(), spec)))
+                                Ok(Spec::from(shape::Define(arr[1].as_str().unwrap(), spec)))
                             }
                             "Refer" => match &arr[1] {
                                 serde_json::Value::String(n) => {
-                                    Ok(Spec::from(shape::refer(n, spec)))
+                                    Ok(Spec::from(shape::Refer(n, spec)))
                                 }
                                 serde_json::Value::Object(o) => {
                                     let opts = ReferOptions {
@@ -74,7 +74,7 @@ pub fn decode_spec(v: &serde_json::Value) -> Result<Spec, Unsupported> {
                                             .and_then(|v| v.as_bool())
                                             .unwrap_or(false),
                                     };
-                                    Ok(Spec::from(shape::refer_with(
+                                    Ok(Spec::from(shape::ReferWith(
                                         o["name"].as_str().unwrap(),
                                         opts,
                                         spec,
@@ -87,29 +87,29 @@ pub fn decode_spec(v: &serde_json::Value) -> Result<Spec, Unsupported> {
                                     .iter()
                                     .map(decode_spec)
                                     .collect::<Result<Vec<_>, _>>()?;
-                                Ok(Spec::from(shape::all(branches)))
+                                Ok(Spec::from(shape::All(branches)))
                             }
                             "Nof" => {
                                 let branches = arr[2..]
                                     .iter()
                                     .map(decode_spec)
                                     .collect::<Result<Vec<_>, _>>()?;
-                                Ok(Spec::from(shape::nof(decode_spec(&arr[1])?, branches)))
+                                Ok(Spec::from(shape::Nof(decode_spec(&arr[1])?, branches)))
                             }
                             "Pick" | "Omit" => {
                                 let names =
                                     shape::Names::from_value(&Value::from(arr[1].clone()), name)
                                         .unwrap();
                                 Ok(Spec::from(if name == "Pick" {
-                                    shape::pick(names, spec)
+                                    shape::Pick(names, spec)
                                 } else {
-                                    shape::omit(names, spec)
+                                    shape::Omit(names, spec)
                                 }))
                             }
-                            "Rest" => Ok(Spec::from(shape::rest(decode_spec(&arr[1])?, spec))),
-                            "Child" => Ok(Spec::from(shape::child(decode_spec(&arr[1])?, spec))),
-                            "Partial" => Ok(Spec::from(shape::partial(decode_spec(&arr[1])?))),
-                            "Extend" => Ok(Spec::from(shape::extend(decode_spec(&arr[1])?, spec))),
+                            "Rest" => Ok(Spec::from(shape::Rest(decode_spec(&arr[1])?, spec))),
+                            "Child" => Ok(Spec::from(shape::Child(decode_spec(&arr[1])?, spec))),
+                            "Partial" => Ok(Spec::from(shape::Partial(decode_spec(&arr[1])?))),
+                            "Extend" => Ok(Spec::from(shape::Extend(decode_spec(&arr[1])?, spec))),
                             other => Err(Unsupported(format!("$call {}", other))),
                         };
                     }
@@ -120,7 +120,7 @@ pub fn decode_spec(v: &serde_json::Value) -> Result<Spec, Unsupported> {
                         for (t, b) in arr[1].as_object().unwrap() {
                             branches.push((t.clone(), decode_spec(b)?));
                         }
-                        return Ok(Spec::from(shape::discriminated(tag, branches)));
+                        return Ok(Spec::from(shape::Discriminated(tag, branches)));
                     }
                     "$jsonschema" => {
                         return Ok(shape::from_json_schema(&Value::from(sv.clone()))

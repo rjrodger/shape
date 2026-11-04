@@ -11,3 +11,4 @@ These are not user documentation—for that, start at the
 | - | -------- | ------ |
 | [0001](0001-validation-is-synchronous.md) | Validation is synchronous, in both languages | Accepted |
 | [0002](0002-nof-replaces-one-and-some.md) | `Nof` replaces `One` and `Some` | Accepted |
+| [0003](0003-rust-builders-keep-their-canonical-names.md) | Rust builders keep their canonical names | Accepted |

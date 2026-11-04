@@ -303,7 +303,7 @@ pub(crate) fn compile_regexp(src: &str) -> Result<Regex, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{check_re, expr, from_json_schema, Schema, Spec, Value};
+    use crate::{expr, from_json_schema, CheckRe, Schema, Spec, Value};
 
     const REJECTS: &[(&str, &str)] = &[
         (
@@ -441,7 +441,7 @@ mod tests {
             if let Ok(re) = Regex::new(pattern) {
                 let s = Schema::new(Spec::from(re.clone()));
                 assert_eq!(s.validate(Value::from("a")).unwrap_err().to_string(), want);
-                let c = Schema::new(check_re(re, crate::any()));
+                let c = Schema::new(CheckRe(re, crate::Any()));
                 assert_eq!(c.validate(Value::from("a")).unwrap_err().to_string(), want);
             }
         }
@@ -473,9 +473,9 @@ mod tests {
             assert_eq!(s.valid(&v), *ok, "{} on {:?}", pattern, input);
             let s2 = Schema::new(Spec::from(Regex::new(pattern).unwrap()));
             assert_eq!(s2.valid(&v), *ok, "spec {} on {:?}", pattern, input);
-            let s3 = Schema::new(check_re(Regex::new(pattern).unwrap(), crate::any()));
+            let s3 = Schema::new(CheckRe(Regex::new(pattern).unwrap(), crate::Any()));
             assert_eq!(s3.valid(&v), *ok, "check {} on {:?}", pattern, input);
-            let s4 = Schema::new(crate::any().check_re(Regex::new(pattern).unwrap()));
+            let s4 = Schema::new(crate::Any().CheckRe(Regex::new(pattern).unwrap()));
             assert_eq!(
                 s4.valid(&v),
                 *ok,

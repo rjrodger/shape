@@ -181,17 +181,17 @@ mod tests {
             "null"
         );
         assert_eq!(stringify_node(&buildize(f64::NAN), false), "NaN");
-        assert_eq!(stringify_node(&any(), false), "Any");
-        assert_eq!(stringify_node(&min(2, any()), false), "Min(2)");
+        assert_eq!(stringify_node(&Any(), false), "Any");
+        assert_eq!(stringify_node(&Min(2, Any()), false), "Min(2)");
         assert_eq!(
-            stringify_node(&min(2, Token::Number), false),
+            stringify_node(&Min(2, Token::Number), false),
             "Number.Min(2)"
         );
-        let mut anyd = any();
+        let mut anyd = Any();
         anyd.has_default = true;
         anyd.default = Value::from(3);
         assert_eq!(stringify_node(&anyd, false), "Any(3)");
-        assert_eq!(stringify_node(&never(1), false), "Never");
+        assert_eq!(stringify_node(&Never(1), false), "Never");
         assert_eq!(
             stringify_node(&buildize(Regex::new("^a").unwrap()), false),
             "/^a/"
@@ -200,7 +200,7 @@ mod tests {
         re.kind = Kind::Regexp;
         assert_eq!(stringify_node(&re, false), "Regexp");
         assert_eq!(
-            stringify_node(&check(|_, _| true, any()), false),
+            stringify_node(&Check(|_, _| true, Any()), false),
             "Check.Check()"
         );
         assert_eq!(
@@ -208,11 +208,11 @@ mod tests {
             "Function"
         );
         assert_eq!(
-            stringify_node(&nof(1, [Spec::from(Token::Number), Spec::from("a")]), false),
+            stringify_node(&Nof(1, [Spec::from(Token::Number), Spec::from("a")]), false),
             "Nof(1,Number,a)"
         );
         assert_eq!(
-            stringify_node(&all([Spec::from(Token::Number)]), false),
+            stringify_node(&All([Spec::from(Token::Number)]), false),
             "All(Number)"
         );
         assert_eq!(stringify_node(&buildize(Token::Array), false), "[]");
@@ -224,7 +224,7 @@ mod tests {
             "[1, String]"
         );
         assert_eq!(
-            stringify_node(&rest(Token::Number, arr::<Spec>([])), false),
+            stringify_node(&Rest(Token::Number, arr::<Spec>([])), false),
             "[...Number]"
         );
         assert_eq!(
@@ -239,7 +239,7 @@ mod tests {
         );
         assert_eq!(stringify_node(&buildize(Token::Object), false), "{}.Open()");
         assert_eq!(
-            stringify_node(&child(Token::Number, Token::Object), false),
+            stringify_node(&Child(Token::Number, Token::Object), false),
             "{}.Child(Number)"
         );
         assert_eq!(inline_value(&Value::Undefined), "undefined");

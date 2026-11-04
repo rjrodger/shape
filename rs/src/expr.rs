@@ -178,8 +178,8 @@ fn is_builder(name: &str) -> bool {
 /// is `Type(String, Min(2))`. Bare, it is `Type(tok)` as well, so that a
 /// bare `Object` is closed, as `Type(Object)` is.
 fn type_node(tok: Token, args: Vec<Spec>) -> Node {
-    let spec = args.into_iter().next().unwrap_or_else(|| Spec::from(any()));
-    type_(tok, spec)
+    let spec = args.into_iter().next().unwrap_or_else(|| Spec::from(Any()));
+    Type(tok, spec)
 }
 
 /// A `/re/` token: held to the shared subset here, so that a pattern
@@ -280,7 +280,7 @@ impl<'s> Parser<'s> {
             return Ok(regexp_node_src(&re?));
         }
         if let Some(lit) = json_literal(&head) {
-            return Ok(default_of(lit));
+            return Ok(DefaultOf(lit));
         }
         self.unexpected(&head)
     }
@@ -299,7 +299,7 @@ impl<'s> Parser<'s> {
         if head == "Exact" {
             if let Spec::Node(n) = carrier {
                 let args = self.parse_args()?;
-                return Ok(n.exact(exact_vals(args)?));
+                return Ok(n.Exact(exact_vals(args)?));
             }
         }
         if is_builder(&head) {
@@ -312,7 +312,7 @@ impl<'s> Parser<'s> {
         // `.Array` is `Type(Array)` applied to the current node.
         if let Some(tok) = type_token(&head) {
             self.parse_args()?;
-            return Ok(type_(tok, carrier));
+            return Ok(Type(tok, carrier));
         }
         self.unexpected(&head)
     }
@@ -430,28 +430,28 @@ fn exact_vals(args: Vec<Spec>) -> Result<Vec<Value>, ExprError> {
 }
 
 fn build_call(name: &str, mut args: Vec<Spec>) -> Result<Node, ExprError> {
-    let any_spec = || Spec::from(any());
+    let any_spec = || Spec::from(Any());
     let unary =
-        |args: &mut Vec<Spec>, f: fn(Spec) -> Node| Ok(f(shape_at(args, 0, Spec::from(any()))));
+        |args: &mut Vec<Spec>, f: fn(Spec) -> Node| Ok(f(shape_at(args, 0, Spec::from(Any()))));
     match name {
-        "Required" => unary(&mut args, required),
-        "Optional" => unary(&mut args, optional),
-        "Open" => Ok(open(shape_at(&mut args, 0, Spec::Obj(Vec::new())))),
-        "Closed" => unary(&mut args, closed),
-        "Skip" => unary(&mut args, skip),
-        "Ignore" => unary(&mut args, ignore),
-        "Empty" => unary(&mut args, empty),
-        "Never" => unary(&mut args, never),
-        "Func" => unary(&mut args, func),
-        "Nullable" => unary(&mut args, nullable),
-        "Coerce" => unary(&mut args, coerce),
-        "Email" => unary(&mut args, email),
-        "Url" => unary(&mut args, url),
-        "Uuid" => unary(&mut args, uuid),
-        "DateTime" => unary(&mut args, date_time),
-        "Ip" => unary(&mut args, ip),
-        "Ipv4" => unary(&mut args, ipv4),
-        "Ipv6" => unary(&mut args, ipv6),
+        "Required" => unary(&mut args, Required),
+        "Optional" => unary(&mut args, Optional),
+        "Open" => Ok(Open(shape_at(&mut args, 0, Spec::Obj(Vec::new())))),
+        "Closed" => unary(&mut args, Closed),
+        "Skip" => unary(&mut args, Skip),
+        "Ignore" => unary(&mut args, Ignore),
+        "Empty" => unary(&mut args, Empty),
+        "Never" => unary(&mut args, Never),
+        "Func" => unary(&mut args, Func),
+        "Nullable" => unary(&mut args, Nullable),
+        "Coerce" => unary(&mut args, Coerce),
+        "Email" => unary(&mut args, Email),
+        "Url" => unary(&mut args, Url),
+        "Uuid" => unary(&mut args, Uuid),
+        "DateTime" => unary(&mut args, DateTime),
+        "Ip" => unary(&mut args, Ip),
+        "Ipv4" => unary(&mut args, Ipv4),
+        "Ipv6" => unary(&mut args, Ipv6),
         "Default" => {
             if args.is_empty() {
                 return err("Default: missing default value".to_string());
@@ -460,9 +460,9 @@ fn build_call(name: &str, mut args: Vec<Spec>) -> Result<Node, ExprError> {
                 return err("Default: default value must be a value".to_string());
             };
             if args.len() == 1 {
-                return Ok(default_of(dval));
+                return Ok(DefaultOf(dval));
             }
-            Ok(default(dval, shape_at(&mut args, 1, any_spec())))
+            Ok(Default(dval, shape_at(&mut args, 1, any_spec())))
         }
         "Catch" => {
             if args.is_empty() {
@@ -471,15 +471,15 @@ fn build_call(name: &str, mut args: Vec<Spec>) -> Result<Node, ExprError> {
             let Some(fb) = value_at(&args, 0) else {
                 return err("Catch: fallback value must be a value".to_string());
             };
-            Ok(catch(fb, shape_at(&mut args, 1, any_spec())))
+            Ok(Catch(fb, shape_at(&mut args, 1, any_spec())))
         }
         "Describe" => {
             let msg = string_at("Describe", "description", &args, 0)?;
-            Ok(describe(msg, shape_at(&mut args, 1, any_spec())))
+            Ok(Describe(msg, shape_at(&mut args, 1, any_spec())))
         }
         "Fault" => {
             let msg = string_at("Fault", "message", &args, 0)?;
-            Ok(fault(msg, shape_at(&mut args, 1, any_spec())))
+            Ok(Fault(msg, shape_at(&mut args, 1, any_spec())))
         }
         "Type" => {
             if args.is_empty() {
@@ -488,14 +488,14 @@ fn build_call(name: &str, mut args: Vec<Spec>) -> Result<Node, ExprError> {
             let kind = args.remove(0);
             let spec = shape_at(&mut args, 0, any_spec());
             Ok(match kind {
-                Spec::Node(n) => type_(*n, spec),
-                Spec::Token(t) => type_(t, spec),
-                Spec::Value(Value::Str(name)) => type_(name.as_str(), spec),
+                Spec::Node(n) => Type(*n, spec),
+                Spec::Token(t) => Type(t, spec),
+                Spec::Value(Value::Str(name)) => Type(name.as_str(), spec),
                 // Not a kind at all: the node stands as it is.
                 _ => normalize(spec),
             })
         }
-        "Exact" => Ok(exact(exact_vals(args)?)),
+        "Exact" => Ok(Exact(exact_vals(args)?)),
         "Discriminated" => {
             if args.len() < 2 {
                 return err("Discriminated: missing tag or branches".to_string());
@@ -504,7 +504,7 @@ fn build_call(name: &str, mut args: Vec<Spec>) -> Result<Node, ExprError> {
             let Spec::Obj(branches) = args.remove(1) else {
                 return err("Discriminated: branches must be an object".to_string());
             };
-            Ok(crate::discriminated::discriminated(tag, branches))
+            Ok(crate::discriminated::Discriminated(tag, branches))
         }
         "Min" | "Max" | "Above" | "Below" => {
             if args.is_empty() {
@@ -515,10 +515,10 @@ fn build_call(name: &str, mut args: Vec<Spec>) -> Result<Node, ExprError> {
             let bound = value_at(&args, 0).unwrap_or(Value::Undefined);
             let spec = shape_at(&mut args, 1, any_spec());
             Ok(match name {
-                "Min" => min(bound, spec),
-                "Max" => max(bound, spec),
-                "Above" => above(bound, spec),
-                _ => below(bound, spec),
+                "Min" => Min(bound, spec),
+                "Max" => Max(bound, spec),
+                "Above" => Above(bound, spec),
+                _ => Below(bound, spec),
             })
         }
         "Len" => {
@@ -531,7 +531,7 @@ fn build_call(name: &str, mut args: Vec<Spec>) -> Result<Node, ExprError> {
             if f != f.trunc() {
                 return err("Shape: Len needs a whole number of zero or more".to_string());
             }
-            Ok(len(f, shape_at(&mut args, 1, any_spec())))
+            Ok(Len(f, shape_at(&mut args, 1, any_spec())))
         }
         "Check" => {
             if args.is_empty() {
@@ -545,13 +545,13 @@ fn build_call(name: &str, mut args: Vec<Spec>) -> Result<Node, ExprError> {
                 _ => normalize(spec),
             })
         }
-        "All" => Ok(all(args)),
+        "All" => Ok(All(args)),
         "Nof" => {
             if args.is_empty() {
                 return err(crate::builders::NOF_FAULT.to_string());
             }
             let count = args.remove(0);
-            Ok(nof(count, args))
+            Ok(Nof(count, args))
         }
         "Child" => {
             if args.is_empty() {
@@ -562,12 +562,12 @@ fn build_call(name: &str, mut args: Vec<Spec>) -> Result<Node, ExprError> {
             let spec = shape_at(
                 &mut args,
                 0,
-                Spec::from(default(
+                Spec::from(Default(
                     Value::Obj(Default::default()),
                     Spec::Obj(Vec::new()),
                 )),
             );
-            Ok(child(c, spec))
+            Ok(Child(c, spec))
         }
         "Rest" => {
             if args.is_empty() {
@@ -575,19 +575,19 @@ fn build_call(name: &str, mut args: Vec<Spec>) -> Result<Node, ExprError> {
             }
             let c = args.remove(0);
             let spec = shape_at(&mut args, 0, Spec::Arr(Vec::new()));
-            Ok(rest(c, spec))
+            Ok(Rest(c, spec))
         }
         "Define" => {
             let n = string_at("Define", "name", &args, 0)?;
-            Ok(define(n, shape_at(&mut args, 1, any_spec())))
+            Ok(Define(n, shape_at(&mut args, 1, any_spec())))
         }
         "Refer" => {
             let n = string_at("Refer", "name", &args, 0)?;
-            Ok(refer(n, shape_at(&mut args, 1, any_spec())))
+            Ok(Refer(n, shape_at(&mut args, 1, any_spec())))
         }
         "Rename" => {
             let n = string_at("Rename", "name", &args, 0)?;
-            Ok(rename(n, shape_at(&mut args, 1, any_spec())))
+            Ok(Rename(n, shape_at(&mut args, 1, any_spec())))
         }
         "Key" => {
             let vals: Vec<Value> = args
@@ -597,7 +597,7 @@ fn build_call(name: &str, mut args: Vec<Spec>) -> Result<Node, ExprError> {
                     _ => None,
                 })
                 .collect();
-            Ok(key_args(&vals))
+            Ok(KeyArgs(&vals))
         }
         "Pick" | "Omit" => {
             if args.is_empty() {

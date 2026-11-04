@@ -161,7 +161,7 @@ pub struct Node {
     pub kind: Kind,
     pub required: bool,
     pub required_set: bool,
-    /// The kind was named by the spec (a type token, `type_`), as against
+    /// The kind was named by the spec (a type token, `Type`), as against
     /// implied by a value: a key expression's example keeps the named kind
     /// and supplies the default alone.
     pub kind_set: bool,
@@ -212,7 +212,7 @@ pub struct Node {
     /// A `Fault` message overriding the structural text.
     pub fault_msg: Option<String>,
     /// Made by a builder given a wrong argument, as against a deliberate
-    /// `fault`: the string form refuses such a node.
+    /// `Fault`: the string form refuses such a node.
     pub arg_fault: bool,
 
     pub list_mode: ListMode,

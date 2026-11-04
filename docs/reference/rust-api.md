@@ -10,9 +10,9 @@ behaviour of each builder is in the [builder reference](builders.md).
 ## Compilation
 
 ```rust
-use shape::{shape, Options, Schema, Spec, Token};
+use shape::{Options, Schema, Shape, Spec, Token};
 
-let s: Schema = shape(spec); // any `impl Into<Spec>`
+let s: Schema = Shape(spec); // any `impl Into<Spec>`
 let s = Schema::new(spec); // the same
 let s = Schema::with_options(spec, &Options::default());
 let s = Schema::parse("String.Min(2)")?; // the string form; Err(ExprError)
@@ -28,20 +28,20 @@ A `Spec` is what a schema is compiled from:
 | an object | `obj([("a", Spec::from(1))])`, `shape!({ "a": 1 })` | a closed object of those properties |
 | an array | `arr([Spec::from(Token::String)])`, `shape!([String])` | an array of that element shape; two or more elements are a tuple |
 | a regexp | `Regex::new("^a")?` | a required string matching it |
-| a node | `min(2, Token::Number)` | a builder's result |
+| a node | `Min(2, Token::Number)` | a builder's result |
 
 `shape!` writes a spec as the example it is, in the `serde_json::json!` style:
 objects in braces, arrays in brackets, the type tokens bare, and any other
 Rust expression a spec can be made from:
 
 ```rust
-use shape::{min, shape, Schema, Token};
+use shape::{shape, Min, Schema, Token};
 
 let s = Schema::new(shape!({
     "name": String,
     "port": 8080,
     "tags": [String],
-    "age": min(0, Token::Integer),
+    "age": Min(0, Token::Integer),
     "addr": { "zip": String },
 }));
 ```
@@ -59,7 +59,7 @@ let s = Schema::new(shape!({
 | `json_schema()` | `Value` | the JSON Schema export (draft 2020-12) |
 | `standard()` | `StandardSchema` | the Standard Schema V1 surface: `version` 1, `vendor` `"shape"`, and `validate(Value)`, a `StandardResult` of the value or the issues, never failing |
 | `node()` | `&Node` | the compiled tree |
-| `defs()` | `&HashMap<String, Arc<Node>>` | the `define`d nodes |
+| `defs()` | `&HashMap<String, Arc<Node>>` | the `Define`d nodes |
 
 `validate` takes its input by value and produces in place. `Value::Undefined`
 is no value at all, as a bare `shape()` call is in TypeScript. The `Node` of
@@ -96,42 +96,53 @@ default it injects once made optional. `Token::Object` accepts any keys;
 
 ## Builders
 
+Builders keep the names they have in TypeScript and Go, upper case, and so
+do their chain methods: `Min(2, Token::Number)`,
+`buildize(Token::String).Min(3)`. The crate allows Rust's `non_snake_case`
+lint for them, and calling them raises no warning in your code. Where Rust
+needs a second function for what TypeScript does with one, the second is
+named the same way: `DefaultOf`, `CheckRe`, `ReferWith`, `RenameWith`,
+`KeyDepth`, `KeyJoin` and `KeyArgs`. The rest of the API (`Schema::new`,
+`validate`, `expr`, `build`, `buildize`, `obj`, `arr`) is snake case, as its
+TypeScript counterparts are lower case.
+
 Every builder is a free function taking the spec it applies to as its last
 argument, and a chain method on `Node`. `buildize(spec)` is the node a spec
-compiles to, where a chain starts; pass `any()` for the bare form.
+compiles to, where a chain starts; pass `Any()` for the bare form.
 
 | Builder | Chain |
 | ------- | ----- |
-| `required(spec)`, `optional(spec)`, `default(value, spec)`, `default_of(value)` | `.required()`, `.optional()`, `.default_to(value)` |
-| `skip(spec)`, `ignore(spec)`, `empty(spec)`, `nullable(spec)`, `fault(msg, spec)`, `never(spec)` | `.skip()`, `.ignore()`, `.empty()`, `.nullable()`, `.fault(msg)`, `.never()` |
-| `open(spec)`, `closed(spec)`, `child(child, spec)`, `rest(child, spec)` | `.open()`, `.closed()`, `.child(c)`, `.rest(c)` |
-| `type_(kind, spec)`, `func(spec)` | `.type_(kind)`, `.string()`, `.number()`, `.boolean()`, `.object()`, `.array()`, `.function()`, `.integer()`, `.date()`, `.any()`, `.func()` |
-| `exact(values)` | `.exact(values)` |
-| `min(bound, spec)`, `max(..)`, `above(..)`, `below(..)`, `len(length, spec)` | `.min(b)`, `.max(b)`, `.above(b)`, `.below(b)`, `.len(n)` |
-| `check(f, spec)`, `check_re(regex, spec)`, `before(f, spec)`, `after(f, spec)` | `.check(f)`, `.check_re(re)`, `.before(f)`, `.after(f)` |
-| `all(shapes)`, `nof(count, shapes)` (the count a whole number, or a spec for it), `discriminated(tag, branches)` (the branches `(name, spec)` pairs) | n/a |
-| `define(name, spec)`, `refer(name, spec)`, `refer_with(name, ReferOptions, spec)` | `.define(name)`, `.refer(name)`, `.refer_with(name, opts)` |
-| `rename(name, spec)`, `rename_with(name, RenameOptions, spec)` | `.rename(name)`, `.rename_with(name, opts)` |
-| `key()`, `key_depth(depth)`, `key_join(depth, sep)`, `key_args(&[Value])` | n/a |
-| `catch(fallback, spec)`, `transform(f, spec)`, `describe(text, spec)` | `.catch(v)`, `.transform(f)`, `.describe(text)` |
-| `coerce(spec)`, `email(spec)`, `url(spec)`, `uuid(spec)`, `date_time(spec)`, `ip(spec)`, `ipv4(spec)`, `ipv6(spec)` | `.coerce()`, `.email()`, `.url()`, `.uuid()`, `.date_time()`, `.ip()`, `.ipv4()`, `.ipv6()` |
-| `pick(names, spec)`, `omit(names, spec)`, `partial(spec)`, `extend(extra, spec)` | `.pick(names)`, `.omit(names)`, `.partial()`, `.extend(extra)` |
+| `Required(spec)`, `Optional(spec)`, `Default(value, spec)`, `DefaultOf(value)` | `.Required()`, `.Optional()`, `.Default(value)` |
+| `Skip(spec)`, `Ignore(spec)`, `Empty(spec)`, `Nullable(spec)`, `Fault(msg, spec)`, `Never(spec)` | `.Skip()`, `.Ignore()`, `.Empty()`, `.Nullable()`, `.Fault(msg)`, `.Never()` |
+| `Open(spec)`, `Closed(spec)`, `Child(child, spec)`, `Rest(child, spec)` | `.Open()`, `.Closed()`, `.Child(c)`, `.Rest(c)` |
+| `Type(kind, spec)`, `Func(spec)` | `.Type(kind)`, `.String()`, `.Number()`, `.Boolean()`, `.Object()`, `.Array()`, `.Function()`, `.Integer()`, `.Date()`, `.Any()`, `.Func()` |
+| `Exact(values)` | `.Exact(values)` |
+| `Min(bound, spec)`, `Max(..)`, `Above(..)`, `Below(..)`, `Len(length, spec)` | `.Min(b)`, `.Max(b)`, `.Above(b)`, `.Below(b)`, `.Len(n)` |
+| `Check(f, spec)`, `CheckRe(regex, spec)`, `Before(f, spec)`, `After(f, spec)` | `.Check(f)`, `.CheckRe(re)`, `.Before(f)`, `.After(f)` |
+| `All(shapes)`, `Nof(count, shapes)` (the count a whole number, or a spec for it), `Discriminated(tag, branches)` (the branches `(name, spec)` pairs) | n/a |
+| `Define(name, spec)`, `Refer(name, spec)`, `ReferWith(name, ReferOptions, spec)` | `.Define(name)`, `.Refer(name)`, `.ReferWith(name, opts)` |
+| `Rename(name, spec)`, `RenameWith(name, RenameOptions, spec)` | `.Rename(name)`, `.RenameWith(name, opts)` |
+| `Key()`, `KeyDepth(depth)`, `KeyJoin(depth, sep)`, `KeyArgs(&[Value])` | n/a |
+| `Catch(fallback, spec)`, `Transform(f, spec)`, `Describe(text, spec)` | `.Catch(v)`, `.Transform(f)`, `.Describe(text)` |
+| `Coerce(spec)`, `Email(spec)`, `Url(spec)`, `Uuid(spec)`, `DateTime(spec)`, `Ip(spec)`, `Ipv4(spec)`, `Ipv6(spec)` | `.Coerce()`, `.Email()`, `.Url()`, `.Uuid()`, `.DateTime()`, `.Ip()`, `.Ipv4()`, `.Ipv6()` |
+| `Pick(names, spec)`, `Omit(names, spec)`, `Partial(spec)`, `Extend(extra, spec)` | `.Pick(names)`, `.Omit(names)`, `.Partial()`, `.Extend(extra)` |
 
-The chain method for `Default` is `default_to`, to leave `Default::default`
-alone; the one for `Type` is `type_`, since `type` is a keyword. Builders
-consume the node they are given and return it, so a compiled `Schema` is
-immutable and `Send + Sync`; a base to reshape twice is cloned first.
+The chain method `.Default(value)` leaves `Default::default` alone, since
+Rust names are case-sensitive, and `Type` needs no escape, not being a
+keyword. Builders consume the node they are given and return it, so a
+compiled `Schema` is immutable and `Send + Sync`; a base to reshape twice is
+cloned first.
 
-The argument types: `pick` and `omit` take a `Names`, made from a `&str`, a
-`String`, a `Vec` or an array of them; `type_` takes a `TypeRef`, made from
-a `Kind`, a `Token`, a kind's name or a `Node`; `check_re` takes a
-`regex::Regex`; `exact` any iterator of values. `ReferOptions` has `fill`
+The argument types: `Pick` and `Omit` take a `Names`, made from a `&str`, a
+`String`, a `Vec` or an array of them; `Type` takes a `TypeRef`, made from
+a `Kind`, a `Token`, a kind's name or a `Node`; `CheckRe` takes a
+`regex::Regex`; `Exact` any iterator of values. `ReferOptions` has `fill`
 (substitute even when the value is absent) and `strict` (a name with no
-`define` is an error); `RenameOptions` has `keep` (keep the original key
+`Define` is an error); `RenameOptions` has `keep` (keep the original key
 too) and `claim` (other keys to read from when the renamed one is missing).
 
-A builder called with a wrong argument (`min("x", ..)`, `len(-1, ..)`,
-`define("", ..)`, `pick("z", ..)`) cannot fail as TypeScript's throwing
+A builder called with a wrong argument (`Min("x", ..)`, `Len(-1, ..)`,
+`Define("", ..)`, `Pick("z", ..)`) cannot fail as TypeScript's throwing
 builders do; it returns a fault node that accepts nothing and reports the
 message at validation. The string form refuses it instead: `expr` and
 `Schema::parse` return an `ExprError` for a wrong argument (`Shape: Min
@@ -140,7 +151,7 @@ in TypeScript.
 
 ## Custom validators
 
-`check`, `before` and `after` take `Fn(&mut State, &mut Update) -> bool`,
+`Check`, `Before` and `After` take `Fn(&mut State, &mut Update) -> bool`,
 `Send + Sync + 'static` (the `ValidatorFn` type). The `State` is the
 `value`, the `node`, the path (`path_arr`, a slice of `PathPart`;
 `path_str()` dotted; `path_keys()` as strings), the `key`,
@@ -150,11 +161,11 @@ in TypeScript.
 `UpdateErr`: a text with `$PATH` and `$VALUE`, a `FieldError`, or several),
 `why` and `mark`, a replacement `val`, a replacement `node`, `done` to stop
 the node's other checks, and `fatal` to end the walk's errors there.
-`transform` takes `Fn(Value, &mut State) -> Value` (the `TransformFn`
+`Transform` takes `Fn(Value, &mut State) -> Value` (the `TransformFn`
 type).
 
 The `Context` carries `custom`, a typed map of the caller's own state
-(`get::<T>`, `set`), `refs`, the `define`d shapes met on the call, and
+(`get::<T>`, `set`), `refs`, the `Define`d shapes met on the call, and
 `err`, every error raised.
 
 ## Options
@@ -194,21 +205,21 @@ is the `$schema` URL written.
 ## Positional arguments (`Argu`)
 
 ```rust
-use shape::{skip, Spec, Token, Value};
+use shape::{Skip, Spec, Token, Value};
 
 let argu = shape::Argu::new("mylib");
 let sig = argu.signature(
     "foo",
     [
         ("a", Spec::from(Token::Number)),
-        ("b", Spec::from(skip(Token::String))),
+        ("b", Spec::from(Skip(Token::String))),
     ],
 )?;
 let named: shape::Map = sig.apply(vec![Value::from(2)])?; // {"a": 2, "b": Undefined}
 ```
 
 `argu.validate(args, whence, spec)` compiles and applies in one call. A
-`skip` slot is optional and shifts the ones after it; a `rest` slot
+`Skip` slot is optional and shifts the ones after it; a `Rest` slot
 captures whatever remains; too many arguments, or one that does not match,
 is an `ArguError` with the canonical text
 (`mylib (foo): Too many arguments for type signature (was 3, expected 2)`).

@@ -193,8 +193,8 @@ divergences listed earlier do not apply to it:
 
 Its own divergences, each deliberate:
 
-- **Construction faults.** A builder called wrongly (`min("x", ..)`,
-  `define("", ..)`, `pick("z", ..)`) cannot throw, as in Go, and returns a
+- **Construction faults.** A builder called wrongly (`Min("x", ..)`,
+  `Define("", ..)`, `Pick("z", ..)`) cannot throw, as in Go, and returns a
   node that accepts nothing and reports the message at validation. In the
   string form (`Schema::parse`, key expressions) the fault is an error at
   parse time, as `expr` throws in TypeScript.

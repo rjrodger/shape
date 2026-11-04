@@ -97,10 +97,10 @@ fn scalars() {
     );
     round_trip(
         obj([
-            ("a", optional(Token::String)),
-            ("b", skip(Token::Number)),
-            ("c", optional(Token::Integer)),
-            ("d", required(5)),
+            ("a", Optional(Token::String)),
+            ("b", Skip(Token::Number)),
+            ("c", Optional(Token::Integer)),
+            ("d", Required(5)),
         ]),
         r#"{"a: String.Optional":"","b: Skip":0,"c: Integer.Optional":0,"d: Required":5}"#,
         &[
@@ -112,21 +112,21 @@ fn scalars() {
     );
     round_trip(
         obj([
-            ("a", empty(Token::String)),
-            ("b", nullable(Token::String)),
-            ("c", empty("x")),
-            ("d", nullable(5)),
+            ("a", Empty(Token::String)),
+            ("b", Nullable(Token::String)),
+            ("c", Empty("x")),
+            ("d", Nullable(5)),
         ]),
         r#"{"a: String.Empty":"","b: String.Nullable":"","c: Empty":"x","d: Nullable":5}"#,
         &[v(r#"{"a":"","b":null,"c":"","d":null}"#), v("{}")],
     );
     round_trip(
         obj([
-            ("a", min(2, Token::String)),
-            ("b", max(3, optional(Token::Number))),
-            ("c", above(1.5, Token::Number)),
-            ("d", below(-2, any())),
-            ("e", len(3, "abc")),
+            ("a", Min(2, Token::String)),
+            ("b", Max(3, Optional(Token::Number))),
+            ("c", Above(1.5, Token::Number)),
+            ("d", Below(-2, Any())),
+            ("e", Len(3, "abc")),
         ]),
         r#"{"a: String.Min(2)":"","b: Max(3)":0,"c: Number.Above(1.5)":0,"d":"Any.Below(-2)","e: Len(3)":"abc"}"#,
         &[
@@ -139,10 +139,10 @@ fn scalars() {
     );
     round_trip(
         obj([
-            ("a", email(any())),
-            ("b", coerce(Token::Number)),
-            ("c", describe("desc", Token::Number)),
-            ("d", fault("bad", Token::String)),
+            ("a", Email(Any())),
+            ("b", Coerce(Token::Number)),
+            ("c", Describe("desc", Token::Number)),
+            ("d", Fault("bad", Token::String)),
         ]),
         r#"{"a: String.Email":"","b: Number.Coerce":0,"c: Number.Describe(\"desc\")":0,"d: String.Fault(\"bad\")":""}"#,
         &[
@@ -153,12 +153,12 @@ fn scalars() {
     );
     // Order is kept: Coerce goes ahead of the bound it converts for.
     round_trip(
-        obj([("a", min(2, Token::Number).coerce())]),
+        obj([("a", Min(2, Token::Number).Coerce())]),
         r#"{"a: Number.Coerce.Min(2)":0}"#,
         &[v(r#"{"a":"3"}"#), v(r#"{"a":"1"}"#)],
     );
     round_trip(
-        obj([("a", min(1, max(3, Token::Number)))]),
+        obj([("a", Min(1, Max(3, Token::Number)))]),
         r#"{"a: Number.Max(3).Min(1)":0}"#,
         &[v(r#"{"a":2}"#), v(r#"{"a":4}"#)],
     );
@@ -166,24 +166,24 @@ fn scalars() {
 
 #[test]
 fn value_form() {
-    round_trip(arr([skip(0)]), r#"["Skip(0)"]"#, &[v("[1]"), v(r#"["x"]"#)]);
+    round_trip(arr([Skip(0)]), r#"["Skip(0)"]"#, &[v("[1]"), v(r#"["x"]"#)]);
     round_trip(
-        arr([min(2, 0)]),
+        arr([Min(2, 0)]),
         r#"["Optional(0).Min(2)"]"#,
         &[v("[3]"), v("[1]")],
     );
     round_trip(
-        arr([required(5)]),
+        arr([Required(5)]),
         r#"["Required(5)"]"#,
         &[v("[5]"), v("[]")],
     );
     round_trip(
-        arr([optional(Token::String)]),
+        arr([Optional(Token::String)]),
         r#"["String.Optional"]"#,
         &[v(r#"[""]"#), v("[1]")],
     );
     round_trip(
-        arr([optional(Token::Integer)]),
+        arr([Optional(Token::Integer)]),
         r#"["Integer.Optional"]"#,
         &[v("[1]"), v("[1.5]")],
     );
@@ -198,12 +198,12 @@ fn value_form() {
         &[v(r#"[""]"#), v("[1]")],
     );
     round_trip(
-        arr([empty("x")]),
+        arr([Empty("x")]),
         r#"["Optional(\"x\").Empty"]"#,
         &[v(r#"[""]"#), v("[1]")],
     );
     round_trip(
-        arr([exact([
+        arr([Exact([
             Value::from(1),
             Value::from("a"),
             Value::Null,
@@ -213,7 +213,7 @@ fn value_form() {
         &[v(r#"["a"]"#), v("[2]")],
     );
     round_trip(
-        obj([("a", optional(7).exact([2]))]),
+        obj([("a", Optional(7).Exact([2]))]),
         r#"{"a":"Optional(7).Exact(2)"}"#,
         &[v("{}"), v(r#"{"a":2}"#), v(r#"{"a":3}"#)],
     );
@@ -225,8 +225,8 @@ fn objects() {
         obj([
             ("a", obj([("b", Token::String)])),
             ("c", obj::<&str, Spec>([])),
-            ("d", Spec::from(closed(obj::<&str, Spec>([])))),
-            ("e", Spec::from(open(obj([("b", 1)])))),
+            ("d", Spec::from(Closed(obj::<&str, Spec>([])))),
+            ("e", Spec::from(Open(obj([("b", 1)])))),
         ]),
         r#"{"a":{"b: String":""},"c":{},"d: Closed":{},"e: Open":{"b":1}}"#,
         &[
@@ -237,10 +237,10 @@ fn objects() {
     );
     round_trip(
         obj([
-            ("a", child(Token::Number, any())),
-            ("b", child(Token::String, obj([("c", 1)]))),
-            ("d", required(obj([("e", 1)]))),
-            ("f", skip(obj([("g", 1)]))),
+            ("a", Child(Token::Number, Any())),
+            ("b", Child(Token::String, obj([("c", 1)]))),
+            ("d", Required(obj([("e", 1)]))),
+            ("f", Skip(obj([("g", 1)]))),
         ]),
         r#"{"a: Child(Number)":{},"b: Child(String)":{"c":1},"d: Required":{"e":1},"f: Skip":{"g":1}}"#,
         &[
@@ -252,31 +252,31 @@ fn objects() {
     );
     round_trip(
         obj([
-            ("a", min(1, open(obj([("b", 1)])))),
-            ("c", nullable(obj([("d", 1)]))),
+            ("a", Min(1, Open(obj([("b", 1)])))),
+            ("c", Nullable(obj([("d", 1)]))),
         ]),
         r#"{"a: Min(1).Open":{"b":1},"c: Nullable":{"d":1}}"#,
         &[v(r#"{"a":{},"c":null}"#), v(r#"{"a":{"b":2}}"#)],
     );
     // A child shape with no expression rides in a sidecar.
     round_trip(
-        child(obj([("x", Token::Number)]), any()),
+        Child(obj([("x", Token::Number)]), Any()),
         r#"{"$$":"Child($$0)","$$0":{"x: Number":0}}"#,
         &[v(r#"{"a":{"x":1}}"#), v(r#"{"a":{"x":"no"}}"#)],
     );
     round_trip(
-        obj([("a", child(obj([("x", Token::Number)]), obj([("b", 1)])))]),
+        obj([("a", Child(obj([("x", Token::Number)]), obj([("b", 1)])))]),
         r#"{"a":{"b":1,"$$":"Child($$0)","$$0":{"x: Number":0}}}"#,
         &[v(r#"{"a":{"c":{"x":1}}}"#)],
     );
     round_trip(
-        open(obj([("a", Token::String)])),
+        Open(obj([("a", Token::String)])),
         r#"{"a: String":"","$$":"Open"}"#,
         &[v(r#"{"a":"x","z":1}"#)],
     );
     round_trip(obj::<&str, Spec>([]), "{}", &[v(r#"{"z":1}"#)]);
     round_trip(
-        closed(obj::<&str, Spec>([])),
+        Closed(obj::<&str, Spec>([])),
         r#"{"$$":"Closed"}"#,
         &[v("{}"), v(r#"{"z":1}"#)],
     );
@@ -302,7 +302,7 @@ fn arrays() {
     );
     // A single position is closed, which [X] cannot say.
     round_trip(
-        obj([("a", closed(arr([Token::String])))]),
+        obj([("a", Closed(arr([Token::String])))]),
         r#"{"a":{"$$":"Closed($$0)","$$0":["String"]}}"#,
         &[v(r#"{"a":["x"]}"#), v(r#"{"a":["x","y"]}"#)],
     );
@@ -310,10 +310,10 @@ fn arrays() {
         obj([
             (
                 "a",
-                rest(Token::Number, arr([Token::String, Token::Number])),
+                Rest(Token::Number, arr([Token::String, Token::Number])),
             ),
-            ("b", rest(Token::Number, closed(arr([Token::String])))),
-            ("c", rest(Token::Number, arr::<Spec>([]))),
+            ("b", Rest(Token::Number, Closed(arr([Token::String])))),
+            ("c", Rest(Token::Number, arr::<Spec>([]))),
         ]),
         r#"{"a: Rest(Number)":["String","Number"],"b":{"$$":"Rest(Number,Closed($$0))","$$0":["String"]},"c: Rest(Number)":[]}"#,
         &[
@@ -325,10 +325,10 @@ fn arrays() {
     );
     round_trip(
         obj([
-            ("a", min(2, arr([Token::String]))),
-            ("b", required(arr([Token::Number]))),
-            ("c", skip(arr([Token::Number]))),
-            ("d", min(1, closed(arr([Token::String])))),
+            ("a", Min(2, arr([Token::String]))),
+            ("b", Required(arr([Token::Number]))),
+            ("c", Skip(arr([Token::Number]))),
+            ("d", Min(1, Closed(arr([Token::String])))),
         ]),
         r#"{"a: Min(2)":["String"],"b: Required":["Number"],"c: Skip":["Number"],"d":{"$$":"Min(1,Closed($$0))","$$0":["String"]}}"#,
         &[
@@ -341,12 +341,12 @@ fn arrays() {
     // A rest replaces a plain element shape, so nothing of the String is
     // left to write.
     round_trip(
-        obj([("a", rest(Token::Number, arr([Token::String])))]),
+        obj([("a", Rest(Token::Number, arr([Token::String])))]),
         r#"{"a: Rest(Number)":[]}"#,
         &[v(r#"{"a":[1,2]}"#), v(r#"{"a":["x"]}"#)],
     );
     round_trip(
-        rest(obj([("q", 1)]), arr::<Spec>([])),
+        Rest(obj([("q", 1)]), arr::<Spec>([])),
         r#"{"$$":"Rest($$1,$$0)","$$0":[],"$$1":{"q":1}}"#,
         &[v("[{}]"), v("[1]")],
     );
@@ -355,15 +355,15 @@ fn arrays() {
 #[test]
 fn lists() {
     round_trip(
-        obj([("a", nof(1, [Token::String, Token::Number]))]),
+        obj([("a", Nof(1, [Token::String, Token::Number]))]),
         r#"{"a":"Nof(1,String,Number)"}"#,
         &[v(r#"{"a":1}"#), v(r#"{"a":true}"#)],
     );
     round_trip(
         obj([(
             "a",
-            nof(
-                min(1, any()),
+            Nof(
+                Min(1, Any()),
                 [obj([("x", 1)]), Spec::Arr(vec![Spec::from(Token::String)])],
             ),
         )]),
@@ -371,34 +371,34 @@ fn lists() {
         &[v(r#"{"a":{"x":2}}"#), v(r#"{"a":["y"]}"#)],
     );
     round_trip(
-        obj([("a", nof(1, [obj([("x", 1)]), obj([("y", 2)])]))]),
+        obj([("a", Nof(1, [obj([("x", 1)]), obj([("y", 2)])]))]),
         r#"{"a":{"$$":"Nof(1,$$0,$$1)","$$0":{"x":1},"$$1":{"y":2}}}"#,
         &[v(r#"{"a":{"x":2}}"#), v(r#"{"a":1}"#)],
     );
     round_trip(
         obj([(
             "a",
-            all([Spec::from(Token::Number), Spec::from(min(1, any()))]),
+            All([Spec::from(Token::Number), Spec::from(Min(1, Any()))]),
         )]),
         r#"{"a":"All(Number,Any.Min(1))"}"#,
         &[v(r#"{"a":1}"#), v(r#"{"a":0}"#)],
     );
     round_trip(
         obj([
-            ("a", optional(nof(1, [Token::String, Token::Number]))),
-            ("b", skip(nof(1, [Token::String, Token::Number]))),
+            ("a", Optional(Nof(1, [Token::String, Token::Number]))),
+            ("b", Skip(Nof(1, [Token::String, Token::Number]))),
         ]),
         r#"{"a":"Nof(1,String,Number).Optional","b":"Nof(1,String,Number).Skip"}"#,
         &[v("{}"), v(r#"{"a":true}"#)],
     );
     round_trip(
         obj([
-            ("a", nof(1, [skip(0)])),
+            ("a", Nof(1, [Skip(0)])),
             (
                 "b",
-                nof(
+                Nof(
                     1,
-                    [Spec::from(min(2, 0).ignore()), Spec::from(Token::String)],
+                    [Spec::from(Min(2, 0).Ignore()), Spec::from(Token::String)],
                 ),
             ),
         ]),
@@ -407,9 +407,9 @@ fn lists() {
     );
     // Marks inside a branch apply to the branch.
     round_trip(
-        nof(
-            min(1, any()),
-            [open(obj([("a", 1)])), open(obj([("b", 2)]))],
+        Nof(
+            Min(1, Any()),
+            [Open(obj([("a", 1)])), Open(obj([("b", 2)]))],
         ),
         r#"{"$$":"Nof(Any.Min(1),$$0,$$1)","$$0":{"a":1,"$$":"Open"},"$$1":{"b":2,"$$":"Open"}}"#,
         &[v("{}"), v(r#"{"a":2,"c":3}"#)],
@@ -417,7 +417,7 @@ fn lists() {
     round_trip(
         obj([(
             "a",
-            discriminated(
+            Discriminated(
                 "k",
                 [
                     ("x", obj([("a", Token::Number)])),
@@ -437,12 +437,12 @@ fn lists() {
     );
     // A branch that is not an object has no tag property to drop.
     round_trip(
-        discriminated("k", [("x", Spec::from(Token::Number))]),
+        Discriminated("k", [("x", Spec::from(Token::Number))]),
         r#"{"$$":"Discriminated(\"k\",$$0)","$$0":{"x":"Number"}}"#,
         &[v(r#"{"k":"x"}"#), v("1")],
     );
     round_trip(
-        discriminated("k", [("x", obj([("k", min(1, "x"))]))]),
+        Discriminated("k", [("x", obj([("k", Min(1, "x"))]))]),
         r#"{"$$":"Discriminated(\"k\",$$0)","$$0":{"x":{"k: Min(1)":"x"}}}"#,
         &[v(r#"{"k":"x"}"#)],
     );
@@ -454,10 +454,10 @@ fn kinds() {
     round_trip(
         obj([
             ("a", Spec::from(re("^a+$"))),
-            ("b", Spec::from(check_re(re("^b"), any()))),
-            ("c", Spec::from(skip(re("x")))),
-            ("d", Spec::from(min(2, re("x")).skip())),
-            ("e", Spec::from(optional(check_re(re("^b"), any())))),
+            ("b", Spec::from(CheckRe(re("^b"), Any()))),
+            ("c", Spec::from(Skip(re("x")))),
+            ("d", Spec::from(Min(2, re("x")).Skip())),
+            ("e", Spec::from(Optional(CheckRe(re("^b"), Any())))),
         ]),
         r#"{"a":"/^a+$/","b":"Check(/^b/)","c":"Skip(/x/)","d":"Skip(/x/).Min(2)","e":"Check(/^b/).Optional"}"#,
         &[
@@ -470,12 +470,12 @@ fn kinds() {
     );
     round_trip(
         obj([
-            ("a", Spec::from(any())),
-            ("b", Spec::from(required(any()))),
-            ("c", Spec::from(never(any()))),
+            ("a", Spec::from(Any())),
+            ("b", Spec::from(Required(Any()))),
+            ("c", Spec::from(Never(Any()))),
             ("d", Spec::from(Token::Date)),
-            ("e", Spec::from(optional(Token::Date))),
-            ("f", Spec::from(func(any()))),
+            ("e", Spec::from(Optional(Token::Date))),
+            ("f", Spec::from(Func(Any()))),
             ("g", Spec::from(Token::Function)),
         ]),
         r#"{"a":"Any","b":"Required","c":"Never","d":"Date","e":"Optional(Date)","f":"Optional(Function)","g":"Function"}"#,
@@ -483,9 +483,9 @@ fn kinds() {
     );
     round_trip(
         obj([
-            ("a", Spec::from(open(obj::<&str, Spec>([])))),
+            ("a", Spec::from(Open(obj::<&str, Spec>([])))),
             ("b", Spec::from(expr("Any(3)").unwrap())),
-            ("e", Spec::from(skip(never(any())))),
+            ("e", Spec::from(Skip(Never(Any())))),
         ]),
         r#"{"a":{},"b":"Any(3)","e":"Never.Skip"}"#,
         &[v(r#"{"a":{"z":1}}"#), v("{}")],
@@ -493,8 +493,8 @@ fn kinds() {
     round_trip(
         obj([
             ("a", Spec::from(expr("NaN").unwrap())),
-            ("b", Spec::from(required(expr("NaN").unwrap()))),
-            ("c", Spec::from(min(2, expr("NaN").unwrap()))),
+            ("b", Spec::from(Required(expr("NaN").unwrap()))),
+            ("c", Spec::from(Min(2, expr("NaN").unwrap()))),
             ("d", Spec::from(expr("Skip(null)").unwrap())),
             ("e", Spec::from(expr("Required(null)").unwrap())),
         ]),
@@ -508,19 +508,19 @@ fn checks() {
     let re = |s: &str| regex::Regex::new(s).unwrap();
     round_trip(
         obj([
-            ("a", catch(0, min(2, Token::Number))),
-            ("b", ignore(min(2, Token::String))),
-            ("c", catch("x", re("^a"))),
+            ("a", Catch(0, Min(2, Token::Number))),
+            ("b", Ignore(Min(2, Token::String))),
+            ("c", Catch("x", re("^a"))),
         ]),
         r#"{"a: Number.Min(2).Catch(0)":0,"b: String.Min(2).Ignore":"","c":"Catch(\"x\",/^a/)"}"#,
         &[v(r#"{"a":1,"b":"a","c":"b"}"#), v(r#"{"a":"x"}"#), v("{}")],
     );
     round_trip(
         obj([
-            ("a", define("d", Token::String)),
-            ("b", refer("d", any())),
-            ("c", rename("z", Token::String)),
-            ("d", rename("z", Token::Number)),
+            ("a", Define("d", Token::String)),
+            ("b", Refer("d", Any())),
+            ("c", Rename("z", Token::String)),
+            ("d", Rename("z", Token::Number)),
         ]),
         r#"{"a: String.Define(\"d\")":"","b":"Any.Refer(\"d\")","c: String.Rename(\"z\")":"","d: Number.Rename(\"z\")":0}"#,
         &[
@@ -530,11 +530,11 @@ fn checks() {
     );
     round_trip(
         obj([
-            ("a", key()),
-            ("b", key_join(2, "/")),
-            ("c", key_depth(1)),
-            ("d", required(key())),
-            ("e", key().min(1)),
+            ("a", Key()),
+            ("b", KeyJoin(2, "/")),
+            ("c", KeyDepth(1)),
+            ("d", Required(Key())),
+            ("e", Key().Min(1)),
         ]),
         r#"{"a":"Key","b":"Key(2,\"/\")","c":"Key(1)","d":"Key.Required","e":"Key.Min(1)"}"#,
         &[v(r#"{"a":"x"}"#), v("{}")],
@@ -570,37 +570,37 @@ fn names() {
 fn refusals() {
     let re = |s: &str| regex::Regex::new(s).unwrap();
     cannot(
-        obj([("a", check(|_s, _u| true, any()))]),
+        obj([("a", Check(|_s, _u| true, Any()))]),
         "cannot express a check function",
     );
     cannot(
-        obj([("a", any().check(|_s, _u| true))]),
+        obj([("a", Any().Check(|_s, _u| true))]),
         "cannot express a check function",
     );
     cannot(
-        obj([("a", any().before(|_s, _u| true))]),
+        obj([("a", Any().Before(|_s, _u| true))]),
         "cannot express a custom check Before",
     );
     cannot(
-        obj([("a", exact([Value::Func(1)]))]),
+        obj([("a", Exact([Value::Func(1)]))]),
         "cannot express the Exact value function",
     );
     cannot(
-        obj([("a", exact([Value::BigInt(num_bigint::BigInt::from(1))]))]),
+        obj([("a", Exact([Value::BigInt(num_bigint::BigInt::from(1))]))]),
         "cannot express the Exact value bigint",
     );
     cannot(
-        obj([("a", any().transform(|v, _s| v))]),
+        obj([("a", Any().Transform(|v, _s| v))]),
         "cannot express Transform",
     );
     cannot(
-        obj([("a", catch(0, any().transform(|v, _s| v)))]),
+        obj([("a", Catch(0, Any().Transform(|v, _s| v)))]),
         "cannot express Transform",
     );
     cannot(
         obj([(
             "a",
-            rename_with(
+            RenameWith(
                 "b",
                 RenameOptions {
                     keep: true,
@@ -614,13 +614,13 @@ fn refusals() {
     cannot(
         obj([(
             "a",
-            refer_with(
+            ReferWith(
                 "d",
                 ReferOptions {
                     fill: true,
                     strict: false,
                 },
-                any(),
+                Any(),
             ),
         )]),
         "cannot express the options of Refer",
@@ -628,35 +628,35 @@ fn refusals() {
     cannot(
         obj([(
             "a",
-            refer_with(
+            ReferWith(
                 "d",
                 ReferOptions {
                     fill: false,
                     strict: true,
                 },
-                any(),
+                Any(),
             ),
         )]),
         "cannot express the options of Refer",
     );
     cannot(
-        obj([("a", catch(Value::Obj(Default::default()), Token::Number))]),
+        obj([("a", Catch(Value::Obj(Default::default()), Token::Number))]),
         "cannot express the fallback object",
     );
     cannot(
-        obj([("a", catch(Value::Undefined, Token::Number))]),
+        obj([("a", Catch(Value::Undefined, Token::Number))]),
         "cannot express the fallback undefined",
     );
     cannot(
-        obj([("a", default(Value::from(v(r#"{"q":1}"#)), any()))]),
+        obj([("a", Default(Value::from(v(r#"{"q":1}"#)), Any()))]),
         "cannot express an object default",
     );
     cannot(
         obj([(
             "a",
-            default(
+            Default(
                 Value::from(vec![Value::from(1)]),
-                child(Token::Number, any()),
+                Child(Token::Number, Any()),
             ),
         )]),
         "cannot express an object default",
@@ -664,7 +664,7 @@ fn refusals() {
     cannot(
         obj([(
             "a",
-            default(Value::from(vec![Value::from(1)]), arr([Token::Number])),
+            Default(Value::from(vec![Value::from(1)]), arr([Token::Number])),
         )]),
         "cannot express an array default",
     );
@@ -682,38 +682,38 @@ fn refusals() {
     );
     cannot(obj([("$$", 1)]), r#"cannot express the property name "$$""#);
     cannot(
-        obj([("a", child(Token::Number, any()).exact([1]))]),
+        obj([("a", Child(Token::Number, Any()).Exact([1]))]),
         "cannot express Exact on an object",
     );
     cannot(
-        obj([("a", rest(Token::Number, arr::<Spec>([])).exact([1]))]),
+        obj([("a", Rest(Token::Number, arr::<Spec>([])).Exact([1]))]),
         "cannot express Exact on an array",
     );
     cannot(
-        obj([("a", exact([Value::Undefined]))]),
+        obj([("a", Exact([Value::Undefined]))]),
         "cannot express the Exact value undefined",
     );
     cannot(
-        obj([("a", exact([Value::Obj(Default::default())]))]),
+        obj([("a", Exact([Value::Obj(Default::default())]))]),
         "cannot express the Exact value object",
     );
     cannot(
-        obj([("a", exact([Value::Num(f64::INFINITY)]))]),
+        obj([("a", Exact([Value::Num(f64::INFINITY)]))]),
         "cannot express the Exact value Infinity",
     );
     cannot(
-        obj([("a", check_re(re("^a"), any()).check(|_s, _u| true))]),
+        obj([("a", CheckRe(re("^a"), Any()).Check(|_s, _u| true))]),
         "cannot express a check function",
     );
     cannot(
-        obj([("a", any().after(|_s, _u| true))]),
+        obj([("a", Any().After(|_s, _u| true))]),
         "cannot express a custom after check",
     );
     let opts = Options {
         key_expr: false,
         ..Default::default()
     };
-    let s = Schema::with_options(obj([("a: b", nof(1, [1, 2]))]), &opts);
+    let s = Schema::with_options(obj([("a: b", Nof(1, [1, 2]))]), &opts);
     assert!(s
         .json()
         .expect_err("no key form")

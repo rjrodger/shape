@@ -9,7 +9,7 @@
 //! Unknown keywords are ignored; an unknown type or reference is an error.
 
 use crate::builders::*;
-use crate::discriminated::discriminated;
+use crate::discriminated::Discriminated;
 use crate::node::{Node, Token};
 use crate::spec::Spec;
 use crate::value::{Map, Value};
@@ -147,7 +147,7 @@ impl<'a> Import<'a> {
             return Ok(if *b {
                 Spec::from(Token::Any)
             } else {
-                Spec::from(never(any()))
+                Spec::from(Never(Any()))
             });
         }
         let Value::Obj(m) = s else {
@@ -158,7 +158,7 @@ impl<'a> Import<'a> {
             None => self.keywords(m, path)?,
         };
         Ok(match as_str(m.get("description")) {
-            Some(d) => Spec::from(describe(d, spec)),
+            Some(d) => Spec::from(Describe(d, spec)),
             None => spec,
         })
     }
@@ -185,7 +185,7 @@ impl<'a> Import<'a> {
         };
         if self.stack.contains(&name) {
             self.recursive.insert(name, true);
-            return Ok(Spec::from(refer(refname, any())));
+            return Ok(Spec::from(Refer(refname, Any())));
         }
         self.stack.push(name.clone());
         let was = self.recursive.get(&name).copied().unwrap_or(false);
@@ -196,7 +196,7 @@ impl<'a> Import<'a> {
         self.stack.pop();
         let spec = spec?;
         Ok(if recursive {
-            Spec::from(define(refname, spec))
+            Spec::from(Define(refname, spec))
         } else {
             spec
         })
@@ -205,24 +205,24 @@ impl<'a> Import<'a> {
     fn keywords(&mut self, m: &Map, path: &str) -> Res<Spec> {
         let spec = if let Some(e) = m.get("enum") {
             match e {
-                Value::Arr(vals) if !vals.is_empty() => Spec::from(exact(vals.clone())),
+                Value::Arr(vals) if !vals.is_empty() => Spec::from(Exact(vals.clone())),
                 _ => return fault("enum must be a non-empty array", path),
             }
         } else if let Some(v) = m.get("const") {
-            Spec::from(exact([v.clone()]))
+            Spec::from(Exact([v.clone()]))
         } else if let Some(all_of) = m.get("allOf") {
             let branches = self.branches(all_of, &format!("{}/allOf", path))?;
-            Spec::from(all(branches))
+            Spec::from(All(branches))
         } else if let Some(one_of) = m.get("oneOf") {
             let sub = format!("{}/oneOf", path);
             let list = branch_list(one_of, &sub)?;
             match self.discriminated(list, &sub)? {
                 Some(d) => d,
-                None => Spec::from(nof(1, self.branches(one_of, &sub)?)),
+                None => Spec::from(Nof(1, self.branches(one_of, &sub)?)),
             }
         } else if let Some(any_of) = m.get("anyOf").filter(|v| !is_ip_formats(Some(v))) {
-            Spec::from(nof(
-                min(1, any()),
+            Spec::from(Nof(
+                Min(1, Any()),
                 self.branches(any_of, &format!("{}/anyOf", path))?,
             ))
         } else {
@@ -233,18 +233,18 @@ impl<'a> Import<'a> {
         // so it is Never whatever else the schema says.
         let spec = match m.get("not") {
             None => spec,
-            Some(not) if empty_object(Some(not)) => Spec::from(never(any())),
+            Some(not) if empty_object(Some(not)) => Spec::from(Never(Any())),
             Some(not) => {
-                let none = Spec::from(nof(0, [self.schema(not, &format!("{}/not", path))?]));
+                let none = Spec::from(Nof(0, [self.schema(not, &format!("{}/not", path))?]));
                 if matches!(spec, Spec::Token(Token::Any)) {
                     none
                 } else {
-                    Spec::from(all([none, spec]))
+                    Spec::from(All([none, spec]))
                 }
             }
         };
         Ok(match m.get("default") {
-            Some(d) => Spec::from(default(d.clone(), spec)),
+            Some(d) => Spec::from(Default(d.clone(), spec)),
             None => spec,
         })
     }
@@ -297,10 +297,10 @@ impl<'a> Import<'a> {
             for t in &types {
                 kinds.push(self.kind(as_str(Some(t)).unwrap_or(""), m, path)?);
             }
-            Spec::from(nof(min(1, any()), kinds))
+            Spec::from(Nof(Min(1, Any()), kinds))
         };
         Ok(if nullable {
-            Spec::from(nullable_(spec))
+            Spec::from(Nullable(spec))
         } else {
             spec
         })
@@ -312,7 +312,7 @@ impl<'a> Import<'a> {
             "number" => import_number(Some(Spec::from(Token::Number)), m).unwrap(),
             "integer" => import_number(Some(Spec::from(Token::Integer)), m).unwrap(),
             "boolean" => Spec::from(Token::Boolean),
-            "null" => Spec::from(required(crate::spec::null())),
+            "null" => Spec::from(Required(crate::spec::null())),
             "object" => self.object(m, path)?,
             _ => self.array(m, path)?,
         })
@@ -388,22 +388,22 @@ impl<'a> Import<'a> {
         // A required name with no property schema must still be present.
         for k in &required {
             if !props.contains_key(k) {
-                obj.push((k.clone(), Spec::from(required_(any()))));
+                obj.push((k.clone(), Spec::from(Required(Any()))));
             }
         }
         let ap = m.get("additionalProperties");
         let spec = match ap {
             Some(Value::Bool(false)) => {
                 if obj.is_empty() {
-                    Spec::from(closed(Spec::Obj(obj)))
+                    Spec::from(Closed(Spec::Obj(obj)))
                 } else {
                     Spec::Obj(obj)
                 }
             }
-            None | Some(Value::Bool(true)) => Spec::from(open(Spec::Obj(obj))),
+            None | Some(Value::Bool(true)) => Spec::from(Open(Spec::Obj(obj))),
             Some(other) => {
                 let c = self.schema(other, &format!("{}/additionalProperties", path))?;
-                Spec::from(child(c, Spec::Obj(obj)))
+                Spec::from(Child(c, Spec::Obj(obj)))
             }
         };
         Ok(bounded(spec, m, "minProperties", "maxProperties"))
@@ -419,9 +419,9 @@ impl<'a> Import<'a> {
             }
         }
         Ok(Spec::from(if is_required {
-            required_(spec)
+            Required(spec)
         } else {
-            skip(spec)
+            Skip(spec)
         }))
     }
 
@@ -436,13 +436,13 @@ impl<'a> Import<'a> {
             // Closed makes a one-element list a tuple rather than an element
             // shape; items says what may follow (anything, when it is
             // absent or true).
-            let tuple = closed(Spec::Arr(elems));
+            let tuple = Closed(Spec::Arr(elems));
             match items {
                 Some(Value::Bool(false)) => Spec::from(tuple),
-                None | Some(Value::Bool(true)) => Spec::from(rest(Token::Any, tuple)),
+                None | Some(Value::Bool(true)) => Spec::from(Rest(Token::Any, tuple)),
                 Some(other) => {
                     let r = self.schema(other, &format!("{}/items", path))?;
-                    Spec::from(rest(r, tuple))
+                    Spec::from(Rest(r, tuple))
                 }
             }
         } else {
@@ -524,16 +524,8 @@ impl<'a> Import<'a> {
             let spec = self.object(&branch, &format!("{}/{}", path, i))?;
             out.push((tags[i].clone(), spec));
         }
-        Ok(Some(Spec::from(discriminated(tag, out))))
+        Ok(Some(Spec::from(Discriminated(tag, out))))
     }
-}
-
-fn required_(spec: impl Into<Spec>) -> Node {
-    required(spec)
-}
-
-fn nullable_(spec: impl Into<Spec>) -> Node {
-    nullable(spec)
 }
 
 fn branch_list<'v>(v: &'v Value, path: &str) -> Res<&'v [Value]> {
@@ -552,12 +544,12 @@ fn first_number(m: &Map, keys: &[&str]) -> Option<f64> {
 
 fn format_builder(format: &str) -> Option<fn(Spec) -> Node> {
     Some(match format {
-        "email" => |s| email(s),
-        "uri" => |s| url(s),
-        "uuid" => |s| uuid(s),
-        "date-time" => |s| date_time(s),
-        "ipv4" => |s| ipv4(s),
-        "ipv6" => |s| ipv6(s),
+        "email" => |s| Email(s),
+        "uri" => |s| Url(s),
+        "uuid" => |s| Uuid(s),
+        "date-time" => |s| DateTime(s),
+        "ipv4" => |s| Ipv4(s),
+        "ipv6" => |s| Ipv6(s),
         _ => return None,
     })
 }
@@ -577,17 +569,17 @@ fn import_string(m: &Map, path: &str) -> Res<Spec> {
     if let Some(b) = format_builder(format) {
         spec = Spec::from(b(spec));
     } else if is_ip_formats(m.get("anyOf")) {
-        spec = Spec::from(ip(spec));
+        spec = Spec::from(Ip(spec));
     } else if plain && !min_length.map(|v| v > 0.0).unwrap_or(false) {
         // A string with no lower bound is allowed to be empty; a pattern or
         // format decides for itself.
-        spec = Spec::from(empty(spec));
+        spec = Spec::from(Empty(spec));
     }
     if let Some(v) = min_length.filter(|v| *v > 1.0) {
-        spec = Spec::from(min(v, spec));
+        spec = Spec::from(Min(v, spec));
     }
     if let Some(v) = as_f64(m.get("maxLength")) {
-        spec = Spec::from(max(v, spec));
+        spec = Spec::from(Max(v, spec));
     }
     Ok(spec)
 }
@@ -595,30 +587,30 @@ fn import_string(m: &Map, path: &str) -> Res<Spec> {
 /// The bounds of a number, on the spec or bare when there is none.
 fn import_number(spec: Option<Spec>, m: &Map) -> Option<Spec> {
     let mut spec = spec;
-    let base = |s: Option<Spec>| s.unwrap_or_else(|| Spec::from(any()));
+    let base = |s: Option<Spec>| s.unwrap_or_else(|| Spec::from(Any()));
     // A numeric exclusive bound and a plain bound are independent keywords,
     // so both apply; the boolean form makes the plain bound exclusive.
     if let Some(v) = as_f64(m.get("exclusiveMinimum")) {
-        spec = Some(Spec::from(above(v, base(spec))));
+        spec = Some(Spec::from(Above(v, base(spec))));
     }
     if let Some(v) = as_f64(m.get("minimum")) {
         spec = Some(Spec::from(
             if as_bool(m.get("exclusiveMinimum")) == Some(true) {
-                above(v, base(spec))
+                Above(v, base(spec))
             } else {
-                min(v, base(spec))
+                Min(v, base(spec))
             },
         ));
     }
     if let Some(v) = as_f64(m.get("exclusiveMaximum")) {
-        spec = Some(Spec::from(below(v, base(spec))));
+        spec = Some(Spec::from(Below(v, base(spec))));
     }
     if let Some(v) = as_f64(m.get("maximum")) {
         spec = Some(Spec::from(
             if as_bool(m.get("exclusiveMaximum")) == Some(true) {
-                below(v, base(spec))
+                Below(v, base(spec))
             } else {
-                max(v, base(spec))
+                Max(v, base(spec))
             },
         ));
     }
@@ -628,10 +620,10 @@ fn import_number(spec: Option<Spec>, m: &Map) -> Option<Spec> {
 fn bounded(spec: Spec, m: &Map, lo: &str, hi: &str) -> Spec {
     let mut spec = spec;
     if let Some(v) = as_f64(m.get(lo)) {
-        spec = Spec::from(min(v, spec));
+        spec = Spec::from(Min(v, spec));
     }
     if let Some(v) = as_f64(m.get(hi)) {
-        spec = Spec::from(max(v, spec));
+        spec = Spec::from(Max(v, spec));
     }
     spec
 }
