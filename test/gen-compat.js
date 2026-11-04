@@ -256,7 +256,8 @@ const files = {
     ['some-failing-branch-leaks-nothing', CALL('Some', { x: { $expr: 'Number' }, y: 1 }, { $open: { z: 3 } }), {}],
     // Nof counts the shapes the value satisfies: exactly that many, or as
     // many as a shape for the count admits. A shape is tried only while the
-    // rest could change the verdict, and Nof never produces.
+    // rest could change the verdict. A count of exactly one produces from
+    // the shape that matched; any other count only checks.
     ['nof-one-ok', { a: { $expr: 'Nof(1,Number,Integer)' } }, { a: 1.5 }],
     ['nof-one-two', { a: { $expr: 'Nof(1,Number,Integer)' } }, { a: 1 }],
     ['nof-one-none', { a: { $expr: 'Nof(1,Number,Integer)' } }, { a: 'x' }],
@@ -275,7 +276,9 @@ const files = {
     ['nof-absent-optional', { a: { $expr: 'Optional(Nof(1,String,Number))' } }, {}],
     ['nof-skip-never-absent', { a: { $expr: 'Skip(Nof(0,Any))' } }, {}],
     ['nof-skip-never-present', { a: { $expr: 'Skip(Nof(0,Any))' } }, { a: 1 }],
-    ['nof-no-produce', CALL('Nof', 1, { $open: { b: 2 } }, { $expr: 'Number' }), { a: 1 }],
+    ['nof-one-produces', CALL('Nof', 1, { $open: { b: 2 } }, { $expr: 'Number' }), { a: 1 }],
+    ['nof-min-no-produce', CALL('Nof', { $expr: 'Min(1)' }, { $open: { b: 2 } }, { $expr: 'Number' }), { a: 1 }],
+    ['nof-one-coerce-produces', { a: { $expr: 'Nof(1,Coerce(Number),Boolean)' } }, { a: '5' }],
     ['nof-no-produce-object', { a: CALL('Nof', 1, { x: N }, { x: T }) }, { a: { x: 'y' } }],
     ['nof-in-all', { a: CALL('All', { $expr: 'Nof(0,/^a/)' }, { $expr: 'String' }) }, { a: 'ab' }],
     // A composition's default, which its JSON writes as Default around it,

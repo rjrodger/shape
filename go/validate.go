@@ -970,14 +970,15 @@ func evaluateList(n *node, in any, path []string, pathArr []any, key string, par
 		if absent {
 			return in
 		}
-		// A branch is tried only while the untried could change the verdict,
-		// and the value is never changed.
-		k, tried, total := 0, 0, len(n.list)
+		// A branch is tried only while the untried could change the verdict.
+		k, tried, total, matched := 0, 0, len(n.list), 0
+		var matchedOut any
 		for nofSpan(n.nofOK, k, total-tried) == nofSome {
 			sub := &ValidationError{}
-			validateNode(n.list[tried], branchIn, path, pathArr, key, parent, ctx, true, sub)
+			out := validateNode(n.list[tried], branchIn, path, pathArr, key, parent, ctx, true, sub)
 			if !sub.hasAny() {
 				k++
+				matched, matchedOut = tried, out
 			}
 			tried++
 		}
@@ -998,6 +999,15 @@ func evaluateList(n *node, in any, path []string, pathArr []any, key string, par
 			if !n.silent {
 				verr.add(err)
 			}
+			return in
+		}
+		// Exactly one: the branch the value satisfies produces it, as One's
+		// match does.
+		if n.nofOne {
+			if !match {
+				return validateNode(n.list[matched], branchIn, path, pathArr, key, parent, ctx, false, &ValidationError{})
+			}
+			return matchedOut
 		}
 		return in
 	}

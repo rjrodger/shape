@@ -1118,15 +1118,16 @@ fn evaluate_list(
         ListMode::Nof => {
             // An absent value is not tried: the required check speaks for
             // it. A branch is tried only while the untried could change the
-            // verdict, and the value is never changed.
+            // verdict.
             if absent {
                 return true;
             }
             let total = n.list.len();
-            let (mut k, mut tried) = (0, 0);
+            let (mut k, mut tried, mut matched) = (0, 0, 0);
             while nof_span(&n.nof_ok, k, total - tried) == Admits::Some {
                 if branch_passes(&n.list[tried], cur.get(), key, parent_is_array, w) {
                     k += 1;
+                    matched = tried;
                 }
                 tried += 1;
             }
@@ -1154,6 +1155,20 @@ fn evaluate_list(
                     4033,
                     &text,
                     true,
+                );
+                return true;
+            }
+            // Exactly one: the branch the value satisfies produces it, as
+            // One's match does.
+            if n.nof_one {
+                let mut sub = ValidationError::default();
+                return validate_node(
+                    &n.list[matched],
+                    cur.reborrow(),
+                    key,
+                    parent_is_array,
+                    w,
+                    &mut sub,
                 );
             }
             true

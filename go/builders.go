@@ -941,9 +941,10 @@ const nofFault = "Shape: Nof needs a whole number of zero or more, or a shape fo
 // admits. The count is a whole number, for exactly that many, or a shape the
 // number must satisfy: Nof(1, ...) is exactly one, Nof(Min(1), ...) at least
 // one, Nof(0, s) not s. A shape is tried only while the shapes left untried
-// could still change the verdict, and the value is never changed: Nof
-// checks, it does not produce. An absent value is not tried, so whether it
-// may be absent is the node's required or optional.
+// could still change the verdict. A count of exactly one produces: the one
+// shape the value satisfies makes the result. Any other count only checks,
+// and the value is left as it was given. An absent value is not tried, so
+// whether it may be absent is the node's required or optional.
 func Nof(count any, shapes ...any) *Node {
 	exact, isNumber := toFloat64(count)
 	var counter *Schema
@@ -964,9 +965,11 @@ func Nof(count any, shapes ...any) *Node {
 	}
 	nb := makeListBuilder(listNof, shapes)
 	nb.n.nofExact = exact
+	nb.n.nofOne = len(shapes) > 0
 	for c := 0; c <= len(shapes); c++ {
-		nb.n.nofOK = append(nb.n.nofOK, (counter == nil && float64(c) == exact) ||
-			(counter != nil && counter.Match(float64(c))))
+		ok := (counter == nil && float64(c) == exact) || (counter != nil && counter.Match(float64(c)))
+		nb.n.nofOK = append(nb.n.nofOK, ok)
+		nb.n.nofOne = nb.n.nofOne && ok == (c == 1)
 	}
 	if counter != nil {
 		nb.n.nofCount = counter.root

@@ -40,7 +40,9 @@ nof-absent-required	{"a":{"$expr":"Nof(1,String,Number)"}}	{}		"Validation faile
 nof-absent-optional	{"a":{"$expr":"Optional(Nof(1,String,Number))"}}	{}	{}	
 nof-skip-never-absent	{"a":{"$expr":"Skip(Nof(0,Any))"}}	{}	{}	
 nof-skip-never-present	{"a":{"$expr":"Skip(Nof(0,Any))"}}	{"a":1}		"Value \"1\" for property \"a\" satisfies 1 of: Any; the count must be 0."
-nof-no-produce	{"$call":["Nof",1,{"$open":{"b":2}},{"$expr":"Number"}]}	{"a":1}	{"a":1}	
+nof-one-produces	{"$call":["Nof",1,{"$open":{"b":2}},{"$expr":"Number"}]}	{"a":1}	{"a":1,"b":2}	
+nof-min-no-produce	{"$call":["Nof",{"$expr":"Min(1)"},{"$open":{"b":2}},{"$expr":"Number"}]}	{"a":1}	{"a":1}	
+nof-one-coerce-produces	{"a":{"$expr":"Nof(1,Coerce(Number),Boolean)"}}	{"a":"5"}	{"a":5}	
 nof-no-produce-object	{"a":{"$call":["Nof",1,{"x":{"$type":"Number"}},{"x":{"$type":"String"}}]}}	{"a":{"x":"y"}}	{"a":{"x":"y"}}	
 nof-in-all	{"a":{"$call":["All",{"$expr":"Nof(0,/^a/)"},{"$expr":"String"}]}}	{"a":"ab"}		"Value \"ab\" for property \"a\" does not satisfy all of: Nof(0,/^a/), String"
 nof-absent-default	{"a":{"$expr":"Default(\"x\",Nof(1,String,Number))"}}	{}	{"a":"x"}	

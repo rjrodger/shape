@@ -68,10 +68,13 @@ type node struct {
 
 	// A Nof composition's count: a whole number (nofExact), or a shape the
 	// number of satisfied branches must satisfy (nofCount, nil for a whole
-	// number), and the counts it admits, from none of the branches to all.
+	// number), the counts it admits, from none of the branches to all, and
+	// whether it admits exactly one and nothing else (nofOne), when the
+	// branch that matched produces the value.
 	nofExact float64
 	nofCount *node
 	nofOK    []bool
+	nofOne   bool
 
 	// Exact value match.
 	exactVals []any

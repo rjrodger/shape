@@ -3453,9 +3453,11 @@ const One = function <const S extends readonly any[]>(this: any, ...inshapes: S)
 // The count is a whole number, for exactly that many, or a shape the number
 // must satisfy: Nof(1, ...) is exactly one, Nof(Min(1), ...) at least one,
 // Nof(0, s) not s. A shape is tried on a copy of the value only while the
-// shapes left untried could still change the verdict, and the value is
-// never changed: Nof checks, it does not produce. An absent value is not
-// tried, so whether it may be absent is the node's required or optional.
+// shapes left untried could still change the verdict. A count of exactly
+// one produces: the one shape the value satisfies makes the result. Any
+// other count only checks, and the value is left as it was given. An absent
+// value is not tried, so whether it may be absent is the node's required or
+// optional.
 interface NofBuilder {
   <const S extends readonly any[]>(this: any, count: 0, ...shapes: S): Node<any>
   <const S extends readonly any[]>(this: any, count: number, ...shapes: S): Node<S[number]>
@@ -3483,6 +3485,9 @@ const Nof = function Nof(this: any, count: any, ...inshapes: any[]): Node<any> {
   }
   node.u.nof = { count: exact ? count : (countShape as any).node(), ok }
 
+  // Whether the count admits exactly one shape and nothing else.
+  const one = 1 < ok.length && ok.every((v: boolean, c: number) => v === (1 === c))
+
   const validator = function Nof(val: any, update: Update, state: State) {
     if (undefined === val) {
       return true
@@ -3490,9 +3495,11 @@ const Nof = function Nof(this: any, count: any, ...inshapes: any[]): Node<any> {
 
     let k = 0
     let tried = 0
+    let matched = 0
     while (NOF_SOME === nofSpan(ok, k, shapes.length - tried)) {
       if (shapes[tried].match(clone(val), { ...state.ctx, err: [] })) {
         k++
+        matched = tried
       }
       tried++
     }
@@ -3507,6 +3514,11 @@ const Nof = function Nof(this: any, count: any, ...inshapes: any[]): Node<any> {
           '; the count must be ' + stringify(count, true) + '.')
       ]
       return false
+    }
+
+    // Exactly one: the shape the value satisfies produces from a copy.
+    if (one) {
+      update.val = shapes[matched](clone(val), { ...state.ctx, err: [] })
     }
 
     return true

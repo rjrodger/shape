@@ -139,9 +139,9 @@ pet := shape.MustShape(shape.Discriminated("kind", map[string]any{
   Open({b:2}))` on `{}` gives `{b:2}`), `All` threads the result from branch
   to branch (`{a:1,b:2}`), and a failing composition leaves the input as it
   was.
-- `Nof` never produces: the value passes through as it was given, so a
-  branch's defaults are not filled in. Use `One` when you want the matching
-  branch's output.
+- `Nof(1, …)` produces from the one branch that matched, as `One` does, so
+  that branch's defaults are filled in. Any other count only checks, and the
+  value passes through as it was given.
 - `Nof` tries a branch only while the branches left untried could still
   change the verdict, so `Nof(Min(1), …)` stops at the first match.
 - `Exact` also matches when the value is absent but the node's default equals one

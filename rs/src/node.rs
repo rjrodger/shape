@@ -223,11 +223,14 @@ pub struct Node {
     /// which are the list in that order.
     pub disc: Option<crate::discriminated::Disc>,
     /// A `Nof`'s count: a whole number (`nof_exact`), or a shape the number
-    /// of satisfied branches must satisfy (`nof_count`), and the counts it
-    /// admits, from none of the branches to all of them.
+    /// of satisfied branches must satisfy (`nof_count`), the counts it
+    /// admits, from none of the branches to all of them, and whether it
+    /// admits exactly one and nothing else (`nof_one`), when the branch
+    /// that matched produces the value.
     pub nof_exact: f64,
     pub nof_count: Option<Box<Node>>,
     pub nof_ok: Vec<bool>,
+    pub nof_one: bool,
 
     pub exact_vals: Vec<Value>,
     pub has_exact: bool,

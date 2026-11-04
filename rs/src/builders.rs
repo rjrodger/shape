@@ -265,9 +265,11 @@ pub(crate) const NOF_FAULT: &str =
 /// count is a whole number, for exactly that many, or a shape the number
 /// must satisfy: `nof(1, ..)` is exactly one, `nof(min(1, any()), ..)` at
 /// least one, `nof(0, [s])` not `s`. A shape is tried only while the shapes
-/// left untried could still change the verdict, and the value is never
-/// changed: `nof` checks, it does not produce. An absent value is not tried,
-/// so whether it may be absent is the node's required or optional.
+/// left untried could still change the verdict. A count of exactly one
+/// produces: the one shape the value satisfies makes the result. Any other
+/// count only checks, and the value is left as it was given. An absent value
+/// is not tried, so whether it may be absent is the node's required or
+/// optional.
 pub fn nof<C, I>(count: C, shapes: I) -> Node
 where
     C: Into<Spec>,
@@ -297,6 +299,7 @@ where
             n.nof_count = Some(Box::new(counter.node().clone()));
         }
     }
+    n.nof_one = total > 0 && n.nof_ok.iter().enumerate().all(|(c, ok)| *ok == (c == 1));
     n
 }
 
@@ -1525,11 +1528,19 @@ mod tests {
             run(&at_a(ignore(nof(0, [s(Token::String)]))), &a("\"x\"")),
             "{}"
         );
-        // The value is never changed: a branch's default is not taken.
-        let open_b = open(obj([("b", Spec::from(2))]));
+        // A count of exactly one produces from the branch that matched; any
+        // other count only checks.
+        let open_b = || Spec::from(open(obj([("b", Spec::from(2))])));
         assert_eq!(
             run(
-                &Schema::new(nof(1, [Spec::from(open_b), s(Token::Number)])),
+                &Schema::new(nof(1, [open_b(), s(Token::Number)])),
+                "{\"a\":1}"
+            ),
+            "{\"a\":1,\"b\":2}"
+        );
+        assert_eq!(
+            run(
+                &Schema::new(nof(min(1, any()), [open_b(), s(Token::Number)])),
                 "{\"a\":1}"
             ),
             "{\"a\":1}"

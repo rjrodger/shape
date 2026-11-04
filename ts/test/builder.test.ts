@@ -488,11 +488,14 @@ Value "{x:green,z:Z}" for property "1" does not satisfy one of: {"x":"Exact(red)
     throws(() => absent({ a: 1 }), 'Value "1" for property "a" satisfies 1 of: Any; the count must be 0.')
     throws(() => Shape(Nof(1, String))(), 'Validation failed for value "undefined" because the value is required.')
 
-    // Nof checks; it does not produce: a shape's default is not taken.
+    // A count of exactly one produces from the shape that matched, from a
+    // copy; any other count only checks, and the value stays as given.
     const input = { a: 1 }
-    deepEqual(Shape(Nof(1, Open({ b: 2 }), Number))(input), { a: 1 })
+    deepEqual(Shape(Nof(1, Open({ b: 2 }), Number))(input), { a: 1, b: 2 })
     deepEqual(input, { a: 1 })
-    deepEqual(Shape(One(Open({ b: 2 }), Number))({ a: 1 }), { a: 1, b: 2 })
+    deepEqual(Shape(Nof(Exact(1), Open({ b: 2 }), Number))({ a: 1 }), { a: 1, b: 2 })
+    deepEqual(Shape(Nof(Min(1), Open({ b: 2 }), Number))({ a: 1 }), { a: 1 })
+    deepEqual(Shape(Nof(1, Shape.Coerce(Number), Boolean))('5'), 5)
 
     // Inside an array, each element is counted.
     const els = Shape([Nof(1, { x: Number }, { x: String })])

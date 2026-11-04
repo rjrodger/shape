@@ -328,6 +328,8 @@ function build() {
   add('c-nof-in-one', E('One(Nof(0,String),String)'), SCALARS)
   add('c-nof-in-all', E('All(Nof(0,/^a/),String)'), SCALARS)
   add('c-nof-open', CALL('Nof', 1, { $open: { b: 2 } }, N), [{}, { a: 1 }, { b: 3 }, { a: {} }, 1, 2.5])
+  add('c-nof-min-open', CALL('Nof', E('Min(1)'), { $open: { b: 2 } }, N), [{}, { a: 1 }, { b: 3 }, 1, 2.5])
+  add('c-nof-coerce', E('Nof(1,Coerce(Number),Boolean)'), SCALARS.concat(['5', ' 7 ', 'true']))
   add('expr-fault-nof', E('Nof(-1,String)'), SCALARS)
   add('expr-fault-nof-fraction', E('Nof(1.5,String)'), SCALARS)
   add('c-all-ignore', E('All(Ignore(Min(2,Number)),Number)'), SCALARS)

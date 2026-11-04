@@ -150,7 +150,7 @@ A bound outside the isolation still applies to what comes out:
 | `One(shapes…)` | Passes on the first matching branch, whose output is the result. |
 | `Some(shapes…)` | Passes if at least one branch matches; all branches are evaluated, and the last matching branch's result stands. Every branch is handed the value as it was given, never one another branch changed (`Some(Open({a:1}), Open({b:2}))` on `{}` gives `{b:2}`). |
 | `All(shapes…)` | Passes only if every branch matches; the value is threaded through each, so later branches see what earlier ones produced (`All(Open({a:1}), Open({b:2}))` on `{}` gives `{a:1,b:2}`). |
-| `Nof(count, shapes…)` | Passes if the number of branches the value matches is one the count admits. The count is a whole number, for exactly that many (`Nof(1, …)` is exactly one, `Nof(0, s)` is not `s`), or a shape the number must satisfy (`Nof(Min(1), …)` is at least one). The value passes through unchanged. |
+| `Nof(count, shapes…)` | Passes if the number of branches the value matches is one the count admits. The count is a whole number, for exactly that many (`Nof(1, …)` is exactly one, `Nof(0, s)` is not `s`), or a shape the number must satisfy (`Nof(Min(1), …)` is at least one). A count of exactly one produces: the branch that matched makes the result. Any other count leaves the value as it was given. |
 | `Discriminated(tag, { name: shape, … })` | A tagged union: the branch is chosen by the string value of the `tag` property and the value validated against that branch **alone**, so the errors are its own rather than a list of every alternative. |
 
 None of the three changes the value it was given: each branch matches and
@@ -158,10 +158,13 @@ produces from a copy, and the composition's result replaces the value only
 when it passes, so a failing `One`, `Some` or `All` leaves the input as it
 was.
 
-`Nof` produces nothing at all: it checks a copy of the value against each
-branch and leaves the value as it was given. It tries a branch only while
-the branches left untried could still change the verdict, so a failure can
-report a range of counts:
+`Nof` checks a copy of the value against each branch. When its count
+admits exactly one branch (`Nof(1, …)`, or a count shape such as
+`Exact(1)`), the branch that matched then produces the result from a copy,
+as `One`'s does: `Nof(1, Open({b:2}), Number)` on `{a:1}` gives `{a:1,b:2}`.
+Any other count leaves the value as it was given. `Nof` tries a branch only
+while the branches left untried could still change the verdict, so a
+failure can report a range of counts:
 
 ```
 Value "1" for property "v" satisfies 2 of: Number, Integer; the count must be 1.

@@ -43,11 +43,22 @@ func TestNofCounts(t *testing.T) {
 		!reflect.DeepEqual(out, map[string]any{}) {
 		t.Fatalf("ignored: %v %v", out, err)
 	}
-	// The value is never changed: a branch's default is not taken.
+	// A count of exactly one produces from the branch that matched, in
+	// either mode; any other count only checks.
 	in := map[string]any{"a": 1.0}
 	out, err := MustShape(Nof(1, Open(map[string]any{"b": 2.0}), Number)).Validate(in)
+	if err != nil || !reflect.DeepEqual(out, map[string]any{"a": 1.0, "b": 2.0}) {
+		t.Fatalf("one produces: %v %v", out, err)
+	}
+	if !reflect.DeepEqual(in, map[string]any{"a": 1.0}) {
+		t.Fatalf("input changed: %v", in)
+	}
+	if !MustShape(All(Nof(1, Coerce(Number), Boolean), Min(2))).Match("5") {
+		t.Fatal("a match threads the produced value")
+	}
+	out, err = MustShape(Nof(Min(1), Open(map[string]any{"b": 2.0}), Number)).Validate(map[string]any{"a": 1.0})
 	if err != nil || !reflect.DeepEqual(out, map[string]any{"a": 1.0}) {
-		t.Fatalf("no produce: %v %v", out, err)
+		t.Fatalf("min checks only: %v %v", out, err)
 	}
 	if GNof(0, String).n.listMode != listNof {
 		t.Fatal("GNof is Nof")
