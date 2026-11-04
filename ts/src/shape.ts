@@ -4557,6 +4557,9 @@ function node2json(n: Node<any>): any {
     s += bdesc(n)
     return s
   }
+  else if (S.never === t) {
+    return S.Never + bdesc(n)
+  }
 }
 
 
@@ -5072,9 +5075,15 @@ function nodeJson(n: Node<any>): any {
           [S.number === typeof n.u.nof.count ? { x: '' + n.u.nof.count } : jsonArg(n.u.nof.count)])
           .concat(n.u.list.map((b: any) => jsonArg(b)))
       }
-    const calls = jsonRequiredCalls(n, true)
+    // A default the node injects is a Default around the list, which makes
+    // it optional too.
+    const dflt = undefined !== n.f && !n.r && !n.p
+    const headText = jsonCallText(head, refs)
+    const calls = (dflt ? [] : jsonRequiredCalls(n, true))
       .concat(jsonFlagCalls(n, false), jsonValidatorCalls(n), jsonTailCalls(n))
-    const text = jsonChainText(jsonCallText(head, refs), calls, refs) as string
+    const text = jsonChainText(dflt ?
+      S.Default + '(' + jsonLiteral(n.f, 'the default') + ',' + headText + ')' : headText,
+      calls, refs) as string
     return 0 === keys(refs).length ? text : jsonCarrier(text, refs)
   }
 

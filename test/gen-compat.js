@@ -278,6 +278,11 @@ const files = {
     ['nof-no-produce', CALL('Nof', 1, { $open: { b: 2 } }, { $expr: 'Number' }), { a: 1 }],
     ['nof-no-produce-object', { a: CALL('Nof', 1, { x: N }, { x: T }) }, { a: { x: 'y' } }],
     ['nof-in-all', { a: CALL('All', { $expr: 'Nof(0,/^a/)' }, { $expr: 'String' }) }, { a: 'ab' }],
+    // A composition's default, which its JSON writes as Default around it,
+    // and Never as a composite message names it.
+    ['nof-absent-default', { a: { $expr: 'Default("x",Nof(1,String,Number))' } }, {}],
+    ['all-absent-default', { a: { $expr: 'Default(5,All(Number,Min(2)))' } }, {}],
+    ['all-never-message', { a: { $expr: 'All(Never,String)' } }, { a: 'x' }],
     // Default over an untyped shape takes the default's kind and keeps the
     // shape's builders, description and fault.
     ['default-untyped-kind', { a: { $expr: 'Default(2,Required())' } }, { a: 'x' }],

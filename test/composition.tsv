@@ -43,6 +43,9 @@ nof-skip-never-present	{"a":{"$expr":"Skip(Nof(0,Any))"}}	{"a":1}		"Value \"1\" 
 nof-no-produce	{"$call":["Nof",1,{"$open":{"b":2}},{"$expr":"Number"}]}	{"a":1}	{"a":1}	
 nof-no-produce-object	{"a":{"$call":["Nof",1,{"x":{"$type":"Number"}},{"x":{"$type":"String"}}]}}	{"a":{"x":"y"}}	{"a":{"x":"y"}}	
 nof-in-all	{"a":{"$call":["All",{"$expr":"Nof(0,/^a/)"},{"$expr":"String"}]}}	{"a":"ab"}		"Value \"ab\" for property \"a\" does not satisfy all of: Nof(0,/^a/), String"
+nof-absent-default	{"a":{"$expr":"Default(\"x\",Nof(1,String,Number))"}}	{}	{"a":"x"}	
+all-absent-default	{"a":{"$expr":"Default(5,All(Number,Min(2)))"}}	{}	{"a":5}	
+all-never-message	{"a":{"$expr":"All(Never,String)"}}	{"a":"x"}		"Value \"x\" for property \"a\" does not satisfy all of: Never, String"
 default-untyped-kind	{"a":{"$expr":"Default(2,Required())"}}	{"a":"x"}		"Validation failed for property \"a\" with string \"x\" because the string is not of type number."
 default-untyped-absent	{"a":{"$expr":"Default(2,Required())"}}	{}	{"a":2}	
 default-untyped-describe	{"a":{"$expr":"Default(2,Describe(\"two\",Required()))"}}	{"a":3}	{"a":3}	

@@ -646,10 +646,21 @@ func nodeJSON(n *node) any {
 				head.a = append(head.a, jsonArgOf(b))
 			}
 		}
-		calls := append(jsonRequiredCalls(n, true), jsonFlagCalls(n, false)...)
+		// A default the node injects is a Default around the list, which
+		// makes it optional too.
+		dflt := n.hasDefault && !n.required && !n.skippable
+		var calls []jsonCall
+		if !dflt {
+			calls = jsonRequiredCalls(n, true)
+		}
+		calls = append(calls, jsonFlagCalls(n, false)...)
 		calls = append(calls, jsonValidatorCalls(n, nil)...)
 		calls = append(calls, jsonTailCalls(n)...)
-		text := jsonChainText(jsonCallText(head, refs, ""), calls, refs)
+		headText := jsonCallText(head, refs, "")
+		if dflt {
+			headText = "Default(" + jsonLiteral(n.defaultValue, "the default") + "," + headText + ")"
+		}
+		text := jsonChainText(headText, calls, refs)
 		if len(refs) == 0 {
 			return text
 		}

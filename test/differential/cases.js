@@ -323,6 +323,8 @@ function build() {
   add('c-nof-optional', { a: E('Optional(Nof(0,String))') }, OBJS)
   add('c-nof-skip-never', { a: E('Skip(Nof(0,Any))') }, OBJS)
   add('c-nof-default', { a: E('Default("d",Nof(1,String,Number))') }, OBJS)
+  add('c-all-default', { a: E('Default(5,All(Number,Min(2)))') }, OBJS)
+  add('c-all-never', E('All(Never,String)'), SCALARS)
   add('c-nof-in-one', E('One(Nof(0,String),String)'), SCALARS)
   add('c-nof-in-all', E('All(Nof(0,/^a/),String)'), SCALARS)
   add('c-nof-open', CALL('Nof', 1, { $open: { b: 2 } }, N), [{}, { a: 1 }, { b: 3 }, { a: {} }, 1, 2.5])

@@ -704,11 +704,25 @@ pub fn node_json(n: &Node) -> R<Value> {
                     }
                 }
             };
-            let mut calls = required_calls(n, true);
+            // A default the node injects is a Default around the list,
+            // which makes it optional too.
+            let dflt = n.has_default && !n.required && !n.skippable;
+            let mut calls = if dflt {
+                Vec::new()
+            } else {
+                required_calls(n, true)
+            };
             calls.extend(flag_calls(n, false)?);
             calls.extend(validator_calls(n, None)?);
             calls.extend(tail_calls(n));
-            let head_text = call_text(&head, &mut refs, None);
+            let mut head_text = call_text(&head, &mut refs, None);
+            if dflt {
+                head_text = format!(
+                    "Default({},{})",
+                    literal(&n.default, "the default")?,
+                    head_text
+                );
+            }
             let text = chain_text(&head_text, &calls, &mut refs);
             Ok(if refs.is_empty() {
                 Value::Str(text)
