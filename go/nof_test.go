@@ -33,10 +33,14 @@ func TestNofCounts(t *testing.T) {
 	if got := nofErr(t, early, true); got != `Value "true" for property "" satisfies 0 to 1 of: String, Number, Boolean; the count must be Min(2).` {
 		t.Fatalf("early: %s", got)
 	}
-	// A Fault speaks for the Nof.
+	// A Nof's message is its own, so a Fault does not replace it; the Fault
+	// speaks for a value that is missing.
 	faulted := MustShape(Fault("not that", Nof(0, String)))
-	if got := nofErr(t, faulted, "x"); got != "not that" {
+	if got := nofErr(t, faulted, "x"); got != `Value "x" for property "" satisfies 1 of: String; the count must be 0.` {
 		t.Fatalf("fault: %s", got)
+	}
+	if got := nofErr(t, MustShape(map[string]any{"a": Fault("not that", Nof(0, String))}), map[string]any{}); got != "not that" {
+		t.Fatalf("fault, missing: %s", got)
 	}
 	// Ignore drops the failure and the value.
 	if out, err := MustShape(map[string]any{"a": Ignore(Nof(0, String))}).Validate(map[string]any{"a": "x"}); err != nil ||

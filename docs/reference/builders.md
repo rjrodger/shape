@@ -25,7 +25,7 @@ a node. Most take an optional trailing `spec` that they narrow or wrap.
 | `Ignore(spec?)` | Like `Skip`, and drop the value (and its errors) if it fails to match—anywhere in its subtree. |
 | `Empty(spec?)` | Allow the empty string `""` for a `String` shape. |
 | `Nullable(spec?)` | Accept an explicit `null` as the value. Absent is still governed by required/optional. |
-| `Fault(message, spec?)` | Override the **structural** error message for this node (a check's own message is kept). |
+| `Fault(message, spec?)` | Override the **structural** error message for this node (a check's own message is kept, and so is a composition's). |
 
 Notes:
 - A literal in a spec is already "optional with a default"; these builders adjust

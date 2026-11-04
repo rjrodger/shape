@@ -157,6 +157,11 @@ function build() {
   add('fault-bound', E('Fault("boom",Min(2,Number))'), SCALARS)
   add('fault-format', E('Fault("boom",Email)'), FORMATS)
   add('fault-type', E('Fault("boom",String)'), SCALARS)
+  add('fault-nof', E('Fault("boom",Nof(1,Number,String))'), SCALARS)
+  add('fault-nof-none', E('Fault("boom",Nof(0,String))'), SCALARS)
+  add('fault-nof-min', E('Fault("boom",Nof(Min(1),Number,Boolean))'), SCALARS)
+  add('fault-nof-obj', { a: E('Fault("boom",Nof(1,Number,String))') }, OBJS)
+  add('fault-all', E('Fault("boom",All(Number,Min(2)))'), SCALARS)
 
   // Catch, Describe and Ignore: the subtree is judged as a whole.
   add('catch-num', E('Catch(0,Number)'), SCALARS)

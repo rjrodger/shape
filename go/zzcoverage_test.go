@@ -544,12 +544,12 @@ func TestZZValidateAftersAndLists(t *testing.T) {
 	if !MustShape(Nof(1, Number, String)).Match(5.0) {
 		t.Fatal("Nof match should pass")
 	}
-	// Nof failures carrying a Fault message.
-	if _, err := MustShape(Fault("no", Nof(1, Number, String))).Validate(true); err == nil {
-		t.Fatal("expected Nof fault error")
+	// Nof failures under a Fault keep their own message.
+	if _, err := MustShape(Fault("no", Nof(1, Number, String))).Validate(true); err == nil || err.Error() == "no" {
+		t.Fatalf("Nof fault error: %v", err)
 	}
-	if _, err := MustShape(Fault("no", Nof(Min(1), Number, String))).Validate(true); err == nil {
-		t.Fatal("expected Nof fault error")
+	if _, err := MustShape(Fault("no", Nof(Min(1), Number, String))).Validate(true); err == nil || err.Error() == "no" {
+		t.Fatalf("Nof fault error: %v", err)
 	}
 
 	// evaluateList with no list mode returns the input (527).

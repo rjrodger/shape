@@ -1018,7 +1018,9 @@ fn list_names(n: &Node) -> String {
     names.join(", ")
 }
 
-/// A composition's error with the text given.
+/// A composition's error with the text given. The text is the
+/// composition's own, so a `fault` does not replace it: as in TypeScript, a
+/// fault speaks for structural failures only.
 #[allow(clippy::too_many_arguments)]
 fn list_error_text(
     n: &Node,
@@ -1031,15 +1033,9 @@ fn list_error_text(
     why: &str,
     mark: i64,
     text: &str,
-    fault_applies: bool,
 ) {
     let at = at_of(w, key, n, value, parent_is_array, "");
-    let mut err = make_err(&at, why, mark, text);
-    if fault_applies && !err.terse {
-        if let Some(f) = &n.fault_msg {
-            err.text = expand_err_text(f, &err.path, value, at.absent);
-        }
-    }
+    let err = make_err(&at, why, mark, text);
     if !silent {
         verr.add(err);
     }
@@ -1120,7 +1116,6 @@ fn evaluate_list(
                     "Nof",
                     4033,
                     &text,
-                    true,
                 );
                 return true;
             }
@@ -1172,7 +1167,6 @@ fn evaluate_list(
                     "All",
                     4032,
                     &text,
-                    false,
                 );
                 return true;
             }

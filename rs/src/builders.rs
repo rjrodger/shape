@@ -1498,12 +1498,17 @@ mod tests {
             run(&at_a(early), &a("true")),
             "ERR Value \"true\" for property \"a\" satisfies 0 to 1 of: String, Number, Boolean; the count must be Min(2)."
         );
-        // A Fault speaks for the Nof; Ignore drops it.
+        // A Nof's message is its own, so a Fault does not replace it; the
+        // Fault speaks for a value that is missing. Ignore drops the failure.
         assert_eq!(
             run(
                 &at_a(fault("not that", nof(0, [s(Token::String)]))),
                 &a("\"x\"")
             ),
+            "ERR Value \"x\" for property \"a\" satisfies 1 of: String; the count must be 0."
+        );
+        assert_eq!(
+            run(&at_a(fault("not that", nof(0, [s(Token::String)]))), "{}"),
             "ERR not that"
         );
         assert_eq!(
@@ -1655,9 +1660,15 @@ mod tests {
             ),
             "ERR Value \"true\" for property \"a\" satisfies 0 of: /^a/, Number; the count must be Min(1)."
         );
-        // Fault applies to Nof, not All.
-        assert_eq!(run(&at_a(fault("F", one_ns())), &a("true")), "ERR F");
-        assert_eq!(run(&at_a(fault("F", some_ns())), &a("true")), "ERR F");
+        // A composition keeps its own message under a Fault.
+        assert_eq!(
+            run(&at_a(fault("F", one_ns())), &a("true")),
+            "ERR Value \"true\" for property \"a\" satisfies 0 of: Number, String; the count must be 1."
+        );
+        assert_eq!(
+            run(&at_a(fault("F", some_ns())), &a("true")),
+            "ERR Value \"true\" for property \"a\" satisfies 0 of: Number, String; the count must be Min(1)."
+        );
         assert_eq!(
             run(&at_a(fault("F", all_nm())), &a("1")),
             "ERR Value \"1\" for property \"a\" does not satisfy all of: Number, Min(2)"

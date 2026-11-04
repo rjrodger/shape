@@ -924,14 +924,11 @@ func evaluateList(n *node, in any, path []string, pathArr []any, key string, par
 			if tried < total {
 				admitted += " to " + strconv.Itoa(k+total-tried)
 			}
+			// The message is the Nof's own, so a Fault does not replace it:
+			// as in TypeScript, a Fault speaks for structural failures only.
 			err := makeErr(state, WhyNof, 4033,
 				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" satisfies %s of: %s; the count must be %s.",
 					admitted, listShapeNames(n), nofCountText(n)))
-			if n.faultMsg != "" {
-				if !err.terse {
-					err.Text = expandErrText(n.faultMsg, err.Path, in)
-				}
-			}
 			if !n.silent {
 				verr.add(err)
 			}
