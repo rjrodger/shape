@@ -150,13 +150,13 @@ func TestExprBuildersFull(t *testing.T) {
 
 func TestStringifyStructural(t *testing.T) {
 	s := MustShape(map[string]any{
-		"list":   One(Number, String),
+		"list":   Nof(1, Number, String),
 		"nested": map[string]any{"deep": []any{Number, String}},
 		"open":   Open(map[string]any{"x": 1.0}),
 		"child":  Child(Number, map[string]any{}),
 	})
 	out := s.String()
-	for _, want := range []string{"One(", "deep", "Open", "Child"} {
+	for _, want := range []string{"Nof(1,", "deep", "Open", "Child"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("String() missing %q in %q", want, out)
 		}

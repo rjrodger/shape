@@ -177,7 +177,7 @@ describe('parity', () => {
 
     // The expression keeps the kind it declared...
     assert.deepEqual(Shape({ 'a: Any': 0 })({ a: 'x' }), { a: 'x' })
-    assert.deepEqual(Shape({ 'a: One(String,Number)': 5 })({ a: 'q' }), { a: 'q' })
+    assert.deepEqual(Shape({ 'a: Nof(1,String,Number)': 5 })({ a: 'q' }), { a: 'q' })
 
     // ...and a constraint-only expression takes the example's.
     assert.match(

@@ -116,4 +116,3 @@ disc-unknown-tag	{"p":{"$discriminated":["kind",{"dog":{"bark":{"$type":"Boolean
 disc-not-object	{"p":{"$discriminated":["kind",{"dog":{"bark":{"$type":"Boolean"}},"fish":{"fins":{"$type":"Number"}}}]}}	{"p":1}		"Value \"1\" for property \"p\" is not an object with a \"kind\" property."
 disc-required-absent	{"p":{"$discriminated":["kind",{"dog":{"bark":{"$type":"Boolean"}},"fish":{"fins":{"$type":"Number"}}}]}}	{}		"Validation failed for property \"p\" because the property is missing."
 disc-optional-absent	{"p":{"$optional":{"$discriminated":["kind",{"dog":{"bark":{"$type":"Boolean"}},"fish":{"fins":{"$type":"Number"}}}]}}}	{}	{}	
-one-optional-absent	{"a":{"$expr":"Optional(One(String,Number))"}}	{}	{}	

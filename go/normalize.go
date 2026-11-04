@@ -35,7 +35,7 @@ func normalizeWith(spec any, opts ShapeOptions) (*node, error) {
 		return typeTokenNode(v.kind), nil
 	case *regexp.Regexp:
 		// A regexp anywhere in a spec is a string-shaped node, as in TS. Without
-		// this, One(/re/, Number) and a raw regexp spec both failed to build.
+		// this, Nof(1, /re/, Number) and a raw regexp spec both failed to build.
 		return regexpNode(v.String())
 	case time.Time:
 		// A date value in a spec is a date default, as a number literal is a
@@ -235,7 +235,7 @@ func normalizeObject(v map[string]any, opts ShapeOptions) (*node, error) {
 		// valexpr keymark: apply the expression to the parent node in place, so
 		// e.g. "Open" opens this object (mirrors TS expr(src, n)). Narrowing
 		// builders (Open/Closed/Min/Required/...) mutate the carrier and take
-		// effect. Composition builders (All/One/Some/Exact) can't: TS applies them
+		// effect. Composition builders (All/Nof/Exact) can't: TS applies them
 		// with the object as `this` (keeping its children), but Go's variadic
 		// composition builders have no carrier slot — so those are not supported
 		// as value expressions (an off-by-default, rarely-used combination).

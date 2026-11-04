@@ -191,16 +191,18 @@ func TestJSONLists(t *testing.T) {
 		return m
 	}
 	A := func(v ...any) []any { return v }
-	roundTrip(t, M("a", One(String, Number)), `{"a":"One(String,Number)"}`, M("a", 1.0), M("a", true))
-	roundTrip(t, M("a", Some(M("x", 1.0), A(String))), `{"a":{"$$":"Some($$0,$$1)","$$0":{"x":1},"$$1":["String"]}}`,
-		M("a", M("x", 2.0)), M("a", A("y")))
+	roundTrip(t, M("a", Nof(1, String, Number)), `{"a":"Nof(1,String,Number)"}`, M("a", 1.0), M("a", true))
+	roundTrip(t, M("a", Nof(Min(1), M("x", 1.0), A(String))),
+		`{"a":{"$$":"Nof(Any.Min(1),$$0,$$1)","$$0":{"x":1},"$$1":["String"]}}`, M("a", M("x", 2.0)), M("a", A("y")))
+	roundTrip(t, M("a", Nof(1, M("x", 1.0), M("y", 2.0))), `{"a":{"$$":"Nof(1,$$0,$$1)","$$0":{"x":1},"$$1":{"y":2}}}`,
+		M("a", M("x", 2.0)), M("a", 1.0))
 	roundTrip(t, M("a", All(Number, Min(1))), `{"a":"All(Number,Any.Min(1))"}`, M("a", 1.0), M("a", 0.0))
-	roundTrip(t, M("a", Optional(One(String, Number)), "b", Skip(One(String, Number))),
-		`{"a":"One(String,Number).Optional","b":"One(String,Number).Skip"}`, M(), M("a", true))
-	roundTrip(t, M("a", One(Skip(0.0)), "b", One(Min(2, 0.0).Ignore(), String)),
-		`{"a":"One(Skip(0))","b":"One(Skip(0).Min(2).Ignore,String)"}`, M(), M("a", 1.0), M("b", 1.0), M("b", "x"))
-	roundTrip(t, Some(Open(M("a", 1.0)), Open(M("b", 2.0))),
-		`{"$$":"Some($$0,$$1)","$$0":{"a":1,"$$":"Open"},"$$1":{"b":2,"$$":"Open"}}`, M(), M("a", 2.0, "c", 3.0))
+	roundTrip(t, M("a", Optional(Nof(1, String, Number)), "b", Skip(Nof(1, String, Number))),
+		`{"a":"Nof(1,String,Number).Optional","b":"Nof(1,String,Number).Skip"}`, M(), M("a", true))
+	roundTrip(t, M("a", Nof(1, Skip(0.0)), "b", Nof(1, Min(2, 0.0).Ignore(), String)),
+		`{"a":"Nof(1,Skip(0))","b":"Nof(1,Skip(0).Min(2).Ignore,String)"}`, M(), M("a", 1.0), M("b", 1.0), M("b", "x"))
+	roundTrip(t, Nof(Min(1), Open(M("a", 1.0)), Open(M("b", 2.0))),
+		`{"$$":"Nof(Any.Min(1),$$0,$$1)","$$0":{"a":1,"$$":"Open"},"$$1":{"b":2,"$$":"Open"}}`, M(), M("a", 2.0, "c", 3.0))
 	roundTrip(t, M("a", Discriminated("k", M("x", M("a", Number), "y", M("b", String, "k", "y")))),
 		`{"a":{"$$":"Discriminated(\"k\",$$0)","$$0":{"x":{"a: Number":0},"y":{"b: String":""}}}}`,
 		M("a", M("k", "x", "a", 1.0)), M("a", M("k", "y", "b", 1.0)), M("a", M("k", "z")))
@@ -291,7 +293,7 @@ func TestJSONCannot(t *testing.T) {
 	cannot(t, M("a", Exact(M())), "cannot express the Exact value object")
 	cannot(t, M("a", Type(Any).Default(M())), "cannot express the default object")
 	cannot(t, M("a", Type(Kind("bigint"))), "cannot express a bigint value")
-	s, _ := ShapeWith(M("a: b", One(1.0, 2.0)), ShapeOptions{KeyExpr: KeyExprOptions{Disable: true}})
+	s, _ := ShapeWith(M("a: b", Nof(1, 1.0, 2.0)), ShapeOptions{KeyExpr: KeyExprOptions{Disable: true}})
 	if _, err := s.JSON(); err == nil || !strings.Contains(err.Error(), `property name "a: b" of a value with no key form`) {
 		t.Fatalf("got %v", err)
 	}
@@ -354,7 +356,7 @@ func TestJSONReader(t *testing.T) {
 		t.Fatalf("got %v", out)
 	}
 	// Marks are read where they are, so a branch has its own.
-	if out := mustOK(t, build(M("$$", "One($$0,String)", "$$0", M("a", 1.0, "$$", "Open"))), M("z", 1.0)); !reflect.DeepEqual(out, M("a", 1.0, "z", 1.0)) {
+	if out := mustOK(t, build(M("$$", "Nof(1,$$0,String)", "$$0", M("a", 1.0, "$$", "Open"))), M("z", 1.0)); !reflect.DeepEqual(out, M("a", 1.0, "z", 1.0)) {
 		t.Fatalf("got %v", out)
 	}
 	mustOK(t, build(M("$$", "Min(2,$$0).Skip", "$$0", A("String"))), A("a", "b"))
@@ -373,7 +375,7 @@ func TestJSONReader(t *testing.T) {
 	// A mark that does not parse is a build error.
 	for _, bad := range []any{
 		M("$$", ""),
-		M("$$", "One(@)"),
+		M("$$", "Nof(1,@)"),
 		M("$$", "Min(", "$$0", A()),
 		M("$$", "Min(2,$$0).Bogus", "$$0", A()),
 		M("$$", "Discriminated(1,$$0)", "$$0", M()),

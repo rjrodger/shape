@@ -125,8 +125,8 @@ func TestGAliasesFull(t *testing.T) {
 	mustErr(t, MustShape(map[string]any{"a": GCheck(regexp.MustCompile(`^a`))}), map[string]any{"a": "z"}, "failed")
 	mustOK(t, MustShape(map[string]any{"a": GBefore(func(v any, u *Update, s *State) bool { return true }, Number)}), map[string]any{"a": 1.0})
 	mustOK(t, MustShape(map[string]any{"a": GAfter(func(v any, u *Update, s *State) bool { return true }, Number)}), map[string]any{"a": 1.0})
-	mustOK(t, MustShape(map[string]any{"a": GOne(Number, String)}), map[string]any{"a": "x"})
-	mustOK(t, MustShape(map[string]any{"a": GSome(Number, String)}), map[string]any{"a": 5.0})
+	mustOK(t, MustShape(map[string]any{"a": GNof(1, Number, String)}), map[string]any{"a": "x"})
+	mustOK(t, MustShape(map[string]any{"a": GNof(Min(1), Number, String)}), map[string]any{"a": 5.0})
 	mustOK(t, MustShape(map[string]any{"a": GAll(Number, GMin(1.0))}), map[string]any{"a": 5.0})
 	mustOK(t, MustShape(GChild(Number, map[string]any{})), map[string]any{"x": 1.0})
 	mustOK(t, MustShape(GRest(Number, []any{Number, String})), []any{1.0, "a", 2.0})
@@ -146,7 +146,7 @@ func TestIntrospection(t *testing.T) {
 		"b":   true,
 		"arr": []any{Number},
 		"tup": []any{Number, String},
-		"one": One(Number, String),
+		"one": Nof(1, Number, String),
 		"chk": Check(regexp.MustCompile(`^a`)),
 		"obj": Open(map[string]any{"x": 1.0}),
 		"nul": MustExpr("null"),
@@ -333,7 +333,7 @@ func TestExprAndBuild(t *testing.T) {
 	for _, src := range []string{
 		"String", "Number.Min(2).Max(9)", "Required(Min(1))",
 		"null", "NaN", "/^a.+/", "Exact(1,2,3)", `Exact("x","y")`,
-		"One(Number,String)", "Some(Number,String)", "All(Number,Min(1))",
+		"Nof(1,Number,String)", "Nof(Min(1),Number,String)", "All(Number,Min(1))",
 		"Child(Number)", "Rest(Number)", "Open", "Closed", "Skip", "Ignore",
 		"Empty", "Never", "Default(5)", "Type(Number)", "42", `"hello"`, "true",
 	} {

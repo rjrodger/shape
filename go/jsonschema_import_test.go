@@ -77,7 +77,8 @@ func TestJSONSchemaImportRoundTrip(t *testing.T) {
 		"regexp-bounds": Min(2, mustRegexp("^a+$")),
 		"formats":       map[string]any{"a": Email(), "b": Url(), "c": Uuid(), "d": DateTime(), "e": Ipv4(), "f": Ipv6(), "g": Ip()},
 		"exact":         map[string]any{"a": Exact("x", "y"), "b": Exact(1.0), "c": Exact(true, false)},
-		"one":           One(String, Number),
+		"nof":           Nof(Min(1), String, Number),
+		"nof-one":       Nof(1, String, Number),
 		"all":           All(Number, Min(1, Number)),
 		"nullable":      map[string]any{"a": Nullable(Number), "b": Nullable(Empty(String))},
 		"never":         map[string]any{"a": Never()},
@@ -194,7 +195,7 @@ func TestJSONSchemaImportKeywords(t *testing.T) {
 	ok(`{"type":["string","null"]}`, Null)
 	ok(`{"type":"null"}`, Null)
 	bad(`{"type":"null"}`, 1.0, "not of type null")
-	bad(`{"type":["string","number"]}`, true, "does not satisfy one of")
+	bad(`{"type":["string","number"]}`, true, "satisfies 0 of: String, Number; the count must be Min(1).")
 	ok(`{"type":"boolean"}`, false)
 	ok(`{}`, "anything")
 	ok(`{"properties":{"a":{"type":"number"}}}`, map[string]any{"a": 1.0, "b": 2.0})

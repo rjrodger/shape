@@ -8,7 +8,7 @@ import { test } from 'node:test'
 import assert from 'node:assert'
 
 import {
-  Shape, Min, Max, Optional, Skip, Nullable, Default, Exact, One, Some, All, Integer, Email,
+  Shape, Min, Max, Optional, Skip, Nullable, Default, Exact, All, Integer, Email,
   Key, Child, Rest, Discriminated, Transform, Catch, Pick, Omit, Partial, Extend, Type,
   Never, Required, Closed, Open, Check, Any, Func, Describe, Coerce, Ignore, Nof,
 } from '../dist/shape'
@@ -36,8 +36,6 @@ const shape = Shape({
   dd: Default('a', String),
   e: Exact('admin', 'user'),
   en: Exact(1, 2, null),
-  u: One(String, Number),
-  so: Some(Boolean, Number),
   al: All(Number, Min(2)),
   nf: Nof(1, String, Number),
   n0: Nof(0, String),
@@ -104,8 +102,6 @@ type _checks = [
   Expect<Equal<Out['dd'], string>>,
   Expect<Equal<Out['e'], 'admin' | 'user'>>,
   Expect<Equal<Out['en'], 1 | 2 | null>>,
-  Expect<Equal<Out['u'], string | number>>,
-  Expect<Equal<Out['so'], boolean | number>>,
   Expect<Equal<Out['al'], any>>,
   // A count of at least one leaves a value one of the shapes; a count of
   // none, or a shape for the count, says nothing of the type.
@@ -209,7 +205,7 @@ function inferredMore() {
 test('types-agree-with-values', () => {
   assert.equal(typeof inferredMore, 'function')
   const v = shape({ name: 'n', n: 2, chained: 3, nu: null, tup: [1, 'a'], nested: { q: { r: true } }, e: 'admin', en: 1,
-    u: 'x', so: true, al: 2, nf: 'x', n0: 1, nm: true, i: 1, ic: 1, em: 'a@b.co', dt: new Date(0), re: 'abc', k: 'ignored', c: { z: 1 }, rest: [1],
+    al: 2, nf: 'x', n0: 1, nm: true, i: 1, ic: 1, em: 'a@b.co', dt: new Date(0), re: 'abc', k: 'ignored', c: { z: 1 }, rest: [1],
     disc: { kind: 'dog', bark: true }, t: 'abc', ca: 'x', ke: 3, om: { b: 'y' }, ex: { z: true }, ty: 1, tn: 's',
     cl: { a: 2 }, op: { a: 3 }, ck: 'abc', an: 1, fn: (x: number) => x, de: 1, cf: 'true' } as any)
   assert.equal(v.t, 3)

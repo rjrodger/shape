@@ -14,7 +14,7 @@ import (
 // Supported tokens:
 //   - Builder names: Required, Optional, Min, Max, Above, Below, Len, Check,
 //     Open, Closed, Skip, Ignore, Empty, Default, Fault, Never, Type, Exact,
-//     One, Some, All, Nof, Child, Rest, Define, Refer, Rename, Func, Key.
+//     All, Nof, Child, Rest, Define, Refer, Rename, Func, Key.
 //   - Type tokens: String, Number, Boolean, Object, Array, Function, Any.
 //   - Literals: JSON values (numbers, strings, true, false, null) and undefined/NaN.
 //   - Regexp: /pattern/.
@@ -104,7 +104,7 @@ func buildValue(spec any, example bool) (any, error) {
 
 // buildMark applies the expression under the mark to the object that holds
 // it. The sidecars are its arguments; the object's own keys are the shape a
-// chained builder takes, but a composition (One, Exact, ...) has no slot for
+// chained builder takes, but a composition (Nof, Exact, ...) has no slot for
 // a carrier and is read on its own, as it is in TypeScript, where the
 // carrier is the node the composition becomes.
 func buildMark(src string, carrier map[string]any) (any, error) {
@@ -140,7 +140,7 @@ func buildMark(src string, carrier map[string]any) (any, error) {
 
 // The builders that read every argument for themselves.
 var exprComposition = map[string]bool{
-	"One": true, "Some": true, "All": true, "Nof": true, "Exact": true, "Discriminated": true,
+	"All": true, "Nof": true, "Exact": true, "Discriminated": true,
 }
 
 // Tokenization --------------------------------------------------------
@@ -617,12 +617,6 @@ func buildExprBuilders() map[string]exprBuilderFn {
 			return nil, fmt.Errorf("Check: missing checker")
 		}
 		return Check(args[0], exprShapes(args[1:])...), nil
-	},
-	"One": func(args []builderArg) (*Node, error) {
-		return One(exprShapes(args)...), nil
-	},
-	"Some": func(args []builderArg) (*Node, error) {
-		return Some(exprShapes(args)...), nil
 	},
 	"All": func(args []builderArg) (*Node, error) {
 		return All(exprShapes(args)...), nil

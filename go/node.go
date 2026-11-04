@@ -2,13 +2,11 @@ package shape
 
 import "regexp"
 
-// listMode controls how a composition node (One/Some/All/Nof) evaluates its branches.
+// listMode controls how a composition node (All/Nof) evaluates its branches.
 type listMode int
 
 const (
 	listNone listMode = iota
-	listOne
-	listSome
 	listAll
 	listNof
 )

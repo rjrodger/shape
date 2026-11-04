@@ -53,14 +53,12 @@ const {
   Min,
   Never,
   Nof,
-  One,
   Open,
   Optional,
   Refer,
   Rename,
   Required,
   Skip,
-  Some,
   Type,
 } = Shape
 
@@ -392,49 +390,6 @@ describe('builder', () => {
   })
 
 
-  test('builder-one', () => {
-    let g0 = Shape(One(Number, String))
-    deepEqual(g0(1), 1)
-    deepEqual(g0('x'), 'x')
-    throws(() => g0(true), 'Value "true" for property "" does not satisfy one of: Number, String')
-    throws(() => g0(), 'Value "undefined" for property "" does not satisfy one of: Number, String')
-
-    let g0o = Shape(Skip(One(Number, String)))
-    deepEqual(g0o(1), 1)
-    deepEqual(g0o('x'), 'x')
-    deepEqual(g0o(), undefined)
-    throws(() => g0o(true), 'Value "true" for property "" does not satisfy one of: Number, String')
-
-    let g1 = Shape([One({ x: Number }, { x: String })])
-    matchObject(g1([{ x: 1 }, { x: 'x' }, { x: 2 }, { x: 'y' }]), [{ x: 1 }, { x: 'x' }, { x: 2 }, { x: 'y' }])
-    throws(() => g1([{ x: 1 }, { x: true }, { x: 2 }, { x: false }]), `Value "{x:true}" for property "1" does not satisfy one of: {"x":"Number"}, {"x":"String"}
-Value "{x:false}" for property "3" does not satisfy one of: {"x":"Number"}, {"x":"String"}`)
-
-    let g2 = Shape([One(
-      { x: Exact('red'), y: String },
-      { x: Exact('green'), z: Number }
-    )])
-    matchObject(g2([
-      { x: 'red', y: 'Y' },
-      { x: 'green', z: 1 },
-    ]), [
-      { x: 'red', y: 'Y' },
-      { x: 'green', z: 1 },
-    ])
-    throws(() => g2([
-      { x: 'green', z: 2, y: 22 },
-      { x: 'red', y: 'Y', z: 'YY' }
-    ]), `Value "{x:green,z:2,y:22}" for property "0" does not satisfy one of: {"x":"Exact(red)","y":"String"}, {"x":"Exact(green)","z":"Number"}
-Value "{x:red,y:Y,z:YY}" for property "1" does not satisfy one of: {"x":"Exact(red)","y":"String"}, {"x":"Exact(green)","z":"Number"}`)
-
-    throws(() => g2([
-      { x: 'red', y: 3 },
-      { x: 'green', z: 'Z' },
-    ]), `Value "{x:red,y:3}" for property "0" does not satisfy one of: {"x":"Exact(red)","y":"String"}, {"x":"Exact(green)","z":"Number"}
-Value "{x:green,z:Z}" for property "1" does not satisfy one of: {"x":"Exact(red)","y":"String"}, {"x":"Exact(green)","z":"Number"}`)
-  })
-
-
   test('builder-nof', () => {
     const Integer = Shape.Integer
 
@@ -518,45 +473,6 @@ Value "{x:green,z:Z}" for property "1" does not satisfy one of: {"x":"Exact(red)
     deepEqual(Shape(Nof(Min(1), Number, { a: String })).stringify(),
       '{"$$":"Nof(Min(1),Number,$$ref0)","$$ref0":{"a":"String"}}')
     deepEqual(ShapeModule.GNof, Nof)
-  })
-
-
-  test('builder-some', () => {
-    let g0 = Shape({ a: Some(Number, String) })
-    deepEqual(g0({ a: 1 }), { a: 1 })
-    deepEqual(g0({ a: 'x' }), { a: 'x' })
-    throws(() => g0({ a: true }), `Value "true" for property "a" does not satisfy any of: Number, String`)
-
-    throws(() => g0({}), 'Value "undefined" for property "a" does not satisfy any of: Number, String')
-
-    let g1 = Shape(Some(Number, String))
-    deepEqual(g1(1), 1)
-    deepEqual(g1('x'), 'x')
-    throws(() => g1(true), `Value "true" for property "" does not satisfy any of: Number, String`)
-
-    let g2 = Shape([Some(Number, String)])
-    deepEqual(g2([1]), [1])
-    deepEqual(g2(['x']), ['x'])
-    deepEqual(g2([1, 2]), [1, 2])
-    deepEqual(g2([1, 'x']), [1, 'x'])
-    deepEqual(g2(['x', 1]), ['x', 1])
-    deepEqual(g2(['x', 'y']), ['x', 'y'])
-    deepEqual(g2(['x', 1, 'y', 2]), ['x', 1, 'y', 2])
-    throws(() =>
-      g2([true]), `Value "true" for property "0" does not satisfy any of: Number, String`)
-
-    let g3 = Shape({ a: [Some(Number, String)] })
-    deepEqual(g3({ a: [1] }), { a: [1] })
-    deepEqual(g3({ a: ['x'] }), { a: ['x'] })
-    deepEqual(g3({ a: ['x', 1, 'y', 2] }), { a: ['x', 1, 'y', 2] })
-    throws(() =>
-      g3({ a: [1, 2, true] }), `Value "true" for property "a.2" does not satisfy any of: Number, String`)
-
-    let g4 = Shape({ a: [Some(Open({ x: 1 }), Open({ x: 'X' }))] })
-    deepEqual(g4({ a: [{ x: 2 }, { x: 'Q' }, { x: 3, y: true }, { x: 'W', y: false }] }), { a: [{ x: 2 }, { x: 'Q' }, { x: 3, y: true }, { x: 'W', y: false }] })
-
-    let g5 = Shape({ a: [Some({ x: 1 }, Closed({ x: 'X' }))] })
-    deepEqual(g5({ a: [{ x: 2 }, { x: 'Q' }] }), { a: [{ x: 2 }, { x: 'Q' }] })
   })
 
 
@@ -970,7 +886,7 @@ Value "{x:green,z:Z}" for property "1" does not satisfy one of: {"x":"Exact(red)
     throws(() => g0(1), 'type')
     deepEqual(g0(), 'foo!') // before called before processing!
 
-    const g1 = Shape(Skip(Hyperbole(One(String, Number))))
+    const g1 = Shape(Skip(Hyperbole(Nof(1, String, Number))))
     deepEqual(g1('a'), 'A!')
     deepEqual(g1(1), 1)
     deepEqual(g1(), undefined)
@@ -2102,27 +2018,25 @@ Validation failed for property "b" with string "B" because the string is not of 
     throws(() => shape_NeverB0(10), 'Validation failed for number "10" because no value is allowed.')
     throws(() => shape_NeverB0(true), 'Validation failed for boolean "true" because no value is allowed.')
 
-    let shape_OneB0 = Shape(One(Exact(10), Exact(11), Exact(true)))
-    deepEqual(shape_OneB0(10), 10)
-    deepEqual(shape_OneB0(11), 11)
-    deepEqual(shape_OneB0(true), true)
-    throws(() => shape_OneB0(12), 'Value "12" for property "" does not satisfy one of: ' +
-        'Exact(10), Exact(11), Exact(true)')
-    throws(() => shape_OneB0(false), 'Value "false" for property "" does not satisfy one of: ' +
-        'Exact(10), Exact(11), Exact(true)')
-    throws(() => shape_OneB0(null), 'Value "null" for property "" does not satisfy one of: ' +
-        'Exact(10), Exact(11), Exact(true)')
-    throws(() => shape_OneB0(NaN), 'Value "NaN" for property "" does not satisfy one of: ' +
-        'Exact(10), Exact(11), Exact(true)')
-    throws(() => shape_OneB0(undefined), 'Value "undefined" for property "" does not satisfy one of: ' +
-        'Exact(10), Exact(11), Exact(true)')
-    throws(() => shape_OneB0(), 'Value "undefined" for property "" does not satisfy one of: ' +
-        'Exact(10), Exact(11), Exact(true)')
+    let shape_NofB0 = Shape(Nof(1, Exact(10), Exact(11), Exact(true)))
+    deepEqual(shape_NofB0(10), 10)
+    deepEqual(shape_NofB0(11), 11)
+    deepEqual(shape_NofB0(true), true)
+    throws(() => shape_NofB0(12), 'Value "12" for property "" satisfies 0 of: ' +
+        'Exact(10), Exact(11), Exact(true); the count must be 1.')
+    throws(() => shape_NofB0(false), 'Value "false" for property "" satisfies 0 of: ' +
+        'Exact(10), Exact(11), Exact(true); the count must be 1.')
+    throws(() => shape_NofB0(null), 'Value "null" for property "" satisfies 0 of: ' +
+        'Exact(10), Exact(11), Exact(true); the count must be 1.')
+    throws(() => shape_NofB0(NaN), 'Value "NaN" for property "" satisfies 0 of: ' +
+        'Exact(10), Exact(11), Exact(true); the count must be 1.')
+    throws(() => shape_NofB0(undefined), 'Validation failed for value "undefined" because the value is required.')
+    throws(() => shape_NofB0(), 'Validation failed for value "undefined" because the value is required.')
 
-    let shape_OneB1 = Shape(One(Number, String))
-    deepEqual(shape_OneB1(123), 123)
-    deepEqual(shape_OneB1('abc'), 'abc')
-    throws(() => shape_OneB1(true), 'Value "true" for property "" does not satisfy one of: Number, String')
+    let shape_NofB1 = Shape(Nof(1, Number, String))
+    deepEqual(shape_NofB1(123), 123)
+    deepEqual(shape_NofB1('abc'), 'abc')
+    throws(() => shape_NofB1(true), 'Value "true" for property "" satisfies 0 of: Number, String; the count must be 1.')
 
     // TODO: more complex objects
 
@@ -2181,15 +2095,14 @@ Validation failed for property "b" with string "B" because the string is not of 
 
 
 
-    // TODO: update docs - need better example where one prop differentiates
-    let shape_SomeB0 = Shape(Some({ x: 1 }, { y: 2 }))
+    let shape_NofB2 = Shape(Nof(Min(1), { x: 1 }, { y: 2 }))
 
-    deepEqual(shape_SomeB0({ x: 1 }), { x: 1 })
-    deepEqual(shape_SomeB0({ y: 2 }), { y: 2 })
-    throws(() => shape_SomeB0({ x: 11, y: 22 }), 'Value "{x:11,y:22}" for property "" does not satisfy any of: {"x":1}, {"y":2}')
-    throws(() => shape_SomeB0({ x: true, y: 2 }), 'any of')
-    throws(() => shape_SomeB0({ x: 1, y: true }), 'any of')
-    throws(() => shape_SomeB0({ x: true, y: true }), `Value "{x:true,y:true}" for property "" does not satisfy any of: {"x":1}, {"y":2}`)
+    deepEqual(shape_NofB2({ x: 1 }), { x: 1 })
+    deepEqual(shape_NofB2({ y: 2 }), { y: 2 })
+    throws(() => shape_NofB2({ x: 11, y: 22 }), 'Value "{x:11,y:22}" for property "" satisfies 0 of: {"x":1}, {"y":2}; the count must be Min(1).')
+    throws(() => shape_NofB2({ x: true, y: 2 }), 'satisfies 0 of')
+    throws(() => shape_NofB2({ x: 1, y: true }), 'satisfies 0 of')
+    throws(() => shape_NofB2({ x: true, y: true }), `Value "{x:true,y:true}" for property "" satisfies 0 of: {"x":1}, {"y":2}; the count must be Min(1).`)
     // TODO: more complex objects
 
 

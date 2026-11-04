@@ -1,5 +1,5 @@
 //! The string form of a spec: `"String.Min(2)"`, `"Min(2, Number)"`,
-//! `"One(String, Number)"`. Builder names, type tokens, JSON literals and
+//! `"Nof(1, String, Number)"`. Builder names, type tokens, JSON literals and
 //! `/regexp/` tokens, chained with dots and given arguments in parentheses.
 
 use crate::algebra::{extend_node, omit_node, partial_node, pick_node, Names};
@@ -123,7 +123,7 @@ fn type_token(name: &str) -> Option<Token> {
     })
 }
 
-const BUILDERS: [&str; 46] = [
+const BUILDERS: [&str; 44] = [
     "Required",
     "Optional",
     "Open",
@@ -158,8 +158,6 @@ const BUILDERS: [&str; 46] = [
     "Below",
     "Len",
     "Check",
-    "One",
-    "Some",
     "All",
     "Nof",
     "Child",
@@ -547,8 +545,6 @@ fn build_call(name: &str, mut args: Vec<Spec>) -> Result<Node, ExprError> {
                 _ => normalize(spec),
             })
         }
-        "One" => Ok(one(args)),
-        "Some" => Ok(some(args)),
         "All" => Ok(all(args)),
         "Nof" => {
             if args.is_empty() {
@@ -749,7 +745,7 @@ pub(crate) fn split_key_expr(key: &str) -> Option<(String, String)> {
 
 /// The builders that read every argument for themselves, so a mark of one
 /// is the whole node rather than a chain around the object holding it.
-const COMPOSITION: [&str; 6] = ["One", "Some", "All", "Nof", "Exact", "Discriminated"];
+const COMPOSITION: [&str; 4] = ["All", "Nof", "Exact", "Discriminated"];
 
 /// Read the declarative JSON of a shape, what `Schema::json` writes: every
 /// string is an expression (the example of a key expression is a value, so
@@ -881,8 +877,8 @@ mod tests {
             ("Check(/^a/)", "Check.Check(/^a/)"),
             ("Check(/^a/, String)", "String.Check(/^a/)"),
             ("Check(1)", "Any"),
-            ("One(String, 1, NaN, /x/)", "One(String,1,NaN,/x/)"),
-            ("Some(Number)", "Some(Number)"),
+            ("Nof(1, String, 1, NaN, /x/)", "Nof(1,String,1,NaN,/x/)"),
+            ("Nof(Min(1), Number)", "Nof(Min(1),Number)"),
             ("All(Number)", "All(Number)"),
             ("Optional(Number)", "0"),
             ("Required()", "Any"),
@@ -937,7 +933,7 @@ mod tests {
             ("Function", "Function"),
             ("String(Min(2))", "String.Min(2)"),
             ("Min(2).", "Min(2)"),
-            ("One(Number.Min(2), String)", "One(Number.Min(2),String)"),
+            ("All(Number.Min(2), String)", "All(Number.Min(2),String)"),
             ("Optional(Min(2).Number)", "0.Min(2)"),
             ("Optional(Number)", "0"),
             ("Min(2, /^a/)", "/^a/.Min(2)"),

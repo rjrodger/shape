@@ -185,7 +185,7 @@ func jsonValidatorCall(v *validator, calls []jsonCall) []jsonCall {
 		return append(calls, jsonCall{n: name, a: args})
 	case name == "Check":
 		jsonFault("a check function")
-	case name == "One" || name == "Some" || name == "All" || name == "Discriminated":
+	case name == "All" || name == "Discriminated":
 		// The list itself is the head of the expression.
 	default:
 		jsonFault("a custom check " + name)
@@ -625,12 +625,8 @@ func nodeJSON(n *node) any {
 			head = jsonCall{n: "Discriminated", a: []jsonArg{
 				jx(jsonText(n.disc.tag)), {j: jsonBranches(n), side: true}}}
 		} else {
-			mode := "One"
+			mode := "All"
 			switch n.listMode {
-			case listSome:
-				mode = "Some"
-			case listAll:
-				mode = "All"
 			case listNof:
 				// A Nof's count leads its shapes: a number inline, a shape
 				// as its value.

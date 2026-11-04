@@ -12,8 +12,8 @@ import (
 // drafts), the inverse of the export in jsonschema.go: a type becomes a
 // token, bounds become size builders, formats and patterns their builders,
 // enum and const become Exact, properties and items become objects and
-// arrays, the compositions become One, All, Nof and Discriminated (oneOf a
-// count of exactly one, not a count of none), and a definition is inlined
+// arrays, the compositions become All, Nof and Discriminated (anyOf a count
+// of at least one, oneOf of exactly one, not of none), and a definition is inlined
 // where it is referenced — Define and Refer only where
 // a definition refers to itself. A property that is not required and has no
 // default is Skip. Unknown keywords are ignored; an unknown type or reference
@@ -181,7 +181,7 @@ func (c *jsonSchemaImport) keywords(m map[string]any, path string) (any, error) 
 		if err != nil {
 			return nil, err
 		}
-		spec = One(branches...)
+		spec = Nof(Min(1), branches...)
 	} else {
 		spec, err = c.typed(m, path)
 		if err != nil {
@@ -323,7 +323,7 @@ func (c *jsonSchemaImport) typed(m map[string]any, path string) (any, error) {
 			}
 			kinds[i] = k
 		}
-		spec = One(kinds...)
+		spec = Nof(Min(1), kinds...)
 	}
 
 	if nullable {

@@ -133,5 +133,5 @@ if (await emailTaken(user.email)) {
 ## See also
 
 - [ADR 0001—validation is synchronous](../adr/0001-validation-is-synchronous.md).
-- [Compose shapes](compose-shapes.md) for `One` / `Some` / `All` / `Exact`.
+- [Compose shapes](compose-shapes.md) for `Nof` / `All` / `Exact`.
 - [Handle and collect errors](handle-and-collect-errors.md).

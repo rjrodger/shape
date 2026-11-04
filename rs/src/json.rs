@@ -173,7 +173,7 @@ fn validator_call(v: &Validator, calls: &mut Vec<Call>) -> R<()> {
         }
         "Check" => return cannot("a check function"),
         // The list itself is the head of the expression.
-        "One" | "Some" | "All" | "Discriminated" => {}
+        "All" | "Discriminated" => {}
         _ if is_format(name) => calls.push(call(name)),
         // The check of a regexp is named by its pattern.
         _ if name.starts_with('/') => calls.push(call1("Check", name.to_string())),
@@ -682,8 +682,6 @@ pub fn node_json(n: &Node) -> R<Value> {
                 None => {
                     let mut args = Vec::with_capacity(n.list.len() + 1);
                     let mode = match n.list_mode {
-                        ListMode::Some => "Some",
-                        ListMode::All => "All",
                         ListMode::Nof => {
                             // A Nof's count leads its shapes: a number
                             // inline, a shape as its value.
@@ -693,7 +691,7 @@ pub fn node_json(n: &Node) -> R<Value> {
                             });
                             "Nof"
                         }
-                        _ => "One",
+                        _ => "All",
                     };
                     for b in &n.list {
                         args.push(arg_of(b)?);

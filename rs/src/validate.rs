@@ -1012,40 +1012,6 @@ fn branch_passes(
     !sub.has_any()
 }
 
-#[allow(clippy::too_many_arguments)]
-fn list_error(
-    n: &Node,
-    silent: bool,
-    value: &Value,
-    key: &str,
-    parent_is_array: bool,
-    w: &Walk<'_>,
-    verr: &mut ValidationError,
-    why: &str,
-    mark: i64,
-    words: &str,
-    fault_applies: bool,
-) {
-    let text = format!(
-        "Value \"$VALUE\" for property \"$PATH\" does not satisfy {}: {}",
-        words,
-        list_names(n)
-    );
-    list_error_text(
-        n,
-        silent,
-        value,
-        key,
-        parent_is_array,
-        w,
-        verr,
-        why,
-        mark,
-        &text,
-        fault_applies,
-    );
-}
-
 /// The branches of a composition, as its message names them.
 fn list_names(n: &Node) -> String {
     let names: Vec<String> = n.list.iter().map(|sn| stringify_node(sn, true)).collect();
@@ -1100,7 +1066,7 @@ fn nof_span(ok: &[bool], k: usize, open: usize) -> Admits {
     }
 }
 
-/// One, Some, All and Nof. The branches see the value as the parent saw it:
+/// All and Nof. The branches see the value as the parent saw it:
 /// an absent value stays absent, so a branch that does not require one can
 /// still match and supply its default.
 #[allow(clippy::too_many_arguments)]
@@ -1158,8 +1124,7 @@ fn evaluate_list(
                 );
                 return true;
             }
-            // Exactly one: the branch the value satisfies produces it, as
-            // One's match does.
+            // Exactly one: the branch the value satisfies produces it.
             if n.nof_one {
                 let mut sub = ValidationError::default();
                 return validate_node(
@@ -1172,76 +1137,6 @@ fn evaluate_list(
                 );
             }
             true
-        }
-        ListMode::One => {
-            let winner = n
-                .list
-                .iter()
-                .position(|sn| branch_passes(sn, cur.get(), key, parent_is_array, w));
-            match winner {
-                Some(i) => {
-                    // The value is produced by the branch that took it.
-                    let mut sub = ValidationError::default();
-                    validate_node(
-                        &n.list[i],
-                        cur.reborrow(),
-                        key,
-                        parent_is_array,
-                        w,
-                        &mut sub,
-                    )
-                }
-                None => {
-                    list_error(
-                        n,
-                        silent,
-                        cur.get(),
-                        key,
-                        parent_is_array,
-                        w,
-                        verr,
-                        "One",
-                        4030,
-                        "one of",
-                        true,
-                    );
-                    true
-                }
-            }
-        }
-        ListMode::Some => {
-            // Every branch sees the value as it was given, never one another
-            // branch changed: each matching branch produces from its own copy
-            // of the original, and the last one's result stands.
-            let original = cur.get().clone();
-            let mut matched = false;
-            let mut kept = true;
-            for sn in &n.list {
-                if !branch_passes(sn, &original, key, parent_is_array, w) {
-                    continue;
-                }
-                matched = true;
-                cur.set(original.clone());
-                let mut sub = ValidationError::default();
-                kept = validate_node(sn, cur.reborrow(), key, parent_is_array, w, &mut sub);
-            }
-            if !matched {
-                list_error(
-                    n,
-                    silent,
-                    &original,
-                    key,
-                    parent_is_array,
-                    w,
-                    verr,
-                    "Some",
-                    4031,
-                    "any of",
-                    true,
-                );
-                return true;
-            }
-            kept
         }
         _ => {
             // All threads the value through its branches; a branch that
@@ -1262,7 +1157,11 @@ fn evaluate_list(
             }
             if !pass_all {
                 cur.set(original.clone());
-                list_error(
+                let text = format!(
+                    "Value \"$VALUE\" for property \"$PATH\" does not satisfy all of: {}",
+                    list_names(n)
+                );
+                list_error_text(
                     n,
                     silent,
                     &original,
@@ -1272,7 +1171,7 @@ fn evaluate_list(
                     verr,
                     "All",
                     4032,
-                    "all of",
+                    &text,
                     false,
                 );
                 return true;
@@ -1587,7 +1486,7 @@ mod tests {
     #[test]
     fn structural_rules() {
         assert_eq!(
-            run(&Schema::new(one([Spec::from(Token::Number)])), "1"),
+            run(&Schema::new(nof(1, [Spec::from(Token::Number)])), "1"),
             "1"
         );
         assert_eq!(

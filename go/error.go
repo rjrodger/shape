@@ -20,8 +20,6 @@ const (
 	WhyRequired      = "required"
 	WhyClosed        = "closed"
 	WhyCheck         = "check"
-	WhyOne           = "One"
-	WhySome          = "Some"
 	WhyAll           = "All"
 	WhyNof           = "Nof"
 	WhyExact         = "Exact"

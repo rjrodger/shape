@@ -61,9 +61,11 @@ Injected defaults are deep-cloned, so two validations never share mutable state.
 
 ## Traversal and error collection
 
-Validation is a single depth-first pass. Because composition builders
-(`One`/`Some`/`All`) and defaults interact, the engine deliberately evaluates
-branches without early exit where a short-circuit would skip a default. All
+Validation is a single depth-first pass. Because composition builders and
+defaults interact, `All` deliberately evaluates every branch, so no
+short-circuit skips a default. `Nof` stops once the branches left untried
+cannot change its verdict, and it only checks unless its count admits exactly
+one branch, which then produces the value. All
 errors from one pass are collected; by default the first failure surfaces as a
 thrown error (TS) or a returned error (Go and Rust), but you can
 [collect them all](../how-to/handle-and-collect-errors.md).

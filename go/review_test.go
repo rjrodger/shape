@@ -88,35 +88,22 @@ func TestCheckSkipsAbsent(t *testing.T) {
 	}
 }
 
-// Every Some branch sees the value as given, never one another branch
-// changed; the last matching branch's result stands, and the subject is
-// not changed.
-func TestSomeBranchesSeeTheOriginal(t *testing.T) {
-	s, _ := Shape(Some(Open(map[string]any{"a": 1}), Open(map[string]any{"a": 2})))
+// A Nof that only checks leaves the value as it was given, and the subject
+// is not changed; a failing branch leaks nothing into the value.
+func TestNofBranchesSeeTheOriginal(t *testing.T) {
+	s, _ := Shape(Nof(Min(1), Open(map[string]any{"a": 1}), Open(map[string]any{"a": 2})))
 	in := map[string]any{}
 	out := mustValid(t, s, in).(map[string]any)
-	if out["a"] != 2 || len(in) != 0 {
-		t.Fatalf("got %v, in %v, want a: 2 and an untouched input", out, in)
+	if len(out) != 0 || len(in) != 0 {
+		t.Fatalf("got %v, in %v, want both empty", out, in)
 	}
-	both, _ := Shape(Some(Open(map[string]any{"a": 1}), Open(map[string]any{"b": 2})))
-	if out := mustValid(t, both, map[string]any{}).(map[string]any); out["b"] != 2 || out["a"] != nil {
-		t.Fatalf("got %v, want b: 2 only", out)
-	}
-	sc, _ := Shape(Some(Coerce(Number), Max(2)))
+	sc, _ := Shape(Nof(Min(1), Coerce(Number), Max(2)))
 	if out := mustValid(t, sc, "12"); out != "12" {
 		t.Fatalf("got %v (%T), want \"12\"", out, out)
 	}
-	cs, _ := Shape(Some(Max(2), Coerce(Number)))
-	if out := mustValid(t, cs, "12"); out != 12.0 {
-		t.Fatalf("got %v (%T), want 12", out, out)
-	}
-	// A branch that replaces the value leaves the next branch the original.
-	rp, _ := Shape(Some(Catch(1, Number), Open(map[string]any{"a": 1})))
-	if out := mustValid(t, rp, map[string]any{}).(map[string]any); out["a"] != 1 {
-		t.Fatalf("got %v, want a: 1", out)
-	}
-	if out := mustValid(t, rp, 3); out != 3.0 && out != 3 {
-		t.Fatalf("got %v (%T), want 3", out, out)
+	lk, _ := Shape(Nof(1, map[string]any{"x": Number, "y": 1}, Open(map[string]any{"z": 3})))
+	if out := mustValid(t, lk, map[string]any{}).(map[string]any); out["z"] != 3 || len(out) != 1 {
+		t.Fatalf("got %v, want z: 3 only", out)
 	}
 	// All threads a copy; a failing composition leaves the input untouched.
 	all, _ := Shape(All(Open(map[string]any{"a": 1}), Open(map[string]any{"b": 2})))

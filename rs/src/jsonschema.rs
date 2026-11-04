@@ -223,12 +223,9 @@ fn list_schema(n: &Node, s: &mut Map, defs: &mut Map) {
         return;
     }
     match n.list_mode {
-        ListMode::All => {
-            s.insert("allOf".to_string(), Value::Arr(branches));
-        }
         ListMode::Nof => nof_schema(&n.nof_ok, branches, s),
         _ => {
-            s.insert("anyOf".to_string(), Value::Arr(branches));
+            s.insert("allOf".to_string(), Value::Arr(branches));
         }
     }
 }
@@ -608,8 +605,11 @@ mod tests {
             json!({"type": "number", "maximum": 2})
         );
         assert_eq!(
-            js(one([Spec::from(Token::String), Spec::from(Token::Number)])),
-            json!({"anyOf": [{"type": "string", "minLength": 1}, {"type": "number"}]})
+            js(nof(
+                1,
+                [Spec::from(Token::String), Spec::from(Token::Number)]
+            )),
+            json!({"oneOf": [{"type": "string", "minLength": 1}, {"type": "number"}]})
         );
         assert_eq!(
             js(all([Spec::from(Token::Number), Spec::from(min(1, any()))])),

@@ -918,16 +918,6 @@ func (n *Node) After(fn func(val any, update *Update, state *State) bool) *Node 
 	return n
 }
 
-// One requires the value to satisfy exactly one of the given shapes.
-func One(shapes ...any) *Node {
-	return makeListBuilder(listOne, shapes)
-}
-
-// Some requires the value to satisfy at least one shape.
-func Some(shapes ...any) *Node {
-	return makeListBuilder(listSome, shapes)
-}
-
 // All requires the value to satisfy every shape.
 func All(shapes ...any) *Node {
 	return makeListBuilder(listAll, shapes)
@@ -1442,8 +1432,6 @@ func GBefore(fn func(any, *Update, *State) bool, spec ...any) *Node {
 func GAfter(fn func(any, *Update, *State) bool, spec ...any) *Node {
 	return After(fn, spec...)
 }
-func GOne(shapes ...any) *Node               { return One(shapes...) }
-func GSome(shapes ...any) *Node              { return Some(shapes...) }
 func GAll(shapes ...any) *Node               { return All(shapes...) }
 func GNof(count any, shapes ...any) *Node    { return Nof(count, shapes...) }
 func GChild(child any, spec ...any) *Node    { return Child(child, spec...) }

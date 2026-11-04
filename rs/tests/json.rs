@@ -355,17 +355,25 @@ fn arrays() {
 #[test]
 fn lists() {
     round_trip(
-        obj([("a", one([Token::String, Token::Number]))]),
-        r#"{"a":"One(String,Number)"}"#,
+        obj([("a", nof(1, [Token::String, Token::Number]))]),
+        r#"{"a":"Nof(1,String,Number)"}"#,
         &[v(r#"{"a":1}"#), v(r#"{"a":true}"#)],
     );
     round_trip(
         obj([(
             "a",
-            some([obj([("x", 1)]), Spec::Arr(vec![Spec::from(Token::String)])]),
+            nof(
+                min(1, any()),
+                [obj([("x", 1)]), Spec::Arr(vec![Spec::from(Token::String)])],
+            ),
         )]),
-        r#"{"a":{"$$":"Some($$0,$$1)","$$0":{"x":1},"$$1":["String"]}}"#,
+        r#"{"a":{"$$":"Nof(Any.Min(1),$$0,$$1)","$$0":{"x":1},"$$1":["String"]}}"#,
         &[v(r#"{"a":{"x":2}}"#), v(r#"{"a":["y"]}"#)],
+    );
+    round_trip(
+        obj([("a", nof(1, [obj([("x", 1)]), obj([("y", 2)])]))]),
+        r#"{"a":{"$$":"Nof(1,$$0,$$1)","$$0":{"x":1},"$$1":{"y":2}}}"#,
+        &[v(r#"{"a":{"x":2}}"#), v(r#"{"a":1}"#)],
     );
     round_trip(
         obj([(
@@ -377,27 +385,33 @@ fn lists() {
     );
     round_trip(
         obj([
-            ("a", optional(one([Token::String, Token::Number]))),
-            ("b", skip(one([Token::String, Token::Number]))),
+            ("a", optional(nof(1, [Token::String, Token::Number]))),
+            ("b", skip(nof(1, [Token::String, Token::Number]))),
         ]),
-        r#"{"a":"One(String,Number).Optional","b":"One(String,Number).Skip"}"#,
+        r#"{"a":"Nof(1,String,Number).Optional","b":"Nof(1,String,Number).Skip"}"#,
         &[v("{}"), v(r#"{"a":true}"#)],
     );
     round_trip(
         obj([
-            ("a", one([skip(0)])),
+            ("a", nof(1, [skip(0)])),
             (
                 "b",
-                one([Spec::from(min(2, 0).ignore()), Spec::from(Token::String)]),
+                nof(
+                    1,
+                    [Spec::from(min(2, 0).ignore()), Spec::from(Token::String)],
+                ),
             ),
         ]),
-        r#"{"a":"One(Skip(0))","b":"One(Skip(0).Min(2).Ignore,String)"}"#,
+        r#"{"a":"Nof(1,Skip(0))","b":"Nof(1,Skip(0).Min(2).Ignore,String)"}"#,
         &[v("{}"), v(r#"{"a":1}"#), v(r#"{"b":1}"#), v(r#"{"b":"x"}"#)],
     );
     // Marks inside a branch apply to the branch.
     round_trip(
-        some([open(obj([("a", 1)])), open(obj([("b", 2)]))]),
-        r#"{"$$":"Some($$0,$$1)","$$0":{"a":1,"$$":"Open"},"$$1":{"b":2,"$$":"Open"}}"#,
+        nof(
+            min(1, any()),
+            [open(obj([("a", 1)])), open(obj([("b", 2)]))],
+        ),
+        r#"{"$$":"Nof(Any.Min(1),$$0,$$1)","$$0":{"a":1,"$$":"Open"},"$$1":{"b":2,"$$":"Open"}}"#,
         &[v("{}"), v(r#"{"a":2,"c":3}"#)],
     );
     round_trip(
@@ -699,7 +713,7 @@ fn refusals() {
         key_expr: false,
         ..Default::default()
     };
-    let s = Schema::with_options(obj([("a: b", one([1, 2]))]), &opts);
+    let s = Schema::with_options(obj([("a: b", nof(1, [1, 2]))]), &opts);
     assert!(s
         .json()
         .expect_err("no key form")
@@ -792,7 +806,7 @@ fn reader() {
     // Marks are read where they are, so a branch has its own.
     assert_eq!(
         serde_json::Value::from(ok(
-            &b(r#"{"$$":"One($$0,String)","$$0":{"a":1,"$$":"Open"}}"#),
+            &b(r#"{"$$":"Nof(1,$$0,String)","$$0":{"a":1,"$$":"Open"}}"#),
             r#"{"z":1}"#
         )),
         v(r#"{"a":1,"z":1}"#)

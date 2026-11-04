@@ -2,8 +2,8 @@
 //! drafts), the inverse of the export: a type becomes a token, bounds become
 //! size builders, formats and patterns their builders, enum and const become
 //! Exact, properties and items become objects and arrays, the compositions
-//! become One, All, Nof and Discriminated (oneOf a count of exactly one, not
-//! a count of none), and a definition is inlined where it is referenced,
+//! become All, Nof and Discriminated (anyOf a count of at least one, oneOf
+//! of exactly one, not of none), and a definition is inlined where it is referenced,
 //! with Define and Refer only where a definition refers to
 //! itself. A property that is not required and has no default is Skip.
 //! Unknown keywords are ignored; an unknown type or reference is an error.
@@ -221,7 +221,10 @@ impl<'a> Import<'a> {
                 None => Spec::from(nof(1, self.branches(one_of, &sub)?)),
             }
         } else if let Some(any_of) = m.get("anyOf").filter(|v| !is_ip_formats(Some(v))) {
-            Spec::from(one(self.branches(any_of, &format!("{}/anyOf", path))?))
+            Spec::from(nof(
+                min(1, any()),
+                self.branches(any_of, &format!("{}/anyOf", path))?,
+            ))
         } else {
             self.typed(m, path)?
         };
@@ -294,7 +297,7 @@ impl<'a> Import<'a> {
             for t in &types {
                 kinds.push(self.kind(as_str(Some(t)).unwrap_or(""), m, path)?);
             }
-            Spec::from(one(kinds))
+            Spec::from(nof(min(1, any()), kinds))
         };
         Ok(if nullable {
             Spec::from(nullable_(spec))
@@ -717,7 +720,7 @@ mod tests {
         );
         assert_eq!(
             render(json!({"type": ["string", "number"]})),
-            "One(String,Number)"
+            "Nof(Min(1),String,Number)"
         );
         assert_eq!(render(json!({"enum": ["a", 1]})), "Exact(a, 1)");
         assert_eq!(render(json!({"const": 1})), "Exact(1)");
@@ -727,7 +730,7 @@ mod tests {
         );
         assert_eq!(
             render(json!({"anyOf": [{"type": "string"}, {"type": "number"}]})),
-            "One(String,Number)"
+            "Nof(Min(1),String,Number)"
         );
         // A oneOf is a count of exactly one; a not, a count of none that
         // holds beside the other keywords, ahead of them.
@@ -762,7 +765,7 @@ mod tests {
         );
         assert_eq!(
             render(json!({"anyOf": [{"format": "ipv4"}]})),
-            "One(String.Ipv4)"
+            "Nof(Min(1),String.Ipv4)"
         );
         assert_eq!(
             fails(json!({"anyOf": [{"format": "ipv4"}, 1]})),

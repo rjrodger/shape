@@ -68,14 +68,12 @@ pub fn stringify_node(n: &Node, inline: bool) -> String {
             }
             let mut parts: Vec<String> = Vec::new();
             let mode = match n.list_mode {
-                ListMode::Some => "Some",
-                ListMode::All => "All",
                 ListMode::Nof => {
                     // A Nof's count leads its shapes.
                     parts.push(nof_count_text(n));
                     "Nof"
                 }
-                _ => "One",
+                _ => "All",
             };
             parts.extend(n.list.iter().map(|sn| stringify_node(sn, true)));
             suffix(format!("{}({})", mode, parts.join(",")), n)
@@ -210,12 +208,8 @@ mod tests {
             "Function"
         );
         assert_eq!(
-            stringify_node(&one([Spec::from(Token::Number), Spec::from("a")]), false),
-            "One(Number,a)"
-        );
-        assert_eq!(
-            stringify_node(&some([Spec::from(Token::Number)]), false),
-            "Some(Number)"
+            stringify_node(&nof(1, [Spec::from(Token::Number), Spec::from("a")]), false),
+            "Nof(1,Number,a)"
         );
         assert_eq!(
             stringify_node(&all([Spec::from(Token::Number)]), false),

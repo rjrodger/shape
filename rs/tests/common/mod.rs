@@ -82,16 +82,12 @@ pub fn decode_spec(v: &serde_json::Value) -> Result<Spec, Unsupported> {
                                 }
                                 _ => Err(Unsupported("$call Refer".into())),
                             },
-                            "Some" | "One" | "All" => {
+                            "All" => {
                                 let branches = arr[1..]
                                     .iter()
                                     .map(decode_spec)
                                     .collect::<Result<Vec<_>, _>>()?;
-                                Ok(Spec::from(match name {
-                                    "Some" => shape::some(branches),
-                                    "One" => shape::one(branches),
-                                    _ => shape::all(branches),
-                                }))
+                                Ok(Spec::from(shape::all(branches)))
                             }
                             "Nof" => {
                                 let branches = arr[2..]

@@ -159,7 +159,7 @@ func TestNormalizeErrors(t *testing.T) {
 	}
 }
 
-// --- validate: after-fail with Done, All-fail, Some-none, array non-slice
+// --- validate: after-fail with Done, All-fail, Nof-none, array non-slice
 
 func TestValidateBranches(t *testing.T) {
 	// After returning false with Done → error and stop.
@@ -173,8 +173,8 @@ func TestValidateBranches(t *testing.T) {
 	// All with one failing branch.
 	mustErr(t, MustShape(map[string]any{"a": All(Number, Min(10.0))}), map[string]any{"a": 1.0}, "satisfy all")
 
-	// Some with no matching branch.
-	mustErr(t, MustShape(map[string]any{"a": Some(Number, Boolean)}), map[string]any{"a": "x"}, "satisfy any")
+	// Nof with no matching branch.
+	mustErr(t, MustShape(map[string]any{"a": Nof(Min(1), Number, Boolean)}), map[string]any{"a": "x"}, "satisfies 0 of")
 
 	// Array shape validating a non-array input.
 	mustErr(t, MustShape([]any{Number}), map[string]any{"not": "array"}, "not of type array")

@@ -16,7 +16,7 @@ if (ShapeModule.Shape) {
 const Shape: ShapeX = ShapeModule
 const {
   build, expr, Min, Max, Above, Below, Len, Optional, Required, Skip, Empty, Nullable, Integer,
-  Open, Closed, Child, Rest, One, Some, All, Exact, Discriminated, Any, Never, Func, Check,
+  Open, Closed, Child, Rest, All, Exact, Discriminated, Any, Never, Func, Check,
   Catch, Ignore, Transform, Coerce, Define, Refer, Rename, Key, Email, Describe, Fault,
   Default, Before, After, fromJsonSchema, Nof,
 } = ShapeModule
@@ -129,10 +129,9 @@ describe('json', () => {
 
 
   test('lists', () => {
-    roundTrip({ a: One(String, Number) }, { a: 'One(String,Number)' }, { a: 1 }, { a: true })
-    roundTrip({ a: Some({ x: 1 }, [String]) }, { a: { $$: 'Some($$0,$$1)', $$0: { x: 1 }, $$1: ['String'] } },
-      { a: { x: 2 } }, { a: ['y'] })
-    roundTrip({ a: Some({ x: 1 }, { y: 2 }) }, { a: { $$: 'Some($$0,$$1)', $$0: { x: 1 }, $$1: { y: 2 } } },
+    roundTrip({ a: Nof(Min(1), { x: 1 }, [String]) },
+      { a: { $$: 'Nof(Any.Min(1),$$0,$$1)', $$0: { x: 1 }, $$1: ['String'] } }, { a: { x: 2 } }, { a: ['y'] })
+    roundTrip({ a: Nof(1, { x: 1 }, { y: 2 }) }, { a: { $$: 'Nof(1,$$0,$$1)', $$0: { x: 1 }, $$1: { y: 2 } } },
       { a: { x: 2 } }, { a: 1 })
     roundTrip({ a: All(Number, Min(1)) }, { a: 'All(Number,Any.Min(1))' }, { a: 1 }, { a: 0 })
     // A Nof's count leads its shapes: a number inline, a shape as its value.
@@ -140,13 +139,13 @@ describe('json', () => {
       { a: 'Nof(1,String,Number)', b: 'Nof(0,String).Optional' }, { a: 1 }, { a: true }, { a: 1, b: 'x' })
     roundTrip({ a: Nof(Min(1), { x: 1 }, Number) }, { a: { $$: 'Nof(Any.Min(1),$$0,Number)', $$0: { x: 1 } } },
       { a: 2 }, { a: true }, { a: { x: 2 } }, { a: { y: 2 } })
-    roundTrip({ a: Optional(One(String, Number)), b: Skip(One(String, Number)) },
-      { a: 'One(String,Number).Optional', b: 'One(String,Number).Skip' }, {}, { a: true })
-    roundTrip({ a: One(Skip(0)), b: One(Min(2, 0).Ignore(), String) },
-      { a: 'One(Skip(0))', b: 'One(Skip(0).Min(2).Ignore,String)' }, {}, { a: 1 }, { b: 1 }, { b: 'x' })
+    roundTrip({ a: Optional(Nof(1, String, Number)), b: Skip(Nof(1, String, Number)) },
+      { a: 'Nof(1,String,Number).Optional', b: 'Nof(1,String,Number).Skip' }, {}, { a: true })
+    roundTrip({ a: Nof(1, Skip(0)), b: Nof(1, Min(2, 0).Ignore(), String) },
+      { a: 'Nof(1,Skip(0))', b: 'Nof(1,Skip(0).Min(2).Ignore,String)' }, {}, { a: 1 }, { b: 1 }, { b: 'x' })
     // Marks inside a branch apply to the branch.
-    roundTrip(Some(Open({ a: 1 }), Open({ b: 2 })),
-      { $$: 'Some($$0,$$1)', $$0: { a: 1, $$: 'Open' }, $$1: { b: 2, $$: 'Open' } }, {}, { a: 2, c: 3 })
+    roundTrip(Nof(Min(1), Open({ a: 1 }), Open({ b: 2 })),
+      { $$: 'Nof(Any.Min(1),$$0,$$1)', $$0: { a: 1, $$: 'Open' }, $$1: { b: 2, $$: 'Open' } }, {}, { a: 2, c: 3 })
     roundTrip({ a: Discriminated('k', { x: { a: Number }, y: { b: String, k: 'y' } }) },
       { a: { $$: 'Discriminated("k",$$0)', $$0: { x: { 'a: Number': 0 }, y: { 'b: String': '' } } } },
       { a: { k: 'x', a: 1 } }, { a: { k: 'y', b: 1 } }, { a: { k: 'z' } })
@@ -214,7 +213,7 @@ describe('json', () => {
     cannot({ a: Symbol('s') }, /cannot express a symbol value/)
     cannot({ a: 10n }, /cannot express a bigint value/)
     cannot({ $$: 1 }, /cannot express the property name "\$\$"/)
-    cannot(Shape({ 'a: b': One(1, 2) }, { keyexpr: { active: false } }), /property name "a: b" of a value with no key form/)
+    cannot(Shape({ 'a: b': Nof(1, 1, 2) }, { keyexpr: { active: false } }), /property name "a: b" of a value with no key form/)
     cannot({ a: Child(Number).Exact(1) }, /cannot express Exact on an object/)
     cannot({ a: Shape.Rest(Number).Exact(1) }, /cannot express Exact on an array/)
     cannot({ a: Exact(undefined) }, /cannot express the Exact value undefined/)
@@ -248,7 +247,7 @@ describe('json', () => {
     throws(() => build({ a: null })({ a: 1 }), /not of type null/)
     deepEqual(build({ a: null })({ a: null }), { a: null })
     // Marks are read where they are, so a branch has its own.
-    deepEqual(build({ $$: 'One($$0,String)', $$0: { a: 1, $$: 'Open' } })({ z: 1 }), { a: 1, z: 1 })
+    deepEqual(build({ $$: 'Nof(1,$$0,String)', $$0: { a: 1, $$: 'Open' } })({ z: 1 }), { a: 1, z: 1 })
     deepEqual(build({ $$: 'Min(2,$$0).Skip', $$0: ['String'] })(['a', 'b']), ['a', 'b'])
     throws(() => build({ $$: 'Min(2,$$0).Skip', $$0: ['String'] })(['a']), /minimum length of 2/)
     deepEqual(build({ $$: 'Min(2,$$0).Skip', $$0: ['String'] }).json(), { $$: 'Skip($$0).Min(2)', $$0: ['String'] })

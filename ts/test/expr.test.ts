@@ -29,8 +29,7 @@ const {
   Default,
   Above,
   Below,
-  One,
-  Some,
+  Nof,
   All,
   expr,
   build,
@@ -304,12 +303,12 @@ describe('expr', () => {
 
 
   test('expr-list', () => {
-    let g: any = Shape({ a: One(Number, String) })
+    let g: any = Shape({ a: Nof(1, Number, String) })
     deepEqual(g({ a: 1 }), { a: 1 })
     let gs = g.stringify()
-    deepEqual(gs, '{"a":"One(Number,String)"}')
+    deepEqual(gs, '{"a":"Nof(1,Number,String)"}')
     let gr = Shape.build(JP(gs))
-    deepEqual(gr.jsonify(), { a: 'One(Number,String)' })
+    deepEqual(gr.jsonify(), { a: 'Nof(1,Number,String)' })
 
     g = Shape({ a: All(Number, 1) })
     deepEqual(g({ a: 1 }), { a: 1 })
@@ -318,34 +317,39 @@ describe('expr', () => {
     gr = Shape.build(JP(gs))
     deepEqual(gr.jsonify(), { a: 'All(Number,1)' })
 
-    g = Shape({ a: Some(Number, String) })
+    g = Shape({ a: Nof(Min(1), Number, String) })
     deepEqual(g({ a: 1 }), { a: 1 })
     gs = g.stringify()
-    deepEqual(gs, '{"a":"Some(Number,String)"}')
+    deepEqual(gs, '{"a":"Nof(Min(1),Number,String)"}')
     gr = Shape.build(JP(gs))
-    deepEqual(gr.jsonify(), { a: 'Some(Number,String)' })
+    deepEqual(gr.jsonify(), { a: 'Nof(Min(1),Number,String)' })
 
-    let listBuilders = [One, All, Some]
-    for (let lb of listBuilders) {
-      g = Shape({ a: lb({ x: Number }, [String]) })
-      if (One === lb || Some === lb) {
+    // A list with object and array branches writes them as references; a
+    // count of one passes either branch.
+    const lists: [any, string, boolean][] = [
+      [Nof(1, { x: Number }, [String]), 'Nof(1,', true],
+      [All({ x: Number }, [String]), 'All(', false],
+    ]
+    for (let [spec, head, either] of lists) {
+      g = Shape({ a: spec })
+      if (either) {
         deepEqual(g({ a: { x: 1 } }), { a: { x: 1 } })
         deepEqual(g({ a: ['A', 'B'] }), { a: ['A', 'B'] })
       }
 
       gs = g.stringify()
-      deepEqual(gs, '{"a":{"$$":"' + lb.name + '($$ref0,$$ref1)",' +
+      deepEqual(gs, '{"a":{"$$":"' + head + '$$ref0,$$ref1)",' +
         '"$$ref0":{"x":"Number"},"$$ref1":["String"]}}')
       gr = Shape.build(JP(gs))
 
-      if (One === lb || Some === lb) {
+      if (either) {
         deepEqual(gr({ a: { x: 1 } }), { a: { x: 1 } })
         deepEqual(gr({ a: ['A', 'B'] }), { a: ['A', 'B'] })
       }
 
       deepEqual(gr.jsonify(), {
         a: {
-          "$$": lb.name + "($$ref0,$$ref1)",
+          "$$": head + "$$ref0,$$ref1)",
           "$$ref0": {
             "x": "Number",
           },
@@ -415,11 +419,11 @@ describe('expr', () => {
     pass({ a: Child(Number) }, { a: "Child(Number)" }, '{"a":"Child(Number)"}',
       { a: { x: 1 } }, { a: { x: 'X' } })
 
-    pass({ a: One(Number, String) }, { a: "One(Number,String)" }, '{"a":"One(Number,String)"}',
+    pass({ a: Nof(1, Number, String) }, { a: "Nof(1,Number,String)" }, '{"a":"Nof(1,Number,String)"}',
       { a: 1 }, { a: true })
-    pass({ a: One(Number, { x: String }) },
-      { a: { $$: 'One(Number,$$ref0)', $$ref0: { x: 'String' } } },
-      '{"a":{"$$":"One(Number,$$ref0)","$$ref0":{"x":"String"}}}',
+    pass({ a: Nof(1, Number, { x: String }) },
+      { a: { $$: 'Nof(1,Number,$$ref0)', $$ref0: { x: 'String' } } },
+      '{"a":{"$$":"Nof(1,Number,$$ref0)","$$ref0":{"x":"String"}}}',
       { a: { x: 'X' } }, { a: { x: 1 } })
 
 
@@ -451,8 +455,8 @@ describe('expr', () => {
 
 
   test('desc-list', () => {
-    deepEqual(Shape({ a: One(Number, String) }).stringify(), '{"a":"One(Number,String)"}')
-    deepEqual(Shape({ a: Some(Number, String) }).stringify(), '{"a":"Some(Number,String)"}')
+    deepEqual(Shape({ a: Nof(1, Number, String) }).stringify(), '{"a":"Nof(1,Number,String)"}')
+    deepEqual(Shape({ a: Nof(Min(1), Number, String) }).stringify(), '{"a":"Nof(Min(1),Number,String)"}')
     deepEqual(Shape({ a: All(Number, String) }).stringify(), '{"a":"All(Number,String)"}')
   })
 

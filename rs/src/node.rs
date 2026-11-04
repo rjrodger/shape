@@ -128,8 +128,6 @@ impl Token {
 pub enum ListMode {
     #[default]
     None,
-    One,
-    Some,
     All,
     /// A count of the branches the value satisfies.
     Nof,

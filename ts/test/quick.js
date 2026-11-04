@@ -6,8 +6,7 @@ const {
   G$,
   nodize,
   stringify,
-  One,
-  Some,
+  Nof,
   All,
   Closed,
   Rename,
@@ -229,8 +228,8 @@ let m0 =
     // Min(2)
     // Child(Number)
     // Max(2,Number)
-    // One(Number,String)
-    // One(Number,{x:1}) // FIX
+    // Nof(1,Number,String)
+    // Nof(1,Number,{x:1}) // FIX
     // [Number]
     // [Number,String]
     // [{x:1}]
@@ -338,14 +337,14 @@ let g0 = Shape({ a: Required({ b: 1 }).Child({ x: String }) })
 */
 
 
-// let g0 = Shape({ a: One(Number,String) })
+// let g0 = Shape({ a: Nof(1,Number,String) })
 // let g0 = Shape({ a: All(Number,String) })
-// let g0 = Shape({ a: Some(Number,String) })
-// let g0 = Shape({ a: Some({x:1}) })    
+// let g0 = Shape({ a: Nof(Min(1),Number,String) })
+// let g0 = Shape({ a: Nof(Min(1),{x:1}) })    
 // let g0 = Shape({ a: Child({ x: String }).Required({ b: 1 }) })    
 // let g0 = Shape(Child(Number))
 //let g= Shape({a:Child({x:Number})})
-// let g0 = Shape.build({"a":{"$$":"Some($$ref0)","$$ref0":{"x":"1"}}})
+// let g0 = Shape.build({"a":{"$$":"Nof(Min(1),$$ref0)","$$ref0":{"x":"1"}}})
 //D(g0.node())
 //D(g0.spec())
 //console.log(g0.stringify())

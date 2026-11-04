@@ -2,7 +2,7 @@ import { test, describe } from 'node:test'
 import { equal, deepEqual, throws } from 'node:assert'
 
 import {
-  Shape, fromJsonSchema, Min, Max, Above, Below, Len, Empty, Optional, Skip, Exact, One, All, Nullable,
+  Shape, fromJsonSchema, Min, Max, Above, Below, Len, Empty, Optional, Skip, Exact, All, Nullable,
   Never, Any, Describe, Discriminated, Define, Refer, Child, Rest, Closed, Open, Email, Url, Uuid, DateTime,
   Ipv4, Ipv6, Ip, Integer, Required, Default, Nof,
 } from '../dist/shape'
@@ -46,7 +46,6 @@ describe('jsonschema-import', () => {
   roundTrip('regexp-bounds', Min(2, /^a+$/))
   roundTrip('formats', { a: Email, b: Url, c: Uuid, d: DateTime, e: Ipv4, f: Ipv6, g: Ip })
   roundTrip('exact', { a: Exact('x', 'y'), b: Exact(1), c: Exact(true, false) })
-  roundTrip('one', One(String, Number))
   roundTrip('all', All(Number, Min(1, Number)))
   // Every count JSON Schema has a keyword for comes back as it went.
   roundTrip('nof-one', Nof(1, String, Number))
@@ -139,7 +138,7 @@ describe('jsonschema-import', () => {
     equal(v({ type: ['string', 'null'] }, null), null)
     equal(v({ type: 'null' }, null), null)
     throws(() => v({ type: 'null' }, 1), /not of type null/)
-    throws(() => v({ type: ['string', 'number'] }, true), /does not satisfy one of/)
+    throws(() => v({ type: ['string', 'number'] }, true), /satisfies 0 of: String, Number; the count must be Min\(1\)\.$/)
     equal(v({ type: 'boolean' }, false), false)
     equal(v({}, 'anything'), 'anything')
     deepEqual(v({ properties: { a: { type: 'number' } } }, { a: 1, b: 2 }), { a: 1, b: 2 })

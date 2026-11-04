@@ -220,7 +220,7 @@ func validateStructure(n *node, state *State, absent bool, path []string, pathAr
 
 	// Composition shortcuts. An absent value on a node that does not require
 	// one is not put to the branches: TS drops the errors such a check would
-	// raise, so Optional(One(...)) given nothing is simply absent.
+	// raise, so Optional(All(...)) given nothing is simply absent.
 	if n.kind == KindList && n.listMode != listNone && !(absent && !n.required) {
 		before := verr.count()
 		out := evaluateList(n, state.Value, path, pathArr, key, parent, ctx, match, verr, absent)
@@ -868,70 +868,6 @@ func evaluateList(n *node, in any, path []string, pathArr []any, key string, par
 	}
 
 	switch n.listMode {
-	case listOne:
-		passN := 0
-		var winner any = in
-		for _, sn := range n.list {
-			sub := &ValidationError{}
-			out := validateNode(sn, branchIn, path, pathArr, key, parent, ctx, true, sub)
-			if !sub.hasAny() {
-				passN++
-				if passN == 1 {
-					if !match {
-						out2 := validateNode(sn, branchIn, path, pathArr, key, parent, ctx, false, &ValidationError{})
-						winner = out2
-					} else {
-						winner = out
-					}
-					break
-				}
-			}
-		}
-		if passN != 1 {
-			state := &State{Path: path, PathArr: pathArr, Key: key, Value: in, Node: n, Match: match, Ctx: ctx, absent: absent}
-			err := makeErr(state, WhyOne, 4030,
-				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" does not satisfy one of: %s", listShapeNames(n)))
-			if n.faultMsg != "" {
-				if !err.terse {
-					err.Text = expandErrText(n.faultMsg, err.Path, in)
-				}
-			}
-			if !n.silent {
-				verr.add(err)
-			}
-			return in
-		}
-		return winner
-	case listSome:
-		// Every branch sees the value as it was given, never one another
-		// branch changed: each matching branch produces from the original
-		// (copy-on-write, so the original stays as it was), and the last
-		// one's result stands.
-		matched := false
-		var winner any = branchIn
-		for _, sn := range n.list {
-			sub := &ValidationError{}
-			validateNode(sn, branchIn, path, pathArr, key, parent, ctx, true, sub)
-			if !sub.hasAny() {
-				matched = true
-				winner = validateNode(sn, branchIn, path, pathArr, key, parent, ctx, match, &ValidationError{})
-			}
-		}
-		if !matched {
-			state := &State{Path: path, PathArr: pathArr, Key: key, Value: in, Node: n, Match: match, Ctx: ctx, absent: absent}
-			err := makeErr(state, WhySome, 4031,
-				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" does not satisfy any of: %s", listShapeNames(n)))
-			if n.faultMsg != "" {
-				if !err.terse {
-					err.Text = expandErrText(n.faultMsg, err.Path, in)
-				}
-			}
-			if !n.silent {
-				verr.add(err)
-			}
-			return in
-		}
-		return winner
 	case listAll:
 		passAll := true
 		out := in
@@ -1001,8 +937,7 @@ func evaluateList(n *node, in any, path []string, pathArr []any, key string, par
 			}
 			return in
 		}
-		// Exactly one: the branch the value satisfies produces it, as One's
-		// match does.
+		// Exactly one: the branch the value satisfies produces it.
 		if n.nofOne {
 			if !match {
 				return validateNode(n.list[matched], branchIn, path, pathArr, key, parent, ctx, false, &ValidationError{})

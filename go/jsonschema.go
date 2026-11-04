@@ -215,13 +215,10 @@ func listSchema(n *node, s map[string]any, defs map[string]any) {
 		s["oneOf"] = branches
 		return
 	}
-	switch n.listMode {
-	case listAll:
-		s["allOf"] = branches
-	case listNof:
+	if n.listMode == listNof {
 		nofSchema(n.nofOK, branches, s)
-	default:
-		s["anyOf"] = branches
+	} else {
+		s["allOf"] = branches
 	}
 }
 

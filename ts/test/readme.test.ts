@@ -48,14 +48,13 @@ const {
   Max,
   Min,
   Never,
-  One,
+  Nof,
   Open,
   Optional,
   Refer,
   Rename,
   Required,
   Skip,
-  Some,
 } = Shape
 
 
@@ -68,15 +67,15 @@ describe('readme', () => {
     deepEqual(shape('a'), 'a')
     throws(() => shape(1), 'type')
 
-    shape = Shape(Optional(Some(String, Number)))
+    shape = Shape(Optional(Nof(Min(1), String, Number)))
     deepEqual(shape('a'), 'a')
     deepEqual(shape(1), 1)
-    deepEqual(shape(), undefined) // Overrides Some
+    deepEqual(shape(), undefined) // Overrides Nof
 
-    shape = Shape(Some(String, Number))
+    shape = Shape(Nof(Min(1), String, Number))
     deepEqual(shape('a'), 'a')
     deepEqual(shape(1), 1)
-    throws(() => shape(), 'satisfy')
+    throws(() => shape(), 'required')
   })
 
 

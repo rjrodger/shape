@@ -48,13 +48,12 @@ const {
   Max,
   Min,
   Never,
-  One,
+  Nof,
   Open,
   Refer,
   Rename,
   Required,
   Skip,
-  Some,
   Child,
   Default,
   Optional,
@@ -123,7 +122,7 @@ describe('shape', () => {
     let v2 = s2({ x: { y: 'Y' } })
     deepEqual(v2, { x: { y: 'Y' } })
 
-    let s3 = Shape({ x: { y: One(String, Number), z: One(String, Number) } })
+    let s3 = Shape({ x: { y: Nof(1, String, Number), z: Nof(1, String, Number) } })
     let v3 = s3({ x: { y: 1, z: 'Z' } })
     deepEqual(v3, { x: { y: 1, z: 'Z' } })
 
@@ -2577,7 +2576,7 @@ Validation failed for index "1" with number "1" because the number is not of typ
     // ** thus need a builder for validation functions
     // ** and a builder for raw functions
     // * Do Array, Object work?
-    // * default value within One, Some, etc
+    // * default value within All, Nof, etc
 
     // 'happy'
     let opter: any = Shape({

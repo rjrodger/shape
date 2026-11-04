@@ -15,7 +15,7 @@ const Shape: ShapeX = ShapeModule
 const {
   Above, All, Below, Catch, Check, Child, Closed, Coerce, Default, Define, Describe,
   Discriminated, Email, Empty, Exact, Ignore, Integer, Ip, Len, Max, Min, Never,
-  Nullable, One, Open, Optional, Refer, Rest, Skip, Some, Transform, Url, Uuid,
+  Nullable, Open, Optional, Refer, Rest, Skip, Transform, Url, Uuid,
   DateTime, Ipv4, Ipv6, Func, Nof,
 } = Shape as any
 
@@ -118,14 +118,14 @@ describe('jsonschema', () => {
 
   test('composition-and-references', () => {
     const s = Shape({
-      a: One(String, Number), b: Some(String, Number), c: All(Number, Min(1)),
+      a: Nof(Min(1), String, Number), b: Nof(1, String, Number), c: All(Number, Min(1)),
       d: Discriminated('kind', { dog: { bark: Boolean }, fish: { fins: 1 }, cat: Object, bird: { kind: String, wings: 2 } }),
       e: Define('d', { z: 1 }), f: Refer('d'), g: Describe('a ref', Refer('d')),
     }).jsonSchema()
 
     deepEqual(s.properties, {
       a: { anyOf: [{ type: 'string', minLength: 1 }, { type: 'number' }] },
-      b: { anyOf: [{ type: 'string', minLength: 1 }, { type: 'number' }] },
+      b: { oneOf: [{ type: 'string', minLength: 1 }, { type: 'number' }] },
       c: { allOf: [{ type: 'number' }, { minimum: 1, minLength: 1, minItems: 1, minProperties: 1 }] },
       d: {
         oneOf: [

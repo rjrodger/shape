@@ -229,24 +229,6 @@ where
     buildize(spec).after(f)
 }
 
-/// The value must satisfy exactly one of the shapes.
-pub fn one<I>(shapes: I) -> Node
-where
-    I: IntoIterator,
-    I::Item: Into<Spec>,
-{
-    list_node(ListMode::One, shapes)
-}
-
-/// The value must satisfy at least one of the shapes.
-pub fn some<I>(shapes: I) -> Node
-where
-    I: IntoIterator,
-    I::Item: Into<Spec>,
-{
-    list_node(ListMode::Some, shapes)
-}
-
 /// The value must satisfy every shape.
 pub fn all<I>(shapes: I) -> Node
 where
@@ -1588,23 +1570,25 @@ mod tests {
 
     #[test]
     fn composition() {
-        let one_ns = || one([Spec::from(Token::Number), Spec::from(Token::String)]);
+        let one_ns = || nof(1, [Spec::from(Token::Number), Spec::from(Token::String)]);
         assert_eq!(run(&at_a(one_ns()), &a("\"x\"")), a("\"x\""));
         assert_eq!(
             run(&at_a(one_ns()), &a("true")),
-            "ERR Value \"true\" for property \"a\" does not satisfy one of: Number, String"
+            "ERR Value \"true\" for property \"a\" satisfies 0 of: Number, String; the count must be 1."
         );
         assert!(!at_a(one_ns()).valid(&j(&a("true"))));
         assert!(at_a(one_ns()).valid(&j(&a("1"))));
-        let e = &at_a(one_ns()).error(&j(&a("true")))[0];
-        assert_eq!((e.why.as_str(), e.mark), ("One", 4030));
-        let some_ns = || some([Spec::from(Token::Number), Spec::from(Token::String)]);
+        let some_ns = || {
+            nof(
+                min(1, any()),
+                [Spec::from(Token::Number), Spec::from(Token::String)],
+            )
+        };
         assert_eq!(run(&at_a(some_ns()), &a("5")), a("5"));
         assert_eq!(
             run(&at_a(some_ns()), &a("true")),
-            "ERR Value \"true\" for property \"a\" does not satisfy any of: Number, String"
+            "ERR Value \"true\" for property \"a\" satisfies 0 of: Number, String; the count must be Min(1)."
         );
-        assert_eq!(at_a(some_ns()).error(&j(&a("true")))[0].mark, 4031);
         let all_nm = || all([Spec::from(Token::Number), Spec::from(min(2, any()))]);
         assert_eq!(
             run(&at_a(all_nm()), &a("1")),
@@ -1614,10 +1598,13 @@ mod tests {
         assert_eq!(at_a(all_nm()).error(&j(&a("1")))[0].mark, 4032);
         assert_eq!(
             run(
-                &at_a(one([Spec::from(Token::Number), Spec::from(min(2, any()))])),
+                &at_a(nof(
+                    1,
+                    [Spec::from(Token::Number), Spec::from(min(2, any()))]
+                )),
                 &a("\"x\"")
             ),
-            "ERR Value \"x\" for property \"a\" does not satisfy one of: Number, Min(2)"
+            "ERR Value \"x\" for property \"a\" satisfies 0 of: Number, Min(2); the count must be 1."
         );
         assert_eq!(
             run(
@@ -1628,10 +1615,13 @@ mod tests {
         );
         assert_eq!(
             run(
-                &at_a(one([
-                    Spec::from(ignore(min(2, Token::Number))),
-                    Spec::from(Token::String)
-                ])),
+                &at_a(nof(
+                    1,
+                    [
+                        Spec::from(ignore(min(2, Token::Number))),
+                        Spec::from(Token::String)
+                    ]
+                )),
                 &a("1")
             ),
             a("1")
@@ -1648,21 +1638,24 @@ mod tests {
         );
         assert_eq!(run(&at_a(optional(one_ns())), "{}"), "{}");
         let re = || Regex::new("^a").unwrap();
-        let one_rn = || one([Spec::from(re()), Spec::from(Token::Number)]);
+        let one_rn = || nof(1, [Spec::from(re()), Spec::from(Token::Number)]);
         assert_eq!(run(&at_a(one_rn()), &a("\"abc\"")), a("\"abc\""));
         assert_eq!(run(&at_a(one_rn()), &a("5")), a("5"));
         assert_eq!(
             run(&at_a(one_rn()), &a("true")),
-            "ERR Value \"true\" for property \"a\" does not satisfy one of: /^a/, Number"
+            "ERR Value \"true\" for property \"a\" satisfies 0 of: /^a/, Number; the count must be 1."
         );
         assert_eq!(
             run(
-                &at_a(some([Spec::from(re()), Spec::from(Token::Number)])),
+                &at_a(nof(
+                    min(1, any()),
+                    [Spec::from(re()), Spec::from(Token::Number)]
+                )),
                 &a("true")
             ),
-            "ERR Value \"true\" for property \"a\" does not satisfy any of: /^a/, Number"
+            "ERR Value \"true\" for property \"a\" satisfies 0 of: /^a/, Number; the count must be Min(1)."
         );
-        // Fault applies to One and Some, not All.
+        // Fault applies to Nof, not All.
         assert_eq!(run(&at_a(fault("F", one_ns())), &a("true")), "ERR F");
         assert_eq!(run(&at_a(fault("F", some_ns())), &a("true")), "ERR F");
         assert_eq!(
@@ -1670,13 +1663,13 @@ mod tests {
             "ERR Value \"1\" for property \"a\" does not satisfy all of: Number, Min(2)"
         );
         assert!(!at_a(fault("F", one_ns())).valid(&j(&a("true"))));
-        // Every matching Some branch produces from the original; the last
-        // one's result stands.
-        let s = at_a(some([
-            Spec::from(Token::Number),
-            Spec::from(coerce(Token::String)),
-        ]));
-        assert_eq!(run(&s, &a("5")), a("\"5\""));
+        // A count other than exactly one only checks: the value stays as
+        // it was given.
+        let s = at_a(nof(
+            min(1, any()),
+            [Spec::from(Token::Number), Spec::from(coerce(Token::String))],
+        ));
+        assert_eq!(run(&s, &a("5")), a("5"));
         // All threads the value through its branches.
         let s = at_a(all([
             Spec::from(coerce(Token::Number)),
@@ -1695,11 +1688,14 @@ mod tests {
         // no value, so the missing property is reported.
         let missing = "ERR Validation failed for property \"a\" because the property is missing.";
         assert_eq!(
-            run(&at_a(one([Spec::from(skip(Token::Number))])), "{}"),
+            run(&at_a(nof(1, [Spec::from(skip(Token::Number))])), "{}"),
             missing
         );
         assert_eq!(
-            run(&at_a(some([Spec::from(skip(Token::Number))])), "{}"),
+            run(
+                &at_a(nof(min(1, any()), [Spec::from(skip(Token::Number))])),
+                "{}"
+            ),
             missing
         );
         assert_eq!(

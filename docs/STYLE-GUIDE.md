@@ -321,7 +321,7 @@ that matched physical lines would make wrapping a way through it.
   carries `valid`, `match`, `error`, `json` and the rest.
 - **node**—the internal tree a spec normalises into, one per position.
   Documented in `docs/reference/nodes.md`. Not "rule".
-- **builder**—one of `Min`, `Optional`, `Child`, `One` and the rest. They are
+- **builder**—one of `Min`, `Optional`, `Child`, `Nof` and the rest. They are
   callable and chainable. Not "combinator", and not "modifier".
 - **key expression** and **value expression**—the two halves of the
   string DSL: `{'a: Min(2)': 0}` and `'Min(2)'`. Never "the DSL" alone

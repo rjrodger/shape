@@ -15,7 +15,7 @@ keyexpr-child-array-bad	{"a: Child(Number)":[]}	{"a":[1,"x"]}		"Validation faile
 keyexpr-child-array-not-array	{"a: Child(Number)":[]}	{"a":{}}		"Validation failed for property \"a\" with object \"{}\" because the object is not of type array."
 keyexpr-bare-literal	{"a: 5":3}	{}	{"a":5}	
 keyexpr-bare-literal-present	{"a: 5":3}	{"a":9}	{"a":9}	
-keyexpr-one-of-keeps-choice	{"a: One(String,Number)":5}	{"a":"q"}	{"a":"q"}	
+keyexpr-nof-keeps-choice	{"a: Nof(1,String,Number)":5}	{"a":"q"}	{"a":"q"}	
 keyexpr-quoted-name	{"\"a b\": Min(1)":0}	{"a b":2}	{"a b":2}	
 keyexpr-quoted-name-fail	{"\"a b\": Min(1)":0}	{"a b":0}		"Value \"0\" for property \"a b\" must be a minimum of 1 (was 0)."
 keyexpr-quoted-name-absent	{"\"a b\": String":""}	{}		"Validation failed for property \"a b\" because the property is missing."

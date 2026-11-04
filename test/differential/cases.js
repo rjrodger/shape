@@ -105,11 +105,6 @@ function build() {
   add('re-word', E('/^\\w+$/'), ['ab_1', 'é'])
   add('re-space', E('/^\\s+$/'), [' \t', '\u00a0'])
   add('re-dot', E('/^a.b$/'), ['a\nb', 'a\rb', 'a\u{1F600}b', 'ab'])
-  // Some: an object threads through its matching branches, a scalar does not.
-  // Passing inputs only: the message for a failing one lists object branches,
-  // whose rendering the ports do not yet share (see the parity page).
-  add('some-open-defaults', CALL('Some', { $open: { a: 1 } }, { $open: { a: 2 } }), [{}, { a: 5, q: 9 }, { a: 1 }])
-  add('some-scalar-coerce', CALL('Some', E('Coerce(Number)'), E('Max(2)')), ['12', 5, '7', 1, 99])
   add('token-obj-Integer', { a: I }, OBJS)
   add('int-optional', E('Optional(Integer)'), SCALARS)
   add('int-min', E('Min(2,Integer)'), SCALARS)
@@ -180,8 +175,8 @@ function build() {
   add('disc-prop', { p: DISC }, DISC_IN.map((v) => ({ p: v })).concat([{}]))
   add('disc-optional', { p: { $optional: DISC } }, [{}, { p: { kind: 'cat' } }, { p: { bark: true, kind: 'dog' } }])
   add('disc-arr', [DISC], ARRS.concat([[{ bark: true, kind: 'dog' }, { kind: 'cat' }]]))
-  add('one-optional', { a: E('Optional(One(String,Number))') }, OBJS)
-  add('some-optional', { a: E('Optional(Some(String,Number))') }, OBJS)
+  add('nof-optional', { a: E('Optional(Nof(1,String,Number))') }, OBJS)
+  add('nof-min-optional', { a: E('Optional(Nof(Min(1),String,Number))') }, OBJS)
   add('all-optional', { a: E('Optional(All(String,Min(2)))') }, OBJS)
 
   // Object algebra.
@@ -301,12 +296,12 @@ function build() {
   add('x-exact-mixed', E('Exact(1,"a",true,null)'), SCALARS)
 
   // Composition.
-  add('c-one', E('One(String,Number)'), SCALARS)
-  add('c-some', E('Some(String,Number)'), SCALARS)
+  add('c-nof-of', E('Nof(1,String,Number)'), SCALARS)
+  add('c-nof-min-of', E('Nof(Min(1),String,Number)'), SCALARS)
   add('c-all', E('All(Number,Min(2))'), SCALARS)
   add('c-all-str', E('All(String,Min(2))'), SCALARS)
-  add('c-one-obj', { a: E('One(String,Number)') }, OBJS)
-  add('c-one-ignore', E('One(Ignore(Min(2,Number)),String)'), SCALARS)
+  add('c-nof-of-obj', { a: E('Nof(1,String,Number)') }, OBJS)
+  add('c-nof-ignore', E('Nof(1,Ignore(Min(2,Number)),String)'), SCALARS)
   // Nof: a count of the shapes the value satisfies, a number or a shape for
   // it, tried lazily; the message names the counts still possible.
   add('c-nof-one', E('Nof(1,Number,Integer)'), SCALARS)
@@ -325,12 +320,14 @@ function build() {
   add('c-nof-default', { a: E('Default("d",Nof(1,String,Number))') }, OBJS)
   add('c-all-default', { a: E('Default(5,All(Number,Min(2)))') }, OBJS)
   add('c-all-never', E('All(Never,String)'), SCALARS)
-  add('c-nof-in-one', E('One(Nof(0,String),String)'), SCALARS)
+  add('c-nof-in-nof', E('Nof(1,Nof(0,String),String)'), SCALARS)
   add('c-nof-in-all', E('All(Nof(0,/^a/),String)'), SCALARS)
   add('c-nof-open', CALL('Nof', 1, { $open: { b: 2 } }, N), [{}, { a: 1 }, { b: 3 }, { a: {} }, 1, 2.5])
   add('c-nof-min-open', CALL('Nof', E('Min(1)'), { $open: { b: 2 } }, N), [{}, { a: 1 }, { b: 3 }, 1, 2.5])
   add('c-nof-coerce', E('Nof(1,Coerce(Number),Boolean)'), SCALARS.concat(['5', ' 7 ', 'true']))
   add('expr-fault-nof', E('Nof(-1,String)'), SCALARS)
+  add('expr-removed-one', E('One(String,Number)'), ['x'])
+  add('expr-removed-some', E('Some(String,Number)'), ['x'])
   add('expr-fault-nof-fraction', E('Nof(1.5,String)'), SCALARS)
   add('c-all-ignore', E('All(Ignore(Min(2,Number)),Number)'), SCALARS)
 
@@ -341,7 +338,7 @@ function build() {
     add('dsl-bare-optional-' + t, { a: E(`Optional(${t})`) }, OBJS)
   }
   add('dsl-bare-Array-arr', E('Array'), ARRS)
-  add('dsl-one-Object', E('One(Object,Number)'), SCALARS)
+  add('dsl-nof-Object', E('Nof(1,Object,Number)'), SCALARS)
 
   // Several disallowed keys on a nested closed object.
   add('nested-closed-multi', { a: { b: 1 } },
@@ -367,13 +364,13 @@ function build() {
 
   // Regexp checks. A regexp is a spec value in its own right, so it also has
   // to work as a composition branch and under a bound.
-  add('re-one', E('One(/^a/,Number)'), SCALARS)
-  add('re-some', E('Some(/^a/,Number)'), SCALARS)
+  add('re-nof', E('Nof(1,/^a/,Number)'), SCALARS)
+  add('re-nof-min', E('Nof(Min(1),/^a/,Number)'), SCALARS)
   add('re-all', E('All(/^a/,Min(2))'), SCALARS)
   add('re-bound', E('Min(2,/^a/)'), SCALARS)
   add('b-bound-null', E('Min(2,null)'), SCALARS)
   add('b-bound-nan', E('Min(2,NaN)'), SCALARS)
-  add('re-obj-one', { a: E('One(/^a/,Number)') }, OBJS)
+  add('re-obj-nof', { a: E('Nof(1,/^a/,Number)') }, OBJS)
   add('re-bare', E('/^a+$/'), SCALARS)
   add('re-check', E('Check(/^[0-9]+$/)'), SCALARS)
   add('re-obj', { a: E('/^a/') }, OBJS)
@@ -393,7 +390,7 @@ function build() {
   add('ke-optional-string', { 'a: Optional(String)': 'z' }, OBJS)
   add('ke-skip-number', { 'a: Skip(Number)': 5 }, OBJS)
   add('ke-child-array', { 'a: Child(Number)': [] }, OBJS)
-  add('ke-one-of', { 'a: One(String,Number)': 5 }, OBJS)
+  add('ke-nof-of', { 'a: Nof(1,String,Number)': 5 }, OBJS)
   add('ke-bare-literal', { 'a: 5': 3 }, OBJS)
   // A quoted name holds a space; an empty expression is no expression at all.
   add('ke-quoted-name', { '"a b": Min(1)': 0 }, [{ 'a b': 2 }, { 'a b': 0 }, { 'a b': 'x' }, {}, { a: 1 }])

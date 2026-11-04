@@ -65,14 +65,9 @@ func stringifyNode(n *node, inline bool) string {
 		if n.disc != nil {
 			return suffix("Discriminated("+n.disc.tag+","+strings.Join(n.disc.tags, ",")+")", n)
 		}
-		mode := "One"
+		mode := "All"
 		parts := []string{}
-		switch n.listMode {
-		case listSome:
-			mode = "Some"
-		case listAll:
-			mode = "All"
-		case listNof:
+		if n.listMode == listNof {
 			// A Nof's count leads its shapes.
 			mode = "Nof"
 			parts = append(parts, nofCountText(n))
@@ -137,7 +132,7 @@ func suffix(base string, n *node) string {
 // ("0"), because that value is what the schema actually stands for there.
 //
 // inline mirrors TS stringify's dequote flag. Inside a composite message a
-// string value is written bare, so One("a",Number) reads "a, Number"; on its
+// string value is written bare, so Nof(1,"a",Number) reads "a, Number"; on its
 // own it keeps its quotes, so a string value stays distinguishable from a type
 // name and the empty string stays visible.
 func typeOrValue(n *node, typeName string, inline bool) string {
@@ -203,7 +198,7 @@ func nodeSpec(n *node) any {
 		out["arrayRest"] = nodeSpec(n.arrRest)
 	}
 	if n.listMode != listNone {
-		out["listMode"] = []string{"none", "one", "some", "all"}[n.listMode]
+		out["listMode"] = []string{"none", "all", "nof"}[n.listMode]
 		branches := make([]any, len(n.list))
 		for i, sn := range n.list {
 			branches[i] = nodeSpec(sn)

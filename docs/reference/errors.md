@@ -54,9 +54,9 @@ not exported); Go calls it `FieldError`. The fields line up:
 `type`, `required`, `closed`, `check`, `never`, `regexp`, `Discriminated`, and
 the format codes `Email`/`Url`/`Uuid`/`DateTime`/`Ip`/`Ipv4`/`Ipv6`. Built-in
 bounded checks (`Min`/`Max`/`Above`/`Below`/`Len`) report `why: "check"` with
-the builder name in `check`, and so do `One`/`Some`/`All`/`Nof`/`Exact` and a
+the builder name in `check`, and so do `All`/`Nof`/`Exact` and a
 strict `Refer` in TS. Go and Rust report the bounds and
-`One`/`Some`/`All`/`Nof`/`Exact` under their own why-codes and marks
+`All`/`Nof`/`Exact` under their own why-codes and marks
 (`why: "Min"`, mark 4011; `why: "Nof"`, mark 4033), which the parity page
 lists as a divergence.
 A custom validator sets its own with `update.why`, or through `makeErr`.

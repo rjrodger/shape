@@ -35,7 +35,7 @@ Goal-oriented recipes for a task you already have.
 - [Validate objects and nesting](how-to/validate-objects.md)
 - [Validate arrays and tuples](how-to/validate-arrays-and-tuples.md)
 - [Add custom validation](how-to/add-custom-validation.md)
-- [Compose shapes (One / Some / All / Exact / Discriminated)](how-to/compose-shapes.md)
+- [Compose shapes (`Nof` / `All` / `Exact` / `Discriminated`)](how-to/compose-shapes.md)
 - [Coerce values and check string formats](how-to/coerce-and-formats.md)
 - [Handle and collect errors](how-to/handle-and-collect-errors.md)
 - [Rename, Define and Refer](how-to/rename-define-refer.md)

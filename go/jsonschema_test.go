@@ -84,7 +84,7 @@ func TestJSONSchemaChecks(t *testing.T) {
 
 func TestJSONSchemaCompositionAndReferences(t *testing.T) {
 	s := MustShape(map[string]any{
-		"a": One(String, Number), "b": Some(String, Number), "c": All(Number, Min(1)),
+		"a": Nof(Min(1), String, Number), "b": Nof(1, String, Number), "c": All(Number, Min(1)),
 		"d": Discriminated("kind", map[string]any{
 			"dog": map[string]any{"bark": Boolean}, "fish": map[string]any{"fins": 1}, "cat": Object,
 			"bird": map[string]any{"kind": String, "wings": 2}}),
@@ -92,7 +92,7 @@ func TestJSONSchemaCompositionAndReferences(t *testing.T) {
 	})
 	schemaWant(t, "composition", s.JSONSchema(), `{`+draft+`,"type":"object","properties":{
 		"a":{"anyOf":[{"type":"string","minLength":1},{"type":"number"}]},
-		"b":{"anyOf":[{"type":"string","minLength":1},{"type":"number"}]},
+		"b":{"oneOf":[{"type":"string","minLength":1},{"type":"number"}]},
 		"c":{"allOf":[{"type":"number"},{"minimum":1,"minLength":1,"minItems":1,"minProperties":1}]},
 		"d":{"oneOf":[
 			{"type":"object","properties":{"kind":{"type":"string","const":"bird"},"wings":{"type":"number","default":2}},
