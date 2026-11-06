@@ -197,6 +197,32 @@ describe('parity', () => {
   })
 
 
+  test("a key expression's example is a composition's default", () => {
+    // A composition reads its arguments as branches and a count, so the
+    // example is neither: the outermost composition takes it as its default.
+    assert.deepEqual(Shape({ 'a: Nof(1,String,Number)': 5 })({}), { a: 5 })
+    assert.deepEqual(Shape({ 'a: Nof(1,String,Number)': 5 })({ a: 7 }), { a: 7 })
+    assert.match(failure({ 'a: Nof(1,String,Number)': 5 }, { a: true }),
+      /satisfies 0 of: String, Number; the count must be 1\.$/)
+    assert.deepEqual(Shape({ 'a: All(Number,Min(2))': 5 })({}), { a: 5 })
+    assert.match(failure({ 'a: All(Number,Min(2))': 5 }, { a: 1 }),
+      /does not satisfy all of: Number, Min\(2\)$/)
+
+    // Inside a count, a branch or a wrapper, the outermost composition takes it.
+    assert.deepEqual(Shape({ 'a: Nof(Min(1),String,Number)': 5 })({}), { a: 5 })
+    assert.deepEqual(Shape({ 'a: Nof(1,All(Number,Min(2)),String)': 5 })({}), { a: 5 })
+    assert.deepEqual(Shape({ 'a: Optional(Nof(1,String,Number))': 5 })({ a: 7 }), { a: 7 })
+    assert.deepEqual(Shape({ 'a: Nof(1,String,Number).Optional': 5 })({}), { a: 5 })
+
+    // A wrapper outside the composition still has the last word.
+    assert.match(failure({ 'a: Required(Nof(1,String,Number))': 5 }, {}), /the property is missing/)
+
+    // It is written down as the default it is.
+    assert.deepEqual(Shape({ 'a: Nof(1,String,Number)': 5 }).json(),
+      { a: 'Default(5,Nof(1,String,Number))' })
+  })
+
+
   test('Func is chainable', () => {
     const fn = () => 0
     const shape = Shape({ a: Shape.Optional().Func() })

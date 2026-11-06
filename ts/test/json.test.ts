@@ -282,7 +282,7 @@ describe('json', () => {
           json = s.json()
         }
         catch (e: any) {
-          assert.match(e.message, /cannot express (the options of Refer|an object default)/, row.name)
+          assert.match(e.message, /cannot express (the options of Refer|an object default|the default object)/, row.name)
           cannot++
           continue
         }

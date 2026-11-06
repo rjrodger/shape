@@ -353,6 +353,63 @@ func exprApply(src string, carrier any) (*Node, error) {
 	return buildize(val), nil
 }
 
+// exampleRef names a key expression's example among the tokens of the
+// expression it is applied to.
+const exampleRef = "$$example"
+
+// exampleApply applies a key expression's example to the expression. A
+// composition reads each argument as a branch or its count, so the example
+// is neither: when the call it would land in, the one the first closing
+// parenthesis ends, is a composition or sits inside one, the outermost such
+// composition takes it as its default, and Nof(1,String,Number) with 5 reads
+// as Default(5,Nof(1,String,Number)), as ts/src/shape.ts expr has it.
+// Otherwise the example is the carrier exprApply hands the chain.
+func exampleApply(src string, example any) (*Node, error) {
+	tokens, err := tokenize(src)
+	if err != nil {
+		return nil, err
+	}
+	first := len(tokens)
+	for i, t := range tokens {
+		if t == ")" {
+			first = i
+			break
+		}
+	}
+	for i := 1; i < first && first < len(tokens); i++ {
+		if tokens[i] == "(" && (tokens[i-1] == "All" || tokens[i-1] == "Nof") {
+			end := closingParen(tokens, i)
+			wrapped := append([]string{}, tokens[:i-1]...)
+			wrapped = append(wrapped, "Default", "(", exampleRef)
+			wrapped = append(wrapped, tokens[i-1:end+1]...)
+			wrapped = append(wrapped, ")")
+			wrapped = append(wrapped, tokens[end+1:]...)
+			p := &exprParser{tokens: wrapped, src: src, refs: map[string]any{exampleRef: example}}
+			return p.parseFull()
+		}
+	}
+	return exprApply(src, example)
+}
+
+// closingParen is the index of the parenthesis that closes the one at
+// tokens[open], or of the last token when none does: the expression is then
+// malformed, and parsing it says so.
+func closingParen(tokens []string, open int) int {
+	depth := 1
+	i := open + 1
+	for ; i < len(tokens)-1; i++ {
+		if tokens[i] == "(" {
+			depth++
+		} else if tokens[i] == ")" {
+			depth--
+		}
+		if depth == 0 {
+			return i
+		}
+	}
+	return i
+}
+
 // parseArgs reads "( arg, arg, ... )" if next token is "(".
 func (p *exprParser) parseArgs() ([]builderArg, error) {
 	if p.peek() != "(" {

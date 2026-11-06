@@ -886,7 +886,9 @@ fn corpus() {
                 Err(e) => {
                     let msg = e.to_string();
                     assert!(
-                        msg.contains("the options of Refer") || msg.contains("an object default"),
+                        msg.contains("the options of Refer")
+                            || msg.contains("an object default")
+                            || msg.contains("the default object"),
                         "{}: {}",
                         name,
                         msg

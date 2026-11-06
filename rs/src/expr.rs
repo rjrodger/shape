@@ -696,7 +696,7 @@ pub(crate) fn key_expr_node(src: &str, example: Spec) -> Node {
         }
     }
 
-    let Ok(mut node) = expr_apply(src, example.clone()) else {
+    let Ok(mut node) = example_apply(src, example.clone()) else {
         // Not a builder chain at all, a bare literal such as `a: 5`, so
         // there is nothing to hand the example to and the expression's own
         // value stands.
@@ -718,6 +718,76 @@ pub(crate) fn key_expr_node(src: &str, example: Spec) -> Node {
         }
     }
     node
+}
+
+/// The token that stands for a key expression's example in the expression
+/// it is applied to.
+const EXAMPLE_REF: &str = "$$example";
+
+/// A key expression's example applied to its expression. A composition
+/// reads each argument as a branch or its count, so the example is neither:
+/// when the call it would land in, the one the first closing parenthesis
+/// ends, is a composition or sits inside one, the outermost such
+/// composition takes it as its default, and `Nof(1,String,Number)` with 5
+/// reads as `Default(5,Nof(1,String,Number))`, as in TypeScript. Otherwise
+/// the example is the carrier `expr_apply` hands the chain.
+fn example_apply(src: &str, example: Spec) -> Result<Node, ExprError> {
+    let tokens = tokenize(src)?;
+    let first = tokens.iter().position(|t| t == ")").unwrap_or(0);
+    let composition =
+        (1..first).find(|&i| tokens[i] == "(" && matches!(tokens[i - 1].as_str(), "All" | "Nof"));
+    let Some(open) = composition else {
+        return expr_apply(src, example);
+    };
+    let end = closing_paren(&tokens, open);
+    let mut wrapped: Vec<String> = tokens[..open - 1].to_vec();
+    wrapped.extend(["Default", "(", EXAMPLE_REF].map(String::from));
+    wrapped.extend_from_slice(&tokens[open - 1..=end]);
+    wrapped.push(")".to_string());
+    wrapped.extend_from_slice(&tokens[end + 1..]);
+    let mut p = Parser::new(wrapped, src);
+    p.refs.insert(
+        EXAMPLE_REF.to_string(),
+        Spec::Value(example_value(&example)),
+    );
+    p.parse_full()
+}
+
+/// The index of the parenthesis that closes the one at `tokens[open]`, or
+/// of the last token when none does: the expression is then malformed, and
+/// parsing it says so.
+fn closing_paren(tokens: &[String], open: usize) -> usize {
+    let mut depth = 1;
+    let mut i = open + 1;
+    while i < tokens.len() - 1 {
+        match tokens[i].as_str() {
+            "(" => depth += 1,
+            ")" => depth -= 1,
+            _ => {}
+        }
+        if depth == 0 {
+            return i;
+        }
+        i += 1;
+    }
+    i
+}
+
+/// A key expression's example as the value a composition defaults to: a
+/// literal is itself, and an object or array is its parts. A shape has no
+/// value, as a type function in a TypeScript default has none in JSON.
+fn example_value(example: &Spec) -> Value {
+    match example {
+        Spec::Value(v) => v.clone(),
+        Spec::Obj(pairs) => Value::Obj(
+            pairs
+                .iter()
+                .map(|(k, s)| (k.clone(), example_value(s)))
+                .collect(),
+        ),
+        Spec::Arr(items) => Value::Arr(items.iter().map(example_value).collect()),
+        _ => Value::Undefined,
+    }
 }
 
 /// The rule of a key expression: a name (quoted, or without spaces), a
@@ -1059,6 +1129,35 @@ mod tests {
         assert_eq!(
             fails("Min(2, /[/)"),
             "Shape: invalid regexp /[/: unterminated character class"
+        );
+    }
+
+    #[test]
+    fn a_composition_takes_the_example_as_its_default() {
+        // A literal is itself, an object or array its parts, and a shape
+        // has no value.
+        assert_eq!(example_value(&Spec::from(5)), Value::from(5));
+        let mut m = crate::value::Map::new();
+        m.insert("x".to_string(), Value::from(1));
+        m.insert("y".to_string(), Value::Undefined);
+        assert_eq!(
+            example_value(&obj([
+                ("x", Spec::from(1)),
+                ("y", Spec::from(Token::Number))
+            ])),
+            Value::Obj(m)
+        );
+        assert_eq!(
+            example_value(&arr([Spec::from(1), Spec::from(Token::String)])),
+            Value::Arr(vec![Value::from(1), Value::Undefined])
+        );
+        assert_eq!(example_value(&Spec::from(Token::Number)), Value::Undefined);
+        // A shape as the example leaves the composition optional with
+        // nothing to inject.
+        let s = crate::Schema::new(obj([("a: Nof(1,String,Number)", Token::String)]));
+        assert_eq!(
+            s.validate(Value::Obj(crate::value::Map::new())).unwrap(),
+            Value::Obj(crate::value::Map::new())
         );
     }
 

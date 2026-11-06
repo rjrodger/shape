@@ -405,7 +405,8 @@ func TestJSONCorpus(t *testing.T) {
 		}
 		j, err := s.JSON()
 		if err != nil {
-			if !strings.Contains(err.Error(), "the options of Refer") && !strings.Contains(err.Error(), "an object default") {
+			if !strings.Contains(err.Error(), "the options of Refer") && !strings.Contains(err.Error(), "an object default") &&
+				!strings.Contains(err.Error(), "the default object") {
 				t.Fatalf("%s: %v", row.Name, err)
 			}
 			cannotCount++

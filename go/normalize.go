@@ -345,8 +345,9 @@ func buildExprWithDefault(src string, dflt any) (*Node, error) {
 	// it made no difference to the node it is applied as the value instead.
 	// (ts/src/shape.ts keyExprNode does the same, both ways round.) The raw
 	// example is what is appended, as TS splices the raw value: a builder that
-	// takes a value ("Default()", "Min()") then reads it as one.
-	node, applyErr := exprApply(src, dflt)
+	// takes a value ("Default()", "Min()") then reads it as one. Under a
+	// composition it is the composition's default instead (exampleApply).
+	node, applyErr := exampleApply(src, dflt)
 	if applyErr != nil {
 		// Not a builder chain at all — a bare literal such as "a: 5" — so there
 		// is nothing to hand the example to and the expression's own value

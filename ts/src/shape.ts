@@ -1781,7 +1781,17 @@ function expr(
           spec.refs = (spec.refs || {})
           spec.refs[refname] = current
 
-          if (paren) {
+          // A composition reads each argument as a branch or its count, so
+          // the example is neither: when the call it would land in is a
+          // composition or sits inside one, the outermost such composition
+          // takes it as its default instead, and Nof(1,String,Number) with
+          // 5 reads as Default(5,Nof(1,String,Number)).
+          const cI = paren ? compositionCallAt(spec.tokens, tI) : -1
+          if (-1 < cI) {
+            spec.tokens.splice(closingParen(spec.tokens, cI + 1) + 1, 0, ')')
+            spec.tokens.splice(cI, 0, S.Default, '(', spec.keymark + refname)
+          }
+          else if (paren) {
             // spec.tokens.splice(tI, 0, ctj)
             spec.tokens.splice(tI, 0, spec.keymark + refname)
           }
@@ -1888,6 +1898,32 @@ function expr(
   }
 
   return g
+}
+
+
+// The index of the outermost All or Nof call open at tokens[tI], the first
+// closing parenthesis, so every call opened before it is still open; -1
+// when none is.
+function compositionCallAt(tokens: string[], tI: number): number {
+  for (let i = 1; i < tI; i++) {
+    if ('(' === tokens[i] && (S.All === tokens[i - 1] || S.Nof === tokens[i - 1])) {
+      return i - 1
+    }
+  }
+  return -1
+}
+
+
+// The index of the parenthesis that closes the one at tokens[oI], or the
+// end of the tokens when none does (the expression is then malformed, and
+// parsing it says so or reads what is there, as it would have).
+function closingParen(tokens: string[], oI: number): number {
+  let depth = 1
+  let i = oI + 1
+  while (i < tokens.length && 0 < (depth += '(' === tokens[i] ? 1 : ')' === tokens[i] ? -1 : 0)) {
+    i++
+  }
+  return i
 }
 
 

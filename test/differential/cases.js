@@ -396,6 +396,16 @@ function build() {
   add('ke-skip-number', { 'a: Skip(Number)': 5 }, OBJS)
   add('ke-child-array', { 'a: Child(Number)': [] }, OBJS)
   add('ke-nof-of', { 'a: Nof(1,String,Number)': 5 }, OBJS)
+  // Under a composition the example is the outermost composition's default.
+  add('ke-all-of', { 'a: All(Number,Min(2))': 5 }, OBJS)
+  add('ke-nof-count-shape', { 'a: Nof(Min(1),String,Number)': 5 }, OBJS)
+  add('ke-nof-nested', { 'a: Nof(1,All(Number,Min(2)),String)': 5 }, OBJS)
+  add('ke-optional-nof', { 'a: Optional(Nof(1,String,Number))': 5 }, OBJS)
+  add('ke-required-nof', { 'a: Required(Nof(1,String,Number))': 5 }, OBJS)
+  add('ke-nof-chain', { 'a: Nof(1,String,Number).Optional': 5 }, OBJS)
+  add('ke-nof-object', { 'a: Nof(1,Object,Array)': {} }, OBJS)
+  add('ke-nof-array', { 'a: Nof(1,Object,Array)': [] }, OBJS)
+  add('ke-nof-object-literal', { 'a: Nof(1,Object,Array)': { x: 1 } }, OBJS)
   add('ke-bare-literal', { 'a: 5': 3 }, OBJS)
   // A quoted name holds a space; an empty expression is no expression at all.
   add('ke-quoted-name', { '"a b": Min(1)': 0 }, [{ 'a b': 2 }, { 'a b': 0 }, { 'a b': 'x' }, {}, { a: 1 }])
