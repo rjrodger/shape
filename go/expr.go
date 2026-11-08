@@ -357,13 +357,17 @@ func exprApply(src string, carrier any) (*Node, error) {
 // expression it is applied to.
 const exampleRef = "$$example"
 
-// exampleApply applies a key expression's example to the expression. A
-// composition reads each argument as a branch or its count, so the example
-// is neither: when the call it would land in, the one the first closing
-// parenthesis ends, is a composition or sits inside one, the outermost such
-// composition takes it as its default, and Nof(1,String,Number) with 5 reads
-// as Default(5,Nof(1,String,Number)), as ts/src/shape.ts expr has it.
-// Otherwise the example is the carrier exprApply hands the chain.
+// exampleApply applies a key expression's example to the expression, where
+// ts/src/shape.ts expr puts it: as the last argument of the call the first
+// closing parenthesis ends, so a builder that takes a shape consumes it.
+// "Min(2)" with 5 is Min(2, 5), and "Required(Min(2))" with 5 is
+// Required(Min(2, 5)). A composition reads each argument as a branch or its
+// count, so the example is neither: when that call is a composition or sits
+// inside one, the outermost such composition takes it as its default, and
+// Nof(1,String,Number) with 5 reads as Default(5,Nof(1,String,Number)). When
+// that call is not part of the head's own ("Required.Min(2)", or a bare
+// "Open"), exprApply hands the example to the head instead, which is what
+// TypeScript's chained call on the head's node amounts to.
 func exampleApply(src string, example any) (*Node, error) {
 	tokens, err := tokenize(src)
 	if err != nil {
@@ -376,19 +380,25 @@ func exampleApply(src string, example any) (*Node, error) {
 			break
 		}
 	}
-	for i := 1; i < first && first < len(tokens); i++ {
+	if len(tokens) < 2 || tokens[1] != "(" || first == len(tokens) || first > closingParen(tokens, 1) {
+		return exprApply(src, example)
+	}
+	spliced := append([]string{}, tokens[:first]...)
+	spliced = append(spliced, exampleRef)
+	spliced = append(spliced, tokens[first:]...)
+	for i := 1; i < first; i++ {
 		if tokens[i] == "(" && (tokens[i-1] == "All" || tokens[i-1] == "Nof") {
 			end := closingParen(tokens, i)
-			wrapped := append([]string{}, tokens[:i-1]...)
-			wrapped = append(wrapped, "Default", "(", exampleRef)
-			wrapped = append(wrapped, tokens[i-1:end+1]...)
-			wrapped = append(wrapped, ")")
-			wrapped = append(wrapped, tokens[end+1:]...)
-			p := &exprParser{tokens: wrapped, src: src, refs: map[string]any{exampleRef: example}}
-			return p.parseFull()
+			spliced = append([]string{}, tokens[:i-1]...)
+			spliced = append(spliced, "Default", "(", exampleRef)
+			spliced = append(spliced, tokens[i-1:end+1]...)
+			spliced = append(spliced, ")")
+			spliced = append(spliced, tokens[end+1:]...)
+			break
 		}
 	}
-	return exprApply(src, example)
+	p := &exprParser{tokens: spliced, src: src, refs: map[string]any{exampleRef: example}}
+	return p.parseFull()
 }
 
 // closingParen is the index of the parenthesis that closes the one at

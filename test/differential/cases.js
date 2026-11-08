@@ -406,6 +406,13 @@ function build() {
   add('ke-nof-object', { 'a: Nof(1,Object,Array)': {} }, OBJS)
   add('ke-nof-array', { 'a: Nof(1,Object,Array)': [] }, OBJS)
   add('ke-nof-object-literal', { 'a: Nof(1,Object,Array)': { x: 1 } }, OBJS)
+  // The example goes to the call the first closing parenthesis ends, nested
+  // or not; a chain hands it to the head.
+  add('ke-required-min', { 'a: Required(Min(2))': 5 }, OBJS)
+  add('ke-optional-min', { 'a: Optional(Min(2))': 5 }, OBJS)
+  add('ke-skip-max', { 'a: Skip(Max(9))': 5 }, OBJS)
+  add('ke-chain-required-min', { 'a: Required.Min(2)': [] }, OBJS)
+  add('ke-chain-min-max', { 'a: Min(1).Max(4)': 2 }, OBJS)
   add('ke-bare-literal', { 'a: 5': 3 }, OBJS)
   // A quoted name holds a space; an empty expression is no expression at all.
   add('ke-quoted-name', { '"a b": Min(1)': 0 }, [{ 'a b': 2 }, { 'a b': 0 }, { 'a b': 'x' }, {}, { a: 1 }])
@@ -417,6 +424,7 @@ function build() {
   add('ke-min-empty', { 'a: Min()': 3 }, OBJS)
   add('ke-catch-empty', { 'a: Catch()': 7 }, OBJS)
   add('ke-exact-empty', { 'a: Exact()': 7 }, OBJS)
+  add('ke-exact-bare', { 'a: Exact': 7 }, OBJS)
 
   // Func / Key. Func is a builder, so it is optional; the Function token is
   // required. A NaN literal is an optional NaN default.

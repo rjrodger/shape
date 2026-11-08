@@ -724,32 +724,46 @@ pub(crate) fn key_expr_node(src: &str, example: Spec) -> Node {
 /// it is applied to.
 const EXAMPLE_REF: &str = "$$example";
 
-/// A key expression's example applied to its expression. A composition
-/// reads each argument as a branch or its count, so the example is neither:
-/// when the call it would land in, the one the first closing parenthesis
-/// ends, is a composition or sits inside one, the outermost such
-/// composition takes it as its default, and `Nof(1,String,Number)` with 5
-/// reads as `Default(5,Nof(1,String,Number))`, as in TypeScript. Otherwise
-/// the example is the carrier `expr_apply` hands the chain.
+/// A key expression's example applied to its expression, where TypeScript
+/// puts it: as the last argument of the call the first closing parenthesis
+/// ends, so a builder that takes a shape consumes it. `Min(2)` with 5 is
+/// `Min(2, 5)`, and `Required(Min(2))` with 5 is `Required(Min(2, 5))`. A
+/// composition reads each argument as a branch or its count, so the example
+/// is neither: when that call is a composition or sits inside one, the
+/// outermost such composition takes it as its default, and
+/// `Nof(1,String,Number)` with 5 reads as `Default(5,Nof(1,String,Number))`.
+/// When that call is not part of the head's own (`Required.Min(2)`, or a
+/// bare `Open`), `expr_apply` hands the example to the head instead, which
+/// is what TypeScript's chained call on the head's node amounts to.
 fn example_apply(src: &str, example: Spec) -> Result<Node, ExprError> {
     let tokens = tokenize(src)?;
-    let first = tokens.iter().position(|t| t == ")").unwrap_or(0);
-    let composition =
-        (1..first).find(|&i| tokens[i] == "(" && matches!(tokens[i - 1].as_str(), "All" | "Nof"));
-    let Some(open) = composition else {
+    let Some(first) = tokens.iter().position(|t| t == ")") else {
         return expr_apply(src, example);
     };
-    let end = closing_paren(&tokens, open);
-    let mut wrapped: Vec<String> = tokens[..open - 1].to_vec();
-    wrapped.extend(["Default", "(", EXAMPLE_REF].map(String::from));
-    wrapped.extend_from_slice(&tokens[open - 1..=end]);
-    wrapped.push(")".to_string());
-    wrapped.extend_from_slice(&tokens[end + 1..]);
-    let mut p = Parser::new(wrapped, src);
-    p.refs.insert(
-        EXAMPLE_REF.to_string(),
-        Spec::Value(example_value(&example)),
-    );
+    if tokens.len() < 2 || tokens[1] != "(" || first > closing_paren(&tokens, 1) {
+        return expr_apply(src, example);
+    }
+    let composition =
+        (1..first).find(|&i| tokens[i] == "(" && matches!(tokens[i - 1].as_str(), "All" | "Nof"));
+    let (spliced, arg) = match composition {
+        Some(open) => {
+            let end = closing_paren(&tokens, open);
+            let mut wrapped: Vec<String> = tokens[..open - 1].to_vec();
+            wrapped.extend(["Default", "(", EXAMPLE_REF].map(String::from));
+            wrapped.extend_from_slice(&tokens[open - 1..=end]);
+            wrapped.push(")".to_string());
+            wrapped.extend_from_slice(&tokens[end + 1..]);
+            (wrapped, Spec::Value(example_value(&example)))
+        }
+        None => {
+            let mut spliced: Vec<String> = tokens[..first].to_vec();
+            spliced.push(EXAMPLE_REF.to_string());
+            spliced.extend_from_slice(&tokens[first..]);
+            (spliced, example)
+        }
+    };
+    let mut p = Parser::new(spliced, src);
+    p.refs.insert(EXAMPLE_REF.to_string(), arg);
     p.parse_full()
 }
 
