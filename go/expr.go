@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"reflect"
 	"regexp"
 	"strings"
 	"sync"
@@ -386,6 +387,11 @@ func exampleApply(src string, example any) (*Node, error) {
 	spliced := append([]string{}, tokens[:first]...)
 	spliced = append(spliced, exampleRef)
 	spliced = append(spliced, tokens[first:]...)
+	// An Exact that already lists the example would only list it twice;
+	// left alone, it still takes the example as its default.
+	if exactLists(tokens, first, example) {
+		spliced = tokens
+	}
 	for i := 1; i < first; i++ {
 		if tokens[i] == "(" && (tokens[i-1] == "All" || tokens[i-1] == "Nof") {
 			end := closingParen(tokens, i)
@@ -399,6 +405,44 @@ func exampleApply(src string, example any) (*Node, error) {
 	}
 	p := &exprParser{tokens: spliced, src: src, refs: map[string]any{exampleRef: example}}
 	return p.parseFull()
+}
+
+// exactLists reports whether the call the parenthesis at tokens[close] ends
+// is an Exact already listing the example, a scalar: an object or array is
+// never one, as TypeScript's Exact compares it by identity.
+func exactLists(tokens []string, close int, example any) bool {
+	open := close - 1
+	for open > 0 && tokens[open] != "(" {
+		open--
+	}
+	if open < 1 || tokens[open-1] != "Exact" {
+		return false
+	}
+	switch example.(type) {
+	case map[string]any, []any:
+		return false
+	}
+	for _, t := range tokens[open+1 : close] {
+		var lit any
+		if json.Unmarshal([]byte(t), &lit) == nil && sameScalar(lit, example) {
+			return true
+		}
+	}
+	return false
+}
+
+// sameScalar reports whether a JSON scalar equals a value, numbers by value
+// whatever their Go type.
+func sameScalar(lit, v any) bool {
+	if a, ok := toFloat64(lit); ok {
+		b, ok := toFloat64(v)
+		return ok && a == b
+	}
+	switch lit.(type) {
+	case string, bool, nil:
+		return reflect.DeepEqual(lit, v)
+	}
+	return false
 }
 
 // closingParen is the index of the parenthesis that closes the one at

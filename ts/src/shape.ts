@@ -1791,6 +1791,10 @@ function expr(
             spec.tokens.splice(closingParen(spec.tokens, cI + 1) + 1, 0, ')')
             spec.tokens.splice(cI, 0, S.Default, '(', spec.keymark + refname)
           }
+          else if (paren && exactLists(spec.tokens, tI, current)) {
+            // An Exact that already lists the example would only list it
+            // twice; left alone, it still takes the example as its default.
+          }
           else if (paren) {
             // spec.tokens.splice(tI, 0, ctj)
             spec.tokens.splice(tI, 0, spec.keymark + refname)
@@ -1911,6 +1915,25 @@ function compositionCallAt(tokens: string[], tI: number): number {
     }
   }
   return -1
+}
+
+
+// Whether the call that tokens[tI] closes is an Exact already listing the
+// example, a scalar: an object or array is never one, as Exact compares it
+// by identity.
+function exactLists(tokens: string[], tI: number, example: any): boolean {
+  const oI = tokens.lastIndexOf('(', tI)
+  if (oI < 1 || S.Exact !== tokens[oI - 1] || (null !== example && S.object === typeof example)) {
+    return false
+  }
+  return tokens.slice(oI + 1, tI).some((t: string) => {
+    try {
+      return JSON.parse(t) === example
+    }
+    catch (_e: any) {
+      return false
+    }
+  })
 }
 
 

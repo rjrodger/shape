@@ -756,6 +756,9 @@ fn example_apply(src: &str, example: Spec) -> Result<Node, ExprError> {
             wrapped.extend_from_slice(&tokens[end + 1..]);
             (wrapped, Spec::Value(example_value(&example)))
         }
+        // An Exact that already lists the example would only list it
+        // twice; left alone, it still takes the example as its default.
+        None if exact_lists(&tokens, first, &example) => (tokens.clone(), example),
         None => {
             let mut spliced: Vec<String> = tokens[..first].to_vec();
             spliced.push(EXAMPLE_REF.to_string());
@@ -766,6 +769,22 @@ fn example_apply(src: &str, example: Spec) -> Result<Node, ExprError> {
     let mut p = Parser::new(spliced, src);
     p.refs.insert(EXAMPLE_REF.to_string(), arg);
     p.parse_full()
+}
+
+/// Whether the call `tokens[close]` ends is an `Exact` already listing the
+/// example, a scalar: an object or array is never one, as TypeScript's
+/// Exact compares it by identity.
+fn exact_lists(tokens: &[String], close: usize, example: &Spec) -> bool {
+    let open = tokens[..close].iter().rposition(|t| t == "(").unwrap_or(0);
+    let Spec::Value(v) = example else {
+        return false;
+    };
+    if open < 1 || tokens[open - 1] != "Exact" || matches!(v, Value::Obj(_) | Value::Arr(_)) {
+        return false;
+    }
+    tokens[open + 1..close]
+        .iter()
+        .any(|t| json_literal(t).is_some_and(|lit| lit == *v))
 }
 
 /// The index of the parenthesis that closes the one at `tokens[open]`, or

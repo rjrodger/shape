@@ -303,6 +303,26 @@ func TestZZExprBuildValue(t *testing.T) {
 	}
 }
 
+func TestZZExampleApply(t *testing.T) {
+	// An expression that does not tokenize is an error.
+	if _, err := exampleApply("a,,b", 1.0); err == nil {
+		t.Fatal("expected a tokenize error")
+	}
+	tok := func(s string) []string {
+		ts, _ := tokenize(s)
+		return ts
+	}
+	// Exact never lists an object or array example: TypeScript compares
+	// those by identity.
+	if exactLists(tok(`Exact(1)`), 3, map[string]any{}) || exactLists(tok(`Exact(1)`), 3, []any{}) {
+		t.Fatal("an object or array example is never listed")
+	}
+	// An object in the list is no scalar, so it lists none.
+	if exactLists(tok(`Exact({"x":1})`), 3, "x") {
+		t.Fatal("an object value lists no scalar")
+	}
+}
+
 func TestZZExprTokenize(t *testing.T) {
 	// Unparseable gap between tokens (99-102).
 	if _, err := Expr("a,,b"); err == nil {

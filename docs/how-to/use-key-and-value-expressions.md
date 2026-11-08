@@ -54,6 +54,10 @@ the example would otherwise have gone. A builder around the composition
 still applies after it, so `'id: Required(Nof(1, Number, String))': 0` stays
 required.
 
+`Exact` adds the example to the values it allows, so the default is always
+one of them: `'role: Exact("admin", "user")': 'guest'` allows `guest` too. An
+example the list already has is not added a second time.
+
 ### Turn key expressions off
 
 **TS**

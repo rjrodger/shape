@@ -433,6 +433,13 @@ function build() {
   add('ke-exact-bare', { 'a: Exact': 7 }, OBJS)
   // A null example is an example: the null is the default, and sets the
   // kind where the builder takes a shape.
+  // An Exact that already lists the example does not list it twice.
+  const ROLES = [{}, { role: 'admin' }, { role: 'user' }, { role: 'guest' }, { role: 'x' }, { role: 1 }, { role: null }]
+  add('ke-exact-listed', { 'role: Exact("admin","user")': 'user' }, ROLES)
+  add('ke-exact-unlisted', { 'role: Exact("admin","user")': 'guest' }, ROLES)
+  add('ke-exact-null-listed', { 'a: Exact(1,null)': null }, OBJS)
+  add('ke-exact-nested-listed', { 'a: Optional(Exact(1,2))': 2 }, OBJS)
+  add('ke-exact-number-listed', { 'a: Exact(1,2)': 1 }, OBJS)
   add('ke-null-min', { 'a: Min(2)': null }, OBJS)
   add('ke-null-string', { 'a: String': null }, OBJS)
   add('ke-null-optional-number', { 'a: Optional(Number)': null }, OBJS)

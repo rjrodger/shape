@@ -197,6 +197,21 @@ describe('parity', () => {
   })
 
 
+  test('an Exact that lists the example does not list it twice', () => {
+    assert.match(failure({ 'role: Exact("admin","user")': 'user' }, { role: 'x' }),
+      /must be exactly one of: admin, user$/)
+    assert.deepEqual(Shape({ 'role: Exact("admin","user")': 'user' })({}), { role: 'user' })
+
+    // An example it does not list joins the list, so the default is allowed.
+    assert.match(failure({ 'role: Exact("admin","user")': 'guest' }, { role: 'x' }),
+      /must be exactly one of: admin, user, guest$/)
+    assert.deepEqual(Shape({ 'role: Exact("admin","user")': 'guest' })({ role: 'guest' }), { role: 'guest' })
+
+    // A value that is not JSON is never the example.
+    assert.match(failure({ 'a: Exact(NaN,1)': 1 }, { a: 'x' }), /must be exactly one of: NaN, 1$/)
+  })
+
+
   test("a key expression's example is a composition's default", () => {
     // A composition reads its arguments as branches and a count, so the
     // example is neither: the outermost composition takes it as its default.
