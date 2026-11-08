@@ -32,6 +32,10 @@ nof-no-produce-object	{"a":{"$call":["Nof",1,{"x":{"$type":"Number"}},{"x":{"$ty
 nof-in-all	{"a":{"$call":["All",{"$expr":"Nof(0,/^a/)"},{"$expr":"String"}]}}	{"a":"ab"}		"Value \"ab\" for property \"a\" does not satisfy all of: Nof(0,/^a/), String"
 nof-absent-default	{"a":{"$expr":"Default(\"x\",Nof(1,String,Number))"}}	{}	{"a":"x"}	
 all-absent-default	{"a":{"$expr":"Default(5,All(Number,Min(2)))"}}	{}	{"a":5}	
+default-null-number-injects	{"a":{"$expr":"Default(null,Number)"}}	{}	{"a":null}	
+default-null-untyped-is-null	{"a":{"$expr":"Default(null,Min(2))"}}	{"a":"x"}		"Validation failed for property \"a\" with string \"x\" because the string is not of type null."
+default-null-bare-injects	{"a":{"$expr":"Default(null)"}}	{}	{"a":null}	
+default-null-nof-injects	{"a":{"$expr":"Default(null,Nof(1,String,Number))"}}	{}	{"a":null}	
 all-never-message	{"a":{"$expr":"All(Never,String)"}}	{"a":"x"}		"Value \"x\" for property \"a\" does not satisfy all of: Never, String"
 default-untyped-kind	{"a":{"$expr":"Default(2,Required())"}}	{"a":"x"}		"Validation failed for property \"a\" with string \"x\" because the string is not of type number."
 default-untyped-absent	{"a":{"$expr":"Default(2,Required())"}}	{}	{"a":2}	

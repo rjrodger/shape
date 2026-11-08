@@ -271,6 +271,10 @@ const files = {
     // and Never as a composite message names it.
     ['nof-absent-default', { a: { $expr: 'Default("x",Nof(1,String,Number))' } }, {}],
     ['all-absent-default', { a: { $expr: 'Default(5,All(Number,Min(2)))' } }, {}],
+    ['default-null-number-injects', { a: { $expr: 'Default(null,Number)' } }, {}],
+    ['default-null-untyped-is-null', { a: { $expr: 'Default(null,Min(2))' } }, { a: 'x' }],
+    ['default-null-bare-injects', { a: { $expr: 'Default(null)' } }, {}],
+    ['default-null-nof-injects', { a: { $expr: 'Default(null,Nof(1,String,Number))' } }, {}],
     ['all-never-message', { a: { $expr: 'All(Never,String)' } }, { a: 'x' }],
     // Default over an untyped shape takes the default's kind and keeps the
     // shape's builders, description and fault.

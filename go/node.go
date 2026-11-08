@@ -29,6 +29,10 @@ type node struct {
 	empty       bool // empty string allowed
 	nullable    bool // an explicit null is accepted as the value
 	hasDefault  bool
+	// defaultNull marks an explicit null default (Default(nil, ...)): a nil
+	// default is otherwise the zero of a kind that has none, which TS has no
+	// default for at all.
+	defaultNull bool
 
 	defaultValue any   // injected on missing optional property
 	literal      any   // declarative value (used by Exact match-from-default)

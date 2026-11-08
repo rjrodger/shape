@@ -96,15 +96,15 @@ fn node_schema(n: &Node, defs: &mut Map) -> Map {
     }
 
     // A default the shape injects. An undefined one is the zero of a kind
-    // that has none (Any, Date); only the null kind's null is a default.
+    // that has none (Any, Date); a null is a default as any value is, as
+    // Default(null, Number) injects it.
     let d = &n.default;
     let carries = !n.required
         && !n.skippable
         && n.has_default
         && !d.is_undefined()
         && !matches!(d, Value::Func(_))
-        && !matches!(d, Value::Num(f) if f.is_nan())
-        && (!d.is_null() || n.kind == Kind::Null);
+        && !matches!(d, Value::Num(f) if f.is_nan());
     if carries {
         s.insert("default".to_string(), d.clone());
     }

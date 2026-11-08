@@ -106,7 +106,7 @@ func nodeSchema(n *node, defs map[string]any) map[string]any {
 	// A nil default is the zero of a kind that has none (Any, Date): TS has
 	// no default there at all. Only the null kind's null is a default.
 	if !n.required && !n.skippable && n.hasDefault && !isFunction(n.defaultValue) && !isNaN(n.defaultValue) &&
-		(n.defaultValue != nil || n.kind == KindNull) {
+		(n.defaultValue != nil || n.kind == KindNull || n.defaultNull) {
 		s["default"] = n.defaultValue
 	}
 

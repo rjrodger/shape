@@ -294,6 +294,12 @@ function build() {
   add('d-default-obj', { a: E('Default(5,Number)') }, OBJS)
   add('d-fault', E('Fault("boom",Number)'), SCALARS)
   add('d-fault-obj', { a: E('Fault("boom",Number)') }, OBJS)
+  // An explicit null default is injected, and an untyped shape given one is
+  // the null kind.
+  add('d-default-null-number', { a: E('Default(null,Number)') }, OBJS)
+  add('d-default-null-untyped', { a: E('Default(null,Min(2))') }, OBJS)
+  add('d-default-null-bare', { a: E('Default(null)') }, OBJS)
+  add('d-default-null-nof', { a: E('Default(null,Nof(1,String,Number))') }, OBJS)
 
   // Exact.
   add('x-exact-nums', E('Exact(1,2,3)'), SCALARS)

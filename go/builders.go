@@ -211,12 +211,19 @@ func (n *Node) Empty() *Node {
 func Default(dval any, spec ...any) *Node {
 	var nb *Node
 	if len(spec) == 0 {
-		nb = buildize(dval)
+		// A nil here is the null default, so the shape is the null literal:
+		// buildize(nil) would be no shape at all.
+		if dval == nil {
+			nb = newNodeWrap(&node{kind: KindNull})
+		} else {
+			nb = buildize(dval)
+		}
 	} else {
 		nb = buildize(spec[0])
 		// An untyped shape (Required(), Exact(1)) is built over the default
-		// instead, and so takes the default's kind, as in TS.
-		if nb.n.kind == KindAny && dval != nil {
+		// instead, and so takes the default's kind, as in TS; a null default
+		// makes it the null kind.
+		if nb.n.kind == KindAny {
 			if base, err := normalize(dval); err == nil {
 				base.befores = append(append([]validator{}, nb.n.befores...), base.befores...)
 				bumpValidatorGen()
@@ -240,6 +247,7 @@ func Default(dval any, spec ...any) *Node {
 	nb.n.skippable = false
 	nb.n.hasDefault = true
 	nb.n.defaultValue = dval
+	nb.n.defaultNull = dval == nil
 	return nb
 }
 
@@ -250,6 +258,7 @@ func (n *Node) Default(dval any) *Node {
 	n.n.skippable = false
 	n.n.hasDefault = true
 	n.n.defaultValue = dval
+	n.n.defaultNull = dval == nil
 	return n
 }
 
