@@ -336,9 +336,10 @@ func Type(kind any, spec ...any) *Node {
 		return nb
 	}
 
-	// Any keeps the value it is given as its default, as TS Any(0) does;
-	// the other tokens bring their own.
-	keep := tn.kind == KindAny && nb.n.hasDefault && nb.n.defaultValue != nil
+	// Any keeps the value it is given as its default, as TS Any(0) does, a
+	// null included (Any(null)); the other tokens bring their own.
+	keep := tn.kind == KindAny && nb.n.hasDefault && (nb.n.defaultValue != nil || nb.n.kind == KindNull)
+	nb.n.defaultNull = keep && nb.n.defaultValue == nil
 	nb.n.kind = tn.kind
 	nb.n.kindSet = true
 	nb.n.required = tn.required
@@ -1495,6 +1496,11 @@ func toFloat(v any) float64 {
 func boundDefers(state *State) bool {
 	n := state.Node
 	if state.absent && (n.skippable || !n.required) {
+		return true
+	}
+	// An absent value fails a declared null kind, as it fails any other:
+	// its nil only looks like the null.
+	if state.absent && n.kind == KindNull {
 		return true
 	}
 	return typeWillFail(n, state.Value)

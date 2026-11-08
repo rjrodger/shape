@@ -42,6 +42,9 @@ keyexpr-catch-takes-example	{"a: Catch()":7}	{"a":"x"}	{"a":"x"}
 keyexpr-exact-takes-example	{"a: Exact()":7}	{}	{"a":7}	
 keyexpr-exact-bare-takes-example	{"a: Exact":7}	{}	{"a":7}	
 keyexpr-exact-bare-other-value	{"a: Exact":7}	{"a":8}		"Value \"8\" for property \"a\" must be exactly one of: 7"
+keyexpr-null-example-is-the-default	{"a: Min(2)":null}	{}	{"a":null}	
+keyexpr-null-example-sets-the-kind	{"a: Min(2)":null}	{"a":"x"}		"Validation failed for property \"a\" with string \"x\" because the string is not of type null."
+keyexpr-null-example-composition-default	{"a: Nof(1,String,Number)":null}	{}	{"a":null}	
 keyexpr-exact-present-null-fails	{"a: Exact()":7}	{"a":null}		"Value \"null\" for property \"a\" must be exactly one of: 7"
 exact-default-absent-ok	{"a":{"$expr":"Default(7,Exact(7,8))"}}	{}	{"a":7}	
 exact-default-present-null-fails	{"a":{"$expr":"Default(7,Exact(7,8))"}}	{"a":null}		"Value \"null\" for property \"a\" must be exactly one of: 7, 8"

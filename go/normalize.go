@@ -304,10 +304,8 @@ func normalizeObject(v map[string]any, opts ShapeOptions) (*node, error) {
 func buildExprWithDefault(src string, dflt any) (*Node, error) {
 	bare, bareErr := Expr(src)
 
-	if dflt == nil {
-		return bare, bareErr
-	}
-
+	// The example is the value under the key, so a nil there is a present
+	// null, as it is anywhere in a map: the example null, as in TypeScript.
 	ex, err := normalize(dflt)
 	if err != nil {
 		return nil, err
@@ -321,6 +319,7 @@ func buildExprWithDefault(src string, dflt any) (*Node, error) {
 	if bareErr == nil && bare.n.kindSet {
 		b := bare.n
 		b.hasDefault, b.defaultValue = ex.hasDefault, ex.defaultValue
+		b.defaultNull = dflt == nil
 		b.hasLiteral, b.literal = ex.hasLiteral, ex.literal
 		if b.kind == KindObject && ex.kind == KindObject {
 			b.objChildren, b.objKeys = ex.objChildren, ex.objKeys
@@ -365,6 +364,7 @@ func buildExprWithDefault(src string, dflt any) (*Node, error) {
 		if ex.kind != node.n.kind {
 			node.n.hasDefault = true
 			node.n.defaultValue = dflt
+			node.n.defaultNull = dflt == nil
 			node.n.hasLiteral = true
 			node.n.literal = dflt
 		}
@@ -374,6 +374,7 @@ func buildExprWithDefault(src string, dflt any) (*Node, error) {
 	if sameShapeNode(node.n, bare.n) {
 		node.n.hasDefault = true
 		node.n.defaultValue = dflt
+		node.n.defaultNull = dflt == nil
 		node.n.hasLiteral = true
 		node.n.literal = dflt
 	}

@@ -431,6 +431,15 @@ function build() {
   add('ke-catch-empty', { 'a: Catch()': 7 }, OBJS)
   add('ke-exact-empty', { 'a: Exact()': 7 }, OBJS)
   add('ke-exact-bare', { 'a: Exact': 7 }, OBJS)
+  // A null example is an example: the null is the default, and sets the
+  // kind where the builder takes a shape.
+  add('ke-null-min', { 'a: Min(2)': null }, OBJS)
+  add('ke-null-string', { 'a: String': null }, OBJS)
+  add('ke-null-optional-number', { 'a: Optional(Number)': null }, OBJS)
+  add('ke-null-nof', { 'a: Nof(1,String,Number)': null }, OBJS)
+  add('ke-null-exact', { 'a: Exact(1,2)': null }, OBJS)
+  add('ke-null-all', { 'a: All(String,Min(2))': null }, OBJS)
+  add('ke-null-required-min', { 'a: Required(Min(2))': null }, OBJS)
 
   // Func / Key. Func is a builder, so it is optional; the Function token is
   // required. A NaN literal is an optional NaN default.

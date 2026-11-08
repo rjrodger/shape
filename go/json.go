@@ -693,7 +693,7 @@ func nodeJSON(n *node) any {
 			head = "Required"
 		}
 		headRequired = n.required
-		if n.hasDefault && n.defaultValue != nil {
+		if n.hasDefault && (n.defaultValue != nil || n.defaultNull) {
 			head += "(" + jsonLiteral(n.defaultValue, "the default") + ")"
 		}
 		if n.open && (n.objRest == nil || jsonIsOpen(n.objRest)) {

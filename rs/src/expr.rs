@@ -665,7 +665,8 @@ fn same_shape_node(x: &Node, y: &Node) -> bool {
 pub(crate) fn key_expr_node(src: &str, example: Spec) -> Node {
     let bare = expr(src);
     let or_fault = |r: Result<Node, ExprError>| r.unwrap_or_else(|e| fault_node(e.0));
-    if matches!(example, Spec::Value(Value::Null)) {
+    // No value at all is no example; a null is an example, as in TypeScript.
+    if matches!(example, Spec::Value(Value::Undefined)) {
         return or_fault(bare);
     }
     let ex = normalize(example.clone());
@@ -1178,8 +1179,10 @@ mod tests {
     #[test]
     fn key_expressions_take_the_example() {
         let s = |src: &str, ex: Spec| stringify_node(&key_expr_node(src, ex), false);
-        // A null example leaves the expression alone.
-        assert_eq!(s("Min(2)", Spec::Value(Value::Null)), "Min(2)");
+        // No value leaves the expression alone; a null is an example as any
+        // other value is, and Min(2) with it is the null kind.
+        assert_eq!(s("Min(2)", Spec::Value(Value::Undefined)), "Min(2)");
+        assert_eq!(s("Min(2)", Spec::Value(Value::Null)), "null");
         // A bare literal has no builder to hand the example to.
         assert_eq!(s("5", Spec::from(3)), "5");
         // A value-taking builder reads the example as its argument, and it
