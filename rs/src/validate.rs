@@ -3,7 +3,7 @@
 use crate::context::{Context, PathPart, State, Update, UpdateErr};
 use crate::error::*;
 use crate::node::{Kind, ListMode, Node, Validator};
-use crate::stringify::stringify_node;
+use crate::stringify::{nof_count_text, stringify_node};
 use crate::value::{is_integer, Map, Value};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -1012,8 +1012,17 @@ fn branch_passes(
     !sub.has_any()
 }
 
+/// The branches of a composition, as its message names them.
+fn list_names(n: &Node) -> String {
+    let names: Vec<String> = n.list.iter().map(|sn| stringify_node(sn, true)).collect();
+    names.join(", ")
+}
+
+/// A composition's error with the text given. The text is the
+/// composition's own, so a `Fault` does not replace it: as in TypeScript, a
+/// fault speaks for structural failures only.
 #[allow(clippy::too_many_arguments)]
-fn list_error(
+fn list_error_text(
     n: &Node,
     silent: bool,
     value: &Value,
@@ -1023,29 +1032,38 @@ fn list_error(
     verr: &mut ValidationError,
     why: &str,
     mark: i64,
-    words: &str,
-    fault_applies: bool,
+    text: &str,
 ) {
-    let names: Vec<String> = n.list.iter().map(|sn| stringify_node(sn, true)).collect();
     let at = at_of(w, key, n, value, parent_is_array, "");
-    let text = format!(
-        "Value \"$VALUE\" for property \"$PATH\" does not satisfy {}: {}",
-        words,
-        names.join(", ")
-    );
-    let mut err = make_err(&at, why, mark, &text);
-    if fault_applies && !err.terse {
-        if let Some(f) = &n.fault_msg {
-            err.text = expand_err_text(f, &err.path, value, at.absent);
-        }
-    }
+    let err = make_err(&at, why, mark, text);
     if !silent {
         verr.add(err);
     }
 }
 
-/// One, Some and All. The branches see the value as the parent saw it: an
-/// absent value stays absent, so a branch that does not require one can
+/// Whether the counts a `Nof` can still reach are all admitted, some, or
+/// none: a branch is tried only while it is some.
+#[derive(PartialEq)]
+enum Admits {
+    No,
+    Some,
+    All,
+}
+
+/// The counts from `k` to `k + open`, against the counts a `Nof` admits.
+fn nof_span(ok: &[bool], k: usize, open: usize) -> Admits {
+    let yes = ok[k..=k + open].iter().filter(|v| **v).count();
+    if yes == 0 {
+        Admits::No
+    } else if yes == open + 1 {
+        Admits::All
+    } else {
+        Admits::Some
+    }
+}
+
+/// All and Nof. The branches see the value as the parent saw it:
+/// an absent value stays absent, so a branch that does not require one can
 /// still match and supply its default.
 #[allow(clippy::too_many_arguments)]
 fn evaluate_list(
@@ -1054,80 +1072,66 @@ fn evaluate_list(
     mut cur: Cur<'_>,
     key: &str,
     parent_is_array: bool,
-    _absent: bool,
+    absent: bool,
     w: &mut Walk<'_>,
     verr: &mut ValidationError,
 ) -> bool {
     match n.list_mode {
-        ListMode::One => {
-            let winner = n
-                .list
-                .iter()
-                .position(|sn| branch_passes(sn, cur.get(), key, parent_is_array, w));
-            match winner {
-                Some(i) => {
-                    // The value is produced by the branch that took it.
-                    let mut sub = ValidationError::default();
-                    validate_node(
-                        &n.list[i],
-                        cur.reborrow(),
-                        key,
-                        parent_is_array,
-                        w,
-                        &mut sub,
-                    )
-                }
-                None => {
-                    list_error(
-                        n,
-                        silent,
-                        cur.get(),
-                        key,
-                        parent_is_array,
-                        w,
-                        verr,
-                        "One",
-                        4030,
-                        "one of",
-                        true,
-                    );
-                    true
-                }
+        ListMode::Nof => {
+            // An absent value is not tried: the required check speaks for
+            // it. A branch is tried only while the untried could change the
+            // verdict.
+            if absent {
+                return true;
             }
-        }
-        ListMode::Some => {
-            // Every branch sees the value as it was given, never one another
-            // branch changed: each matching branch produces from its own copy
-            // of the original, and the last one's result stands.
-            let original = cur.get().clone();
-            let mut matched = false;
-            let mut kept = true;
-            for sn in &n.list {
-                if !branch_passes(sn, &original, key, parent_is_array, w) {
-                    continue;
+            let total = n.list.len();
+            let (mut k, mut tried, mut matched) = (0, 0, 0);
+            while nof_span(&n.nof_ok, k, total - tried) == Admits::Some {
+                if branch_passes(&n.list[tried], cur.get(), key, parent_is_array, w) {
+                    k += 1;
+                    matched = tried;
                 }
-                matched = true;
-                cur.set(original.clone());
-                let mut sub = ValidationError::default();
-                kept = validate_node(sn, cur.reborrow(), key, parent_is_array, w, &mut sub);
+                tried += 1;
             }
-            if !matched {
-                list_error(
+            if nof_span(&n.nof_ok, k, total - tried) == Admits::No {
+                let admitted = if tried < total {
+                    format!("{} to {}", k, k + total - tried)
+                } else {
+                    k.to_string()
+                };
+                let text = format!(
+                    "Value \"$VALUE\" for property \"$PATH\" satisfies {} of: {}; the count must be {}.",
+                    admitted,
+                    list_names(n),
+                    nof_count_text(n)
+                );
+                list_error_text(
                     n,
                     silent,
-                    &original,
+                    cur.get(),
                     key,
                     parent_is_array,
                     w,
                     verr,
-                    "Some",
-                    4031,
-                    "any of",
-                    true,
+                    "Nof",
+                    4033,
+                    &text,
                 );
                 return true;
             }
-            kept
+            // Exactly one: the branch the value satisfies produces it.
+            if n.nof_one {
+                let mut sub = ValidationError::default();
+                return validate_node(
+                    &n.list[matched],
+                    cur.reborrow(),
+                    key,
+                    parent_is_array,
+                    w,
+                    &mut sub,
+                );
+            }
+            true
         }
         _ => {
             // All threads the value through its branches; a branch that
@@ -1148,7 +1152,11 @@ fn evaluate_list(
             }
             if !pass_all {
                 cur.set(original.clone());
-                list_error(
+                let text = format!(
+                    "Value \"$VALUE\" for property \"$PATH\" does not satisfy all of: {}",
+                    list_names(n)
+                );
+                list_error_text(
                     n,
                     silent,
                     &original,
@@ -1158,8 +1166,7 @@ fn evaluate_list(
                     verr,
                     "All",
                     4032,
-                    "all of",
-                    false,
+                    &text,
                 );
                 return true;
             }
@@ -1259,7 +1266,7 @@ mod tests {
         let e = Schema::new(obj([("s", Spec::from(Token::String))]));
         assert!(!e.valid(&j(r#"{"s":""}"#)));
         assert!(
-            Schema::new(obj([("s", Spec::from(empty(Token::String)))])).valid(&j(r#"{"s":""}"#))
+            Schema::new(obj([("s", Spec::from(Empty(Token::String)))])).valid(&j(r#"{"s":""}"#))
         );
     }
 
@@ -1310,7 +1317,7 @@ mod tests {
         assert!(!s.valid(&j(r#"{"a":1}"#)));
         assert_eq!(s.error(&j(r#"{"a":1}"#))[0].mark, MARK_CUSTOM_CHECK_ERR);
 
-        let s = at_a(before(fault("bad $PATH $VALUE", Token::Number), fail()));
+        let s = at_a(before(Fault("bad $PATH $VALUE", Token::Number), fail()));
         assert_eq!(run(&s, r#"{"a":1}"#), "ERR bad a 1");
         assert!(!s.valid(&j(r#"{"a":1}"#)));
 
@@ -1418,23 +1425,23 @@ mod tests {
         assert_eq!(run(&s, r#"{"a":"x"}"#), r#"{"a":"x"}"#);
 
         // A failing check against an absent optional value is not an error.
-        let s = at_a(before(optional(Token::Number), fail()));
+        let s = at_a(before(Optional(Token::Number), fail()));
         assert_eq!(run(&s, "{}"), r#"{"a":0}"#);
         // Unless the check insisted.
         let insist = chk("I", |_, u| {
             u.done = true;
             false
         });
-        let s = at_a(before(optional(Token::Number), insist));
+        let s = at_a(before(Optional(Token::Number), insist));
         assert_eq!(s.error(&j("{}")).len(), 1);
         // A required node's absence is the check's to report too, once.
-        let s = at_a(before(required(Token::Number), fail()));
+        let s = at_a(before(Required(Token::Number), fail()));
         assert_eq!(s.error(&j("{}")).len(), 1);
         // The check sees the state it is given.
         let peek = chk("Peek", |s, _| {
             s.absent && s.key == "a" && s.path_str() == "a" && !s.is_match && !s.parent_is_array
         });
-        let s = at_a(before(optional(Token::Number), peek));
+        let s = at_a(before(Optional(Token::Number), peek));
         assert_eq!(run(&s, "{}"), r#"{"a":0}"#);
     }
 
@@ -1457,23 +1464,23 @@ mod tests {
             u.val = Some(Value::Num(9.0));
             true
         });
-        let s = at_a(after(skip(Token::Number), fill));
+        let s = at_a(after(Skip(Token::Number), fill));
         assert_eq!(run(&s, "{}"), r#"{"a":9}"#);
 
         // An injected default is the value a failing after reports.
-        let s = at_a(after(optional(Token::Number), fail()));
+        let s = at_a(after(Optional(Token::Number), fail()));
         assert_eq!(
             run(&s, "{}"),
             "ERR Validation failed for property \"a\" with number \"0\" because check \"Odd\" failed."
         );
-        let s = at_a(after(skip(Token::Number), fail()));
+        let s = at_a(after(Skip(Token::Number), fail()));
         assert_eq!(run(&s, "{}"), "{}");
     }
 
     #[test]
     fn structural_rules() {
         assert_eq!(
-            run(&Schema::new(one([Spec::from(Token::Number)])), "1"),
+            run(&Schema::new(Nof(1, [Spec::from(Token::Number)])), "1"),
             "1"
         );
         assert_eq!(
@@ -1482,15 +1489,15 @@ mod tests {
         );
 
         assert_eq!(
-            run(&at_a(nullable(Token::String)), r#"{"a":null}"#),
+            run(&at_a(Nullable(Token::String)), r#"{"a":null}"#),
             r#"{"a":null}"#
         );
 
-        let s = at_a(never(1));
+        let s = at_a(Never(1));
         assert_eq!(s.error(&j(r#"{"a":1}"#))[0].why, WHY_NEVER);
         assert_eq!(s.error(&j("{}"))[0].why, WHY_NEVER);
         assert!(!s.valid(&j("{}")));
-        assert_eq!(run(&at_a(never(1).fault("nope")), r#"{"a":1}"#), "ERR nope");
+        assert_eq!(run(&at_a(Never(1).Fault("nope")), r#"{"a":1}"#), "ERR nope");
 
         let re = || Regex::new("^a+$").unwrap();
         let s = at_a(buildize(re()));
@@ -1508,9 +1515,9 @@ mod tests {
             "ERR Validation failed for property \"a\" with value \"undefined\" because the value is not of type string."
         );
         assert_eq!(run(&s, r#"{"a":"aa"}"#), r#"{"a":"aa"}"#);
-        assert_eq!(run(&at_a(optional(re())), "{}"), "{}");
-        assert_eq!(run(&at_a(fault("F", re())), r#"{"a":1}"#), "ERR F");
-        assert!(!at_a(fault("F", re())).valid(&j(r#"{"a":1}"#)));
+        assert_eq!(run(&at_a(Optional(re())), "{}"), "{}");
+        assert_eq!(run(&at_a(Fault("F", re())), r#"{"a":1}"#), "ERR F");
+        assert!(!at_a(Fault("F", re())).valid(&j(r#"{"a":1}"#)));
         let mut quiet = buildize(re());
         quiet.silent = true;
         assert_eq!(run(&at_a(quiet), r#"{"a":1}"#), r#"{"a":1}"#);
@@ -1586,7 +1593,7 @@ mod tests {
     #[test]
     fn objects() {
         let inner = || obj([("a", Spec::from(1))]);
-        let s = Schema::new(obj([("o", Spec::from(fault("F $PATH", inner())))]));
+        let s = Schema::new(obj([("o", Spec::from(Fault("F $PATH", inner())))]));
         assert_eq!(run(&s, r#"{"o":{"z":1}}"#), "ERR F o");
         assert!(!s.valid(&j(r#"{"o":{"z":1}}"#)));
         let mut quiet = buildize(inner());
@@ -1600,28 +1607,28 @@ mod tests {
         assert!(s.valid(&j(r#"{"o":{}}"#)));
         assert!(!s.valid(&j(r#"{"o":1}"#)));
 
-        let s = at_a(ignore(Token::Number));
+        let s = at_a(Ignore(Token::Number));
         assert_eq!(run(&s, r#"{"a":"x"}"#), "{}");
         assert_eq!(run(&s, r#"{"a":5}"#), r#"{"a":5}"#);
         assert_eq!(run(&s, "{}"), "{}");
         assert!(s.valid(&j(r#"{"a":"x"}"#)));
         assert!(s.valid(&j(r#"{"a":5}"#)));
 
-        let s = Schema::new(child(Token::Number, inner()));
+        let s = Schema::new(Child(Token::Number, inner()));
         assert_eq!(run(&s, r#"{"a":1,"z":2}"#), r#"{"a":1,"z":2}"#);
         assert!(!s.valid(&j(r#"{"a":1,"z":"x"}"#)));
-        let s = Schema::new(child(ignore(Token::Number), inner()));
+        let s = Schema::new(Child(Ignore(Token::Number), inner()));
         assert_eq!(run(&s, r#"{"a":1,"z":"x"}"#), r#"{"a":1}"#);
         assert!(s.valid(&j(r#"{"a":1,"z":"x"}"#)));
     }
 
     #[test]
     fn arrays() {
-        let s = at_a(fault("F", arr([Spec::from(Token::Number)])));
+        let s = at_a(Fault("F", arr([Spec::from(Token::Number)])));
         assert_eq!(run(&s, r#"{"a":1}"#), "ERR F");
         let tuple = || arr([Spec::from(1), Spec::from(2)]);
-        assert_eq!(run(&at_a(fault("T", tuple())), r#"{"a":[1,2,3]}"#), "ERR T");
-        assert!(!at_a(fault("T", tuple())).valid(&j(r#"{"a":[1,2,3]}"#)));
+        assert_eq!(run(&at_a(Fault("T", tuple())), r#"{"a":[1,2,3]}"#), "ERR T");
+        assert!(!at_a(Fault("T", tuple())).valid(&j(r#"{"a":[1,2,3]}"#)));
         let mut quiet = buildize(tuple());
         quiet.silent = true;
         assert_eq!(run(&at_a(quiet), r#"{"a":[1,2,3]}"#), r#"{"a":[1,2,3]}"#);
@@ -1633,25 +1640,25 @@ mod tests {
         let s = at_a(arr([Spec::from(Token::String), Spec::from(2)]));
         assert!(!s.valid(&j(r#"{"a":[]}"#)));
 
-        let s = at_a(arr([Spec::from(ignore(Token::Number)), Spec::from(2)]));
+        let s = at_a(arr([Spec::from(Ignore(Token::Number)), Spec::from(2)]));
         assert_eq!(run(&s, r#"{"a":["x",2]}"#), r#"{"a":[null,2]}"#);
         assert_eq!(run(&s, r#"{"a":[1]}"#), r#"{"a":[1,2]}"#);
         assert!(s.valid(&j(r#"{"a":["x",2]}"#)));
 
-        let s = at_a(arr([Spec::from(1), Spec::from(skip(Token::Number))]));
+        let s = at_a(arr([Spec::from(1), Spec::from(Skip(Token::Number))]));
         assert_eq!(run(&s, r#"{"a":[]}"#), r#"{"a":[1]}"#);
 
         let s = at_a(arr([Spec::from(Token::Number)]));
         assert!(!s.valid(&j(r#"{"a":[1,"x"]}"#)));
         assert!(s.valid(&j(r#"{"a":[1,2]}"#)));
-        let s = at_a(arr([Spec::from(ignore(Token::Number))]));
+        let s = at_a(arr([Spec::from(Ignore(Token::Number))]));
         assert_eq!(run(&s, r#"{"a":[1,"x"]}"#), r#"{"a":[1,null]}"#);
         assert!(s.valid(&j(r#"{"a":[1,"x"]}"#)));
     }
 
     #[test]
     fn root_ignore_drops_a_bad_value() {
-        let s = Schema::new(ignore(Token::Number));
+        let s = Schema::new(Ignore(Token::Number));
         assert_eq!(run(&s, "\"x\""), "null");
         assert_eq!(run(&s, "5"), "5");
         assert!(s.valid(&j("\"x\"")));

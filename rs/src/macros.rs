@@ -5,12 +5,12 @@
 //! spec can be made from: a literal, a builder call, a node.
 //!
 //! ```
-//! use shape::{min, shape, Token};
+//! use shape::{shape, Min, Token};
 //! let s = shape::Schema::new(shape!({
 //!     "name": String,
 //!     "port": 8080,
 //!     "tags": [String],
-//!     "age": min(0, Token::Integer),
+//!     "age": Min(0, Token::Integer),
 //!     "addr": { "zip": String },
 //! }));
 //! assert!(s.valid(&shape::Value::from(serde_json::json!({ "name": "x", "age": 3, "addr": { "zip": "1" } }))));
@@ -144,7 +144,7 @@ macro_rules! __shape_arr {
 
 #[cfg(test)]
 mod tests {
-    use crate::builders::min;
+    use crate::builders::Min;
     use crate::{Schema, Spec, Token, Value};
 
     fn j(s: &str) -> Value {
@@ -158,7 +158,7 @@ mod tests {
             port: 8080,
             "tags": [String],
             "pair": [Number, "x"],
-            "age": min(0, Token::Integer),
+            "age": Min(0, Token::Integer),
             "addr": { "zip": String, "lines": [{ "text": String }] },
             "empty": {},
             "anything": Any,
@@ -183,7 +183,7 @@ mod tests {
         assert!(matches!(shape!(Date), Spec::Token(Token::Date)));
         assert!(matches!(shape!(BigInt), Spec::Token(Token::BigInt)));
         assert!(matches!(shape!(Any), Spec::Token(Token::Any)));
-        let node = min(1, Token::Number);
+        let node = Min(1, Token::Number);
         assert!(matches!(shape!(node), Spec::Node(_)));
         assert!(matches!(shape!(5), Spec::Value(Value::Num(_))));
         assert!(matches!(shape!([]), Spec::Arr(_)));

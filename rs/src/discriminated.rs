@@ -23,7 +23,7 @@ pub struct Disc {
 /// A union choosing its branch by the value of the tag property. An
 /// object-shaped branch without the tag property has it added, as the
 /// literal it is keyed by.
-pub fn discriminated<I, K, S>(tag: impl Into<String>, branches: I) -> Node
+pub fn Discriminated<I, K, S>(tag: impl Into<String>, branches: I) -> Node
 where
     I: IntoIterator<Item = (K, S)>,
     K: Into<String>,
@@ -127,7 +127,7 @@ fn choose(tag: &str, state: &mut State<'_>, update: &mut Update) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::builders::optional;
+    use crate::builders::Optional;
     use crate::node::Token;
     use crate::spec::obj;
     use crate::stringify::stringify_node;
@@ -145,7 +145,7 @@ mod tests {
     }
 
     fn pet() -> Node {
-        discriminated(
+        Discriminated(
             "kind",
             [
                 ("fish", obj([("fins", Spec::from(Token::Number))])),
@@ -191,7 +191,7 @@ mod tests {
         );
         assert_eq!(
             run(
-                &Schema::new(obj([("p", Spec::from(optional(pet())))])),
+                &Schema::new(obj([("p", Spec::from(Optional(pet())))])),
                 "{}"
             ),
             "{}"
@@ -207,24 +207,24 @@ mod tests {
             "Discriminated(kind,dog,fish)"
         );
         // A branch that is not an object carries no tag of its own.
-        let s = Schema::new(discriminated("k", [("n", Spec::from(Token::Number))]));
+        let s = Schema::new(Discriminated("k", [("n", Spec::from(Token::Number))]));
         assert_eq!(
             run(&s, r#"{"k":"n"}"#),
             "ERR Validation failed for object \"{k:n}\" because the object is not of type number."
         );
         assert_eq!(
-            run(&Schema::new(discriminated("", [("a", Spec::from(1))])), "1"),
+            run(&Schema::new(Discriminated("", [("a", Spec::from(1))])), "1"),
             "ERR Discriminated needs a tag property name and at least one branch"
         );
         assert_eq!(
             run(
-                &Schema::new(discriminated::<[(&str, Spec); 0], &str, Spec>("k", [])),
+                &Schema::new(Discriminated::<[(&str, Spec); 0], &str, Spec>("k", [])),
                 "1"
             ),
             "ERR Discriminated needs a tag property name and at least one branch"
         );
         // A branch that declares the tag keeps its own declaration.
-        let s = Schema::new(discriminated(
+        let s = Schema::new(Discriminated(
             "k",
             [("a", obj([("k", Spec::from(Token::String))]))],
         ));

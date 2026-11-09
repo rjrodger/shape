@@ -99,6 +99,10 @@ format-ipv6-mapped	{"a":{"$expr":"Ipv6"}}	{"a":"::ffff:192.168.1.1"}	{"a":"::fff
 format-bound-order	{"a":{"$expr":"Email(Min(10,String))"}}	{"a":"nope"}		"Value \"nope\" for property \"a\" must be a minimum length of 10 (was 4).\nValue \"nope\" for property \"a\" is not a valid email address."
 fault-keeps-check-text	{"a":{"$expr":"Fault(\"boom\",Min(2,Number))"}}	{"a":1}		"Value \"1\" for property \"a\" must be a minimum of 2 (was 1)."
 fault-replaces-type-text	{"a":{"$expr":"Fault(\"boom\",Email)"}}	{"a":1}		"boom"
+fault-keeps-nof-text	{"a":{"$expr":"Fault(\"boom\",Nof(1,Number,String))"}}	{"a":true}		"Value \"true\" for property \"a\" satisfies 0 of: Number, String; the count must be 1."
+fault-keeps-nof-none-text	{"a":{"$expr":"Fault(\"boom\",Nof(0,String))"}}	{"a":"x"}		"Value \"x\" for property \"a\" satisfies 1 of: String; the count must be 0."
+fault-replaces-nof-missing	{"a":{"$expr":"Fault(\"boom\",Nof(1,Number,String))"}}	{}		"boom"
+fault-keeps-all-text	{"a":{"$expr":"Fault(\"boom\",All(Number,Min(2)))"}}	{"a":1}		"Value \"1\" for property \"a\" does not satisfy all of: Number, Min(2)"
 catch-fallback	{"a":{"$expr":"Catch(0,Number)"}}	{"a":"x"}	{"a":0}	
 catch-passes-through	{"a":{"$expr":"Catch(0,Number)"}}	{"a":5}	{"a":5}	
 catch-inner-bound	{"a":{"$expr":"Catch(\"none\",Min(2,String))"}}	{"a":"x"}	{"a":"none"}	
@@ -116,4 +120,3 @@ disc-unknown-tag	{"p":{"$discriminated":["kind",{"dog":{"bark":{"$type":"Boolean
 disc-not-object	{"p":{"$discriminated":["kind",{"dog":{"bark":{"$type":"Boolean"}},"fish":{"fins":{"$type":"Number"}}}]}}	{"p":1}		"Value \"1\" for property \"p\" is not an object with a \"kind\" property."
 disc-required-absent	{"p":{"$discriminated":["kind",{"dog":{"bark":{"$type":"Boolean"}},"fish":{"fins":{"$type":"Number"}}}]}}	{}		"Validation failed for property \"p\" because the property is missing."
 disc-optional-absent	{"p":{"$optional":{"$discriminated":["kind",{"dog":{"bark":{"$type":"Boolean"}},"fish":{"fins":{"$type":"Number"}}}]}}}	{}	{}	
-one-optional-absent	{"a":{"$expr":"Optional(One(String,Number))"}}	{}	{}	

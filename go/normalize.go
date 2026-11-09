@@ -35,7 +35,7 @@ func normalizeWith(spec any, opts ShapeOptions) (*node, error) {
 		return typeTokenNode(v.kind), nil
 	case *regexp.Regexp:
 		// A regexp anywhere in a spec is a string-shaped node, as in TS. Without
-		// this, One(/re/, Number) and a raw regexp spec both failed to build.
+		// this, Nof(1, /re/, Number) and a raw regexp spec both failed to build.
 		return regexpNode(v.String())
 	case time.Time:
 		// A date value in a spec is a date default, as a number literal is a
@@ -235,7 +235,7 @@ func normalizeObject(v map[string]any, opts ShapeOptions) (*node, error) {
 		// valexpr keymark: apply the expression to the parent node in place, so
 		// e.g. "Open" opens this object (mirrors TS expr(src, n)). Narrowing
 		// builders (Open/Closed/Min/Required/...) mutate the carrier and take
-		// effect. Composition builders (All/One/Some/Exact) can't: TS applies them
+		// effect. Composition builders (All/Nof/Exact) can't: TS applies them
 		// with the object as `this` (keeping its children), but Go's variadic
 		// composition builders have no carrier slot — so those are not supported
 		// as value expressions (an off-by-default, rarely-used combination).
@@ -304,10 +304,8 @@ func normalizeObject(v map[string]any, opts ShapeOptions) (*node, error) {
 func buildExprWithDefault(src string, dflt any) (*Node, error) {
 	bare, bareErr := Expr(src)
 
-	if dflt == nil {
-		return bare, bareErr
-	}
-
+	// The example is the value under the key, so a nil there is a present
+	// null, as it is anywhere in a map: the example null, as in TypeScript.
 	ex, err := normalize(dflt)
 	if err != nil {
 		return nil, err
@@ -321,6 +319,7 @@ func buildExprWithDefault(src string, dflt any) (*Node, error) {
 	if bareErr == nil && bare.n.kindSet {
 		b := bare.n
 		b.hasDefault, b.defaultValue = ex.hasDefault, ex.defaultValue
+		b.defaultNull = dflt == nil
 		b.hasLiteral, b.literal = ex.hasLiteral, ex.literal
 		if b.kind == KindObject && ex.kind == KindObject {
 			b.objChildren, b.objKeys = ex.objChildren, ex.objKeys
@@ -345,8 +344,9 @@ func buildExprWithDefault(src string, dflt any) (*Node, error) {
 	// it made no difference to the node it is applied as the value instead.
 	// (ts/src/shape.ts keyExprNode does the same, both ways round.) The raw
 	// example is what is appended, as TS splices the raw value: a builder that
-	// takes a value ("Default()", "Min()") then reads it as one.
-	node, applyErr := exprApply(src, dflt)
+	// takes a value ("Default()", "Min()") then reads it as one. Under a
+	// composition it is the composition's default instead (exampleApply).
+	node, applyErr := exampleApply(src, dflt)
 	if applyErr != nil {
 		// Not a builder chain at all — a bare literal such as "a: 5" — so there
 		// is nothing to hand the example to and the expression's own value
@@ -364,6 +364,7 @@ func buildExprWithDefault(src string, dflt any) (*Node, error) {
 		if ex.kind != node.n.kind {
 			node.n.hasDefault = true
 			node.n.defaultValue = dflt
+			node.n.defaultNull = dflt == nil
 			node.n.hasLiteral = true
 			node.n.literal = dflt
 		}
@@ -373,6 +374,7 @@ func buildExprWithDefault(src string, dflt any) (*Node, error) {
 	if sameShapeNode(node.n, bare.n) {
 		node.n.hasDefault = true
 		node.n.defaultValue = dflt
+		node.n.defaultNull = dflt == nil
 		node.n.hasLiteral = true
 		node.n.literal = dflt
 	}

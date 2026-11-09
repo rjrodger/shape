@@ -1,4 +1,4 @@
-//! Object algebra: `pick`, `omit`, `partial` and `extend` build a new object
+//! Object algebra: `Pick`, `Omit`, `Partial` and `Extend` build a new object
 //! shape out of an existing one. The result is a fresh node, so the source
 //! is left as it was and one base can be reshaped many times. Key
 //! expressions in a source (`{"a: Min(2)": 0}`) are compiled on the way in,
@@ -148,48 +148,48 @@ fn or_fault(r: Result<Node, String>) -> Node {
 
 /// Keep only the named properties of an object shape. Naming one the shape
 /// does not declare is a fault: there is nothing there to pick.
-pub fn pick(names: impl Into<Names>, spec: impl Into<Spec>) -> Node {
+pub fn Pick(names: impl Into<Names>, spec: impl Into<Spec>) -> Node {
     or_fault(pick_node(names.into(), spec.into()))
 }
 
 /// Drop the named properties of an object shape. A name the shape does not
 /// declare is simply not there to drop.
-pub fn omit(names: impl Into<Names>, spec: impl Into<Spec>) -> Node {
+pub fn Omit(names: impl Into<Names>, spec: impl Into<Spec>) -> Node {
     or_fault(omit_node(names.into(), spec.into()))
 }
 
-/// Make every declared property of an object shape optional, as `optional`
+/// Make every declared property of an object shape optional, as `Optional`
 /// would: a type token then injects its empty value, a literal its own.
 /// Shallow: a nested object's own properties are as they were.
-pub fn partial(spec: impl Into<Spec>) -> Node {
+pub fn Partial(spec: impl Into<Spec>) -> Node {
     or_fault(partial_node(spec.into()))
 }
 
 /// Add the properties of another object shape; a property both declare
 /// takes the extension's. The result stays open or closed as the base was.
-pub fn extend(extra: impl Into<Spec>, spec: impl Into<Spec>) -> Node {
+pub fn Extend(extra: impl Into<Spec>, spec: impl Into<Spec>) -> Node {
     or_fault(extend_node(extra.into(), spec.into()))
 }
 
 impl Node {
-    pub fn pick(self, names: impl Into<Names>) -> Node {
-        pick(names, self)
+    pub fn Pick(self, names: impl Into<Names>) -> Node {
+        Pick(names, self)
     }
-    pub fn omit(self, names: impl Into<Names>) -> Node {
-        omit(names, self)
+    pub fn Omit(self, names: impl Into<Names>) -> Node {
+        Omit(names, self)
     }
-    pub fn partial(self) -> Node {
-        partial(self)
+    pub fn Partial(self) -> Node {
+        Partial(self)
     }
-    pub fn extend(self, extra: impl Into<Spec>) -> Node {
-        extend(extra, self)
+    pub fn Extend(self, extra: impl Into<Spec>) -> Node {
+        Extend(extra, self)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::builders::{any, open};
+    use crate::builders::{Any, Open};
     use crate::node::Token;
     use crate::spec::obj;
     use crate::Schema;
@@ -215,86 +215,86 @@ mod tests {
 
     #[test]
     fn reshapes_objects() {
-        assert_eq!(run(&Schema::new(pick(["a"], base())), "{}"), r#"{"a":1}"#);
-        assert_eq!(run(&Schema::new(pick("a", base())), "{}"), r#"{"a":1}"#);
+        assert_eq!(run(&Schema::new(Pick(["a"], base())), "{}"), r#"{"a":1}"#);
+        assert_eq!(run(&Schema::new(Pick("a", base())), "{}"), r#"{"a":1}"#);
         assert_eq!(
-            run(&Schema::new(pick(vec!["a", "c"], base())), r#"{"c":false}"#),
+            run(&Schema::new(Pick(vec!["a", "c"], base())), r#"{"c":false}"#),
             r#"{"c":false,"a":1}"#
         );
         assert_eq!(
-            run(&Schema::new(pick(vec!["b".to_string()], base())), "{}"),
+            run(&Schema::new(Pick(vec!["b".to_string()], base())), "{}"),
             "ERR Validation failed for property \"b\" because the property is missing."
         );
         assert_eq!(
-            run(&Schema::new(pick("z", base())), "{}"),
+            run(&Schema::new(Pick("z", base())), "{}"),
             "ERR Pick: unknown property \"z\""
         );
         assert_eq!(
-            run(&Schema::new(pick("a", Token::Number)), "1"),
+            run(&Schema::new(Pick("a", Token::Number)), "1"),
             "ERR Pick needs an object shape"
         );
         assert_eq!(
-            run(&Schema::new(pick("a", open(base()))), r#"{"a":2,"z":1}"#),
+            run(&Schema::new(Pick("a", Open(base()))), r#"{"a":2,"z":1}"#),
             r#"{"a":2,"z":1}"#
         );
         assert_eq!(
-            run(&Schema::new(omit(["b"], base())), "{}"),
+            run(&Schema::new(Omit(["b"], base())), "{}"),
             r#"{"a":1,"c":true}"#
         );
         assert_eq!(
-            run(&Schema::new(omit(["z"], base())), r#"{"b":"x"}"#),
+            run(&Schema::new(Omit(["z"], base())), r#"{"b":"x"}"#),
             r#"{"b":"x","a":1,"c":true}"#
         );
         assert_eq!(
-            run(&Schema::new(omit(["b"], base())), r#"{"b":"x"}"#),
+            run(&Schema::new(Omit(["b"], base())), r#"{"b":"x"}"#),
             "ERR Validation failed for object \"{b:x}\" because the property \"b\" is not allowed."
         );
         assert_eq!(
-            run(&Schema::new(partial(base())), "{}"),
+            run(&Schema::new(Partial(base())), "{}"),
             r#"{"a":1,"b":"","c":true}"#
         );
         assert_eq!(
-            run(&Schema::new(partial(any())), "{}"),
+            run(&Schema::new(Partial(Any())), "{}"),
             "ERR Partial needs an object shape"
         );
         assert_eq!(
             run(
-                &Schema::new(extend(obj([("d", Spec::from(2))]), base())),
+                &Schema::new(Extend(obj([("d", Spec::from(2))]), base())),
                 r#"{"b":"x"}"#
             ),
             r#"{"b":"x","a":1,"c":true,"d":2}"#
         );
         assert_eq!(
             run(
-                &Schema::new(extend(obj([("a", Spec::from(Token::Number))]), base())),
+                &Schema::new(Extend(obj([("a", Spec::from(Token::Number))]), base())),
                 r#"{"b":"x"}"#
             ),
             "ERR Validation failed for property \"a\" because the property is missing."
         );
         assert_eq!(
-            run(&Schema::new(extend(Token::Number, base())), "{}"),
+            run(&Schema::new(Extend(Token::Number, base())), "{}"),
             "ERR Extend needs an object to extend with"
         );
         // The source is left as it was, and the chain forms reshape too.
         let b = buildize(base());
-        let picked = b.clone().pick("a");
+        let picked = b.clone().Pick("a");
         assert_eq!(b.obj_children.len(), 3);
         assert_eq!(picked.obj_children.len(), 1);
         assert_eq!(
-            b.clone().omit(Names(vec!["a".into()])).obj_children.len(),
+            b.clone().Omit(Names(vec!["a".into()])).obj_children.len(),
             2
         );
-        assert!(!b.clone().partial().obj_children["b"].required);
-        assert_eq!(b.extend(obj([("z", Spec::from(1))])).obj_children.len(), 4);
+        assert!(!b.clone().Partial().obj_children["b"].required);
+        assert_eq!(b.Extend(obj([("z", Spec::from(1))])).obj_children.len(), 4);
         // A default narrows with the shape.
         let mut d = buildize(base());
         d.has_default = true;
         d.default = j(r#"{"a":5,"b":"q","c":false}"#);
-        let p = pick("a", d);
+        let p = Pick("a", d);
         assert_eq!(p.default, j(r#"{"a":5}"#));
         let mut bare = Node::of(Kind::Object);
         bare.obj_children.insert("a".into(), buildize(1));
-        assert!(pick("a", bare).default.is_undefined());
+        assert!(Pick("a", bare).default.is_undefined());
         assert_eq!(
             Names::from_value(&j(r#"["a","b"]"#), "Pick").unwrap(),
             Names::from(["a", "b"])

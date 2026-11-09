@@ -88,8 +88,8 @@ it is written as that value.
 regexp, a bare `Any`:
 
 ```js
-Shape({ a: One(String, Number), b: /^x/ }).json()
-// { a: 'One(String,Number)', b: '/^x/' }
+Shape({ a: Nof(1, String, Number), b: /^x/ }).json()
+// { a: 'Nof(1,String,Number)', b: '/^x/' }
 ```
 
 **A `$$` key applies an expression to the object that holds it.** This is
@@ -104,8 +104,8 @@ Shape(Open({ a: 1 })).json()
 spell inline**—an object or an array in an argument position:
 
 ```js
-Shape({ a: Some({ x: 1 }, [String]) }).json()
-// { a: { $$: 'Some($$0,$$1)', $$0: { x: 1 }, $$1: ['String'] } }
+Shape({ a: Nof(1, { x: 1 }, [String]) }).json()
+// { a: { $$: 'Nof(1,$$0,$$1)', $$0: { x: 1 }, $$1: ['String'] } }
 ```
 
 Numbers, booleans and `null` are themselves; a string is JSON-quoted, since a

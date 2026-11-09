@@ -24,13 +24,13 @@ tokens as bare words and any other Rust expression standing for a builder's
 result:
 
 ```rust
-use shape::{min, shape, Schema, Token, Value};
+use shape::{shape, Min, Schema, Token, Value};
 
 let s = Schema::new(shape!({
     "port": 8080,                    // optional, defaults to 8080, must be a number
     "host": "localhost",             // optional, defaults to "localhost"
     "debug": Boolean,                // required
-    "workers": min(1, Token::Integer),
+    "workers": Min(1, Token::Integer),
     "tags": [String],
 }));
 ```
@@ -63,11 +63,12 @@ back with `serde_json::Value::from(value)`.
 
 ## Builders are functions and chain methods
 
-Every builder takes the spec it applies to last (`min(2, Token::Number)`) and
-exists as a chain method too (`buildize(Token::Number).min(2)`); pass
-`any()` for a builder with no spec. `Default` is `default_to` as a method and
-`Type` is `type_`. Builders consume the node they are given: clone a base
-you mean to reshape twice.
+Builders keep the names they have in TypeScript and Go. Every builder takes
+the spec it applies to last (`Min(2, Token::Number)`) and exists as a chain
+method too (`buildize(Token::Number).Min(2)`); pass `Any()` for a builder
+with no spec. The crate allows Rust's `non_snake_case` lint for these
+names, and calling them raises no warning in your code. Builders consume the
+node they are given: clone a base you mean to reshape twice.
 
 A builder given a wrong argument returns a fault node that reports the
 message at validation, since a Rust builder cannot throw as a TypeScript
@@ -77,9 +78,9 @@ as `expr` throws in TypeScript.
 ## Custom validation
 
 ```rust
-use shape::{check, Token};
+use shape::{Check, Token};
 
-let even = check(
+let even = Check(
     |state, update| {
         if state
             .value
@@ -99,14 +100,14 @@ let even = check(
 // under {"n": even}, 3 fails: Value "3" for property "n" must be even.
 ```
 
-`before` and `after` take the same closure; `transform` a `Fn(Value, &mut State) -> Value`.
+`Before` and `After` take the same closure; `Transform` a `Fn(Value, &mut State) -> Value`.
 The closure must be `Send + Sync + 'static`, so a compiled schema can be
 shared between threads.
 
 ## Language differences
 
 - No `Symbol` token; a function is an opaque `Value::Func(id)`.
-- `exact` compares object and array literals by value, where TypeScript
+- `Exact` compares object and array literals by value, where TypeScript
   compares them by identity.
 - A wrong builder argument is a fault node, not a panic; in the string form it is an `ExprError`.
 - String lengths are counted in UTF-16 units, as JavaScript counts them.

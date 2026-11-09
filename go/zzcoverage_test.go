@@ -147,9 +147,8 @@ func TestZZBuildersStringify(t *testing.T) {
 }
 
 func TestZZBuildersListErrors(t *testing.T) {
-	// One/Some/All with an unnormalizable shape -> Never fallback (665-667).
-	_ = One(make(chan int))
-	_ = Some(make(chan int))
+	// All and Nof with an unnormalizable shape -> Never fallback.
+	_ = Nof(1, make(chan int))
 	_ = All(make(chan int))
 }
 
@@ -304,6 +303,26 @@ func TestZZExprBuildValue(t *testing.T) {
 	}
 }
 
+func TestZZExampleApply(t *testing.T) {
+	// An expression that does not tokenize is an error.
+	if _, err := exampleApply("a,,b", 1.0); err == nil {
+		t.Fatal("expected a tokenize error")
+	}
+	tok := func(s string) []string {
+		ts, _ := tokenize(s)
+		return ts
+	}
+	// Exact never lists an object or array example: TypeScript compares
+	// those by identity.
+	if exactLists(tok(`Exact(1)`), 3, map[string]any{}) || exactLists(tok(`Exact(1)`), 3, []any{}) {
+		t.Fatal("an object or array example is never listed")
+	}
+	// An object in the list is no scalar, so it lists none.
+	if exactLists(tok(`Exact({"x":1})`), 3, "x") {
+		t.Fatal("an object value lists no scalar")
+	}
+}
+
 func TestZZExprTokenize(t *testing.T) {
 	// Unparseable gap between tokens (99-102).
 	if _, err := Expr("a,,b"); err == nil {
@@ -371,11 +390,11 @@ func TestZZExprArgs(t *testing.T) {
 	}
 
 	// chainContinuation loop within an arg (311-317).
-	if _, err := Expr("One(String.Min(2))"); err != nil {
-		t.Fatalf("One(String.Min(2)) err: %v", err)
+	if _, err := Expr("All(String.Min(2))"); err != nil {
+		t.Fatalf("All(String.Min(2)) err: %v", err)
 	}
 	// chainContinuation error propagation (314-316).
-	if _, err := Expr("One(String.Zzz)"); err == nil {
+	if _, err := Expr("All(String.Zzz)"); err == nil {
 		t.Fatal("expected chainContinuation error")
 	}
 }
@@ -451,8 +470,8 @@ func TestZZStringify(t *testing.T) {
 	}
 	// KindAny with a default (27-29).
 	_ = stringifyNode(&node{kind: KindAny, hasDefault: true, defaultValue: 5}, false)
-	// List Some / All modes (40-43).
-	_ = stringifyNode(Some(String).n, false)
+	// List Nof / All modes.
+	_ = stringifyNode(Nof(1, String).n, false)
 	_ = stringifyNode(All(String).n, false)
 	// Unknown kind default return (79).
 	_ = stringifyNode(&node{kind: Kind("bogus")}, false)
@@ -541,16 +560,16 @@ func TestZZValidateAftersAndLists(t *testing.T) {
 	openN := &node{kind: KindObject, open: true}
 	validateNode(openN, map[string]any{"u": 1.0}, []string{}, []any{}, "", nil, newContext(nil), false, &ValidationError{})
 
-	// One in match mode (456-458).
-	if !MustShape(One(Number, String)).Match(5.0) {
-		t.Fatal("One match should pass")
+	// Nof in match mode.
+	if !MustShape(Nof(1, Number, String)).Match(5.0) {
+		t.Fatal("Nof match should pass")
 	}
-	// One/Some failures carrying a Fault message (467-469 / 492-494).
-	if _, err := MustShape(Fault("no", One(Number, String))).Validate(true); err == nil {
-		t.Fatal("expected One fault error")
+	// Nof failures under a Fault keep their own message.
+	if _, err := MustShape(Fault("no", Nof(1, Number, String))).Validate(true); err == nil || err.Error() == "no" {
+		t.Fatalf("Nof fault error: %v", err)
 	}
-	if _, err := MustShape(Fault("no", Some(Number, String))).Validate(true); err == nil {
-		t.Fatal("expected Some fault error")
+	if _, err := MustShape(Fault("no", Nof(Min(1), Number, String))).Validate(true); err == nil || err.Error() == "no" {
+		t.Fatalf("Nof fault error: %v", err)
 	}
 
 	// evaluateList with no list mode returns the input (527).
@@ -615,7 +634,7 @@ func TestZZUserValidatorsAndPooling(t *testing.T) {
 	if MustShape([]any{Number, Check(user)}).isNoUser() {
 		t.Fatal("tuple position")
 	}
-	if MustShape(One(Check(user), Number)).isNoUser() {
+	if MustShape(Nof(1, Check(user), Number)).isNoUser() {
 		t.Fatal("composition branch")
 	}
 	if MustShape(map[string]any{"a": Catch(0.0, Before(user, Number))}).isNoUser() {

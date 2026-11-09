@@ -13,7 +13,7 @@
 use garde::Validate as GardeValidate;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use shape::{max, min, Schema, Spec, Token, Value};
+use shape::{Max, Min, Schema, Spec, Token, Value};
 use std::collections::BTreeMap;
 use std::sync::LazyLock;
 use std::time::{Duration, Instant};
@@ -277,10 +277,10 @@ fn shape_spec(name: &str) -> Spec {
             Spec::Obj((0..50).map(|j| (large_key(j), Spec::from(kinds[j % 4]))).collect())
         }
         "bounds" => shape::obj([
-            ("name", Spec::from(max(40, min(3, Token::String)))),
-            ("age", Spec::from(max(150, min(0, Token::Integer)))),
+            ("name", Spec::from(Max(40, Min(3, Token::String)))),
+            ("age", Spec::from(Max(150, Min(0, Token::Integer)))),
             ("code", Spec::from(regex::Regex::new("^[A-Z]{3}$").unwrap())),
-            ("ratio", Spec::from(max(1, min(0, Token::Number)))),
+            ("ratio", Spec::from(Max(1, Min(0, Token::Number)))),
         ]),
         other => fail(&format!("no shape spec for case {:?}", other)),
     }

@@ -26,7 +26,7 @@ pub fn buildize(spec: impl Into<Spec>) -> Node {
 }
 
 /// An optional `Any`, the node a builder with no spec starts from.
-pub fn any() -> Node {
+pub fn Any() -> Node {
     Node::of(Kind::Any)
 }
 
@@ -58,132 +58,132 @@ fn validator(
     }
 }
 
-// The free functions: each takes the spec it applies to. Pass `any()` for
+// The free functions: each takes the spec it applies to. Pass `Any()` for
 // the bare form.
 
 /// The value must be present.
-pub fn required(spec: impl Into<Spec>) -> Node {
-    buildize(spec).required()
+pub fn Required(spec: impl Into<Spec>) -> Node {
+    buildize(spec).Required()
 }
 
 /// The value may be absent; the default is injected.
-pub fn optional(spec: impl Into<Spec>) -> Node {
-    buildize(spec).optional()
+pub fn Optional(spec: impl Into<Spec>) -> Node {
+    buildize(spec).Optional()
 }
 
 /// Optional, with an explicit default. The node is the spec's, so an object
 /// or array shape keeps its children; an untyped spec takes the default's
 /// kind.
-pub fn default(dval: impl Into<Value>, spec: impl Into<Spec>) -> Node {
-    buildize(spec).default_to(dval)
+pub fn Default(dval: impl Into<Value>, spec: impl Into<Spec>) -> Node {
+    buildize(spec).Default(dval)
 }
 
 /// A default with no spec: the node takes the default's kind.
-pub fn default_of(dval: impl Into<Value>) -> Node {
+pub fn DefaultOf(dval: impl Into<Value>) -> Node {
     let dval = dval.into();
-    normalize(Spec::Value(dval.clone())).default_to(dval)
+    normalize(Spec::Value(dval.clone())).Default(dval)
 }
 
 /// Optional, and an absent value leaves the key out.
-pub fn skip(spec: impl Into<Spec>) -> Node {
-    buildize(spec).skip()
+pub fn Skip(spec: impl Into<Spec>) -> Node {
+    buildize(spec).Skip()
 }
 
-/// Like `skip`, and a value that fails is dropped with its errors.
-pub fn ignore(spec: impl Into<Spec>) -> Node {
-    buildize(spec).ignore()
+/// Like `Skip`, and a value that fails is dropped with its errors.
+pub fn Ignore(spec: impl Into<Spec>) -> Node {
+    buildize(spec).Ignore()
 }
 
-/// The empty string is allowed. Untyped when bare: `empty(any())` allows
+/// The empty string is allowed. Untyped when bare: `Empty(Any())` allows
 /// the empty string without also demanding a string.
-pub fn empty(spec: impl Into<Spec>) -> Node {
-    buildize(spec).empty()
+pub fn Empty(spec: impl Into<Spec>) -> Node {
+    buildize(spec).Empty()
 }
 
 /// An explicit null is accepted as the value.
-pub fn nullable(spec: impl Into<Spec>) -> Node {
-    buildize(spec).nullable()
+pub fn Nullable(spec: impl Into<Spec>) -> Node {
+    buildize(spec).Nullable()
 }
 
 /// An object accepts keys it does not declare.
-pub fn open(spec: impl Into<Spec>) -> Node {
-    buildize(spec).open()
+pub fn Open(spec: impl Into<Spec>) -> Node {
+    buildize(spec).Open()
 }
 
 /// An object rejects keys it does not declare; a single-shape array becomes
 /// a tuple of one.
-pub fn closed(spec: impl Into<Spec>) -> Node {
-    buildize(spec).closed()
+pub fn Closed(spec: impl Into<Spec>) -> Node {
+    buildize(spec).Closed()
 }
 
 /// The shape of every unknown object value, or of every array element.
-pub fn child(child: impl Into<Spec>, spec: impl Into<Spec>) -> Node {
-    buildize(spec).child(child)
+pub fn Child(child: impl Into<Spec>, spec: impl Into<Spec>) -> Node {
+    buildize(spec).Child(child)
 }
 
 /// The shape of the array elements past the tuple positions.
-pub fn rest(child: impl Into<Spec>, spec: impl Into<Spec>) -> Node {
-    buildize(spec).rest(child)
+pub fn Rest(child: impl Into<Spec>, spec: impl Into<Spec>) -> Node {
+    buildize(spec).Rest(child)
 }
 
 /// A `Fault` message overriding the structural text.
-pub fn fault(msg: impl Into<String>, spec: impl Into<Spec>) -> Node {
-    buildize(spec).fault(msg)
+pub fn Fault(msg: impl Into<String>, spec: impl Into<Spec>) -> Node {
+    buildize(spec).Fault(msg)
 }
 
 /// A node that accepts nothing.
-pub fn never(spec: impl Into<Spec>) -> Node {
-    buildize(spec).never()
+pub fn Never(spec: impl Into<Spec>) -> Node {
+    buildize(spec).Never()
 }
 
 /// The kind the node asserts, given a kind, a token, a kind name or a node
 /// to take it from.
-pub fn type_(kind: impl Into<TypeRef>, spec: impl Into<Spec>) -> Node {
-    buildize(spec).type_(kind)
+pub fn Type(kind: impl Into<TypeRef>, spec: impl Into<Spec>) -> Node {
+    buildize(spec).Type(kind)
 }
 
 /// A function-typed value. A builder, not a type token, so it does not
 /// require a value of itself.
-pub fn func(spec: impl Into<Spec>) -> Node {
-    buildize(spec).func()
+pub fn Func(spec: impl Into<Spec>) -> Node {
+    buildize(spec).Func()
 }
 
 /// The value must equal one of the literals.
-pub fn exact<I>(vals: I) -> Node
+pub fn Exact<I>(vals: I) -> Node
 where
     I: IntoIterator,
     I::Item: Into<Value>,
 {
-    any().exact(vals)
+    Any().Exact(vals)
 }
 
 /// A minimum value, or length.
-pub fn min(bound: impl Into<Value>, spec: impl Into<Spec>) -> Node {
-    buildize(spec).min(bound)
+pub fn Min(bound: impl Into<Value>, spec: impl Into<Spec>) -> Node {
+    buildize(spec).Min(bound)
 }
 
 /// A maximum value, or length.
-pub fn max(bound: impl Into<Value>, spec: impl Into<Spec>) -> Node {
-    buildize(spec).max(bound)
+pub fn Max(bound: impl Into<Value>, spec: impl Into<Spec>) -> Node {
+    buildize(spec).Max(bound)
 }
 
 /// A strict lower bound on value, or length.
-pub fn above(bound: impl Into<Value>, spec: impl Into<Spec>) -> Node {
-    buildize(spec).above(bound)
+pub fn Above(bound: impl Into<Value>, spec: impl Into<Spec>) -> Node {
+    buildize(spec).Above(bound)
 }
 
 /// A strict upper bound on value, or length.
-pub fn below(bound: impl Into<Value>, spec: impl Into<Spec>) -> Node {
-    buildize(spec).below(bound)
+pub fn Below(bound: impl Into<Value>, spec: impl Into<Spec>) -> Node {
+    buildize(spec).Below(bound)
 }
 
 /// An exact value, or length.
-pub fn len(length: impl Into<Value>, spec: impl Into<Spec>) -> Node {
-    buildize(spec).len(length)
+pub fn Len(length: impl Into<Value>, spec: impl Into<Spec>) -> Node {
+    buildize(spec).Len(length)
 }
 
 /// A custom check, run before the structural check.
-pub fn check<F>(f: F, spec: impl Into<Spec>) -> Node
+pub fn Check<F>(f: F, spec: impl Into<Spec>) -> Node
 where
     F: Fn(&mut State<'_>, &mut Update) -> bool + Send + Sync + 'static,
 {
@@ -193,16 +193,16 @@ where
     }
     n.required = true;
     n.required_set = true;
-    n.check(f)
+    n.Check(f)
 }
 
 /// A regexp check: the value must be a string matching it. A failure reads
 /// `check "/re/" failed`.
-pub fn check_re(re: Regex, spec: impl Into<Spec>) -> Node {
+pub fn CheckRe(re: Regex, spec: impl Into<Spec>) -> Node {
     check_re_src(re.as_str(), spec)
 }
 
-/// `check_re` from a pattern text.
+/// `CheckRe` from a pattern text.
 pub(crate) fn check_re_src(src: &str, spec: impl Into<Spec>) -> Node {
     let mut n = buildize(spec);
     if n.kind == Kind::Any {
@@ -214,46 +214,75 @@ pub(crate) fn check_re_src(src: &str, spec: impl Into<Spec>) -> Node {
 }
 
 /// A custom validator run before the structural check.
-pub fn before<F>(f: F, spec: impl Into<Spec>) -> Node
+pub fn Before<F>(f: F, spec: impl Into<Spec>) -> Node
 where
     F: Fn(&mut State<'_>, &mut Update) -> bool + Send + Sync + 'static,
 {
-    buildize(spec).before(f)
+    buildize(spec).Before(f)
 }
 
 /// A custom validator run after the structural check.
-pub fn after<F>(f: F, spec: impl Into<Spec>) -> Node
+pub fn After<F>(f: F, spec: impl Into<Spec>) -> Node
 where
     F: Fn(&mut State<'_>, &mut Update) -> bool + Send + Sync + 'static,
 {
-    buildize(spec).after(f)
-}
-
-/// The value must satisfy exactly one of the shapes.
-pub fn one<I>(shapes: I) -> Node
-where
-    I: IntoIterator,
-    I::Item: Into<Spec>,
-{
-    list_node(ListMode::One, shapes)
-}
-
-/// The value must satisfy at least one of the shapes.
-pub fn some<I>(shapes: I) -> Node
-where
-    I: IntoIterator,
-    I::Item: Into<Spec>,
-{
-    list_node(ListMode::Some, shapes)
+    buildize(spec).After(f)
 }
 
 /// The value must satisfy every shape.
-pub fn all<I>(shapes: I) -> Node
+pub fn All<I>(shapes: I) -> Node
 where
     I: IntoIterator,
     I::Item: Into<Spec>,
 {
     list_node(ListMode::All, shapes)
+}
+
+/// The message of a `Nof` whose count is neither a whole number of zero or
+/// more nor a shape.
+pub(crate) const NOF_FAULT: &str =
+    "Shape: Nof needs a whole number of zero or more, or a shape for the count";
+
+/// The value must satisfy as many of the shapes as the count admits. The
+/// count is a whole number, for exactly that many, or a shape the number
+/// must satisfy: `Nof(1, ..)` is exactly one, `Nof(Min(1, Any()), ..)` at
+/// least one, `Nof(0, [s])` not `s`. A shape is tried only while the shapes
+/// left untried could still change the verdict. A count of exactly one
+/// produces: the one shape the value satisfies makes the result. Any other
+/// count only checks, and the value is left as it was given. An absent value
+/// is not tried, so whether it may be absent is the node's required or
+/// optional.
+pub fn Nof<C, I>(count: C, shapes: I) -> Node
+where
+    C: Into<Spec>,
+    I: IntoIterator,
+    I::Item: Into<Spec>,
+{
+    let mut n = list_node(ListMode::Nof, shapes);
+    let total = n.list.len();
+    match count.into() {
+        Spec::Value(Value::Num(f)) => {
+            if f != f.trunc() || f < 0.0 || f.is_infinite() {
+                return fault_node(NOF_FAULT);
+            }
+            n.nof_exact = f;
+            n.nof_ok = (0..=total).map(|c| c as f64 == f).collect();
+        }
+        spec => {
+            let counter = crate::Schema::new(spec);
+            // A count that is itself a builder's fault is the fault: it is
+            // never validated, so its message would otherwise be lost.
+            if is_fault(counter.node()) {
+                return counter.node().clone();
+            }
+            n.nof_ok = (0..=total)
+                .map(|c| counter.valid(&Value::Num(c as f64)))
+                .collect();
+            n.nof_count = Some(Box::new(counter.node().clone()));
+        }
+    }
+    n.nof_one = total > 0 && n.nof_ok.iter().enumerate().all(|(c, ok)| *ok == (c == 1));
+    n
 }
 
 fn list_node<I>(mode: ListMode, shapes: I) -> Node
@@ -269,49 +298,49 @@ where
     n
 }
 
-/// Name the node so a later `refer` can substitute it.
-pub fn define(name: impl Into<String>, spec: impl Into<Spec>) -> Node {
-    buildize(spec).define(name)
+/// Name the node so a later `Refer` can substitute it.
+pub fn Define(name: impl Into<String>, spec: impl Into<Spec>) -> Node {
+    buildize(spec).Define(name)
 }
 
 /// Substitute the named node at validation time.
-pub fn refer(name: impl Into<String>, spec: impl Into<Spec>) -> Node {
-    buildize(spec).refer_with(name, ReferOptions::default())
+pub fn Refer(name: impl Into<String>, spec: impl Into<Spec>) -> Node {
+    buildize(spec).ReferWith(name, ReferOptions::default())
 }
 
-/// `refer` with options.
-pub fn refer_with(name: impl Into<String>, opts: ReferOptions, spec: impl Into<Spec>) -> Node {
-    buildize(spec).refer_with(name, opts)
+/// `Refer` with options.
+pub fn ReferWith(name: impl Into<String>, opts: ReferOptions, spec: impl Into<Spec>) -> Node {
+    buildize(spec).ReferWith(name, opts)
 }
 
 /// Rename the property after validation. For object children only.
-pub fn rename(name: impl Into<String>, spec: impl Into<Spec>) -> Node {
-    buildize(spec).rename_with(name, RenameOptions::default())
+pub fn Rename(name: impl Into<String>, spec: impl Into<Spec>) -> Node {
+    buildize(spec).RenameWith(name, RenameOptions::default())
 }
 
-/// `rename` with options.
-pub fn rename_with(name: impl Into<String>, opts: RenameOptions, spec: impl Into<Spec>) -> Node {
-    buildize(spec).rename_with(name, opts)
+/// `Rename` with options.
+pub fn RenameWith(name: impl Into<String>, opts: RenameOptions, spec: impl Into<Spec>) -> Node {
+    buildize(spec).RenameWith(name, opts)
 }
 
 /// The value is replaced with the key of the property it sits under.
-pub fn key() -> Node {
-    key_args(&[])
+pub fn Key() -> Node {
+    KeyArgs(&[])
 }
 
 /// The value is replaced with the path `depth` levels up, as an array.
-pub fn key_depth(depth: i64) -> Node {
-    key_args(&[Value::from(depth)])
+pub fn KeyDepth(depth: i64) -> Node {
+    KeyArgs(&[Value::from(depth)])
 }
 
 /// The value is replaced with the path `depth` levels up, joined by `sep`.
-pub fn key_join(depth: i64, sep: impl Into<String>) -> Node {
-    key_args(&[Value::from(depth), Value::Str(sep.into())])
+pub fn KeyJoin(depth: i64, sep: impl Into<String>) -> Node {
+    KeyArgs(&[Value::from(depth), Value::Str(sep.into())])
 }
 
-/// `key` from raw arguments: a numeric argument is the depth, a string the
+/// `Key` from raw arguments: a numeric argument is the depth, a string the
 /// separator, as the string form of a spec supplies them.
-pub fn key_args(args: &[Value]) -> Node {
+pub fn KeyArgs(args: &[Value]) -> Node {
     let mut depth: Option<i64> = None;
     let mut sep: Option<String> = None;
     for a in args {
@@ -387,65 +416,65 @@ fn js_slice(arr: &[Value], start: i64, end: i64) -> Vec<Value> {
 }
 
 /// Whatever fails inside is replaced with the fallback, raising nothing.
-pub fn catch(fallback: impl Into<Value>, spec: impl Into<Spec>) -> Node {
-    buildize(spec).catch(fallback)
+pub fn Catch(fallback: impl Into<Value>, spec: impl Into<Spec>) -> Node {
+    buildize(spec).Catch(fallback)
 }
 
 /// A valid value is replaced with a function of it.
-pub fn transform<F>(f: F, spec: impl Into<Spec>) -> Node
+pub fn Transform<F>(f: F, spec: impl Into<Spec>) -> Node
 where
     F: Fn(Value, &mut State<'_>) -> Value + Send + Sync + 'static,
 {
-    buildize(spec).transform(f)
+    buildize(spec).Transform(f)
 }
 
 /// A description, read back from the node's meta.
-pub fn describe(description: impl Into<String>, spec: impl Into<Spec>) -> Node {
-    buildize(spec).describe(description)
+pub fn Describe(description: impl Into<String>, spec: impl Into<Spec>) -> Node {
+    buildize(spec).Describe(description)
 }
 
 /// The value is converted to the node's kind where the conversion is
 /// unambiguous, before the type check.
-pub fn coerce(spec: impl Into<Spec>) -> Node {
-    buildize(spec).coerce()
+pub fn Coerce(spec: impl Into<Spec>) -> Node {
+    buildize(spec).Coerce()
 }
 
 /// A string in email address form.
-pub fn email(spec: impl Into<Spec>) -> Node {
-    buildize(spec).email()
+pub fn Email(spec: impl Into<Spec>) -> Node {
+    buildize(spec).Email()
 }
 
 /// An absolute URL.
-pub fn url(spec: impl Into<Spec>) -> Node {
-    buildize(spec).url()
+pub fn Url(spec: impl Into<Spec>) -> Node {
+    buildize(spec).Url()
 }
 
 /// A UUID in 8-4-4-4-12 hex form.
-pub fn uuid(spec: impl Into<Spec>) -> Node {
-    buildize(spec).uuid()
+pub fn Uuid(spec: impl Into<Spec>) -> Node {
+    buildize(spec).Uuid()
 }
 
 /// A strict ISO 8601 date-time string.
-pub fn date_time(spec: impl Into<Spec>) -> Node {
-    buildize(spec).date_time()
+pub fn DateTime(spec: impl Into<Spec>) -> Node {
+    buildize(spec).DateTime()
 }
 
 /// An IPv4 or IPv6 address.
-pub fn ip(spec: impl Into<Spec>) -> Node {
-    buildize(spec).ip()
+pub fn Ip(spec: impl Into<Spec>) -> Node {
+    buildize(spec).Ip()
 }
 
 /// A dotted-quad IPv4 address.
-pub fn ipv4(spec: impl Into<Spec>) -> Node {
-    buildize(spec).ipv4()
+pub fn Ipv4(spec: impl Into<Spec>) -> Node {
+    buildize(spec).Ipv4()
 }
 
 /// An IPv6 address in RFC 4291 text form.
-pub fn ipv6(spec: impl Into<Spec>) -> Node {
-    buildize(spec).ipv6()
+pub fn Ipv6(spec: impl Into<Spec>) -> Node {
+    buildize(spec).Ipv6()
 }
 
-/// What `type_` takes its kind from.
+/// What `Type` takes its kind from.
 pub enum TypeRef {
     Kind(Kind),
     Node(Box<Node>),
@@ -472,17 +501,17 @@ impl From<Node> for TypeRef {
     }
 }
 
-/// `refer` options.
+/// `Refer` options.
 #[derive(Clone, Debug, Default)]
 pub struct ReferOptions {
     /// Substitute even when the value is absent (not for self-recursion).
     pub fill: bool,
-    /// A name with no `define` is an error, rather than a `refer` that does
+    /// A name with no `Define` is an error, rather than a `Refer` that does
     /// nothing.
     pub strict: bool,
 }
 
-/// `rename` options.
+/// `Rename` options.
 #[derive(Clone, Debug, Default)]
 pub struct RenameOptions {
     /// Keep the original key as well as writing under the new name.
@@ -641,7 +670,7 @@ fn bound_node(kind: Bound, bound: Value) -> Node {
         return fault_node(format!("Shape: {} needs a number", kind.name()));
     };
     let text = num_text(&bound);
-    let mut n = any();
+    let mut n = Any();
     n.befores.push(validator(
         kind.name(),
         Some(format!("{}({})", kind.name(), text)),
@@ -682,7 +711,7 @@ fn len_node(length: Value) -> Node {
         return fault_node("Shape: Len needs a whole number of zero or more");
     };
     let text = js_number(limit);
-    let mut n = any();
+    let mut n = Any();
     n.befores.push(validator(
         "Len",
         Some(format!("Len({})", text)),
@@ -746,14 +775,14 @@ impl Node {
         self
     }
 
-    pub fn required(mut self) -> Node {
+    pub fn Required(mut self) -> Node {
         self.required = true;
         self.required_set = true;
         self.skippable = false;
         self
     }
 
-    pub fn optional(mut self) -> Node {
+    pub fn Optional(mut self) -> Node {
         self.required = false;
         self.required_set = true;
         self
@@ -762,7 +791,7 @@ impl Node {
     /// Optional with the default; named to leave `Default::default` alone.
     /// An untyped node is built over the default instead, and so takes the
     /// default's kind, keeping the checks and flags it carried.
-    pub fn default_to(mut self, dval: impl Into<Value>) -> Node {
+    pub fn Default(mut self, dval: impl Into<Value>) -> Node {
         let dval = dval.into();
         if self.kind == Kind::Any && !dval.is_undefined() {
             let mut base = normalize(Spec::Value(dval.clone()));
@@ -790,14 +819,14 @@ impl Node {
         self
     }
 
-    pub fn skip(mut self) -> Node {
+    pub fn Skip(mut self) -> Node {
         self.required = false;
         self.required_set = true;
         self.skippable = true;
         self
     }
 
-    pub fn ignore(mut self) -> Node {
+    pub fn Ignore(mut self) -> Node {
         self.required = false;
         self.required_set = true;
         self.skippable = true;
@@ -805,24 +834,24 @@ impl Node {
         self
     }
 
-    pub fn empty(mut self) -> Node {
+    pub fn Empty(mut self) -> Node {
         self.empty = true;
         self
     }
 
-    pub fn nullable(mut self) -> Node {
+    pub fn Nullable(mut self) -> Node {
         self.nullable = true;
         self
     }
 
-    pub fn open(mut self) -> Node {
+    pub fn Open(mut self) -> Node {
         if self.kind == Kind::Object && self.obj_rest.is_none() {
             self.obj_rest = Some(Box::new(Node::of(Kind::Any)));
         }
         self
     }
 
-    pub fn closed(mut self) -> Node {
+    pub fn Closed(mut self) -> Node {
         self.obj_rest = None;
         if self.kind == Kind::Array && self.arr_children.is_empty() {
             if let Some(c) = self.arr_child.take() {
@@ -833,7 +862,7 @@ impl Node {
         self
     }
 
-    pub fn child(mut self, child: impl Into<Spec>) -> Node {
+    pub fn Child(mut self, child: impl Into<Spec>) -> Node {
         let cn = Box::new(buildize(child));
         match self.kind {
             Kind::Array => self.arr_child = Some(cn),
@@ -846,7 +875,7 @@ impl Node {
         self
     }
 
-    pub fn rest(mut self, child: impl Into<Spec>) -> Node {
+    pub fn Rest(mut self, child: impl Into<Spec>) -> Node {
         self.kind = Kind::Array;
         // The rest replaces a plain element shape, as it does in TypeScript,
         // where Rest sets the one child an array has: Rest(Number, [String])
@@ -856,27 +885,27 @@ impl Node {
         self
     }
 
-    pub fn fault(mut self, msg: impl Into<String>) -> Node {
+    pub fn Fault(mut self, msg: impl Into<String>) -> Node {
         self.fault_msg = Some(msg.into());
         self
     }
 
-    pub fn never(mut self) -> Node {
+    pub fn Never(mut self) -> Node {
         self.kind = Kind::Never;
         self
     }
 
     /// The value may be anything.
-    pub fn any(mut self) -> Node {
+    pub fn Any(mut self) -> Node {
         self.kind = Kind::Any;
         self
     }
 
     /// Adopt the reference type's kind and its required, skippable and
     /// default state. Structural children are deliberately not copied:
-    /// `type_(Object)` is a closed object and `type_(Array)` accepts any
+    /// `Type(Object)` is a closed object and `Type(Array)` accepts any
     /// elements.
-    pub fn type_(mut self, kind: impl Into<TypeRef>) -> Node {
+    pub fn Type(mut self, kind: impl Into<TypeRef>) -> Node {
         let tn = match kind.into() {
             TypeRef::Kind(k) => type_token_node(k),
             TypeRef::Node(n) => *n,
@@ -897,38 +926,38 @@ impl Node {
         self
     }
 
-    pub fn string(self) -> Node {
-        self.type_(Kind::String)
+    pub fn String(self) -> Node {
+        self.Type(Kind::String)
     }
-    pub fn number(self) -> Node {
-        self.type_(Kind::Number)
+    pub fn Number(self) -> Node {
+        self.Type(Kind::Number)
     }
-    pub fn boolean(self) -> Node {
-        self.type_(Kind::Boolean)
+    pub fn Boolean(self) -> Node {
+        self.Type(Kind::Boolean)
     }
-    pub fn object(self) -> Node {
-        self.type_(Kind::Object)
+    pub fn Object(self) -> Node {
+        self.Type(Kind::Object)
     }
-    pub fn array(self) -> Node {
-        self.type_(Kind::Array)
+    pub fn Array(self) -> Node {
+        self.Type(Kind::Array)
     }
-    pub fn function(self) -> Node {
-        self.type_(Kind::Function)
+    pub fn Function(self) -> Node {
+        self.Type(Kind::Function)
     }
-    pub fn integer(self) -> Node {
-        self.type_(Kind::Integer)
+    pub fn Integer(self) -> Node {
+        self.Type(Kind::Integer)
     }
-    pub fn date(self) -> Node {
-        self.type_(Kind::Date)
+    pub fn Date(self) -> Node {
+        self.Type(Kind::Date)
     }
 
     /// A function-typed value; the required state is kept.
-    pub fn func(mut self) -> Node {
+    pub fn Func(mut self) -> Node {
         self.kind = Kind::Function;
         self
     }
 
-    pub fn exact<I>(mut self, vals: I) -> Node
+    pub fn Exact<I>(mut self, vals: I) -> Node
     where
         I: IntoIterator,
         I::Item: Into<Value>,
@@ -964,27 +993,27 @@ impl Node {
         self
     }
 
-    pub fn min(self, bound: impl Into<Value>) -> Node {
+    pub fn Min(self, bound: impl Into<Value>) -> Node {
         self.adopt(bound_node(Bound::Min, bound.into()))
     }
 
-    pub fn max(self, bound: impl Into<Value>) -> Node {
+    pub fn Max(self, bound: impl Into<Value>) -> Node {
         self.adopt(bound_node(Bound::Max, bound.into()))
     }
 
-    pub fn above(self, bound: impl Into<Value>) -> Node {
+    pub fn Above(self, bound: impl Into<Value>) -> Node {
         self.adopt(bound_node(Bound::Above, bound.into()))
     }
 
-    pub fn below(self, bound: impl Into<Value>) -> Node {
+    pub fn Below(self, bound: impl Into<Value>) -> Node {
         self.adopt(bound_node(Bound::Below, bound.into()))
     }
 
-    pub fn len(self, length: impl Into<Value>) -> Node {
+    pub fn Len(self, length: impl Into<Value>) -> Node {
         self.adopt(len_node(length.into()))
     }
 
-    pub fn check<F>(mut self, f: F) -> Node
+    pub fn Check<F>(mut self, f: F) -> Node
     where
         F: Fn(&mut State<'_>, &mut Update) -> bool + Send + Sync + 'static,
     {
@@ -998,7 +1027,7 @@ impl Node {
         self
     }
 
-    pub fn check_re(self, re: Regex) -> Node {
+    pub fn CheckRe(self, re: Regex) -> Node {
         self.check_re_src(re.as_str())
     }
 
@@ -1032,7 +1061,7 @@ impl Node {
         self
     }
 
-    pub fn before<F>(mut self, f: F) -> Node
+    pub fn Before<F>(mut self, f: F) -> Node
     where
         F: Fn(&mut State<'_>, &mut Update) -> bool + Send + Sync + 'static,
     {
@@ -1045,7 +1074,7 @@ impl Node {
         self
     }
 
-    pub fn after<F>(mut self, f: F) -> Node
+    pub fn After<F>(mut self, f: F) -> Node
     where
         F: Fn(&mut State<'_>, &mut Update) -> bool + Send + Sync + 'static,
     {
@@ -1058,7 +1087,7 @@ impl Node {
         self
     }
 
-    pub fn define(mut self, name: impl Into<String>) -> Node {
+    pub fn Define(mut self, name: impl Into<String>) -> Node {
         let name = name.into();
         if name.is_empty() {
             return fault_node("Shape: Define needs a name");
@@ -1081,11 +1110,11 @@ impl Node {
         self
     }
 
-    pub fn refer(self, name: impl Into<String>) -> Node {
-        self.refer_with(name, ReferOptions::default())
+    pub fn Refer(self, name: impl Into<String>) -> Node {
+        self.ReferWith(name, ReferOptions::default())
     }
 
-    pub fn refer_with(mut self, name: impl Into<String>, opts: ReferOptions) -> Node {
+    pub fn ReferWith(mut self, name: impl Into<String>, opts: ReferOptions) -> Node {
         let name = name.into();
         if name.is_empty() {
             return fault_node("Shape: Refer needs a name");
@@ -1128,11 +1157,11 @@ impl Node {
         self
     }
 
-    pub fn rename(self, name: impl Into<String>) -> Node {
-        self.rename_with(name, RenameOptions::default())
+    pub fn Rename(self, name: impl Into<String>) -> Node {
+        self.RenameWith(name, RenameOptions::default())
     }
 
-    pub fn rename_with(mut self, name: impl Into<String>, opts: RenameOptions) -> Node {
+    pub fn RenameWith(mut self, name: impl Into<String>, opts: RenameOptions) -> Node {
         let name = name.into();
         if name.is_empty() {
             return fault_node("Shape: Rename needs a name");
@@ -1143,11 +1172,11 @@ impl Node {
         self
     }
 
-    pub fn catch(self, fallback: impl Into<Value>) -> Node {
+    pub fn Catch(self, fallback: impl Into<Value>) -> Node {
         catch_node(self, fallback.into())
     }
 
-    pub fn transform<F>(self, f: F) -> Node
+    pub fn Transform<F>(self, f: F) -> Node
     where
         F: Fn(Value, &mut State<'_>) -> Value + Send + Sync + 'static,
     {
@@ -1155,36 +1184,36 @@ impl Node {
         transform_node(self, f)
     }
 
-    pub fn describe(mut self, description: impl Into<String>) -> Node {
+    pub fn Describe(mut self, description: impl Into<String>) -> Node {
         self.meta
             .insert("description".to_string(), Value::Str(description.into()));
         self
     }
 
-    pub fn coerce(mut self) -> Node {
+    pub fn Coerce(mut self) -> Node {
         self.befores.insert(0, coerce_validator());
         self
     }
 
-    pub fn email(self) -> Node {
+    pub fn Email(self) -> Node {
         with_format(self, FMT_EMAIL)
     }
-    pub fn url(self) -> Node {
+    pub fn Url(self) -> Node {
         with_format(self, FMT_URL)
     }
-    pub fn uuid(self) -> Node {
+    pub fn Uuid(self) -> Node {
         with_format(self, FMT_UUID)
     }
-    pub fn date_time(self) -> Node {
+    pub fn DateTime(self) -> Node {
         with_format(self, FMT_DATE_TIME)
     }
-    pub fn ip(self) -> Node {
+    pub fn Ip(self) -> Node {
         with_format(self, FMT_IP)
     }
-    pub fn ipv4(self) -> Node {
+    pub fn Ipv4(self) -> Node {
         with_format(self, FMT_IPV4)
     }
-    pub fn ipv6(self) -> Node {
+    pub fn Ipv6(self) -> Node {
         with_format(self, FMT_IPV6)
     }
 }
@@ -1219,42 +1248,42 @@ mod tests {
     #[test]
     fn bounds_on_numbers_strings_and_containers() {
         let cases: Vec<(Node, &str, &str)> = vec![
-            (min(3, Token::Number), "5", "{\"a\":5}"),
-            (min(3, Token::Number), "1", "ERR Value \"1\" for property \"a\" must be a minimum of 3 (was 1)."),
-            (max(3, Token::Number), "9", "ERR Value \"9\" for property \"a\" must be a maximum of 3 (was 9)."),
-            (above(3, Token::Number), "3", "ERR Value \"3\" for property \"a\" must be above 3 (was 3)."),
-            (below(3, Token::Number), "3", "ERR Value \"3\" for property \"a\" must be below 3 (was 3)."),
-            (len(3, Token::Number), "4", "ERR Value \"4\" for property \"a\" must be exactly 3 (was 4)."),
-            (min(3, Token::String), "\"hi\"", "ERR Value \"hi\" for property \"a\" must be a minimum length of 3 (was 2)."),
-            (max(2, Token::String), "\"hey\"", "ERR Value \"hey\" for property \"a\" must be a maximum length of 2 (was 3)."),
-            (len(3, Token::String), "\"abc\"", "{\"a\":\"abc\"}"),
-            (len(3, Token::String), "\"ab\"", "ERR Value \"ab\" for property \"a\" must be exactly 3 in length (was 2)."),
-            (min(2, any()), "[1]", "ERR Value \"[1]\" for property \"a\" must be a minimum length of 2 (was 1)."),
-            (above(1, any()), "\"a\"", "ERR Value \"a\" for property \"a\" must have length above 1 (was 1)."),
-            (below(1, any()), "\"ab\"", "ERR Value \"ab\" for property \"a\" must have length below 1 (was 2)."),
-            (min(2, Token::Object), "{\"x\":1}", "ERR Value \"{x:1}\" for property \"a\" must be a minimum length of 2 (was 1)."),
-            (min(2, null()), "null", "ERR Value \"null\" for property \"a\" must be a minimum length of 2 (was NaN)."),
-            (min(2, null()), "1", "ERR Validation failed for property \"a\" with number \"1\" because the number is not of type null."),
-            (min(2, Token::String), "1", "ERR Validation failed for property \"a\" with number \"1\" because the number is not of type string."),
-            (min(2, Token::Integer), "1.5", "ERR Validation failed for property \"a\" with number \"1.5\" because the number is not of type integer."),
-            (min(2, Token::Integer), "1", "ERR Value \"1\" for property \"a\" must be a minimum of 2 (was 1)."),
-            (min("2", Token::Number), "1", "ERR Value \"1\" for property \"a\" must be a minimum of 2 (was 1)."),
-            (min(2, Token::Boolean), "\"x\"", "ERR Validation failed for property \"a\" with string \"x\" because the string is not of type boolean."),
-            (min(2, true), "true", "ERR Value \"true\" for property \"a\" must be a minimum length of 2 (was NaN)."),
-            (min(2, Token::Function), "1", "ERR Validation failed for property \"a\" with number \"1\" because the number is not of type function."),
-            (min(2, Token::Array), "1", "ERR Validation failed for property \"a\" with number \"1\" because the number is not of type array."),
-            (min(2, Token::Object), "1", "ERR Validation failed for property \"a\" with number \"1\" because the number is not of type object."),
-            (min(2, f64::NAN), "1", "ERR Validation failed for property \"a\" with number \"1\" because the number is not of type nan."),
-            (min(2, Token::Date), "1", "ERR Validation failed for property \"a\" with number \"1\" because the number is not of type date."),
-            (min(2, Token::BigInt), "1", "ERR Validation failed for property \"a\" with number \"1\" because the number is not of type bigint."),
-            (min(2, buildize(Regex::new("^a").unwrap())), "1", "ERR Validation failed for property \"a\" with number \"1\" because the number is not of type string."),
-            (min(2, buildize(Regex::new("^a").unwrap())), "\"abc\"", "{\"a\":\"abc\"}"),
-            (optional(min(2, Token::Number)), "{}", "{}"),
-            (optional(len(2, Token::Number)), "{}", "{}"),
-            (max(3, Token::String), "\"hi\"", "{\"a\":\"hi\"}"),
-            (above(3, Token::Number), "4", "{\"a\":4}"),
-            (below(3, Token::Number), "2", "{\"a\":2}"),
-            (len(2, any()), "[1,2]", "{\"a\":[1,2]}"),
+            (Min(3, Token::Number), "5", "{\"a\":5}"),
+            (Min(3, Token::Number), "1", "ERR Value \"1\" for property \"a\" must be a minimum of 3 (was 1)."),
+            (Max(3, Token::Number), "9", "ERR Value \"9\" for property \"a\" must be a maximum of 3 (was 9)."),
+            (Above(3, Token::Number), "3", "ERR Value \"3\" for property \"a\" must be above 3 (was 3)."),
+            (Below(3, Token::Number), "3", "ERR Value \"3\" for property \"a\" must be below 3 (was 3)."),
+            (Len(3, Token::Number), "4", "ERR Value \"4\" for property \"a\" must be exactly 3 (was 4)."),
+            (Min(3, Token::String), "\"hi\"", "ERR Value \"hi\" for property \"a\" must be a minimum length of 3 (was 2)."),
+            (Max(2, Token::String), "\"hey\"", "ERR Value \"hey\" for property \"a\" must be a maximum length of 2 (was 3)."),
+            (Len(3, Token::String), "\"abc\"", "{\"a\":\"abc\"}"),
+            (Len(3, Token::String), "\"ab\"", "ERR Value \"ab\" for property \"a\" must be exactly 3 in length (was 2)."),
+            (Min(2, Any()), "[1]", "ERR Value \"[1]\" for property \"a\" must be a minimum length of 2 (was 1)."),
+            (Above(1, Any()), "\"a\"", "ERR Value \"a\" for property \"a\" must have length above 1 (was 1)."),
+            (Below(1, Any()), "\"ab\"", "ERR Value \"ab\" for property \"a\" must have length below 1 (was 2)."),
+            (Min(2, Token::Object), "{\"x\":1}", "ERR Value \"{x:1}\" for property \"a\" must be a minimum length of 2 (was 1)."),
+            (Min(2, null()), "null", "ERR Value \"null\" for property \"a\" must be a minimum length of 2 (was NaN)."),
+            (Min(2, null()), "1", "ERR Validation failed for property \"a\" with number \"1\" because the number is not of type null."),
+            (Min(2, Token::String), "1", "ERR Validation failed for property \"a\" with number \"1\" because the number is not of type string."),
+            (Min(2, Token::Integer), "1.5", "ERR Validation failed for property \"a\" with number \"1.5\" because the number is not of type integer."),
+            (Min(2, Token::Integer), "1", "ERR Value \"1\" for property \"a\" must be a minimum of 2 (was 1)."),
+            (Min("2", Token::Number), "1", "ERR Value \"1\" for property \"a\" must be a minimum of 2 (was 1)."),
+            (Min(2, Token::Boolean), "\"x\"", "ERR Validation failed for property \"a\" with string \"x\" because the string is not of type boolean."),
+            (Min(2, true), "true", "ERR Value \"true\" for property \"a\" must be a minimum length of 2 (was NaN)."),
+            (Min(2, Token::Function), "1", "ERR Validation failed for property \"a\" with number \"1\" because the number is not of type function."),
+            (Min(2, Token::Array), "1", "ERR Validation failed for property \"a\" with number \"1\" because the number is not of type array."),
+            (Min(2, Token::Object), "1", "ERR Validation failed for property \"a\" with number \"1\" because the number is not of type object."),
+            (Min(2, f64::NAN), "1", "ERR Validation failed for property \"a\" with number \"1\" because the number is not of type nan."),
+            (Min(2, Token::Date), "1", "ERR Validation failed for property \"a\" with number \"1\" because the number is not of type date."),
+            (Min(2, Token::BigInt), "1", "ERR Validation failed for property \"a\" with number \"1\" because the number is not of type bigint."),
+            (Min(2, buildize(Regex::new("^a").unwrap())), "1", "ERR Validation failed for property \"a\" with number \"1\" because the number is not of type string."),
+            (Min(2, buildize(Regex::new("^a").unwrap())), "\"abc\"", "{\"a\":\"abc\"}"),
+            (Optional(Min(2, Token::Number)), "{}", "{}"),
+            (Optional(Len(2, Token::Number)), "{}", "{}"),
+            (Max(3, Token::String), "\"hi\"", "{\"a\":\"hi\"}"),
+            (Above(3, Token::Number), "4", "{\"a\":4}"),
+            (Below(3, Token::Number), "2", "{\"a\":2}"),
+            (Len(2, Any()), "[1,2]", "{\"a\":[1,2]}"),
         ];
         for (n, input, want) in cases {
             let s = at_a(n);
@@ -1265,24 +1294,24 @@ mod tests {
             };
             assert_eq!(got, want.replace("{}", "{\"a\":0}"), "{}", input);
         }
-        let s = at_a(min(3, Token::Number));
+        let s = at_a(Min(3, Token::Number));
         assert!(!s.valid(&j(&a("1"))));
         let e = &s.error(&j(&a("1")))[0];
         assert_eq!((e.why.as_str(), e.mark), ("Min", 4011));
         assert_eq!(s.error(&j(&a("\"x\"")))[0].why, "type");
-        assert_eq!(at_a(max(3, any())).error(&j(&a("9")))[0].mark, 4012);
-        assert_eq!(at_a(above(3, any())).error(&j(&a("1")))[0].mark, 4013);
-        assert_eq!(at_a(below(3, any())).error(&j(&a("9")))[0].mark, 4014);
-        assert_eq!(at_a(len(3, any())).error(&j(&a("9")))[0].mark, 4015);
+        assert_eq!(at_a(Max(3, Any())).error(&j(&a("9")))[0].mark, 4012);
+        assert_eq!(at_a(Above(3, Any())).error(&j(&a("1")))[0].mark, 4013);
+        assert_eq!(at_a(Below(3, Any())).error(&j(&a("9")))[0].mark, 4014);
+        assert_eq!(at_a(Len(3, Any())).error(&j(&a("9")))[0].mark, 4015);
         // A verdict on a failing bound counts it and builds no message.
-        assert!(!at_a(len(3, any())).valid(&j(&a("9"))));
-        assert!(!at_a(min(3, any())).valid(&j(&a("1"))));
-        assert!(!at_a(max(3, any())).valid(&j(&a("9"))));
-        assert!(!at_a(above(3, any())).valid(&j(&a("1"))));
-        assert!(!at_a(below(3, any())).valid(&j(&a("9"))));
+        assert!(!at_a(Len(3, Any())).valid(&j(&a("9"))));
+        assert!(!at_a(Min(3, Any())).valid(&j(&a("1"))));
+        assert!(!at_a(Max(3, Any())).valid(&j(&a("9"))));
+        assert!(!at_a(Above(3, Any())).valid(&j(&a("1"))));
+        assert!(!at_a(Below(3, Any())).valid(&j(&a("9"))));
 
         // Dates compare by their time value.
-        let s = at_a(min(Value::Date(1000), Token::Date));
+        let s = at_a(Min(Value::Date(1000), Token::Date));
         let dated =
             |ms: i64| Value::Obj([("a".to_string(), Value::Date(ms))].into_iter().collect());
         assert!(s.valid(&dated(2000)));
@@ -1295,53 +1324,53 @@ mod tests {
         assert_eq!(bound_arg(&Value::Str("inf".into())), None);
         assert_eq!(bound_arg(&Value::Str(" 2.5 ".into())), Some(2.5));
         assert!(!is_numeric(&Value::Str("x".into())));
-        assert!(!type_will_fail(&any(), &Value::Null));
+        assert!(!type_will_fail(&Any(), &Value::Null));
     }
 
     #[test]
     fn bad_bound_arguments_become_faults() {
         for (n, msg) in [
-            (min("x", Token::Number), "Shape: Min needs a number"),
-            (max(true, Token::Number), "Shape: Max needs a number"),
+            (Min("x", Token::Number), "Shape: Min needs a number"),
+            (Max(true, Token::Number), "Shape: Max needs a number"),
             (
-                above(Value::Null, Token::Number),
+                Above(Value::Null, Token::Number),
                 "Shape: Above needs a number",
             ),
             (
-                below(f64::NAN, Token::Number),
+                Below(f64::NAN, Token::Number),
                 "Shape: Below needs a number",
             ),
             (
-                len(-1, Token::Number),
+                Len(-1, Token::Number),
                 "Shape: Len needs a whole number of zero or more",
             ),
             (
-                len(1.5, Token::Number),
+                Len(1.5, Token::Number),
                 "Shape: Len needs a whole number of zero or more",
             ),
             (
-                buildize(Token::Number).min("x"),
+                buildize(Token::Number).Min("x"),
                 "Shape: Min needs a number",
             ),
             (
-                buildize(Token::Number).max("x"),
+                buildize(Token::Number).Max("x"),
                 "Shape: Max needs a number",
             ),
             (
-                buildize(Token::Number).above("x"),
+                buildize(Token::Number).Above("x"),
                 "Shape: Above needs a number",
             ),
             (
-                buildize(Token::Number).below("x"),
+                buildize(Token::Number).Below("x"),
                 "Shape: Below needs a number",
             ),
             (
-                buildize(Token::Number).len("x"),
+                buildize(Token::Number).Len("x"),
                 "Shape: Len needs a whole number of zero or more",
             ),
-            (define("", Token::Number), "Shape: Define needs a name"),
-            (refer("", Token::Number), "Shape: Refer needs a name"),
-            (rename("", Token::Number), "Shape: Rename needs a name"),
+            (Define("", Token::Number), "Shape: Define needs a name"),
+            (Refer("", Token::Number), "Shape: Refer needs a name"),
+            (Rename("", Token::Number), "Shape: Rename needs a name"),
         ] {
             assert_eq!(run(&at_a(n), &a("1")), format!("ERR {}", msg));
         }
@@ -1349,7 +1378,7 @@ mod tests {
 
     #[test]
     fn exact_literals() {
-        let s = Schema::new(obj([("role", exact(["admin", "user"]))]));
+        let s = Schema::new(obj([("role", Exact(["admin", "user"]))]));
         assert_eq!(run(&s, r#"{"role":"user"}"#), r#"{"role":"user"}"#);
         assert_eq!(
             run(&s, r#"{"role":"root"}"#),
@@ -1358,12 +1387,12 @@ mod tests {
         let e = &s.error(&j(r#"{"role":"root"}"#))[0];
         assert_eq!((e.why.as_str(), e.mark), ("Exact", 4010));
         assert_eq!(
-            run(&at_a(exact([Value::from(1), Value::Null])), &a("0")),
+            run(&at_a(Exact([Value::from(1), Value::Null])), &a("0")),
             "ERR Value \"0\" for property \"a\" must be exactly one of: 1, null"
         );
         assert_eq!(
             run(
-                &at_a(exact([
+                &at_a(Exact([
                     Value::from(1),
                     Value::from("a"),
                     Value::from(true),
@@ -1378,7 +1407,7 @@ mod tests {
             "[1], undefined"
         );
         // The default stands in for an absent value.
-        let s = at_a(default(2, exact([2, 3])));
+        let s = at_a(Default(2, Exact([2, 3])));
         assert_eq!(run(&s, "{}"), a("2"));
         assert_eq!(run(&s, &a("3")), a("3"));
         assert_eq!(
@@ -1389,15 +1418,15 @@ mod tests {
             run(&s, &a("null")),
             "ERR Value \"null\" for property \"a\" must be exactly one of: 2, 3"
         );
-        let s = at_a(buildize(Token::String).exact(["x"]));
+        let s = at_a(buildize(Token::String).Exact(["x"]));
         assert_eq!(run(&s, &a("\"x\"")), a("\"x\""));
         assert!(s.node().obj_children["a"].has_exact);
-        assert_eq!(stringify_node(&exact(["a", "b"]), false), "Exact(a, b)");
+        assert_eq!(stringify_node(&Exact(["a", "b"]), false), "Exact(a, b)");
     }
 
     #[test]
     fn checks() {
-        let s = at_a(check(|st, _| st.value.as_f64().unwrap_or(0.0) > 1.0, any()));
+        let s = at_a(Check(|st, _| st.value.as_f64().unwrap_or(0.0) > 1.0, Any()));
         assert_eq!(s.node().obj_children["a"].kind, Kind::Check);
         assert_eq!(run(&s, &a("2")), a("2"));
         assert_eq!(
@@ -1409,14 +1438,14 @@ mod tests {
             run(&s, "{}"),
             "ERR Validation failed for property \"a\" because the property is missing."
         );
-        let s = at_a(check(|_, _| true, Token::Number));
+        let s = at_a(Check(|_, _| true, Token::Number));
         assert_eq!(
             run(&s, "{}"),
             "ERR Validation failed for property \"a\" because the property is missing."
         );
         assert_eq!(s.node().obj_children["a"].kind, Kind::Number);
         let re = || Regex::new("^a.+").unwrap();
-        let s = at_a(check_re(re(), any()));
+        let s = at_a(CheckRe(re(), Any()));
         assert_eq!(run(&s, &a("\"abc\"")), a("\"abc\""));
         assert_eq!(
             run(&s, &a("\"zzz\"")),
@@ -1427,13 +1456,13 @@ mod tests {
             "ERR Validation failed for property \"a\" with number \"1\" because check \"/^a.+/\" failed."
         );
         assert_eq!(s.error(&j(&a("1")))[0].mark, MARK_CHECK_TYPE);
-        let s = at_a(check_re(re(), Token::String));
+        let s = at_a(CheckRe(re(), Token::String));
         assert_eq!(s.node().obj_children["a"].kind, Kind::String);
         assert_eq!(
-            stringify_node(&check_re(re(), any()), false),
+            stringify_node(&CheckRe(re(), Any()), false),
             "Check.Check(/^a.+/)"
         );
-        let s = at_a(before(
+        let s = at_a(Before(
             |_, u| {
                 u.val = Some(Value::from(9));
                 true
@@ -1441,34 +1470,131 @@ mod tests {
             Token::Number,
         ));
         assert_eq!(run(&s, &a("1")), a("9"));
-        let s = at_a(after(|_, _| false, Token::Number));
+        let s = at_a(After(|_, _| false, Token::Number));
         assert_eq!(s.error(&j(&a("1")))[0].check, "After");
         assert_eq!(
-            stringify_node(&after(|_, _| true, before(|_, _| true, any())), false),
+            stringify_node(&After(|_, _| true, Before(|_, _| true, Any())), false),
             "Before().After()"
         );
     }
 
     #[test]
+    fn nof_counts_faults_and_renders() {
+        let s = |t: Token| Spec::from(t);
+        let ni = || Nof(1, [s(Token::Number), s(Token::Integer)]);
+        assert_eq!(run(&at_a(ni()), &a("1.5")), a("1.5"));
+        assert_eq!(
+            run(&at_a(ni()), &a("1")),
+            "ERR Value \"1\" for property \"a\" satisfies 2 of: Number, Integer; the count must be 1."
+        );
+        let e = &at_a(ni()).error(&j(&a("1")))[0];
+        assert_eq!((e.why.as_str(), e.mark), ("Nof", 4033));
+        // A shape for the count, and a verdict reached early.
+        let early = Nof(
+            Min(2, Any()),
+            [s(Token::String), s(Token::Number), s(Token::Boolean)],
+        );
+        assert_eq!(
+            run(&at_a(early), &a("true")),
+            "ERR Value \"true\" for property \"a\" satisfies 0 to 1 of: String, Number, Boolean; the count must be Min(2)."
+        );
+        // A Nof's message is its own, so a Fault does not replace it; the
+        // Fault speaks for a value that is missing. Ignore drops the failure.
+        assert_eq!(
+            run(
+                &at_a(Fault("not that", Nof(0, [s(Token::String)]))),
+                &a("\"x\"")
+            ),
+            "ERR Value \"x\" for property \"a\" satisfies 1 of: String; the count must be 0."
+        );
+        assert_eq!(
+            run(&at_a(Fault("not that", Nof(0, [s(Token::String)]))), "{}"),
+            "ERR not that"
+        );
+        assert_eq!(
+            run(&at_a(Ignore(Nof(0, [s(Token::String)]))), &a("\"x\"")),
+            "{}"
+        );
+        // A count of exactly one produces from the branch that matched; any
+        // other count only checks.
+        let open_b = || Spec::from(Open(obj([("b", Spec::from(2))])));
+        assert_eq!(
+            run(
+                &Schema::new(Nof(1, [open_b(), s(Token::Number)])),
+                "{\"a\":1}"
+            ),
+            "{\"a\":1,\"b\":2}"
+        );
+        assert_eq!(
+            run(
+                &Schema::new(Nof(Min(1, Any()), [open_b(), s(Token::Number)])),
+                "{\"a\":1}"
+            ),
+            "{\"a\":1}"
+        );
+        // A count that is not a whole number of zero or more, or that is a
+        // builder's fault, is the fault.
+        for c in [-1.0, 1.5, f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            assert_eq!(
+                run(&Schema::new(Nof(c, [s(Token::String)])), "\"x\""),
+                format!("ERR {}", NOF_FAULT)
+            );
+        }
+        assert_eq!(
+            run(
+                &Schema::new(Nof(Min("x", Any()), [s(Token::String)])),
+                "\"x\""
+            ),
+            "ERR Shape: Min needs a number"
+        );
+        // How it renders, and the declarative JSON that reads back as it.
+        assert_eq!(
+            stringify_node(&Nof(1, [s(Token::Number), s(Token::String)]), true),
+            "Nof(1,Number,String)"
+        );
+        assert_eq!(
+            stringify_node(&Nof(Max(2, Min(1, Any())), [s(Token::Number)]), true),
+            "Nof(Min(1).Max(2),Number)"
+        );
+        for (spec, text) in [
+            (
+                Nof(1, [s(Token::String), s(Token::Number)]),
+                "Nof(1,String,Number)",
+            ),
+            (
+                Nof(Min(1, Any()), [s(Token::String), s(Token::Number)]),
+                "Nof(Any.Min(1),String,Number)",
+            ),
+        ] {
+            let json = Schema::new(spec).json().unwrap();
+            assert_eq!(json, Value::from(text));
+            let back = Schema::new(crate::expr::build(&json).unwrap());
+            assert_eq!(back.json().unwrap(), Value::from(text));
+        }
+    }
+
+    #[test]
     fn composition() {
-        let one_ns = || one([Spec::from(Token::Number), Spec::from(Token::String)]);
+        let one_ns = || Nof(1, [Spec::from(Token::Number), Spec::from(Token::String)]);
         assert_eq!(run(&at_a(one_ns()), &a("\"x\"")), a("\"x\""));
         assert_eq!(
             run(&at_a(one_ns()), &a("true")),
-            "ERR Value \"true\" for property \"a\" does not satisfy one of: Number, String"
+            "ERR Value \"true\" for property \"a\" satisfies 0 of: Number, String; the count must be 1."
         );
         assert!(!at_a(one_ns()).valid(&j(&a("true"))));
         assert!(at_a(one_ns()).valid(&j(&a("1"))));
-        let e = &at_a(one_ns()).error(&j(&a("true")))[0];
-        assert_eq!((e.why.as_str(), e.mark), ("One", 4030));
-        let some_ns = || some([Spec::from(Token::Number), Spec::from(Token::String)]);
+        let some_ns = || {
+            Nof(
+                Min(1, Any()),
+                [Spec::from(Token::Number), Spec::from(Token::String)],
+            )
+        };
         assert_eq!(run(&at_a(some_ns()), &a("5")), a("5"));
         assert_eq!(
             run(&at_a(some_ns()), &a("true")),
-            "ERR Value \"true\" for property \"a\" does not satisfy any of: Number, String"
+            "ERR Value \"true\" for property \"a\" satisfies 0 of: Number, String; the count must be Min(1)."
         );
-        assert_eq!(at_a(some_ns()).error(&j(&a("true")))[0].mark, 4031);
-        let all_nm = || all([Spec::from(Token::Number), Spec::from(min(2, any()))]);
+        let all_nm = || All([Spec::from(Token::Number), Spec::from(Min(2, Any()))]);
         assert_eq!(
             run(&at_a(all_nm()), &a("1")),
             "ERR Value \"1\" for property \"a\" does not satisfy all of: Number, Min(2)"
@@ -1477,78 +1603,93 @@ mod tests {
         assert_eq!(at_a(all_nm()).error(&j(&a("1")))[0].mark, 4032);
         assert_eq!(
             run(
-                &at_a(one([Spec::from(Token::Number), Spec::from(min(2, any()))])),
+                &at_a(Nof(
+                    1,
+                    [Spec::from(Token::Number), Spec::from(Min(2, Any()))]
+                )),
                 &a("\"x\"")
             ),
-            "ERR Value \"x\" for property \"a\" does not satisfy one of: Number, Min(2)"
+            "ERR Value \"x\" for property \"a\" satisfies 0 of: Number, Min(2); the count must be 1."
         );
         assert_eq!(
             run(
-                &at_a(all([Spec::from(Token::String), Spec::from(Token::Any)])),
+                &at_a(All([Spec::from(Token::String), Spec::from(Token::Any)])),
                 &a("1")
             ),
             "ERR Value \"1\" for property \"a\" does not satisfy all of: String, Any"
         );
         assert_eq!(
             run(
-                &at_a(one([
-                    Spec::from(ignore(min(2, Token::Number))),
-                    Spec::from(Token::String)
-                ])),
+                &at_a(Nof(
+                    1,
+                    [
+                        Spec::from(Ignore(Min(2, Token::Number))),
+                        Spec::from(Token::String)
+                    ]
+                )),
                 &a("1")
             ),
             a("1")
         );
         assert_eq!(
             run(
-                &at_a(all([
-                    Spec::from(ignore(min(2, Token::Number))),
+                &at_a(All([
+                    Spec::from(Ignore(Min(2, Token::Number))),
                     Spec::from(Token::Number)
                 ])),
                 &a("1")
             ),
             a("1")
         );
-        assert_eq!(run(&at_a(optional(one_ns())), "{}"), "{}");
+        assert_eq!(run(&at_a(Optional(one_ns())), "{}"), "{}");
         let re = || Regex::new("^a").unwrap();
-        let one_rn = || one([Spec::from(re()), Spec::from(Token::Number)]);
+        let one_rn = || Nof(1, [Spec::from(re()), Spec::from(Token::Number)]);
         assert_eq!(run(&at_a(one_rn()), &a("\"abc\"")), a("\"abc\""));
         assert_eq!(run(&at_a(one_rn()), &a("5")), a("5"));
         assert_eq!(
             run(&at_a(one_rn()), &a("true")),
-            "ERR Value \"true\" for property \"a\" does not satisfy one of: /^a/, Number"
+            "ERR Value \"true\" for property \"a\" satisfies 0 of: /^a/, Number; the count must be 1."
         );
         assert_eq!(
             run(
-                &at_a(some([Spec::from(re()), Spec::from(Token::Number)])),
+                &at_a(Nof(
+                    Min(1, Any()),
+                    [Spec::from(re()), Spec::from(Token::Number)]
+                )),
                 &a("true")
             ),
-            "ERR Value \"true\" for property \"a\" does not satisfy any of: /^a/, Number"
+            "ERR Value \"true\" for property \"a\" satisfies 0 of: /^a/, Number; the count must be Min(1)."
         );
-        // Fault applies to One and Some, not All.
-        assert_eq!(run(&at_a(fault("F", one_ns())), &a("true")), "ERR F");
-        assert_eq!(run(&at_a(fault("F", some_ns())), &a("true")), "ERR F");
+        // A composition keeps its own message under a Fault.
         assert_eq!(
-            run(&at_a(fault("F", all_nm())), &a("1")),
+            run(&at_a(Fault("F", one_ns())), &a("true")),
+            "ERR Value \"true\" for property \"a\" satisfies 0 of: Number, String; the count must be 1."
+        );
+        assert_eq!(
+            run(&at_a(Fault("F", some_ns())), &a("true")),
+            "ERR Value \"true\" for property \"a\" satisfies 0 of: Number, String; the count must be Min(1)."
+        );
+        assert_eq!(
+            run(&at_a(Fault("F", all_nm())), &a("1")),
             "ERR Value \"1\" for property \"a\" does not satisfy all of: Number, Min(2)"
         );
-        assert!(!at_a(fault("F", one_ns())).valid(&j(&a("true"))));
-        // Every matching Some branch produces from the original; the last
-        // one's result stands.
-        let s = at_a(some([
-            Spec::from(Token::Number),
-            Spec::from(coerce(Token::String)),
-        ]));
-        assert_eq!(run(&s, &a("5")), a("\"5\""));
+        assert!(!at_a(Fault("F", one_ns())).valid(&j(&a("true"))));
+        // A count other than exactly one only checks: the value stays as
+        // it was given.
+        let s = at_a(Nof(
+            Min(1, Any()),
+            [Spec::from(Token::Number), Spec::from(Coerce(Token::String))],
+        ));
+        assert_eq!(run(&s, &a("5")), a("5"));
         // All threads the value through its branches.
-        let s = at_a(all([
-            Spec::from(coerce(Token::Number)),
-            Spec::from(min(2, any())),
+        let s = at_a(All([
+            Spec::from(Coerce(Token::Number)),
+            Spec::from(Min(2, Any())),
         ]));
         assert_eq!(run(&s, &a("\"5\"")), a("5"));
-        let s = at_a(all([
-            Spec::from(coerce(Token::Number)),
-            Spec::from(min(9, any())),
+        let s = at_a(All([
+            Spec::from(Coerce(Token::Number)),
+            Spec::from(Min(9, Any())),
         ]));
         assert_eq!(
             run(&s, &a("\"5\"")),
@@ -1558,15 +1699,18 @@ mod tests {
         // no value, so the missing property is reported.
         let missing = "ERR Validation failed for property \"a\" because the property is missing.";
         assert_eq!(
-            run(&at_a(one([Spec::from(skip(Token::Number))])), "{}"),
+            run(&at_a(Nof(1, [Spec::from(Skip(Token::Number))])), "{}"),
             missing
         );
         assert_eq!(
-            run(&at_a(some([Spec::from(skip(Token::Number))])), "{}"),
+            run(
+                &at_a(Nof(Min(1, Any()), [Spec::from(Skip(Token::Number))])),
+                "{}"
+            ),
             missing
         );
         assert_eq!(
-            run(&at_a(all([Spec::from(skip(Token::Number))])), "{}"),
+            run(&at_a(All([Spec::from(Skip(Token::Number))])), "{}"),
             missing
         );
         let mut quiet = one_ns();
@@ -1578,10 +1722,10 @@ mod tests {
     fn define_and_refer() {
         let s = |strict: bool, fill: bool| {
             Schema::new(obj([
-                ("a", Spec::from(define("d", Token::Number))),
+                ("a", Spec::from(Define("d", Token::Number))),
                 (
                     "b",
-                    Spec::from(refer_with("d", ReferOptions { strict, fill }, any())),
+                    Spec::from(ReferWith("d", ReferOptions { strict, fill }, Any())),
                 ),
             ]))
         };
@@ -1600,13 +1744,13 @@ mod tests {
             "ERR Validation failed for property \"b\" because the property is missing."
         );
         assert!(s(false, false).defs().contains_key("d"));
-        let lax = at_a(any().refer("nope"));
+        let lax = at_a(Any().Refer("nope"));
         assert_eq!(run(&lax, &a("2")), a("2"));
         let strict = |fill| {
-            at_a(refer_with(
+            at_a(ReferWith(
                 "nope",
                 ReferOptions { strict: true, fill },
-                any(),
+                Any(),
             ))
         };
         assert_eq!(
@@ -1616,27 +1760,27 @@ mod tests {
         assert_eq!(run(&strict(false), "{}"), "{}");
         assert_eq!(run(&strict(true), "{}"), "{}");
         assert_eq!(
-            stringify_node(&define("d", Token::Number), false),
+            stringify_node(&Define("d", Token::Number), false),
             "Number.Define(\"d\")"
         );
-        assert_eq!(stringify_node(&refer("d", any()), false), "Refer(\"d\")");
+        assert_eq!(stringify_node(&Refer("d", Any()), false), "Refer(\"d\")");
         // A define met on one schema's call serves a refer on another, when
         // the calls share a context.
         let mut ctx = Context::new();
-        let first = at_a(define("shared", Token::Number));
+        let first = at_a(Define("shared", Token::Number));
         first.validate_ctx(j(&a("1")), &mut ctx).unwrap();
-        let second = at_a(refer("shared", any()));
+        let second = at_a(Refer("shared", Any()));
         assert!(second.validate_ctx(j(&a("\"x\"")), &mut ctx).is_err());
         assert!(second.validate_ctx(j(&a("3")), &mut ctx).is_ok());
     }
 
     #[test]
     fn renames() {
-        let s = at_a(buildize(Token::Number).rename("b"));
+        let s = at_a(buildize(Token::Number).Rename("b"));
         assert_eq!(run(&s, &a("1")), r#"{"b":1}"#);
         assert_eq!(run(&s, r#"{"a":1,"b":2}"#), r#"{"b":1}"#);
         assert!(s.valid(&j(&a("1"))));
-        let s = at_a(rename_with(
+        let s = at_a(RenameWith(
             "b",
             RenameOptions {
                 keep: true,
@@ -1646,7 +1790,7 @@ mod tests {
         ));
         assert_eq!(run(&s, &a("1")), r#"{"a":1,"b":1}"#);
         let claim = |keep| {
-            at_a(rename_with(
+            at_a(RenameWith(
                 "b",
                 RenameOptions {
                     keep,
@@ -1669,47 +1813,47 @@ mod tests {
         assert!(!claim(false).valid(&j(r#"{"old":"x"}"#)));
         assert!(!claim(false).valid(&j("{}")));
         // A renamed child that produced nothing has nothing to move.
-        assert_eq!(run(&at_a(rename("b", skip(Token::Number))), "{}"), "{}");
-        assert_eq!(run(&at_a(rename("a", Token::Number)), &a("1")), a("1"));
+        assert_eq!(run(&at_a(Rename("b", Skip(Token::Number))), "{}"), "{}");
+        assert_eq!(run(&at_a(Rename("a", Token::Number)), &a("1")), a("1"));
     }
 
     #[test]
     fn keys() {
         let nested = |n: Node| Schema::new(obj([("a", obj([("b", Spec::from(n))]))]));
         assert_eq!(
-            run(&nested(key()), r#"{"a":{"b":"V"}}"#),
+            run(&nested(Key()), r#"{"a":{"b":"V"}}"#),
             r#"{"a":{"b":"a"}}"#
         );
         assert_eq!(
-            run(&nested(key_depth(1)), r#"{"a":{"b":"V"}}"#),
+            run(&nested(KeyDepth(1)), r#"{"a":{"b":"V"}}"#),
             r#"{"a":{"b":["a"]}}"#
         );
         assert_eq!(
-            run(&nested(key_join(1, "/")), r#"{"a":{"b":"V"}}"#),
+            run(&nested(KeyJoin(1, "/")), r#"{"a":{"b":"V"}}"#),
             r#"{"a":{"b":"a"}}"#
         );
         assert_eq!(
-            run(&nested(key_depth(-1)), r#"{"a":{"b":"V"}}"#),
+            run(&nested(KeyDepth(-1)), r#"{"a":{"b":"V"}}"#),
             r#"{"a":{"b":["b"]}}"#
         );
         assert_eq!(
-            run(&nested(key_join(0, "/")), r#"{"a":{"b":"V"}}"#),
+            run(&nested(KeyJoin(0, "/")), r#"{"a":{"b":"V"}}"#),
             "ERR Validation failed for property \"a.b\" with string \"\" because an empty string is not allowed."
         );
         assert_eq!(
-            run(&nested(key_join(2, "/")), r#"{"a":{"b":"V"}}"#),
+            run(&nested(KeyJoin(2, "/")), r#"{"a":{"b":"V"}}"#),
             r#"{"a":{"b":"/a"}}"#
         );
         assert_eq!(
-            run(&nested(key_join(5, ".")), r#"{"a":{"b":"V"}}"#),
+            run(&nested(KeyJoin(5, ".")), r#"{"a":{"b":"V"}}"#),
             r#"{"a":{"b":".a"}}"#
         );
-        assert_eq!(run(&at_a(key()), &a("\"V\"")), a("\"V\""));
+        assert_eq!(run(&at_a(Key()), &a("\"V\"")), a("\"V\""));
         assert_eq!(
-            run(&at_a(key_args(&[Value::from("/")])), &a("\"V\"")),
+            run(&at_a(KeyArgs(&[Value::from("/")])), &a("\"V\"")),
             a("\"V\"")
         );
-        assert_eq!(key_args(&[Value::Null]).kind, Kind::String);
+        assert_eq!(KeyArgs(&[Value::Null]).kind, Kind::String);
         assert_eq!(
             js_slice(&[Value::from(1), Value::from(2)], 5, 9),
             Vec::<Value>::new()
@@ -1718,67 +1862,67 @@ mod tests {
             js_slice(&[Value::from(1), Value::from(2)], -9, -1),
             vec![Value::from(1)]
         );
-        assert_eq!(stringify_node(&key(), false), "String.Key()");
+        assert_eq!(stringify_node(&Key(), false), "String.Key()");
     }
 
     #[test]
     fn catch_and_transform() {
-        assert_eq!(run(&at_a(catch(0, Token::Number)), &a("\"x\"")), a("0"));
-        assert_eq!(run(&at_a(catch(0, Token::Number)), &a("5")), a("5"));
+        assert_eq!(run(&at_a(Catch(0, Token::Number)), &a("\"x\"")), a("0"));
+        assert_eq!(run(&at_a(Catch(0, Token::Number)), &a("5")), a("5"));
         assert_eq!(
-            run(&at_a(catch("none", min(2, Token::String))), &a("\"x\"")),
+            run(&at_a(Catch("none", Min(2, Token::String))), &a("\"x\"")),
             a("\"none\"")
         );
         assert_eq!(
-            run(&at_a(min(2, catch(0, Token::Number))), &a("\"x\"")),
+            run(&at_a(Min(2, Catch(0, Token::Number))), &a("\"x\"")),
             "ERR Value \"0\" for property \"a\" must be a minimum of 2 (was 0)."
         );
-        assert_eq!(run(&at_a(catch(7, Token::Number)), "{}"), a("7"));
-        assert_eq!(run(&at_a(optional(catch(7, Token::Number))), "{}"), a("0"));
+        assert_eq!(run(&at_a(Catch(7, Token::Number)), "{}"), a("7"));
+        assert_eq!(run(&at_a(Optional(Catch(7, Token::Number))), "{}"), a("0"));
         assert_eq!(
-            run(&at_a(catch(Value::Null, Token::Number)), &a("\"x\"")),
+            run(&at_a(Catch(Value::Null, Token::Number)), &a("\"x\"")),
             a("null")
         );
-        assert!(at_a(catch(0, Token::Number)).valid(&j(&a("\"x\""))));
-        let s = at_a(catch(
+        assert!(at_a(Catch(0, Token::Number)).valid(&j(&a("\"x\""))));
+        let s = at_a(Catch(
             Value::Obj(Default::default()),
             obj([("x", Spec::from(Token::Number))]),
         ));
         assert_eq!(run(&s, r#"{"a":{"x":"bad"}}"#), r#"{"a":{}}"#);
         assert_eq!(run(&s, r#"{"a":{"x":1}}"#), r#"{"a":{"x":1}}"#);
         assert_eq!(
-            stringify_node(&catch(0, min(2, Token::Number)), false),
+            stringify_node(&Catch(0, Min(2, Token::Number)), false),
             "Number.Min(2).Catch(0)"
         );
         assert_eq!(
-            stringify_node(&after(|_, _| true, Token::Number).catch("z"), false),
+            stringify_node(&After(|_, _| true, Token::Number).Catch("z"), false),
             "Number.After().Catch(z)"
         );
-        let dbl = |n: Node| transform(|v, _| Value::Num(v.as_f64().unwrap_or(0.0) * 2.0), n);
+        let dbl = |n: Node| Transform(|v, _| Value::Num(v.as_f64().unwrap_or(0.0) * 2.0), n);
         assert_eq!(run(&at_a(dbl(buildize(Token::Number))), &a("2")), a("4"));
         assert_eq!(
             run(&at_a(dbl(buildize(Token::Number))), &a("\"x\"")),
             "ERR Validation failed for property \"a\" with string \"x\" because the string is not of type number."
         );
         assert_eq!(
-            run(&at_a(dbl(min(2, Token::Number))), &a("1")),
+            run(&at_a(dbl(Min(2, Token::Number))), &a("1")),
             "ERR Value \"1\" for property \"a\" must be a minimum of 2 (was 1)."
         );
         assert!(at_a(dbl(buildize(Token::Number))).valid(&j(&a("2"))));
         assert!(!at_a(dbl(buildize(Token::Number))).valid(&j(&a("\"x\""))));
         assert_eq!(
-            stringify_node(&dbl(min(2, Token::Number)), false),
+            stringify_node(&dbl(Min(2, Token::Number)), false),
             "Number.Min(2).Transform"
         );
-        assert!(catch(0, Token::Number).befores[0].inner.is_some());
+        assert!(Catch(0, Token::Number).befores[0].inner.is_some());
         // A transform of an absent optional value: nothing produced, nothing
         // transformed.
-        assert_eq!(run(&at_a(dbl(skip(Token::Number))), "{}"), a("0"));
+        assert_eq!(run(&at_a(dbl(Skip(Token::Number))), "{}"), a("0"));
     }
 
     #[test]
     fn describe_coerce_and_formats() {
-        let s = at_a(describe("a number", Token::Number));
+        let s = at_a(Describe("a number", Token::Number));
         assert_eq!(
             s.node().obj_children["a"].meta.get("description"),
             Some(&Value::from("a number"))
@@ -1788,53 +1932,53 @@ mod tests {
             "ERR Validation failed for property \"a\" with string \"x\" because the string is not of type number."
         );
         let cases: Vec<(Node, &str, &str)> = vec![
-            (coerce(Token::Number), "\"5\"", "5"),
-            (coerce(Token::Number), "true", "1"),
-            (coerce(Token::Number), "\"x\"", "ERR Validation failed for property \"a\" with string \"x\" because the string is not of type number."),
-            (coerce(Token::Number), "\"0x10\"", "ERR Validation failed for property \"a\" with string \"0x10\" because the string is not of type number."),
-            (coerce(Token::Integer), "\"5.5\"", "ERR Validation failed for property \"a\" with number \"5.5\" because the number is not of type integer."),
-            (coerce(Token::String), "1.5", "\"1.5\""),
-            (coerce(Token::String), "1000000", "\"1000000\""),
-            (coerce(Token::String), "false", "\"false\""),
-            (coerce(Token::Boolean), "\" TRUE \"", "true"),
-            (coerce(Token::Boolean), "0", "false"),
-            (coerce(Token::Boolean), "\"yes\"", "ERR Validation failed for property \"a\" with string \"yes\" because the string is not of type boolean."),
-            (coerce(Token::Date), "\"2020-01-01T00:00:00Z\"", "\"2020-01-01T00:00:00.000Z\""),
-            (coerce(Token::Date), "\"2020-01-01T12:30:00.5+02:00\"", "\"2020-01-01T10:30:00.500Z\""),
-            (coerce(Token::Date), "\"2020-02-30T00:00:00Z\"", "ERR Validation failed for property \"a\" with string \"2020-02-30T00:00:00Z\" because the string is not of type date."),
-            (coerce(Token::Date), "1577836800000", "\"2020-01-01T00:00:00.000Z\""),
-            (coerce(min(2, Token::Number)), "\"1\"", "ERR Value \"1\" for property \"a\" must be a minimum of 2 (was 1)."),
-            (email(any()), "\"a@b.co\"", "\"a@b.co\""),
-            (email(any()), "\"nope\"", "ERR Value \"nope\" for property \"a\" is not a valid email address."),
-            (email(any()), "1", "ERR Validation failed for property \"a\" with number \"1\" because the number is not of type string."),
-            (url(any()), "\"https://example.com/a?b=c#d\"", "\"https://example.com/a?b=c#d\""),
-            (url(any()), "\"example.com\"", "ERR Value \"example.com\" for property \"a\" is not a valid URL."),
-            (uuid(any()), "\"123e4567-e89b-12d3-a456-426614174000\"", "\"123e4567-e89b-12d3-a456-426614174000\""),
-            (uuid(any()), "\"123e4567e89b12d3a456426614174000\"", "ERR Value \"123e4567e89b12d3a456426614174000\" for property \"a\" is not a valid UUID."),
-            (date_time(any()), "\"2020-01-01T00:00:00Z\"", "\"2020-01-01T00:00:00Z\""),
-            (date_time(any()), "\"2021-02-29T00:00:00Z\"", "ERR Value \"2021-02-29T00:00:00Z\" for property \"a\" is not a valid ISO 8601 date-time."),
-            (ip(any()), "\"127.0.0.1\"", "\"127.0.0.1\""),
-            (ip(any()), "\"::1\"", "\"::1\""),
-            (ip(any()), "\"1.2.3\"", "ERR Value \"1.2.3\" for property \"a\" is not a valid IP address."),
-            (ipv4(any()), "\"::1\"", "ERR Value \"::1\" for property \"a\" is not a valid IPv4 address."),
-            (ipv6(any()), "\"1.2.3.4\"", "ERR Value \"1.2.3.4\" for property \"a\" is not a valid IPv6 address."),
-            (ipv6(any()), "\"::ffff:192.168.1.1\"", "\"::ffff:192.168.1.1\""),
-            (email(min(10, Token::String)), "\"nope\"", "ERR Value \"nope\" for property \"a\" must be a minimum length of 10 (was 4).\nValue \"nope\" for property \"a\" is not a valid email address."),
-            (fault("boom", min(2, Token::Number)), "1", "ERR Value \"1\" for property \"a\" must be a minimum of 2 (was 1)."),
-            (fault("boom", email(any())), "1", "ERR boom"),
+            (Coerce(Token::Number), "\"5\"", "5"),
+            (Coerce(Token::Number), "true", "1"),
+            (Coerce(Token::Number), "\"x\"", "ERR Validation failed for property \"a\" with string \"x\" because the string is not of type number."),
+            (Coerce(Token::Number), "\"0x10\"", "ERR Validation failed for property \"a\" with string \"0x10\" because the string is not of type number."),
+            (Coerce(Token::Integer), "\"5.5\"", "ERR Validation failed for property \"a\" with number \"5.5\" because the number is not of type integer."),
+            (Coerce(Token::String), "1.5", "\"1.5\""),
+            (Coerce(Token::String), "1000000", "\"1000000\""),
+            (Coerce(Token::String), "false", "\"false\""),
+            (Coerce(Token::Boolean), "\" TRUE \"", "true"),
+            (Coerce(Token::Boolean), "0", "false"),
+            (Coerce(Token::Boolean), "\"yes\"", "ERR Validation failed for property \"a\" with string \"yes\" because the string is not of type boolean."),
+            (Coerce(Token::Date), "\"2020-01-01T00:00:00Z\"", "\"2020-01-01T00:00:00.000Z\""),
+            (Coerce(Token::Date), "\"2020-01-01T12:30:00.5+02:00\"", "\"2020-01-01T10:30:00.500Z\""),
+            (Coerce(Token::Date), "\"2020-02-30T00:00:00Z\"", "ERR Validation failed for property \"a\" with string \"2020-02-30T00:00:00Z\" because the string is not of type date."),
+            (Coerce(Token::Date), "1577836800000", "\"2020-01-01T00:00:00.000Z\""),
+            (Coerce(Min(2, Token::Number)), "\"1\"", "ERR Value \"1\" for property \"a\" must be a minimum of 2 (was 1)."),
+            (Email(Any()), "\"a@b.co\"", "\"a@b.co\""),
+            (Email(Any()), "\"nope\"", "ERR Value \"nope\" for property \"a\" is not a valid email address."),
+            (Email(Any()), "1", "ERR Validation failed for property \"a\" with number \"1\" because the number is not of type string."),
+            (Url(Any()), "\"https://example.com/a?b=c#d\"", "\"https://example.com/a?b=c#d\""),
+            (Url(Any()), "\"example.com\"", "ERR Value \"example.com\" for property \"a\" is not a valid URL."),
+            (Uuid(Any()), "\"123e4567-e89b-12d3-a456-426614174000\"", "\"123e4567-e89b-12d3-a456-426614174000\""),
+            (Uuid(Any()), "\"123e4567e89b12d3a456426614174000\"", "ERR Value \"123e4567e89b12d3a456426614174000\" for property \"a\" is not a valid UUID."),
+            (DateTime(Any()), "\"2020-01-01T00:00:00Z\"", "\"2020-01-01T00:00:00Z\""),
+            (DateTime(Any()), "\"2021-02-29T00:00:00Z\"", "ERR Value \"2021-02-29T00:00:00Z\" for property \"a\" is not a valid ISO 8601 date-time."),
+            (Ip(Any()), "\"127.0.0.1\"", "\"127.0.0.1\""),
+            (Ip(Any()), "\"::1\"", "\"::1\""),
+            (Ip(Any()), "\"1.2.3\"", "ERR Value \"1.2.3\" for property \"a\" is not a valid IP address."),
+            (Ipv4(Any()), "\"::1\"", "ERR Value \"::1\" for property \"a\" is not a valid IPv4 address."),
+            (Ipv6(Any()), "\"1.2.3.4\"", "ERR Value \"1.2.3.4\" for property \"a\" is not a valid IPv6 address."),
+            (Ipv6(Any()), "\"::ffff:192.168.1.1\"", "\"::ffff:192.168.1.1\""),
+            (Email(Min(10, Token::String)), "\"nope\"", "ERR Value \"nope\" for property \"a\" must be a minimum length of 10 (was 4).\nValue \"nope\" for property \"a\" is not a valid email address."),
+            (Fault("boom", Min(2, Token::Number)), "1", "ERR Value \"1\" for property \"a\" must be a minimum of 2 (was 1)."),
+            (Fault("boom", Email(Any())), "1", "ERR boom"),
             (
-                email(Token::Number),
+                Email(Token::Number),
                 "1",
                 "ERR Value \"1\" for property \"a\" is not a valid email address.",
             ),
             (
-                email(Token::Number),
+                Email(Token::Number),
                 "\"x\"",
                 "ERR Validation failed for property \"a\" with string \"x\" because the string is not of type number.",
             ),
-            (buildize(Token::String).email().url().uuid().date_time().ip().ipv4().ipv6(), "1", "ERR Validation failed for property \"a\" with number \"1\" because the number is not of type string."),
-            (buildize(Token::Number).coerce(), "\"7\"", "7"),
-            (buildize(Token::Number).describe("n"), "7", "7"),
+            (buildize(Token::String).Email().Url().Uuid().DateTime().Ip().Ipv4().Ipv6(), "1", "ERR Validation failed for property \"a\" with number \"1\" because the number is not of type string."),
+            (buildize(Token::Number).Coerce(), "\"7\"", "7"),
+            (buildize(Token::Number).Describe("n"), "7", "7"),
         ];
         for (n, input, want) in cases {
             let got = run(&at_a(n), &a(input));
@@ -1846,53 +1990,53 @@ mod tests {
             assert_eq!(got, want, "{}", input);
         }
         assert_eq!(
-            run(&at_a(email(any())), "{}"),
+            run(&at_a(Email(Any())), "{}"),
             "ERR Validation failed for property \"a\" because the property is missing."
         );
-        assert_eq!(run(&at_a(optional(email(any()))), "{}"), a("\"\""));
-        let e = &at_a(email(any())).error(&j(&a("\"nope\"")))[0];
+        assert_eq!(run(&at_a(Optional(Email(Any()))), "{}"), a("\"\""));
+        let e = &at_a(Email(Any())).error(&j(&a("\"nope\"")))[0];
         assert_eq!((e.why.as_str(), e.mark), ("Email", 4000));
-        assert!(!at_a(email(any())).valid(&j(&a("\"nope\""))));
-        assert_eq!(stringify_node(&email(any()), false), "String.Email");
+        assert!(!at_a(Email(Any())).valid(&j(&a("\"nope\""))));
+        assert_eq!(stringify_node(&Email(Any()), false), "String.Email");
     }
 
     #[test]
     fn types_and_structure() {
-        assert_eq!(run(&at_a(type_(Kind::Number, any())), &a("3")), a("3"));
+        assert_eq!(run(&at_a(Type(Kind::Number, Any())), &a("3")), a("3"));
         assert_eq!(
-            run(&at_a(type_(Token::Number, any())), &a("\"x\"")),
+            run(&at_a(Type(Token::Number, Any())), &a("\"x\"")),
             "ERR Validation failed for property \"a\" with string \"x\" because the string is not of type number."
         );
         assert_eq!(
-            run(&at_a(type_("String", any())), &a("3")),
+            run(&at_a(Type("String", Any())), &a("3")),
             "ERR Validation failed for property \"a\" with number \"3\" because the number is not of type string."
         );
         assert_eq!(
-            run(&Schema::new(type_("Object", any())), "1"),
+            run(&Schema::new(Type("Object", Any())), "1"),
             "ERR Validation failed for number \"1\" because the number is not of type object."
         );
         assert_eq!(
-            run(&Schema::new(type_("Object", any())), r#"{"z":1}"#),
+            run(&Schema::new(Type("Object", Any())), r#"{"z":1}"#),
             "ERR Validation failed for object \"{z:1}\" because the property \"z\" is not allowed."
         );
-        assert_eq!(type_("nonsense", any()).kind, Kind::Any);
-        assert_eq!(type_(buildize(Token::Integer), any()).kind, Kind::Integer);
-        assert_eq!(type_(min(2, any()), any()).kind, Kind::Any);
+        assert_eq!(Type("nonsense", Any()).kind, Kind::Any);
+        assert_eq!(Type(buildize(Token::Integer), Any()).kind, Kind::Integer);
+        assert_eq!(Type(Min(2, Any()), Any()).kind, Kind::Any);
         for (n, k) in [
-            (any().string(), Kind::String),
-            (any().number(), Kind::Number),
-            (any().boolean(), Kind::Boolean),
-            (any().object(), Kind::Object),
-            (any().array(), Kind::Array),
-            (any().function(), Kind::Function),
-            (any().integer(), Kind::Integer),
-            (any().date(), Kind::Date),
-            (buildize(Token::Number).any(), Kind::Any),
+            (Any().String(), Kind::String),
+            (Any().Number(), Kind::Number),
+            (Any().Boolean(), Kind::Boolean),
+            (Any().Object(), Kind::Object),
+            (Any().Array(), Kind::Array),
+            (Any().Function(), Kind::Function),
+            (Any().Integer(), Kind::Integer),
+            (Any().Date(), Kind::Date),
+            (buildize(Token::Number).Any(), Kind::Any),
         ] {
             assert_eq!(n.kind, k);
         }
         assert_eq!(
-            run(&Schema::new(obj([("n", Spec::from(func(any())))])), "{}"),
+            run(&Schema::new(obj([("n", Spec::from(Func(Any())))])), "{}"),
             "{}"
         );
         assert_eq!(
@@ -1902,74 +2046,74 @@ mod tests {
             ),
             "ERR Validation failed for property \"n\" because the property is missing."
         );
-        assert_eq!(buildize(Token::Number).func().kind, Kind::Function);
+        assert_eq!(buildize(Token::Number).Func().kind, Kind::Function);
 
-        assert!(!open(Token::Number).is_open());
-        let tuple = closed(arr([Spec::from(Token::Number)]));
+        assert!(!Open(Token::Number).is_open());
+        let tuple = Closed(arr([Spec::from(Token::Number)]));
         assert_eq!(tuple.arr_children.len(), 1);
         assert_eq!(run(&at_a(tuple.clone()), &a("[1]")), a("[1]"));
         assert!(!at_a(tuple).valid(&j(&a("[1,2]"))));
-        assert!(closed(arr([Spec::from(1), Spec::from(2)]))
+        assert!(Closed(arr([Spec::from(1), Spec::from(2)]))
             .arr_child
             .is_none());
-        let c = child(Token::Number, Token::Number);
+        let c = Child(Token::Number, Token::Number);
         assert!(c.kind == Kind::Object && c.obj_rest.is_some());
         assert!(buildize(Token::Array)
-            .child(Token::Number)
+            .Child(Token::Number)
             .arr_child
             .is_some());
         assert!(buildize(Token::Object)
-            .child(Token::Number)
+            .Child(Token::Number)
             .obj_rest
             .is_some());
         assert_eq!(
             run(
-                &at_a(rest(Token::Number, arr([Spec::from(1)]))),
+                &at_a(Rest(Token::Number, arr([Spec::from(1)]))),
                 &a("[1,2,3]")
             ),
             a("[1,2,3]")
         );
-        assert_eq!(run(&at_a(rest(Token::Number, any())), &a("[2]")), a("[2]"));
-        assert!(!at_a(rest(Token::Number, arr([Spec::from(1)]))).valid(&j(&a("[1,\"x\"]"))));
-        assert_eq!(default_of("x").kind, Kind::String);
-        assert_eq!(run(&at_a(default_of("x")), "{}"), a("\"x\""));
-        assert_eq!(run(&at_a(empty(any())), &a("\"\"")), a("\"\""));
-        assert_eq!(run(&at_a(empty(any())), &a("0")), a("0"));
-        assert_eq!(run(&at_a(ignore(empty(any()))), &a("0")), a("0"));
+        assert_eq!(run(&at_a(Rest(Token::Number, Any())), &a("[2]")), a("[2]"));
+        assert!(!at_a(Rest(Token::Number, arr([Spec::from(1)]))).valid(&j(&a("[1,\"x\"]"))));
+        assert_eq!(DefaultOf("x").kind, Kind::String);
+        assert_eq!(run(&at_a(DefaultOf("x")), "{}"), a("\"x\""));
+        assert_eq!(run(&at_a(Empty(Any())), &a("\"\"")), a("\"\""));
+        assert_eq!(run(&at_a(Empty(Any())), &a("0")), a("0"));
+        assert_eq!(run(&at_a(Ignore(Empty(Any()))), &a("0")), a("0"));
         assert_eq!(
-            run(&at_a(required(null())), "{}"),
+            run(&at_a(Required(null())), "{}"),
             "ERR Validation failed for property \"a\" because the property is missing."
         );
-        assert_eq!(run(&at_a(skip(null())), "{}"), "{}");
-        assert_eq!(run(&at_a(min(2, null())), "{}"), a("null"));
+        assert_eq!(run(&at_a(Skip(null())), "{}"), "{}");
+        assert_eq!(run(&at_a(Min(2, null())), "{}"), a("null"));
         assert_eq!(
-            run(&at_a(required(f64::NAN)), "{}"),
+            run(&at_a(Required(f64::NAN)), "{}"),
             "ERR Validation failed for property \"a\" because the property is missing."
         );
-        assert_eq!(run(&at_a(min(2, f64::NAN)), "{}"), a("null"));
-        assert_eq!(run(&at_a(never(Token::String)), "{}"), "ERR Validation failed for property \"a\" with value \"undefined\" because no value is allowed.");
+        assert_eq!(run(&at_a(Min(2, f64::NAN)), "{}"), a("null"));
+        assert_eq!(run(&at_a(Never(Token::String)), "{}"), "ERR Validation failed for property \"a\" with value \"undefined\" because no value is allowed.");
         assert_eq!(
-            run(&at_a(nullable(closed(obj::<&str, Spec>([])))), &a("null")),
+            run(&at_a(Nullable(Closed(obj::<&str, Spec>([])))), &a("null")),
             a("null")
         );
-        assert_eq!(run(&at_a(optional(nullable(Token::Number))), "{}"), a("0"));
+        assert_eq!(run(&at_a(Optional(Nullable(Token::Number))), "{}"), a("0"));
     }
 
     #[test]
     fn untyped_defaults_take_the_default_kind() {
         let cases: Vec<(Node, &str, &str)> = vec![
-            (default(2, required(any())), "\"x\"", "ERR Validation failed for property \"a\" with string \"x\" because the string is not of type number."),
-            (default(2, required(any())), "{}", "2"),
-            (default(2, describe("two", required(any()))), "3", "3"),
-            (default(2, fault("not two", exact([2]))), "3", "ERR Value \"3\" for property \"a\" must be exactly one of: 2"),
-            (default(2, exact([2, 3])), "3", "3"),
-            (default(2, nullable(required(any()))), "null", "null"),
-            (default("x", empty(required(any()))), "\"\"", "\"\""),
-            (default(2, after(|_, _| false, any())), "3", "ERR Validation failed for property \"a\" with number \"3\" because check \"After\" failed."),
+            (Default(2, Required(Any())), "\"x\"", "ERR Validation failed for property \"a\" with string \"x\" because the string is not of type number."),
+            (Default(2, Required(Any())), "{}", "2"),
+            (Default(2, Describe("two", Required(Any()))), "3", "3"),
+            (Default(2, Fault("not two", Exact([2]))), "3", "ERR Value \"3\" for property \"a\" must be exactly one of: 2"),
+            (Default(2, Exact([2, 3])), "3", "3"),
+            (Default(2, Nullable(Required(Any()))), "null", "null"),
+            (Default("x", Empty(Required(Any()))), "\"\"", "\"\""),
+            (Default(2, After(|_, _| false, Any())), "3", "ERR Validation failed for property \"a\" with number \"3\" because check \"After\" failed."),
             // Default clears skippable, so an Ignore's silence remains alone.
-            (default(2, ignore(any())), "\"x\"", "\"x\""),
-            (default(Value::Undefined, any()), "\"x\"", "\"x\""),
-            (default(7, Token::Number), "{}", "7"),
+            (Default(2, Ignore(Any())), "\"x\"", "\"x\""),
+            (Default(Value::Undefined, Any()), "\"x\"", "\"x\""),
+            (Default(7, Token::Number), "{}", "7"),
         ];
         for (n, input, want) in cases {
             let got = if input == "{}" {
@@ -1984,7 +2128,7 @@ mod tests {
             };
             assert_eq!(got, want, "{}", input);
         }
-        let d = default(2, describe("two", any()));
+        let d = Default(2, Describe("two", Any()));
         assert_eq!(d.meta.get("description"), Some(&Value::from("two")));
     }
 }

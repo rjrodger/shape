@@ -106,7 +106,7 @@ func nodeSchema(n *node, defs map[string]any) map[string]any {
 	// A nil default is the zero of a kind that has none (Any, Date): TS has
 	// no default there at all. Only the null kind's null is a default.
 	if !n.required && !n.skippable && n.hasDefault && !isFunction(n.defaultValue) && !isNaN(n.defaultValue) &&
-		(n.defaultValue != nil || n.kind == KindNull) {
+		(n.defaultValue != nil || n.kind == KindNull || n.defaultNull) {
 		s["default"] = n.defaultValue
 	}
 
@@ -215,10 +215,55 @@ func listSchema(n *node, s map[string]any, defs map[string]any) {
 		s["oneOf"] = branches
 		return
 	}
-	if n.listMode == listAll {
-		s["allOf"] = branches
+	if n.listMode == listNof {
+		nofSchema(n.nofOK, branches, s)
 	} else {
-		s["anyOf"] = branches
+		s["allOf"] = branches
+	}
+}
+
+// nofSchema writes a count of the shapes as the keywords that count: none
+// of them is not, exactly one oneOf, every one allOf. JSON Schema has no
+// keyword for any other count, so it is bounded by what it rules out: anyOf
+// when the count is never none, not allOf when it is never every one. That
+// bound is exact for at least one, not every one, and both together.
+func nofSchema(ok []bool, branches []any, s map[string]any) {
+	n := len(branches)
+	only := func(c int) bool {
+		for i, v := range ok {
+			if v != (i == c) {
+				return false
+			}
+		}
+		return true
+	}
+	admits := 0
+	for _, v := range ok {
+		if v {
+			admits++
+		}
+	}
+	switch {
+	case admits == len(ok):
+	case admits == 0:
+		s["not"] = map[string]any{}
+	case only(0):
+		if n == 1 {
+			s["not"] = branches[0]
+		} else {
+			s["not"] = map[string]any{"anyOf": branches}
+		}
+	case only(1):
+		s["oneOf"] = branches
+	case only(n):
+		s["allOf"] = branches
+	default:
+		if !ok[0] {
+			s["anyOf"] = branches
+		}
+		if !ok[n] {
+			s["not"] = map[string]any{"allOf": branches}
+		}
 	}
 }
 

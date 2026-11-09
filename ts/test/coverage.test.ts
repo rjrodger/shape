@@ -65,7 +65,7 @@ describe('coverage-extra', () => {
     assert.throws(() => g('x'), /minimum/)
 
     // Nested builder args exercise the ')' return path.
-    assert.ok(expr('One(Min(1),Max(9))'))
+    assert.ok(expr('Nof(1,Min(1),Max(9))'))
 
     // A trailing ')' at top level hits the close-paren early return.
     assert.ok(expr('Min(1))'))

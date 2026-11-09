@@ -182,7 +182,7 @@ pub(crate) fn format_validator(f: Format) -> Validator {
 /// becomes one first.
 pub(crate) fn with_format(mut n: Node, f: Format) -> Node {
     if n.kind == Kind::Any {
-        n = crate::builders::type_(Kind::String, n);
+        n = crate::builders::Type(Kind::String, n);
     }
     n.befores.push(format_validator(f));
     n

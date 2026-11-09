@@ -9,8 +9,8 @@ a node. Most take an optional trailing `spec` that they narrow or wrap.
 - **Go:** `shape.Min(2, shape.String)`; chainable form `buildize(shape.String).Min(2)`.
   `G`-prefixed aliases (`shape.GMin`) avoid stdlib name clashes.
 
-`One`, `Some`, `All`, `Exact` and `Discriminated` are top-level only (not
-chainable).
+`All`, `Nof`, `Exact` and `Discriminated` are top-level only
+(not chainable).
 
 ---
 
@@ -25,7 +25,7 @@ chainable).
 | `Ignore(spec?)` | Like `Skip`, and drop the value (and its errors) if it fails to match—anywhere in its subtree. |
 | `Empty(spec?)` | Allow the empty string `""` for a `String` shape. |
 | `Nullable(spec?)` | Accept an explicit `null` as the value. Absent is still governed by required/optional. |
-| `Fault(message, spec?)` | Override the **structural** error message for this node (a check's own message is kept). |
+| `Fault(message, spec?)` | Override the **structural** error message for this node (a check's own message is kept, and so is a composition's). |
 
 Notes:
 - A literal in a spec is already "optional with a default"; these builders adjust
@@ -147,15 +147,30 @@ A bound outside the isolation still applies to what comes out:
 
 | Builder | Effect |
 | ------- | ------ |
-| `One(shapes…)` | Passes on the first matching branch, whose output is the result. |
-| `Some(shapes…)` | Passes if at least one branch matches; all branches are evaluated, and the last matching branch's result stands. Every branch is handed the value as it was given, never one another branch changed (`Some(Open({a:1}), Open({b:2}))` on `{}` gives `{b:2}`). |
 | `All(shapes…)` | Passes only if every branch matches; the value is threaded through each, so later branches see what earlier ones produced (`All(Open({a:1}), Open({b:2}))` on `{}` gives `{a:1,b:2}`). |
-
-None of the three changes the value it was given: each branch matches and
-produces from a copy, and the composition's result replaces the value only
-when it passes, so a failing `One`, `Some` or `All` leaves the input as it
-was.
+| `Nof(count, shapes…)` | Passes if the number of branches the value matches is one the count admits. The count is a whole number, for exactly that many (`Nof(1, …)` is exactly one, `Nof(0, s)` is not `s`), or a shape the number must satisfy (`Nof(Min(1), …)` is at least one). A count of exactly one produces: the branch that matched makes the result. Any other count leaves the value as it was given. |
 | `Discriminated(tag, { name: shape, … })` | A tagged union: the branch is chosen by the string value of the `tag` property and the value validated against that branch **alone**, so the errors are its own rather than a list of every alternative. |
+
+Neither changes the value it was given: each branch matches and produces
+from a copy, and the composition's result replaces the value only when it
+passes, so a failing `All` or `Nof` leaves the input as it was.
+
+`Nof` checks a copy of the value against each branch. When its count
+admits exactly one branch (`Nof(1, …)`, or a count shape such as
+`Exact(1)`), the branch that matched then produces the result from a copy:
+`Nof(1, Open({b:2}), Number)` on `{a:1}` gives `{a:1,b:2}`.
+Any other count leaves the value as it was given. `Nof` tries a branch only
+while the branches left untried could still change the verdict, so a
+failure can report a range of counts:
+
+```
+Value "1" for property "v" satisfies 2 of: Number, Integer; the count must be 1.
+Value "x" for property "v" satisfies 1 to 3 of: String, Number, Boolean; the count must be 0.
+```
+
+A count that is neither a whole number of zero or more nor a shape throws
+`Shape: Nof needs a whole number of zero or more, or a shape for the count`
+in TypeScript, and in Go and Rust makes a node that reports it.
 
 `Discriminated` adds the tag property to an object-shaped branch that does not
 declare it, as the literal it is keyed by, so the branch's output carries the
@@ -166,8 +181,9 @@ Value "{bark:true}" for property "p" is not an object with a "kind" property.
 Value "{kind:cat}" for property "p" has unknown "kind" "cat", expected one of: dog, fish.
 ```
 
-An absent optional composition (`Optional(One(String, Number))`) is simply
-absent; it is not put to its branches.
+An absent optional composition (`Optional(Nof(1, String, Number))`) is simply
+absent; it is not put to its branches. `Nof` never puts an absent value to
+its branches: a required `Nof` given nothing reports the value missing.
 
 ## Objects / arrays
 

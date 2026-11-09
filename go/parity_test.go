@@ -305,7 +305,7 @@ func TestIgnoreSuppressesBoundErrors(t *testing.T) {
 
 func TestCompositeMessageRendersAbsentValue(t *testing.T) {
 	// A missing value renders as "undefined", not "null", in a $VALUE template.
-	mustErr(t, MustShape(map[string]any{"a": MustExpr("One(String,Number)")}),
+	mustErr(t, MustShape(map[string]any{"a": MustExpr("All(String,Number)")}),
 		map[string]any{}, `Value "undefined" for property "a"`)
 }
 
@@ -366,12 +366,12 @@ func TestNodeRenderingMatchesTS(t *testing.T) {
 
 func TestRegexpIsASpecValue(t *testing.T) {
 	// A regexp has to normalize like any other spec value, not only in the
-	// string DSL: without that, One(/re/, Number) built a Never branch and
+	// string DSL: without that, Nof(1, /re/, Number) built a Never branch and
 	// rejected every string.
-	one := MustShape(MustExpr(`One(/^a/,Number)`))
+	one := MustShape(MustExpr(`Nof(1,/^a/,Number)`))
 	mustOK(t, one, "abc")
 	mustOK(t, one, 5.0)
-	mustErr(t, one, true, "does not satisfy one of: /^a/, Number")
+	mustErr(t, one, true, "satisfies 0 of: /^a/, Number; the count must be 1.")
 
 	// A raw *regexp.Regexp anywhere in a spec.
 	mustOK(t, MustShape(regexp.MustCompile(`^a`)), "abc")
@@ -1080,7 +1080,7 @@ func TestDiscriminated(t *testing.T) {
 
 	want("render", stringifyNode(D.n, true), "Discriminated(kind,dog,fish)")
 	want("render wrapped", stringifyNode(Optional(D).n, true), "Discriminated(kind,dog,fish)")
-	want("render list join", stringifyNode(One(String, Number).n, true), "One(String,Number)")
+	want("render list join", stringifyNode(Nof(1, String, Number).n, true), "Nof(1,String,Number)")
 	spec := MustShape(D).Spec().(map[string]any)
 	want("spec tag", spec["discriminated"], "kind")
 	if _, ok := spec["branches"].(map[string]any)["dog"]; !ok {
@@ -1091,8 +1091,8 @@ func TestDiscriminated(t *testing.T) {
 	want("check", errs[0].Check, "Discriminated")
 
 	// Composition given nothing on an optional node is simply absent.
-	want("one optional", mustOK(t, MustShape(o("a", Optional(One(String, Number)))), o()), o())
-	want("some optional", mustOK(t, MustShape(o("a", Optional(Some(String, Number)))), o()), o())
+	want("nof one optional", mustOK(t, MustShape(o("a", Optional(Nof(1, String, Number)))), o()), o())
+	want("nof min optional", mustOK(t, MustShape(o("a", Optional(Nof(Min(1), String, Number)))), o()), o())
 	want("all optional", mustOK(t, MustShape(o("a", Optional(All(String, Min(2))))), o()), o())
 }
 

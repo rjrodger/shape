@@ -2,14 +2,13 @@ package shape
 
 import "regexp"
 
-// listMode controls how a composition node (One/Some/All) evaluates its branches.
+// listMode controls how a composition node (All/Nof) evaluates its branches.
 type listMode int
 
 const (
 	listNone listMode = iota
-	listOne
-	listSome
 	listAll
+	listNof
 )
 
 // node is the internal validation tree node. Public *Node alias provides
@@ -30,6 +29,10 @@ type node struct {
 	empty       bool // empty string allowed
 	nullable    bool // an explicit null is accepted as the value
 	hasDefault  bool
+	// defaultNull marks an explicit null default (Default(nil, ...)): a nil
+	// default is otherwise the zero of a kind that has none, which TS has no
+	// default for at all.
+	defaultNull bool
 
 	defaultValue any   // injected on missing optional property
 	literal      any   // declarative value (used by Exact match-from-default)
@@ -64,6 +67,16 @@ type node struct {
 	listMode listMode
 	list     []*node
 	disc     *discriminated // a Discriminated union chooses among list by tag
+
+	// A Nof composition's count: a whole number (nofExact), or a shape the
+	// number of satisfied branches must satisfy (nofCount, nil for a whole
+	// number), the counts it admits, from none of the branches to all, and
+	// whether it admits exactly one and nothing else (nofOne), when the
+	// branch that matched produces the value.
+	nofExact float64
+	nofCount *node
+	nofOK    []bool
+	nofOne   bool
 
 	// Exact value match.
 	exactVals []any

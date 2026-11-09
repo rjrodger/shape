@@ -128,9 +128,9 @@ impl Token {
 pub enum ListMode {
     #[default]
     None,
-    One,
-    Some,
     All,
+    /// A count of the branches the value satisfies.
+    Nof,
 }
 
 /// The function of a custom validator: the current state and an update to
@@ -161,7 +161,7 @@ pub struct Node {
     pub kind: Kind,
     pub required: bool,
     pub required_set: bool,
-    /// The kind was named by the spec (a type token, `type_`), as against
+    /// The kind was named by the spec (a type token, `Type`), as against
     /// implied by a value: a key expression's example keeps the named kind
     /// and supplies the default alone.
     pub kind_set: bool,
@@ -212,7 +212,7 @@ pub struct Node {
     /// A `Fault` message overriding the structural text.
     pub fault_msg: Option<String>,
     /// Made by a builder given a wrong argument, as against a deliberate
-    /// `fault`: the string form refuses such a node.
+    /// `Fault`: the string form refuses such a node.
     pub arg_fault: bool,
 
     pub list_mode: ListMode,
@@ -220,6 +220,15 @@ pub struct Node {
     /// A Discriminated union: the tag it chooses by, and its branch names,
     /// which are the list in that order.
     pub disc: Option<crate::discriminated::Disc>,
+    /// A `Nof`'s count: a whole number (`nof_exact`), or a shape the number
+    /// of satisfied branches must satisfy (`nof_count`), the counts it
+    /// admits, from none of the branches to all of them, and whether it
+    /// admits exactly one and nothing else (`nof_one`), when the branch
+    /// that matched produces the value.
+    pub nof_exact: f64,
+    pub nof_count: Option<Box<Node>>,
+    pub nof_ok: Vec<bool>,
+    pub nof_one: bool,
 
     pub exact_vals: Vec<Value>,
     pub has_exact: bool,

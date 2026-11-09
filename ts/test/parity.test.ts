@@ -177,7 +177,7 @@ describe('parity', () => {
 
     // The expression keeps the kind it declared...
     assert.deepEqual(Shape({ 'a: Any': 0 })({ a: 'x' }), { a: 'x' })
-    assert.deepEqual(Shape({ 'a: One(String,Number)': 5 })({ a: 'q' }), { a: 'q' })
+    assert.deepEqual(Shape({ 'a: Nof(1,String,Number)': 5 })({ a: 'q' }), { a: 'q' })
 
     // ...and a constraint-only expression takes the example's.
     assert.match(
@@ -194,6 +194,47 @@ describe('parity', () => {
     // value since there is no builder to hand the example to.
     assert.deepEqual(Shape({ 'a: Skip(Number)': 5 })({}), {})
     assert.deepEqual(Shape({ 'a: 5': 3 })({}), { a: 5 })
+  })
+
+
+  test('an Exact that lists the example does not list it twice', () => {
+    assert.match(failure({ 'role: Exact("admin","user")': 'user' }, { role: 'x' }),
+      /must be exactly one of: admin, user$/)
+    assert.deepEqual(Shape({ 'role: Exact("admin","user")': 'user' })({}), { role: 'user' })
+
+    // An example it does not list joins the list, so the default is allowed.
+    assert.match(failure({ 'role: Exact("admin","user")': 'guest' }, { role: 'x' }),
+      /must be exactly one of: admin, user, guest$/)
+    assert.deepEqual(Shape({ 'role: Exact("admin","user")': 'guest' })({ role: 'guest' }), { role: 'guest' })
+
+    // A value that is not JSON is never the example.
+    assert.match(failure({ 'a: Exact(NaN,1)': 1 }, { a: 'x' }), /must be exactly one of: NaN, 1$/)
+  })
+
+
+  test("a key expression's example is a composition's default", () => {
+    // A composition reads its arguments as branches and a count, so the
+    // example is neither: the outermost composition takes it as its default.
+    assert.deepEqual(Shape({ 'a: Nof(1,String,Number)': 5 })({}), { a: 5 })
+    assert.deepEqual(Shape({ 'a: Nof(1,String,Number)': 5 })({ a: 7 }), { a: 7 })
+    assert.match(failure({ 'a: Nof(1,String,Number)': 5 }, { a: true }),
+      /satisfies 0 of: String, Number; the count must be 1\.$/)
+    assert.deepEqual(Shape({ 'a: All(Number,Min(2))': 5 })({}), { a: 5 })
+    assert.match(failure({ 'a: All(Number,Min(2))': 5 }, { a: 1 }),
+      /does not satisfy all of: Number, Min\(2\)$/)
+
+    // Inside a count, a branch or a wrapper, the outermost composition takes it.
+    assert.deepEqual(Shape({ 'a: Nof(Min(1),String,Number)': 5 })({}), { a: 5 })
+    assert.deepEqual(Shape({ 'a: Nof(1,All(Number,Min(2)),String)': 5 })({}), { a: 5 })
+    assert.deepEqual(Shape({ 'a: Optional(Nof(1,String,Number))': 5 })({ a: 7 }), { a: 7 })
+    assert.deepEqual(Shape({ 'a: Nof(1,String,Number).Optional': 5 })({}), { a: 5 })
+
+    // A wrapper outside the composition still has the last word.
+    assert.match(failure({ 'a: Required(Nof(1,String,Number))': 5 }, {}), /the property is missing/)
+
+    // It is written down as the default it is.
+    assert.deepEqual(Shape({ 'a: Nof(1,String,Number)': 5 }).json(),
+      { a: 'Default(5,Nof(1,String,Number))' })
   })
 
 

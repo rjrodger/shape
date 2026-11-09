@@ -96,15 +96,15 @@ fn node_schema(n: &Node, defs: &mut Map) -> Map {
     }
 
     // A default the shape injects. An undefined one is the zero of a kind
-    // that has none (Any, Date); only the null kind's null is a default.
+    // that has none (Any, Date); a null is a default as any value is, as
+    // Default(null, Number) injects it.
     let d = &n.default;
     let carries = !n.required
         && !n.skippable
         && n.has_default
         && !d.is_undefined()
         && !matches!(d, Value::Func(_))
-        && !matches!(d, Value::Num(f) if f.is_nan())
-        && (!d.is_null() || n.kind == Kind::Null);
+        && !matches!(d, Value::Num(f) if f.is_nan());
     if carries {
         s.insert("default".to_string(), d.clone());
     }
@@ -222,12 +222,52 @@ fn list_schema(n: &Node, s: &mut Map, defs: &mut Map) {
         s.insert("oneOf".to_string(), Value::Arr(branches));
         return;
     }
-    let key = if n.list_mode == ListMode::All {
-        "allOf"
-    } else {
-        "anyOf"
+    match n.list_mode {
+        ListMode::Nof => nof_schema(&n.nof_ok, branches, s),
+        _ => {
+            s.insert("allOf".to_string(), Value::Arr(branches));
+        }
+    }
+}
+
+/// A count of the shapes, as the keywords that count: none of them is not,
+/// exactly one oneOf, every one allOf. JSON Schema has no keyword for any
+/// other count, so it is bounded by what it rules out: anyOf when the count
+/// is never none, not allOf when it is never every one. That bound is exact
+/// for at least one, not every one, and both together.
+fn nof_schema(ok: &[bool], branches: Vec<Value>, s: &mut Map) {
+    let n = branches.len();
+    let only = |c: usize| ok.iter().enumerate().all(|(i, v)| *v == (i == c));
+    let keyed = |k: &str, v: Vec<Value>| {
+        let mut m = Map::new();
+        m.insert(k.to_string(), Value::Arr(v));
+        Value::Obj(m)
     };
-    s.insert(key.to_string(), Value::Arr(branches));
+    let admits = ok.iter().filter(|v| **v).count();
+    if admits == ok.len() {
+        return;
+    }
+    if admits == 0 {
+        s.insert("not".to_string(), Value::Obj(Map::new()));
+    } else if only(0) {
+        let not = if n == 1 {
+            branches[0].clone()
+        } else {
+            keyed("anyOf", branches)
+        };
+        s.insert("not".to_string(), not);
+    } else if only(1) {
+        s.insert("oneOf".to_string(), Value::Arr(branches));
+    } else if only(n) {
+        s.insert("allOf".to_string(), Value::Arr(branches));
+    } else {
+        if !ok[0] {
+            s.insert("anyOf".to_string(), Value::Arr(branches.clone()));
+        }
+        if !ok[n] {
+            s.insert("not".to_string(), keyed("allOf", branches));
+        }
+    }
 }
 
 /// The bounds a size builder puts on a value: the number family for a
@@ -327,7 +367,7 @@ fn check_schema(n: &Node, s: &mut Map) {
 mod tests {
     use super::*;
     use crate::builders::*;
-    use crate::discriminated::discriminated;
+    use crate::discriminated::Discriminated;
     use crate::node::Token;
     use crate::spec::{arr, obj, Spec};
     use crate::Schema;
@@ -341,12 +381,57 @@ mod tests {
     }
 
     #[test]
+    fn renders_a_count_as_the_keywords_that_count() {
+        let three = || {
+            [
+                Spec::from(Token::String),
+                Spec::from(Token::Number),
+                Spec::from(Token::Boolean),
+            ]
+        };
+        let two = || [Spec::from(Token::String), Spec::from(Token::Number)];
+        let str_ = json!({"type": "string", "minLength": 1});
+        let num = json!({"type": "number"});
+        let all3 = json!([str_, num, {"type": "boolean"}]);
+        assert_eq!(js(Nof(1, two())), json!({"oneOf": [str_, num]}));
+        assert_eq!(
+            js(Nof(0, [Spec::from(Token::String)])),
+            json!({"not": str_})
+        );
+        assert_eq!(js(Nof(0, two())), json!({"not": {"anyOf": [str_, num]}}));
+        assert_eq!(js(Nof(2, two())), json!({"allOf": [str_, num]}));
+        assert_eq!(js(Nof(Min(1, Any()), three())), json!({"anyOf": all3}));
+        assert_eq!(
+            js(Nof(Max(2, Any()), three())),
+            json!({"not": {"allOf": all3}})
+        );
+        assert_eq!(
+            js(Nof(Max(2, Min(1, Any())), three())),
+            json!({"anyOf": all3, "not": {"allOf": all3}})
+        );
+        // Any other count is bounded by what it rules out, or says nothing.
+        assert_eq!(js(Nof(Min(2, Any()), three())), json!({"anyOf": all3}));
+        assert_eq!(js(Nof(Exact([0, 3]), three())), json!({}));
+        // No count admitted, every count admitted, and no shapes at all.
+        assert_eq!(
+            js(Nof(Max(0, Min(1, Any())), [Spec::from(Token::String)])),
+            json!({"not": {}})
+        );
+        assert_eq!(
+            js(Nof(Min(0, Any()), [Spec::from(Token::String)])),
+            json!({})
+        );
+        assert_eq!(js(Nof(0, Vec::<Spec>::new())), json!({}));
+        assert_eq!(js(Nof(1, Vec::<Spec>::new())), json!({"not": {}}));
+    }
+
+    #[test]
     fn renders_kinds_and_containers() {
         assert_eq!(
             serde_json::Value::from(Schema::new(Token::String).json_schema()),
             json!({"$schema": JSON_SCHEMA_DRAFT, "type": "string", "minLength": 1})
         );
-        assert_eq!(js(empty(Token::String)), json!({"type": "string"}));
+        assert_eq!(js(Empty(Token::String)), json!({"type": "string"}));
         assert_eq!(
             js("x"),
             json!({"type": "string", "minLength": 1, "default": "x"})
@@ -359,7 +444,7 @@ mod tests {
             js(Regex::new("^a").unwrap()),
             json!({"type": "string", "pattern": "^a"})
         );
-        assert_eq!(js(never(any())), json!({"not": {}}));
+        assert_eq!(js(Never(Any())), json!({"not": {}}));
         assert_eq!(js(Token::Any), json!({}));
         assert_eq!(js(Token::Integer), json!({"type": "integer"}));
         assert_eq!(js(f64::NAN), json!({"type": "number"}));
@@ -370,12 +455,12 @@ mod tests {
         assert_eq!(js(Spec::Value(Value::Func(1))), json!({}));
         assert_eq!(js(Token::Function), json!({}));
         assert_eq!(
-            js(nullable(Token::Number)),
+            js(Nullable(Token::Number)),
             json!({"type": ["number", "null"]})
         );
-        assert_eq!(js(nullable(any())), json!({}));
+        assert_eq!(js(Nullable(Any())), json!({}));
         assert_eq!(
-            js(describe("d", Token::Boolean)),
+            js(Describe("d", Token::Boolean)),
             json!({"type": "boolean", "description": "d"})
         );
         assert_eq!(
@@ -387,11 +472,11 @@ mod tests {
         );
         assert_eq!(js(Token::Object), json!({"type": "object"}));
         assert_eq!(
-            js(optional(Token::Object)),
+            js(Optional(Token::Object)),
             json!({"type": "object", "default": {}})
         );
         assert_eq!(
-            js(child(Token::Number, Token::Object)),
+            js(Child(Token::Number, Token::Object)),
             json!({"type": "object", "additionalProperties": {"type": "number"}})
         );
         assert_eq!(js(Token::Array), json!({"type": "array"}));
@@ -404,14 +489,14 @@ mod tests {
             json!({"type": "array", "prefixItems": [{"type": "number"}, {"type": "string", "minLength": 1, "default": "x"}], "items": false})
         );
         assert_eq!(
-            js(rest(
+            js(Rest(
                 Token::String,
                 arr([Spec::from(Token::Number), Spec::from(1)])
             )),
             json!({"type": "array", "prefixItems": [{"type": "number"}, {"type": "number", "default": 1}], "items": {"type": "string", "minLength": 1}})
         );
         assert_eq!(
-            js(rest(
+            js(Rest(
                 Token::Any,
                 arr([Spec::from(Token::Number), Spec::from(1)])
             )),
@@ -422,113 +507,116 @@ mod tests {
 
     #[test]
     fn renders_checks_and_compositions() {
-        assert_eq!(js(exact(["a", "b"])), json!({"enum": ["a", "b"]}));
+        assert_eq!(js(Exact(["a", "b"])), json!({"enum": ["a", "b"]}));
         assert_eq!(
-            js(email(any())),
+            js(Email(Any())),
             json!({"type": "string", "minLength": 1, "format": "email"})
         );
         assert_eq!(
-            js(url(any())),
+            js(Url(Any())),
             json!({"type": "string", "minLength": 1, "format": "uri"})
         );
         assert_eq!(
-            js(uuid(any())),
+            js(Uuid(Any())),
             json!({"type": "string", "minLength": 1, "format": "uuid"})
         );
         assert_eq!(
-            js(date_time(any())),
+            js(DateTime(Any())),
             json!({"type": "string", "minLength": 1, "format": "date-time"})
         );
         assert_eq!(
-            js(ipv4(any())),
+            js(Ipv4(Any())),
             json!({"type": "string", "minLength": 1, "format": "ipv4"})
         );
         assert_eq!(
-            js(ipv6(any())),
+            js(Ipv6(Any())),
             json!({"type": "string", "minLength": 1, "format": "ipv6"})
         );
         assert_eq!(
-            js(ip(any())),
+            js(Ip(Any())),
             json!({"type": "string", "minLength": 1, "anyOf": [{"format": "ipv4"}, {"format": "ipv6"}]})
         );
         assert_eq!(
-            js(min(2, Token::Number)),
+            js(Min(2, Token::Number)),
             json!({"type": "number", "minimum": 2})
         );
         assert_eq!(
-            js(max(2, Token::Integer)),
+            js(Max(2, Token::Integer)),
             json!({"type": "integer", "maximum": 2})
         );
         assert_eq!(
-            js(above(2, Token::Number)),
+            js(Above(2, Token::Number)),
             json!({"type": "number", "exclusiveMinimum": 2})
         );
         assert_eq!(
-            js(below(2, Token::Number)),
+            js(Below(2, Token::Number)),
             json!({"type": "number", "exclusiveMaximum": 2})
         );
         assert_eq!(
-            js(len(2, Token::Number)),
+            js(Len(2, Token::Number)),
             json!({"type": "number", "minimum": 2, "maximum": 2})
         );
         assert_eq!(
-            js(above(2, Token::String)),
+            js(Above(2, Token::String)),
             json!({"type": "string", "minLength": 3})
         );
         assert_eq!(
-            js(below(2, Token::String)),
+            js(Below(2, Token::String)),
             json!({"type": "string", "minLength": 1, "maxLength": 1})
         );
         assert_eq!(
-            js(min(2, Token::Array)),
+            js(Min(2, Token::Array)),
             json!({"type": "array", "minItems": 2})
         );
         assert_eq!(
-            js(max(2, Token::Object)),
+            js(Max(2, Token::Object)),
             json!({"type": "object", "maxProperties": 2})
         );
         assert_eq!(
-            js(min(2, any())),
+            js(Min(2, Any())),
             json!({"minimum": 2, "minLength": 2, "minItems": 2, "minProperties": 2})
         );
         assert_eq!(
-            js(len(2, any())),
+            js(Len(2, Any())),
             json!({"minimum": 2, "maximum": 2, "minLength": 2, "maxLength": 2, "minItems": 2, "maxItems": 2, "minProperties": 2, "maxProperties": 2})
         );
         assert_eq!(
-            js(above(2, any())),
+            js(Above(2, Any())),
             json!({"exclusiveMinimum": 2, "minLength": 3, "minItems": 3, "minProperties": 3})
         );
         assert_eq!(
-            js(below(2, any())),
+            js(Below(2, Any())),
             json!({"exclusiveMaximum": 2, "maxLength": 1, "maxItems": 1, "maxProperties": 1})
         );
         assert_eq!(
-            js(check_re(Regex::new("^a").unwrap(), Token::String)),
+            js(CheckRe(Regex::new("^a").unwrap(), Token::String)),
             json!({"type": "string", "minLength": 1, "pattern": "^a"})
         );
         assert_eq!(
-            js(check(|_, _| true, Token::String)),
+            js(Check(|_, _| true, Token::String)),
             json!({"type": "string", "minLength": 1})
         );
         assert_eq!(
-            js(catch(0, min(2, Token::Number))),
+            js(Catch(0, Min(2, Token::Number))),
             json!({"type": "number", "minimum": 2})
         );
         assert_eq!(
-            js(coerce(transform(|v, _| v, max(2, Token::Number)))),
+            js(Coerce(Transform(|v, _| v, Max(2, Token::Number)))),
             json!({"type": "number", "maximum": 2})
         );
         assert_eq!(
-            js(one([Spec::from(Token::String), Spec::from(Token::Number)])),
-            json!({"anyOf": [{"type": "string", "minLength": 1}, {"type": "number"}]})
+            js(Nof(
+                1,
+                [Spec::from(Token::String), Spec::from(Token::Number)]
+            )),
+            json!({"oneOf": [{"type": "string", "minLength": 1}, {"type": "number"}]})
         );
         assert_eq!(
-            js(all([Spec::from(Token::Number), Spec::from(min(1, any()))])),
+            js(All([Spec::from(Token::Number), Spec::from(Min(1, Any()))])),
             json!({"allOf": [{"type": "number"}, {"minimum": 1, "minLength": 1, "minItems": 1, "minProperties": 1}]})
         );
         assert_eq!(
-            js(discriminated(
+            js(Discriminated(
                 "k",
                 [
                     ("a", obj([("x", Spec::from(Token::Number))])),
@@ -542,34 +630,34 @@ mod tests {
         );
         assert_eq!(
             js(obj([
-                ("a", Spec::from(define("d", Token::Number))),
-                ("b", Spec::from(refer("d", any())))
+                ("a", Spec::from(Define("d", Token::Number))),
+                ("b", Spec::from(Refer("d", Any())))
             ])),
             json!({"type": "object", "properties": {"a": {"type": "number"}, "b": {"$ref": "#/$defs/d"}}, "required": ["a"], "additionalProperties": false, "$defs": {"d": {"type": "number"}}})
         );
         assert_eq!(
-            js(describe("r", refer("d", any()))),
+            js(Describe("r", Refer("d", Any()))),
             json!({"$ref": "#/$defs/d", "description": "r"})
         );
         assert_eq!(
-            js(child(refer("d", any()), Token::Object)),
+            js(Child(Refer("d", Any()), Token::Object)),
             json!({"type": "object", "additionalProperties": {"$ref": "#/$defs/d"}})
         );
         assert_eq!(
-            js(arr([Spec::from(refer("d", any()))])),
+            js(arr([Spec::from(Refer("d", Any()))])),
             json!({"type": "array", "items": {"$ref": "#/$defs/d"}})
         );
-        assert_eq!(js(skip(Token::Number)), json!({"type": "number"}));
+        assert_eq!(js(Skip(Token::Number)), json!({"type": "number"}));
         // A branch that declares the tag itself lists it once.
         assert_eq!(
-            js(discriminated(
+            js(Discriminated(
                 "k",
                 [("a", obj([("k", Spec::from(Token::String))]))]
             )),
             json!({"oneOf": [{"type": "object", "properties": {"k": {"type": "string", "const": "a"}}, "required": ["k"], "additionalProperties": false}]})
         );
         assert_eq!(
-            js(optional(Token::Date)),
+            js(Optional(Token::Date)),
             json!({"type": "string", "format": "date-time"})
         );
         assert_eq!(

@@ -1,5 +1,5 @@
 //! The string form of a spec: `"String.Min(2)"`, `"Min(2, Number)"`,
-//! `"One(String, Number)"`. Builder names, type tokens, JSON literals and
+//! `"Nof(1, String, Number)"`. Builder names, type tokens, JSON literals and
 //! `/regexp/` tokens, chained with dots and given arguments in parentheses.
 
 use crate::algebra::{extend_node, omit_node, partial_node, pick_node, Names};
@@ -123,7 +123,7 @@ fn type_token(name: &str) -> Option<Token> {
     })
 }
 
-const BUILDERS: [&str; 45] = [
+const BUILDERS: [&str; 44] = [
     "Required",
     "Optional",
     "Open",
@@ -158,9 +158,8 @@ const BUILDERS: [&str; 45] = [
     "Below",
     "Len",
     "Check",
-    "One",
-    "Some",
     "All",
+    "Nof",
     "Child",
     "Rest",
     "Define",
@@ -179,8 +178,8 @@ fn is_builder(name: &str) -> bool {
 /// is `Type(String, Min(2))`. Bare, it is `Type(tok)` as well, so that a
 /// bare `Object` is closed, as `Type(Object)` is.
 fn type_node(tok: Token, args: Vec<Spec>) -> Node {
-    let spec = args.into_iter().next().unwrap_or_else(|| Spec::from(any()));
-    type_(tok, spec)
+    let spec = args.into_iter().next().unwrap_or_else(|| Spec::from(Any()));
+    Type(tok, spec)
 }
 
 /// A `/re/` token: held to the shared subset here, so that a pattern
@@ -281,7 +280,7 @@ impl<'s> Parser<'s> {
             return Ok(regexp_node_src(&re?));
         }
         if let Some(lit) = json_literal(&head) {
-            return Ok(default_of(lit));
+            return Ok(DefaultOf(lit));
         }
         self.unexpected(&head)
     }
@@ -300,7 +299,7 @@ impl<'s> Parser<'s> {
         if head == "Exact" {
             if let Spec::Node(n) = carrier {
                 let args = self.parse_args()?;
-                return Ok(n.exact(exact_vals(args)?));
+                return Ok(n.Exact(exact_vals(args)?));
             }
         }
         if is_builder(&head) {
@@ -313,7 +312,7 @@ impl<'s> Parser<'s> {
         // `.Array` is `Type(Array)` applied to the current node.
         if let Some(tok) = type_token(&head) {
             self.parse_args()?;
-            return Ok(type_(tok, carrier));
+            return Ok(Type(tok, carrier));
         }
         self.unexpected(&head)
     }
@@ -431,28 +430,28 @@ fn exact_vals(args: Vec<Spec>) -> Result<Vec<Value>, ExprError> {
 }
 
 fn build_call(name: &str, mut args: Vec<Spec>) -> Result<Node, ExprError> {
-    let any_spec = || Spec::from(any());
+    let any_spec = || Spec::from(Any());
     let unary =
-        |args: &mut Vec<Spec>, f: fn(Spec) -> Node| Ok(f(shape_at(args, 0, Spec::from(any()))));
+        |args: &mut Vec<Spec>, f: fn(Spec) -> Node| Ok(f(shape_at(args, 0, Spec::from(Any()))));
     match name {
-        "Required" => unary(&mut args, required),
-        "Optional" => unary(&mut args, optional),
-        "Open" => Ok(open(shape_at(&mut args, 0, Spec::Obj(Vec::new())))),
-        "Closed" => unary(&mut args, closed),
-        "Skip" => unary(&mut args, skip),
-        "Ignore" => unary(&mut args, ignore),
-        "Empty" => unary(&mut args, empty),
-        "Never" => unary(&mut args, never),
-        "Func" => unary(&mut args, func),
-        "Nullable" => unary(&mut args, nullable),
-        "Coerce" => unary(&mut args, coerce),
-        "Email" => unary(&mut args, email),
-        "Url" => unary(&mut args, url),
-        "Uuid" => unary(&mut args, uuid),
-        "DateTime" => unary(&mut args, date_time),
-        "Ip" => unary(&mut args, ip),
-        "Ipv4" => unary(&mut args, ipv4),
-        "Ipv6" => unary(&mut args, ipv6),
+        "Required" => unary(&mut args, Required),
+        "Optional" => unary(&mut args, Optional),
+        "Open" => Ok(Open(shape_at(&mut args, 0, Spec::Obj(Vec::new())))),
+        "Closed" => unary(&mut args, Closed),
+        "Skip" => unary(&mut args, Skip),
+        "Ignore" => unary(&mut args, Ignore),
+        "Empty" => unary(&mut args, Empty),
+        "Never" => unary(&mut args, Never),
+        "Func" => unary(&mut args, Func),
+        "Nullable" => unary(&mut args, Nullable),
+        "Coerce" => unary(&mut args, Coerce),
+        "Email" => unary(&mut args, Email),
+        "Url" => unary(&mut args, Url),
+        "Uuid" => unary(&mut args, Uuid),
+        "DateTime" => unary(&mut args, DateTime),
+        "Ip" => unary(&mut args, Ip),
+        "Ipv4" => unary(&mut args, Ipv4),
+        "Ipv6" => unary(&mut args, Ipv6),
         "Default" => {
             if args.is_empty() {
                 return err("Default: missing default value".to_string());
@@ -461,9 +460,9 @@ fn build_call(name: &str, mut args: Vec<Spec>) -> Result<Node, ExprError> {
                 return err("Default: default value must be a value".to_string());
             };
             if args.len() == 1 {
-                return Ok(default_of(dval));
+                return Ok(DefaultOf(dval));
             }
-            Ok(default(dval, shape_at(&mut args, 1, any_spec())))
+            Ok(Default(dval, shape_at(&mut args, 1, any_spec())))
         }
         "Catch" => {
             if args.is_empty() {
@@ -472,15 +471,15 @@ fn build_call(name: &str, mut args: Vec<Spec>) -> Result<Node, ExprError> {
             let Some(fb) = value_at(&args, 0) else {
                 return err("Catch: fallback value must be a value".to_string());
             };
-            Ok(catch(fb, shape_at(&mut args, 1, any_spec())))
+            Ok(Catch(fb, shape_at(&mut args, 1, any_spec())))
         }
         "Describe" => {
             let msg = string_at("Describe", "description", &args, 0)?;
-            Ok(describe(msg, shape_at(&mut args, 1, any_spec())))
+            Ok(Describe(msg, shape_at(&mut args, 1, any_spec())))
         }
         "Fault" => {
             let msg = string_at("Fault", "message", &args, 0)?;
-            Ok(fault(msg, shape_at(&mut args, 1, any_spec())))
+            Ok(Fault(msg, shape_at(&mut args, 1, any_spec())))
         }
         "Type" => {
             if args.is_empty() {
@@ -489,14 +488,14 @@ fn build_call(name: &str, mut args: Vec<Spec>) -> Result<Node, ExprError> {
             let kind = args.remove(0);
             let spec = shape_at(&mut args, 0, any_spec());
             Ok(match kind {
-                Spec::Node(n) => type_(*n, spec),
-                Spec::Token(t) => type_(t, spec),
-                Spec::Value(Value::Str(name)) => type_(name.as_str(), spec),
+                Spec::Node(n) => Type(*n, spec),
+                Spec::Token(t) => Type(t, spec),
+                Spec::Value(Value::Str(name)) => Type(name.as_str(), spec),
                 // Not a kind at all: the node stands as it is.
                 _ => normalize(spec),
             })
         }
-        "Exact" => Ok(exact(exact_vals(args)?)),
+        "Exact" => Ok(Exact(exact_vals(args)?)),
         "Discriminated" => {
             if args.len() < 2 {
                 return err("Discriminated: missing tag or branches".to_string());
@@ -505,7 +504,7 @@ fn build_call(name: &str, mut args: Vec<Spec>) -> Result<Node, ExprError> {
             let Spec::Obj(branches) = args.remove(1) else {
                 return err("Discriminated: branches must be an object".to_string());
             };
-            Ok(crate::discriminated::discriminated(tag, branches))
+            Ok(crate::discriminated::Discriminated(tag, branches))
         }
         "Min" | "Max" | "Above" | "Below" => {
             if args.is_empty() {
@@ -516,10 +515,10 @@ fn build_call(name: &str, mut args: Vec<Spec>) -> Result<Node, ExprError> {
             let bound = value_at(&args, 0).unwrap_or(Value::Undefined);
             let spec = shape_at(&mut args, 1, any_spec());
             Ok(match name {
-                "Min" => min(bound, spec),
-                "Max" => max(bound, spec),
-                "Above" => above(bound, spec),
-                _ => below(bound, spec),
+                "Min" => Min(bound, spec),
+                "Max" => Max(bound, spec),
+                "Above" => Above(bound, spec),
+                _ => Below(bound, spec),
             })
         }
         "Len" => {
@@ -532,7 +531,7 @@ fn build_call(name: &str, mut args: Vec<Spec>) -> Result<Node, ExprError> {
             if f != f.trunc() {
                 return err("Shape: Len needs a whole number of zero or more".to_string());
             }
-            Ok(len(f, shape_at(&mut args, 1, any_spec())))
+            Ok(Len(f, shape_at(&mut args, 1, any_spec())))
         }
         "Check" => {
             if args.is_empty() {
@@ -546,9 +545,14 @@ fn build_call(name: &str, mut args: Vec<Spec>) -> Result<Node, ExprError> {
                 _ => normalize(spec),
             })
         }
-        "One" => Ok(one(args)),
-        "Some" => Ok(some(args)),
-        "All" => Ok(all(args)),
+        "All" => Ok(All(args)),
+        "Nof" => {
+            if args.is_empty() {
+                return err(crate::builders::NOF_FAULT.to_string());
+            }
+            let count = args.remove(0);
+            Ok(Nof(count, args))
+        }
         "Child" => {
             if args.is_empty() {
                 return err("Child: missing child shape".to_string());
@@ -558,12 +562,12 @@ fn build_call(name: &str, mut args: Vec<Spec>) -> Result<Node, ExprError> {
             let spec = shape_at(
                 &mut args,
                 0,
-                Spec::from(default(
+                Spec::from(Default(
                     Value::Obj(Default::default()),
                     Spec::Obj(Vec::new()),
                 )),
             );
-            Ok(child(c, spec))
+            Ok(Child(c, spec))
         }
         "Rest" => {
             if args.is_empty() {
@@ -571,19 +575,19 @@ fn build_call(name: &str, mut args: Vec<Spec>) -> Result<Node, ExprError> {
             }
             let c = args.remove(0);
             let spec = shape_at(&mut args, 0, Spec::Arr(Vec::new()));
-            Ok(rest(c, spec))
+            Ok(Rest(c, spec))
         }
         "Define" => {
             let n = string_at("Define", "name", &args, 0)?;
-            Ok(define(n, shape_at(&mut args, 1, any_spec())))
+            Ok(Define(n, shape_at(&mut args, 1, any_spec())))
         }
         "Refer" => {
             let n = string_at("Refer", "name", &args, 0)?;
-            Ok(refer(n, shape_at(&mut args, 1, any_spec())))
+            Ok(Refer(n, shape_at(&mut args, 1, any_spec())))
         }
         "Rename" => {
             let n = string_at("Rename", "name", &args, 0)?;
-            Ok(rename(n, shape_at(&mut args, 1, any_spec())))
+            Ok(Rename(n, shape_at(&mut args, 1, any_spec())))
         }
         "Key" => {
             let vals: Vec<Value> = args
@@ -593,7 +597,7 @@ fn build_call(name: &str, mut args: Vec<Spec>) -> Result<Node, ExprError> {
                     _ => None,
                 })
                 .collect();
-            Ok(key_args(&vals))
+            Ok(KeyArgs(&vals))
         }
         "Pick" | "Omit" => {
             if args.is_empty() {
@@ -661,7 +665,8 @@ fn same_shape_node(x: &Node, y: &Node) -> bool {
 pub(crate) fn key_expr_node(src: &str, example: Spec) -> Node {
     let bare = expr(src);
     let or_fault = |r: Result<Node, ExprError>| r.unwrap_or_else(|e| fault_node(e.0));
-    if matches!(example, Spec::Value(Value::Null)) {
+    // No value at all is no example; a null is an example, as in TypeScript.
+    if matches!(example, Spec::Value(Value::Undefined)) {
         return or_fault(bare);
     }
     let ex = normalize(example.clone());
@@ -692,7 +697,7 @@ pub(crate) fn key_expr_node(src: &str, example: Spec) -> Node {
         }
     }
 
-    let Ok(mut node) = expr_apply(src, example.clone()) else {
+    let Ok(mut node) = example_apply(src, example.clone()) else {
         // Not a builder chain at all, a bare literal such as `a: 5`, so
         // there is nothing to hand the example to and the expression's own
         // value stands.
@@ -714,6 +719,109 @@ pub(crate) fn key_expr_node(src: &str, example: Spec) -> Node {
         }
     }
     node
+}
+
+/// The token that stands for a key expression's example in the expression
+/// it is applied to.
+const EXAMPLE_REF: &str = "$$example";
+
+/// A key expression's example applied to its expression, where TypeScript
+/// puts it: as the last argument of the call the first closing parenthesis
+/// ends, so a builder that takes a shape consumes it. `Min(2)` with 5 is
+/// `Min(2, 5)`, and `Required(Min(2))` with 5 is `Required(Min(2, 5))`. A
+/// composition reads each argument as a branch or its count, so the example
+/// is neither: when that call is a composition or sits inside one, the
+/// outermost such composition takes it as its default, and
+/// `Nof(1,String,Number)` with 5 reads as `Default(5,Nof(1,String,Number))`.
+/// When that call is not part of the head's own (`Required.Min(2)`, or a
+/// bare `Open`), `expr_apply` hands the example to the head instead, which
+/// is what TypeScript's chained call on the head's node amounts to.
+fn example_apply(src: &str, example: Spec) -> Result<Node, ExprError> {
+    let tokens = tokenize(src)?;
+    let Some(first) = tokens.iter().position(|t| t == ")") else {
+        return expr_apply(src, example);
+    };
+    if tokens.len() < 2 || tokens[1] != "(" || first > closing_paren(&tokens, 1) {
+        return expr_apply(src, example);
+    }
+    let composition =
+        (1..first).find(|&i| tokens[i] == "(" && matches!(tokens[i - 1].as_str(), "All" | "Nof"));
+    let (spliced, arg) = match composition {
+        Some(open) => {
+            let end = closing_paren(&tokens, open);
+            let mut wrapped: Vec<String> = tokens[..open - 1].to_vec();
+            wrapped.extend(["Default", "(", EXAMPLE_REF].map(String::from));
+            wrapped.extend_from_slice(&tokens[open - 1..=end]);
+            wrapped.push(")".to_string());
+            wrapped.extend_from_slice(&tokens[end + 1..]);
+            (wrapped, Spec::Value(example_value(&example)))
+        }
+        // An Exact that already lists the example would only list it
+        // twice; left alone, it still takes the example as its default.
+        None if exact_lists(&tokens, first, &example) => (tokens.clone(), example),
+        None => {
+            let mut spliced: Vec<String> = tokens[..first].to_vec();
+            spliced.push(EXAMPLE_REF.to_string());
+            spliced.extend_from_slice(&tokens[first..]);
+            (spliced, example)
+        }
+    };
+    let mut p = Parser::new(spliced, src);
+    p.refs.insert(EXAMPLE_REF.to_string(), arg);
+    p.parse_full()
+}
+
+/// Whether the call `tokens[close]` ends is an `Exact` already listing the
+/// example, a scalar: an object or array is never one, as TypeScript's
+/// Exact compares it by identity.
+fn exact_lists(tokens: &[String], close: usize, example: &Spec) -> bool {
+    let open = tokens[..close].iter().rposition(|t| t == "(").unwrap_or(0);
+    let Spec::Value(v) = example else {
+        return false;
+    };
+    if open < 1 || tokens[open - 1] != "Exact" || matches!(v, Value::Obj(_) | Value::Arr(_)) {
+        return false;
+    }
+    tokens[open + 1..close]
+        .iter()
+        .any(|t| json_literal(t).is_some_and(|lit| lit == *v))
+}
+
+/// The index of the parenthesis that closes the one at `tokens[open]`, or
+/// of the last token when none does: the expression is then malformed, and
+/// parsing it says so.
+fn closing_paren(tokens: &[String], open: usize) -> usize {
+    let mut depth = 1;
+    let mut i = open + 1;
+    while i < tokens.len() - 1 {
+        match tokens[i].as_str() {
+            "(" => depth += 1,
+            ")" => depth -= 1,
+            _ => {}
+        }
+        if depth == 0 {
+            return i;
+        }
+        i += 1;
+    }
+    i
+}
+
+/// A key expression's example as the value a composition defaults to: a
+/// literal is itself, and an object or array is its parts. A shape has no
+/// value, as a type function in a TypeScript default has none in JSON.
+fn example_value(example: &Spec) -> Value {
+    match example {
+        Spec::Value(v) => v.clone(),
+        Spec::Obj(pairs) => Value::Obj(
+            pairs
+                .iter()
+                .map(|(k, s)| (k.clone(), example_value(s)))
+                .collect(),
+        ),
+        Spec::Arr(items) => Value::Arr(items.iter().map(example_value).collect()),
+        _ => Value::Undefined,
+    }
 }
 
 /// The rule of a key expression: a name (quoted, or without spaces), a
@@ -741,7 +849,7 @@ pub(crate) fn split_key_expr(key: &str) -> Option<(String, String)> {
 
 /// The builders that read every argument for themselves, so a mark of one
 /// is the whole node rather than a chain around the object holding it.
-const COMPOSITION: [&str; 5] = ["One", "Some", "All", "Exact", "Discriminated"];
+const COMPOSITION: [&str; 4] = ["All", "Nof", "Exact", "Discriminated"];
 
 /// Read the declarative JSON of a shape, what `Schema::json` writes: every
 /// string is an expression (the example of a key expression is a value, so
@@ -840,6 +948,9 @@ mod tests {
     #[test]
     fn a_wrong_builder_argument_is_a_parse_error() {
         assert_eq!(fails("String.Min(\"x\")"), "Shape: Min needs a number");
+        for src in ["Nof(-1,String)", "Nof(1.5,String)", "Nof()"] {
+            assert_eq!(fails(src), crate::builders::NOF_FAULT, "{}", src);
+        }
         assert_eq!(
             fails("Len(-1)"),
             "Shape: Len needs a whole number of zero or more"
@@ -870,8 +981,8 @@ mod tests {
             ("Check(/^a/)", "Check.Check(/^a/)"),
             ("Check(/^a/, String)", "String.Check(/^a/)"),
             ("Check(1)", "Any"),
-            ("One(String, 1, NaN, /x/)", "One(String,1,NaN,/x/)"),
-            ("Some(Number)", "Some(Number)"),
+            ("Nof(1, String, 1, NaN, /x/)", "Nof(1,String,1,NaN,/x/)"),
+            ("Nof(Min(1), Number)", "Nof(Min(1),Number)"),
             ("All(Number)", "All(Number)"),
             ("Optional(Number)", "0"),
             ("Required()", "Any"),
@@ -926,7 +1037,7 @@ mod tests {
             ("Function", "Function"),
             ("String(Min(2))", "String.Min(2)"),
             ("Min(2).", "Min(2)"),
-            ("One(Number.Min(2), String)", "One(Number.Min(2),String)"),
+            ("All(Number.Min(2), String)", "All(Number.Min(2),String)"),
             ("Optional(Min(2).Number)", "0.Min(2)"),
             ("Optional(Number)", "0"),
             ("Min(2, /^a/)", "/^a/.Min(2)"),
@@ -1056,10 +1167,41 @@ mod tests {
     }
 
     #[test]
+    fn a_composition_takes_the_example_as_its_default() {
+        // A literal is itself, an object or array its parts, and a shape
+        // has no value.
+        assert_eq!(example_value(&Spec::from(5)), Value::from(5));
+        let mut m = crate::value::Map::new();
+        m.insert("x".to_string(), Value::from(1));
+        m.insert("y".to_string(), Value::Undefined);
+        assert_eq!(
+            example_value(&obj([
+                ("x", Spec::from(1)),
+                ("y", Spec::from(Token::Number))
+            ])),
+            Value::Obj(m)
+        );
+        assert_eq!(
+            example_value(&arr([Spec::from(1), Spec::from(Token::String)])),
+            Value::Arr(vec![Value::from(1), Value::Undefined])
+        );
+        assert_eq!(example_value(&Spec::from(Token::Number)), Value::Undefined);
+        // A shape as the example leaves the composition optional with
+        // nothing to inject.
+        let s = crate::Schema::new(obj([("a: Nof(1,String,Number)", Token::String)]));
+        assert_eq!(
+            s.validate(Value::Obj(crate::value::Map::new())).unwrap(),
+            Value::Obj(crate::value::Map::new())
+        );
+    }
+
+    #[test]
     fn key_expressions_take_the_example() {
         let s = |src: &str, ex: Spec| stringify_node(&key_expr_node(src, ex), false);
-        // A null example leaves the expression alone.
-        assert_eq!(s("Min(2)", Spec::Value(Value::Null)), "Min(2)");
+        // No value leaves the expression alone; a null is an example as any
+        // other value is, and Min(2) with it is the null kind.
+        assert_eq!(s("Min(2)", Spec::Value(Value::Undefined)), "Min(2)");
+        assert_eq!(s("Min(2)", Spec::Value(Value::Null)), "null");
         // A bare literal has no builder to hand the example to.
         assert_eq!(s("5", Spec::from(3)), "5");
         // A value-taking builder reads the example as its argument, and it

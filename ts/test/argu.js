@@ -27,8 +27,8 @@ let Argu = MakeArgu('QAZ')
 
 // function bar() {
 //   let args = Argu(arguments, 'bar', {
-//     'a: One(String,{})': {},
-//     'b: Ignore(One(String,{}))': {},
+//     'a: Nof(1,String,{})': {},
+//     'b: Ignore(Nof(1,String,{}))': {},
 //     c: Function,
 //   })
 //   console.log(arguments, args)

@@ -1,27 +1,42 @@
 name	spec	input	output	error
-some-open-defaults-first-wins	{"$call":["Some",{"$open":{"a":1}},{"$open":{"a":2}}]}	{}	{"a":2}	
-some-open-defaults-both	{"$call":["Some",{"$open":{"a":1}},{"$open":{"b":2}}]}	{}	{"b":2}	
-some-open-defaults-present	{"$call":["Some",{"$open":{"a":1}},{"$open":{"a":2}}]}	{"a":5,"q":9}	{"a":5,"q":9}	
-some-scalar-original	{"$call":["Some",{"$expr":"Coerce(Number)"},{"$expr":"Max(2)"}]}	"12"	"12"	
-some-scalar-last-wins	{"$call":["Some",{"$expr":"Max(2)"},{"$expr":"Coerce(Number)"}]}	"12"	12	
-some-replace-then-open	{"$call":["Some",{"$expr":"Catch(1,Number)"},{"$open":{"a":1}}]}	{}	{"a":1}	
-some-replace-then-open-present	{"$call":["Some",{"$expr":"Catch(1,Number)"},{"$open":{"a":1}}]}	{"a":5}	{"a":5}	
-some-replace-then-open-scalar	{"$call":["Some",{"$expr":"Catch(1,Number)"},{"$open":{"a":1}}]}	3	3	
 all-open-defaults	{"$call":["All",{"$open":{"a":1}},{"$open":{"b":2}}]}	{}	{"a":1,"b":2}	
 all-coerce-then-min	{"a":{"$expr":"All(Coerce(Number),Min(2))"}}	{"a":"5"}	{"a":5}	
 all-coerce-then-min-fail	{"a":{"$expr":"All(Coerce(Number),Min(2))"}}	{"a":"1"}		"Value \"1\" for property \"a\" does not satisfy all of: Number, Min(2)"
-one-open-default	{"$call":["One",{"$open":{"a":1}},{"$expr":"String"}]}	{}	{"a":1}	
 all-absent-required	{"a":{"$call":["All",{"$open":{"x":1}},{"$open":{"y":"a"}}]}}	{}		"Validation failed for property \"a\" because the property is missing."
-some-absent-required	{"a":{"$call":["Some",{"$open":{"x":1}},{"$expr":"String"}]}}	{}	{"a":{"x":1}}	
-one-absent-no-match	{"a":{"$expr":"One(String,Number)"}}	{}		"Value \"undefined\" for property \"a\" does not satisfy one of: String, Number"
-some-absent-no-match	{"a":{"$expr":"Some(String,Number)"}}	{}		"Value \"undefined\" for property \"a\" does not satisfy any of: String, Number"
 all-absent-fail	{"a":{"$expr":"All(String,Number)"}}	{}		"Value \"undefined\" for property \"a\" does not satisfy all of: String, Number"
-one-skip-branch-absent	{"a":{"$expr":"One(Skip(Number))"}}	{}		"Validation failed for property \"a\" because the property is missing."
-some-skip-branch-absent	{"a":{"$expr":"Some(Skip(Number))"}}	{}		"Validation failed for property \"a\" because the property is missing."
 all-skip-branch-absent	{"a":{"$expr":"All(Skip(Number))"}}	{}		"Validation failed for property \"a\" because the property is missing."
-one-skip-branch-present	{"a":{"$expr":"One(Skip(Number))"}}	{"a":1}	{"a":1}	
-one-absent-default-branch	{"a":{"$expr":"One(String,Number)"},"b":{"$call":["One",{"$expr":"Number"},{"$open":{"x":1}}]}}	{"a":"x"}	{"a":"x","b":{"x":1}}	
-some-failing-branch-leaks-nothing	{"$call":["Some",{"x":{"$expr":"Number"},"y":1},{"$open":{"z":3}}]}	{}	{"z":3}	
+nof-skip-branch-present	{"a":{"$expr":"Nof(1,Skip(Number))"}}	{"a":1}	{"a":1}	
+nof-failing-branch-leaks-nothing	{"$call":["Nof",1,{"x":{"$expr":"Number"},"y":1},{"$open":{"z":3}}]}	{}	{"z":3}	
+nof-one-ok	{"a":{"$expr":"Nof(1,Number,Integer)"}}	{"a":1.5}	{"a":1.5}	
+nof-one-two	{"a":{"$expr":"Nof(1,Number,Integer)"}}	{"a":1}		"Value \"1\" for property \"a\" satisfies 2 of: Number, Integer; the count must be 1."
+nof-one-none	{"a":{"$expr":"Nof(1,Number,Integer)"}}	{"a":"x"}		"Value \"x\" for property \"a\" satisfies 0 of: Number, Integer; the count must be 1."
+nof-zero-ok	{"a":{"$expr":"Nof(0,String)"}}	{"a":1}	{"a":1}	
+nof-zero-fail	{"a":{"$expr":"Nof(0,String)"}}	{"a":"x"}		"Value \"x\" for property \"a\" satisfies 1 of: String; the count must be 0."
+nof-zero-early	{"a":{"$expr":"Nof(0,String,Number,Boolean)"}}	{"a":"x"}		"Value \"x\" for property \"a\" satisfies 1 to 3 of: String, Number, Boolean; the count must be 0."
+nof-min-ok	{"a":{"$expr":"Nof(Min(1),String,Number,Boolean)"}}	{"a":true}	{"a":true}	
+nof-min-fail	{"a":{"$expr":"Nof(Min(1),String,Number,Boolean)"}}	{"a":null}		"Value \"null\" for property \"a\" satisfies 0 of: String, Number, Boolean; the count must be Min(1)."
+nof-min-early	{"a":{"$expr":"Nof(Min(2),String,Number,Boolean)"}}	{"a":true}		"Value \"true\" for property \"a\" satisfies 0 to 1 of: String, Number, Boolean; the count must be Min(2)."
+nof-range-ok	{"a":{"$expr":"Nof(Min(1).Max(2),Number,Integer,Min(2))"}}	{"a":2.5}	{"a":2.5}	
+nof-range-high	{"a":{"$expr":"Nof(Min(1).Max(2),Number,Integer,Min(2))"}}	{"a":3}		"Value \"3\" for property \"a\" satisfies 3 of: Number, Integer, Min(2); the count must be Min(1).Max(2)."
+nof-range-string	{"a":{"$expr":"Nof(Min(1).Max(2),Number,Integer,Min(2))"}}	{"a":"x"}		"Value \"x\" for property \"a\" satisfies 0 of: Number, Integer, Min(2); the count must be Min(1).Max(2)."
+nof-no-shapes	{"a":{"$expr":"Nof(1)"}}	{"a":1}		"Value \"1\" for property \"a\" satisfies 0 of: ; the count must be 1."
+nof-no-shapes-zero	{"a":{"$expr":"Nof(0)"}}	{"a":1}	{"a":1}	
+nof-absent-required	{"a":{"$expr":"Nof(1,String,Number)"}}	{}		"Validation failed for property \"a\" because the property is missing."
+nof-absent-optional	{"a":{"$expr":"Optional(Nof(1,String,Number))"}}	{}	{}	
+nof-skip-never-absent	{"a":{"$expr":"Skip(Nof(0,Any))"}}	{}	{}	
+nof-skip-never-present	{"a":{"$expr":"Skip(Nof(0,Any))"}}	{"a":1}		"Value \"1\" for property \"a\" satisfies 1 of: Any; the count must be 0."
+nof-one-produces	{"$call":["Nof",1,{"$open":{"b":2}},{"$expr":"Number"}]}	{"a":1}	{"a":1,"b":2}	
+nof-min-no-produce	{"$call":["Nof",{"$expr":"Min(1)"},{"$open":{"b":2}},{"$expr":"Number"}]}	{"a":1}	{"a":1}	
+nof-one-coerce-produces	{"a":{"$expr":"Nof(1,Coerce(Number),Boolean)"}}	{"a":"5"}	{"a":5}	
+nof-no-produce-object	{"a":{"$call":["Nof",1,{"x":{"$type":"Number"}},{"x":{"$type":"String"}}]}}	{"a":{"x":"y"}}	{"a":{"x":"y"}}	
+nof-in-all	{"a":{"$call":["All",{"$expr":"Nof(0,/^a/)"},{"$expr":"String"}]}}	{"a":"ab"}		"Value \"ab\" for property \"a\" does not satisfy all of: Nof(0,/^a/), String"
+nof-absent-default	{"a":{"$expr":"Default(\"x\",Nof(1,String,Number))"}}	{}	{"a":"x"}	
+all-absent-default	{"a":{"$expr":"Default(5,All(Number,Min(2)))"}}	{}	{"a":5}	
+default-null-number-injects	{"a":{"$expr":"Default(null,Number)"}}	{}	{"a":null}	
+default-null-untyped-is-null	{"a":{"$expr":"Default(null,Min(2))"}}	{"a":"x"}		"Validation failed for property \"a\" with string \"x\" because the string is not of type null."
+default-null-bare-injects	{"a":{"$expr":"Default(null)"}}	{}	{"a":null}	
+default-null-nof-injects	{"a":{"$expr":"Default(null,Nof(1,String,Number))"}}	{}	{"a":null}	
+all-never-message	{"a":{"$expr":"All(Never,String)"}}	{"a":"x"}		"Value \"x\" for property \"a\" does not satisfy all of: Never, String"
 default-untyped-kind	{"a":{"$expr":"Default(2,Required())"}}	{"a":"x"}		"Validation failed for property \"a\" with string \"x\" because the string is not of type number."
 default-untyped-absent	{"a":{"$expr":"Default(2,Required())"}}	{}	{"a":2}	
 default-untyped-describe	{"a":{"$expr":"Default(2,Describe(\"two\",Required()))"}}	{"a":3}	{"a":3}	
@@ -30,12 +45,12 @@ default-untyped-exact	{"a":{"$expr":"Default(2,Exact(2,3))"}}	{"a":3}	{"a":3}
 default-untyped-nullable	{"a":{"$expr":"Default(2,Nullable(Required()))"}}	{"a":null}	{"a":null}	
 default-untyped-empty	{"a":{"$expr":"Default(\"x\",Empty(Required()))"}}	{"a":""}	{"a":""}	
 all-any-token	{"a":{"$expr":"All(String,Any)"}}	{"a":1}		"Value \"1\" for property \"a\" does not satisfy all of: String, Any"
-one-min-any-token	{"a":{"$expr":"One(Number,Min(2,Any))"}}	{"a":"x"}		"Value \"x\" for property \"a\" does not satisfy one of: Number, Min(2)"
-one-of-ok	{"a":{"$expr":"One(Number,String)"}}	{"a":"x"}	{"a":"x"}	
-one-of-fail	{"a":{"$expr":"One(Number,String)"}}	{"a":true}		"Value \"true\" for property \"a\" does not satisfy one of: Number, String"
-some-of-ok	{"a":{"$expr":"Some(Number,String)"}}	{"a":5}	{"a":5}	
+nof-min-any-token	{"a":{"$expr":"Nof(1,Number,Min(2,Any))"}}	{"a":"x"}		"Value \"x\" for property \"a\" satisfies 0 of: Number, Min(2); the count must be 1."
+nof-of-ok	{"a":{"$expr":"Nof(1,Number,String)"}}	{"a":"x"}	{"a":"x"}	
+nof-of-fail	{"a":{"$expr":"Nof(1,Number,String)"}}	{"a":true}		"Value \"true\" for property \"a\" satisfies 0 of: Number, String; the count must be 1."
+nof-min-of-ok	{"a":{"$expr":"Nof(Min(1),Number,String)"}}	{"a":5}	{"a":5}	
 all-of-fail-message	{"a":{"$expr":"All(Number,Min(2))"}}	{"a":1}		"Value \"1\" for property \"a\" does not satisfy all of: Number, Min(2)"
 all-of-ok	{"a":{"$expr":"All(Number,Min(2))"}}	{"a":5}	{"a":5}	
-some-of-fail	{"a":{"$expr":"Some(Number,String)"}}	{"a":true}		"Value \"true\" for property \"a\" does not satisfy any of: Number, String"
-one-of-ignore-branch	{"a":{"$expr":"One(Ignore(Min(2,Number)),String)"}}	{"a":1}	{"a":1}	
+nof-min-of-fail	{"a":{"$expr":"Nof(Min(1),Number,String)"}}	{"a":true}		"Value \"true\" for property \"a\" satisfies 0 of: Number, String; the count must be Min(1)."
+nof-of-ignore-branch	{"a":{"$expr":"Nof(1,Ignore(Min(2,Number)),String)"}}	{"a":1}	{"a":1}	
 all-of-ignore-branch	{"a":{"$expr":"All(Ignore(Min(2,Number)),Number)"}}	{"a":1}	{"a":1}	

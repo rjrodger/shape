@@ -173,7 +173,7 @@ fn validator_call(v: &Validator, calls: &mut Vec<Call>) -> R<()> {
         }
         "Check" => return cannot("a check function"),
         // The list itself is the head of the expression.
-        "One" | "Some" | "All" | "Discriminated" => {}
+        "All" | "Discriminated" => {}
         _ if is_format(name) => calls.push(call(name)),
         // The check of a regexp is named by its pattern.
         _ if name.starts_with('/') => calls.push(call1("Check", name.to_string())),
@@ -680,12 +680,19 @@ pub fn node_json(n: &Node) -> R<Value> {
                     args: vec![Arg::Text(json_text(&d.tag)), Arg::Side(branches(n)?)],
                 },
                 None => {
+                    let mut args = Vec::with_capacity(n.list.len() + 1);
                     let mode = match n.list_mode {
-                        ListMode::Some => "Some",
-                        ListMode::All => "All",
-                        _ => "One",
+                        ListMode::Nof => {
+                            // A Nof's count leads its shapes: a number
+                            // inline, a shape as its value.
+                            args.push(match &n.nof_count {
+                                Some(c) => arg_of(c)?,
+                                None => Arg::Text(crate::value::js_number(n.nof_exact)),
+                            });
+                            "Nof"
+                        }
+                        _ => "All",
                     };
-                    let mut args = Vec::with_capacity(n.list.len());
                     for b in &n.list {
                         args.push(arg_of(b)?);
                     }
@@ -695,11 +702,25 @@ pub fn node_json(n: &Node) -> R<Value> {
                     }
                 }
             };
-            let mut calls = required_calls(n, true);
+            // A default the node injects is a Default around the list,
+            // which makes it optional too.
+            let dflt = n.has_default && !n.required && !n.skippable;
+            let mut calls = if dflt {
+                Vec::new()
+            } else {
+                required_calls(n, true)
+            };
             calls.extend(flag_calls(n, false)?);
             calls.extend(validator_calls(n, None)?);
             calls.extend(tail_calls(n));
-            let head_text = call_text(&head, &mut refs, None);
+            let mut head_text = call_text(&head, &mut refs, None);
+            if dflt {
+                head_text = format!(
+                    "Default({},{})",
+                    literal(&n.default, "the default")?,
+                    head_text
+                );
+            }
             let text = chain_text(&head_text, &calls, &mut refs);
             Ok(if refs.is_empty() {
                 Value::Str(text)

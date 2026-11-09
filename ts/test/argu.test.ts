@@ -29,7 +29,7 @@ const {
   Rest,
   Any,
   Empty,
-  One,
+  Nof,
   Default,
 } = Shape
 
@@ -81,7 +81,7 @@ describe('argu', () => {
 
     function bar(a: string | object, b?: object, c?: Function, d?: object) {
       let argmap = Argu(arguments, 'bar', {
-        a: One(Empty(String), Object),
+        a: Nof(1, Empty(String), Object),
         b: Skip(Object),
         c: Skip(Function),
         d: Skip(Object),
@@ -132,8 +132,8 @@ describe('argu', () => {
   test('plugin-args', () => {
     const Argu = MakeArgu('plugin')
     const argu: any = Argu('args', {
-      plugin: One(Object, Function, String),
-      options: Default(undefined, One(Object, String)),
+      plugin: Nof(1, Object, Function, String),
+      options: Default(undefined, Nof(1, Object, String)),
       callback: Skip(Function),
     })
 
@@ -154,7 +154,7 @@ describe('argu', () => {
     deepEqual(argu([{ x: 1 }, { y: 2 }, f1]), { plugin: { x: 1 }, options: { y: 2 }, callback: f1 })
 
     throws(() => argu([f0, f1]), 'plugin (args): Value "f1" for property "options"' +
-      ' does not satisfy one of: Object, String')
+      ' satisfies 0 of: Object, String; the count must be 1.')
 
     deepEqual(argu([Object.freeze({ x: 11 })]), { plugin: { x: 11 }, options: undefined, callback: undefined })
 

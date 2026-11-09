@@ -64,6 +64,12 @@ func TestSchemaSpec(t *testing.T) {
 	if m["kind"] != string(KindObject) {
 		t.Fatalf("expected object kind, got %v", m["kind"])
 	}
+	// A composition names its mode.
+	for want, s := range map[string]*Schema{"nof": MustShape(Nof(1, String)), "all": MustShape(All(String))} {
+		if got := s.Spec().(map[string]any)["listMode"]; got != want {
+			t.Fatalf("listMode = %v, want %v", got, want)
+		}
+	}
 }
 
 // --- Min / Max / Above / Below / Len ------------------------------------
@@ -154,20 +160,20 @@ func TestIgnoreSuppressesErrors(t *testing.T) {
 	}
 }
 
-// --- One / Some / All --------------------------------------------------
+// --- Nof / All ----------------------------------------------------------
 
-func TestOne(t *testing.T) {
-	s := MustShape(One(Number, String))
+func TestNofExactlyOne(t *testing.T) {
+	s := MustShape(Nof(1, Number, String))
 	mustValid(t, s, 5)
 	mustValid(t, s, "x")
-	mustInvalid(t, s, true, "one of")
+	mustInvalid(t, s, true, "satisfies 0 of")
 }
 
-func TestSome(t *testing.T) {
-	s := MustShape(Some(Number, String))
+func TestNofAtLeastOne(t *testing.T) {
+	s := MustShape(Nof(Min(1), Number, String))
 	mustValid(t, s, 1)
 	mustValid(t, s, "ok")
-	mustInvalid(t, s, true, "any of")
+	mustInvalid(t, s, true, "the count must be Min(1)")
 }
 
 func TestAll(t *testing.T) {

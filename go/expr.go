@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"reflect"
 	"regexp"
 	"strings"
 	"sync"
@@ -14,7 +15,7 @@ import (
 // Supported tokens:
 //   - Builder names: Required, Optional, Min, Max, Above, Below, Len, Check,
 //     Open, Closed, Skip, Ignore, Empty, Default, Fault, Never, Type, Exact,
-//     One, Some, All, Child, Rest, Define, Refer, Rename, Func, Key.
+//     All, Nof, Child, Rest, Define, Refer, Rename, Func, Key.
 //   - Type tokens: String, Number, Boolean, Object, Array, Function, Any.
 //   - Literals: JSON values (numbers, strings, true, false, null) and undefined/NaN.
 //   - Regexp: /pattern/.
@@ -104,7 +105,7 @@ func buildValue(spec any, example bool) (any, error) {
 
 // buildMark applies the expression under the mark to the object that holds
 // it. The sidecars are its arguments; the object's own keys are the shape a
-// chained builder takes, but a composition (One, Exact, ...) has no slot for
+// chained builder takes, but a composition (Nof, Exact, ...) has no slot for
 // a carrier and is read on its own, as it is in TypeScript, where the
 // carrier is the node the composition becomes.
 func buildMark(src string, carrier map[string]any) (any, error) {
@@ -140,7 +141,7 @@ func buildMark(src string, carrier map[string]any) (any, error) {
 
 // The builders that read every argument for themselves.
 var exprComposition = map[string]bool{
-	"One": true, "Some": true, "All": true, "Exact": true, "Discriminated": true,
+	"All": true, "Nof": true, "Exact": true, "Discriminated": true,
 }
 
 // Tokenization --------------------------------------------------------
@@ -351,6 +352,116 @@ func exprApply(src string, carrier any) (*Node, error) {
 		val = next
 	}
 	return buildize(val), nil
+}
+
+// exampleRef names a key expression's example among the tokens of the
+// expression it is applied to.
+const exampleRef = "$$example"
+
+// exampleApply applies a key expression's example to the expression, where
+// ts/src/shape.ts expr puts it: as the last argument of the call the first
+// closing parenthesis ends, so a builder that takes a shape consumes it.
+// "Min(2)" with 5 is Min(2, 5), and "Required(Min(2))" with 5 is
+// Required(Min(2, 5)). A composition reads each argument as a branch or its
+// count, so the example is neither: when that call is a composition or sits
+// inside one, the outermost such composition takes it as its default, and
+// Nof(1,String,Number) with 5 reads as Default(5,Nof(1,String,Number)). When
+// that call is not part of the head's own ("Required.Min(2)", or a bare
+// "Open"), exprApply hands the example to the head instead, which is what
+// TypeScript's chained call on the head's node amounts to.
+func exampleApply(src string, example any) (*Node, error) {
+	tokens, err := tokenize(src)
+	if err != nil {
+		return nil, err
+	}
+	first := len(tokens)
+	for i, t := range tokens {
+		if t == ")" {
+			first = i
+			break
+		}
+	}
+	if len(tokens) < 2 || tokens[1] != "(" || first == len(tokens) || first > closingParen(tokens, 1) {
+		return exprApply(src, example)
+	}
+	spliced := append([]string{}, tokens[:first]...)
+	spliced = append(spliced, exampleRef)
+	spliced = append(spliced, tokens[first:]...)
+	// An Exact that already lists the example would only list it twice;
+	// left alone, it still takes the example as its default.
+	if exactLists(tokens, first, example) {
+		spliced = tokens
+	}
+	for i := 1; i < first; i++ {
+		if tokens[i] == "(" && (tokens[i-1] == "All" || tokens[i-1] == "Nof") {
+			end := closingParen(tokens, i)
+			spliced = append([]string{}, tokens[:i-1]...)
+			spliced = append(spliced, "Default", "(", exampleRef)
+			spliced = append(spliced, tokens[i-1:end+1]...)
+			spliced = append(spliced, ")")
+			spliced = append(spliced, tokens[end+1:]...)
+			break
+		}
+	}
+	p := &exprParser{tokens: spliced, src: src, refs: map[string]any{exampleRef: example}}
+	return p.parseFull()
+}
+
+// exactLists reports whether the call the parenthesis at tokens[close] ends
+// is an Exact already listing the example, a scalar: an object or array is
+// never one, as TypeScript's Exact compares it by identity.
+func exactLists(tokens []string, close int, example any) bool {
+	open := close - 1
+	for open > 0 && tokens[open] != "(" {
+		open--
+	}
+	if open < 1 || tokens[open-1] != "Exact" {
+		return false
+	}
+	switch example.(type) {
+	case map[string]any, []any:
+		return false
+	}
+	for _, t := range tokens[open+1 : close] {
+		var lit any
+		if json.Unmarshal([]byte(t), &lit) == nil && sameScalar(lit, example) {
+			return true
+		}
+	}
+	return false
+}
+
+// sameScalar reports whether a JSON scalar equals a value, numbers by value
+// whatever their Go type.
+func sameScalar(lit, v any) bool {
+	if a, ok := toFloat64(lit); ok {
+		b, ok := toFloat64(v)
+		return ok && a == b
+	}
+	switch lit.(type) {
+	case string, bool, nil:
+		return reflect.DeepEqual(lit, v)
+	}
+	return false
+}
+
+// closingParen is the index of the parenthesis that closes the one at
+// tokens[open], or of the last token when none does: the expression is then
+// malformed, and parsing it says so.
+func closingParen(tokens []string, open int) int {
+	depth := 1
+	i := open + 1
+	for ; i < len(tokens)-1; i++ {
+		if tokens[i] == "(" {
+			depth++
+		} else if tokens[i] == ")" {
+			depth--
+		}
+		if depth == 0 {
+			return i
+		}
+	}
+	return i
 }
 
 // parseArgs reads "( arg, arg, ... )" if next token is "(".
@@ -618,15 +729,15 @@ func buildExprBuilders() map[string]exprBuilderFn {
 		}
 		return Check(args[0], exprShapes(args[1:])...), nil
 	},
-	"One": func(args []builderArg) (*Node, error) {
-		return One(exprShapes(args)...), nil
-	},
-	"Some": func(args []builderArg) (*Node, error) {
-		return Some(exprShapes(args)...), nil
-	},
 	"All": func(args []builderArg) (*Node, error) {
 		return All(exprShapes(args)...), nil
 	},
+		"Nof": func(args []builderArg) (*Node, error) {
+			if len(args) < 1 {
+				return nil, fmt.Errorf(nofFault)
+			}
+			return Nof(exprShape(args[0]), exprShapes(args[1:])...), nil
+		},
 	"Child": func(args []builderArg) (*Node, error) {
 		if len(args) < 1 {
 			return nil, fmt.Errorf("Child: missing child shape")

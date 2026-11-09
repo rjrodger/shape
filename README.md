@@ -106,7 +106,7 @@ shape to other validators across hosts and versions:
 - Optional-by-default: a literal is its own default and type.
 - Required fields via type markers.
 - Deep object/array filling and validation.
-- A rich, composable builder set (`Min`, `Max`, `One`, `Exact`, `Check`,
+- A rich, composable builder set (`Min`, `Max`, `Nof`, `Exact`, `Check`,
   `Rename`, `Refer`, …).
 - Coercion (`Coerce`), string formats (`Email`, `Url`, `Uuid`, `DateTime`,
   `Ip`), `Integer` and `Date` kinds, `Nullable`.

@@ -28,7 +28,7 @@ s, _ := shape.Shape(n)
 
 ### Grammar
 
-- **Builders** are called by name: `Min(2)`, `Max(10)`, `One(Number,String)`.
+- **Builders** are called by name: `Min(2)`, `Max(10)`, `Nof(1,Number,String)`.
 - **Chaining** with `.`: `Number.Min(1).Below(10)`. Adjacent builders without a
   dot also chain.
 - **Type tokens**: `String`, `Number`, `Boolean`, `Object`, `Array`,

@@ -55,7 +55,7 @@ row so the committed gate keeps it closed.
 - Error **message text**, including the aggregation separator (a newline), the
   order errors are reported in, the `undefined`-vs-`null` rendering, the
   `index`-vs-`property` wording, and how a node renders inside a composite
-  `One`/`Some`/`All` message.
+  `All`/`Nof` message.
 - The builder set, the chainable-method set, and the string DSL
   grammar—including the coercions, the string formats, the isolation builders
   (`Catch`, `Transform`, `Ignore`), discriminated unions and the object
@@ -135,9 +135,11 @@ Some differences are inherent to Go and are unlikely ever to close.
   there must return `false` rather than panic.
 
 - **Composite messages render object and array branches differently.** The
-  `does not satisfy one of` list of `One`/`Some`/`All` names each branch.
-  TypeScript renders a node branch in its spec form (`{a:1,$$:Open}`,
-  `[String,Number]`, `Exact(1,x)`, and `[Number]` for a rest tuple) and a
+  `does not satisfy all of` list of `All`, and the `satisfies 2 of` list of
+  `Nof`, name each branch, and a `Nof` names its count when the
+  count is a shape. TypeScript renders a node branch in its spec form
+  (`{a:1,$$:Open}`, `[String,Number]`, `Exact(1,x)`, and `[Number]` for a
+  rest tuple) and a
   plain object or array literal as JSON (`{"b":"String","c":["Number"]}`);
   Go and Rust render every branch from the compiled node, spaced (`{a:
   1}.Open()`, `[String, Number]`, `Exact(1, x)`, `[String, ...Number]`,
@@ -155,10 +157,10 @@ Some differences are inherent to Go and are unlikely ever to close.
 All three languages produce the same message *text*, and the Go `FieldError`
 and Rust `FieldError` carry the fields of TypeScript's `ErrDesc` (`why`,
 `check`, `mark`, `path`, `pathArr`, …). The codes differ for the built-in
-checks: TypeScript reports a bound, `One`/`Some`/`All` and `Exact` as
+checks: TypeScript reports a bound, `All`, `Nof` and `Exact` as
 `why: "check"` with mark 4000 and the builder's name in `check`, while Go and
 Rust report the builder's own code and mark (`why: "Min"`, mark 4011;
-`why: "One"`, mark 4030). The corpus compares text only, so this is a
+`why: "Nof"`, mark 4033). The corpus compares text only, so this is a
 documented divergence rather than a gated one.
 
 ## Contributing changes
@@ -191,8 +193,8 @@ divergences listed earlier do not apply to it:
 
 Its own divergences, each deliberate:
 
-- **Construction faults.** A builder called wrongly (`min("x", ..)`,
-  `define("", ..)`, `pick("z", ..)`) cannot throw, as in Go, and returns a
+- **Construction faults.** A builder called wrongly (`Min("x", ..)`,
+  `Define("", ..)`, `Pick("z", ..)`) cannot throw, as in Go, and returns a
   node that accepts nothing and reports the message at validation. In the
   string form (`Schema::parse`, key expressions) the fault is an error at
   parse time, as `expr` throws in TypeScript.

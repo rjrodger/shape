@@ -1,34 +1,55 @@
 # How to compose shapes
 
-**Goal:** accept a value that matches one of several shapes, or all of them, or
-a fixed set of literal values.
+**Goal:** accept a value that matches one of several shapes, all of them, a
+counted number of them, or a fixed set of literal values.
 
-## Exactly one of a set of shapes: `One`
+## Which to use
+
+| You want | Use |
+| -------- | --- |
+| exactly one of several shapes, with that shape's output | `Nof(1, …)` |
+| at least one of them, the value left as it was given | `Nof(Min(1), …)` |
+| none of them: "not this" | `Nof(0, …)` |
+| any other count: at least two, at most one, … | `Nof(count, …)` |
+| every one, each building on the last | `All(…)` |
+| one of a few literal values | `Exact(…)` |
+| one of several objects told apart by one property | `Discriminated(tag, { … })` |
+
+`Nof` counts; `All` threads. When the alternatives are objects with a tag
+property, prefer `Discriminated`: it reports the errors of the one branch the
+tag picks instead of a count over all of them.
+
+## Exactly one: `Nof(1, …)`
 
 **TS**
 
 ```js
-const { Shape, One } = require('shape')   // Number and String are the JS globals
-const id = Shape({ id: One(Number, String) })
+const { Shape, Nof } = require('shape')   // Number and String are the JS globals
+const id = Shape({ id: Nof(1, Number, String) })
 
 id({ id: 42 })     // OK
 id({ id: 'x42' })  // OK
-id({ id: true })   // throws: does not satisfy one of: Number, String
+id({ id: true })   // throws: satisfies 0 of: Number, String; the count must be 1.
 ```
 
 **Go**
 
 ```go
-s := shape.MustShape(map[string]any{"id": shape.One(shape.Number, shape.String)})
+s := shape.MustShape(map[string]any{"id": shape.Nof(1, shape.Number, shape.String)})
 ```
 
-## At least one: `Some`
+Exactly one means exactly one: a value two branches both satisfy fails. The
+branch that matched produces the value, so its defaults are filled in.
 
-`Some` passes if the value matches any branch.
+## At least one: `Nof(Min(1), …)`
 
 ```js
-Shape({ v: Some(Number, String) })
+Shape({ v: Nof(Min(1), Number, String) })
 ```
+
+The count is a shape here, `Min(1)`, which the number of matching branches
+must satisfy. `Nof` stops at the first match, and the value passes through as
+it was given.
 
 ## All of them: `All`
 
@@ -38,6 +59,42 @@ so defaults from earlier branches are visible to later ones.
 ```js
 Shape({ v: All(Number, Min(1), Max(9)) })   // number, and 1..9
 ```
+
+## A counted number of them: `Nof`
+
+`Nof` counts the branches the value satisfies, and passes when the count is
+one it admits. Give it a whole number for exactly that many, or a shape the
+count must satisfy:
+
+**TS**
+
+```js
+const { Shape, Nof, Min, Integer } = require('shape')
+
+// Exactly one: an integer satisfies Number and Integer both.
+const half = Shape({ v: Nof(1, Number, Integer) })
+half({ v: 1.5 })   // OK
+half({ v: 1 })     // throws: satisfies 2 of: Number, Integer; the count must be 1.
+
+// None: anything but a string.
+const notStr = Shape({ v: Nof(0, String) })
+notStr({ v: 1 })   // OK
+notStr({ v: 'x' }) // throws: satisfies 1 of: String; the count must be 0.
+
+// At least two of an uppercase letter, a digit and a symbol.
+const pw = Shape({ pw: Nof(Min(2), /[A-Z]/, /[0-9]/, /[^A-Za-z0-9]/) })
+pw({ pw: 'Abc1' }) // OK
+pw({ pw: 'abc!' }) // throws: satisfies 0 to 1 of: /[A-Z]/, /[0-9]/, /[^A-Za-z0-9]/; the count must be Min(2).
+```
+
+**Go**
+
+```go
+s := shape.MustShape(map[string]any{"v": shape.Nof(1, shape.Number, shape.Integer)})
+```
+
+The last failure counts "0 to 1" because `Nof` stopped after two branches:
+one branch left could not have reached two.
 
 ## One of a set of literal values: `Exact`
 
@@ -94,16 +151,19 @@ pet := shape.MustShape(shape.Discriminated("kind", map[string]any{
 
 ## Notes
 
-- `One` stops at the **first** matching branch and uses that branch's output.
-- `Some` and `All` evaluate **every** branch (no short-circuit), so default
-  injection from any branch is never skipped.
-- No branch changes the value it was given: each matches and produces from a
-  copy. `Some` takes the last matching branch's result (`Some(Open({a:1}),
-  Open({b:2}))` on `{}` gives `{b:2}`), `All` threads the result from branch
-  to branch (`{a:1,b:2}`), and a failing composition leaves the input as it
-  was.
+- `Nof` tries a branch only while the branches left untried could still
+  change the verdict, so `Nof(Min(1), …)` stops at the first match and
+  `Nof(1, …)` at the second.
+- No branch changes the value it was given: each is tried on a copy.
+  `Nof(1, …)` produces from the one branch that matched
+  (`Nof(1, Open({b:2}), Number)` on `{a:1}` gives `{a:1,b:2}`). Any other
+  count only checks, and the value passes through as it was given.
+- `All` evaluates **every** branch (no short-circuit) and threads the result
+  from branch to branch (`All(Open({a:1}), Open({b:2}))` on `{}` gives
+  `{a:1,b:2}`). A failing composition leaves the input as it was.
 - `Exact` also matches when the value is absent but the node's default equals one
   of the listed literals.
 - These builders are not chainable methods—call them as top-level builders.
-- An absent optional composition (`Optional(One(String, Number))`) is simply
-  absent; it is not put to its branches.
+- An absent optional composition (`Optional(Nof(1, String, Number))`) is simply
+  absent; it is not put to its branches. `Nof` never puts an absent value to
+  its branches, so a required one reports the value missing.

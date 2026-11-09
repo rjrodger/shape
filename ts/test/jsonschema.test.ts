@@ -15,8 +15,8 @@ const Shape: ShapeX = ShapeModule
 const {
   Above, All, Below, Catch, Check, Child, Closed, Coerce, Default, Define, Describe,
   Discriminated, Email, Empty, Exact, Ignore, Integer, Ip, Len, Max, Min, Never,
-  Nullable, One, Open, Optional, Refer, Rest, Skip, Some, Transform, Url, Uuid,
-  DateTime, Ipv4, Ipv6, Func,
+  Nullable, Open, Optional, Refer, Rest, Skip, Transform, Url, Uuid,
+  DateTime, Ipv4, Ipv6, Func, Nof,
 } = Shape as any
 
 const DRAFT = 'https://json-schema.org/draft/2020-12/schema'
@@ -118,14 +118,14 @@ describe('jsonschema', () => {
 
   test('composition-and-references', () => {
     const s = Shape({
-      a: One(String, Number), b: Some(String, Number), c: All(Number, Min(1)),
+      a: Nof(Min(1), String, Number), b: Nof(1, String, Number), c: All(Number, Min(1)),
       d: Discriminated('kind', { dog: { bark: Boolean }, fish: { fins: 1 }, cat: Object, bird: { kind: String, wings: 2 } }),
       e: Define('d', { z: 1 }), f: Refer('d'), g: Describe('a ref', Refer('d')),
     }).jsonSchema()
 
     deepEqual(s.properties, {
       a: { anyOf: [{ type: 'string', minLength: 1 }, { type: 'number' }] },
-      b: { anyOf: [{ type: 'string', minLength: 1 }, { type: 'number' }] },
+      b: { oneOf: [{ type: 'string', minLength: 1 }, { type: 'number' }] },
       c: { allOf: [{ type: 'number' }, { minimum: 1, minLength: 1, minItems: 1, minProperties: 1 }] },
       d: {
         oneOf: [
@@ -157,6 +157,40 @@ describe('jsonschema', () => {
     deepEqual(s.$defs, {
       d: { type: 'object', properties: { z: { type: 'number', default: 1 } }, additionalProperties: false },
     })
+  })
+
+
+  test('nof', () => {
+    const js = (spec: any) => {
+      const s = Shape(spec).jsonSchema()
+      delete s.$schema
+      return s
+    }
+    const str = { type: 'string', minLength: 1 }, num = { type: 'number' }, bool = { type: 'boolean' }
+
+    // The counts JSON Schema has a keyword for.
+    deepEqual(js(Nof(1, String, Number)), { oneOf: [str, num] })
+    deepEqual(js(Nof(0, String)), { not: str })
+    deepEqual(js(Nof(0, String, Number)), { not: { anyOf: [str, num] } })
+    deepEqual(js(Nof(2, String, Number)), { allOf: [str, num] })
+    deepEqual(js(Nof(Min(1), String, Number, Boolean)), { anyOf: [str, num, bool] })
+    deepEqual(js(Nof(Max(2), String, Number, Boolean)), { not: { allOf: [str, num, bool] } })
+    deepEqual(js(Nof(Max(2, Min(1)), String, Number, Boolean)),
+      { anyOf: [str, num, bool], not: { allOf: [str, num, bool] } })
+
+    // Any other count is bounded by what it rules out, or says nothing.
+    deepEqual(js(Nof(Min(2), String, Number, Boolean)), { anyOf: [str, num, bool] })
+    deepEqual(js(Nof(Exact(0, 3), String, Number, Boolean)), {})
+
+    // No count admitted, every count admitted, and no shapes at all.
+    deepEqual(js(Nof(Max(0, Min(1)), String)), { not: {} })
+    deepEqual(js(Nof(Min(0), String)), {})
+    deepEqual(js(Nof(0)), {})
+    deepEqual(js(Nof(1)), { not: {} })
+
+    // As a property, with its own annotations.
+    deepEqual(js({ a: Optional(Describe('d', Nof(1, String, Number))) }),
+      { type: 'object', properties: { a: { oneOf: [str, num], description: 'd' } }, additionalProperties: false })
   })
 
 

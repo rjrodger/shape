@@ -323,12 +323,10 @@ func callBuilder(name string, args []any) any {
 		return Rest(args[0], args[1:]...)
 	case "Child":
 		return Child(args[0], args[1:]...)
-	case "Some":
-		return Some(args...)
-	case "One":
-		return One(args...)
 	case "All":
 		return All(args...)
+	case "Nof":
+		return Nof(args[0], args[1:]...)
 	case "Refer":
 		// A name, or an options object as the TS form takes it.
 		if name, ok := args[0].(string); ok {

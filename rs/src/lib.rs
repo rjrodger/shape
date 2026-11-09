@@ -6,12 +6,16 @@
 //! is canonical and this one is held to it by a shared corpus.
 //!
 //! ```
-//! use shape::{obj, shape, Spec, Token, Value};
+//! use shape::{obj, Shape, Spec, Token, Value};
 //!
-//! let s = shape(obj([("name", Spec::from(Token::String)), ("port", Spec::from(8080))]));
+//! let s = Shape(obj([("name", Spec::from(Token::String)), ("port", Spec::from(8080))]));
 //! let out = s.validate(Value::from(serde_json::json!({ "name": "x" }))).unwrap();
 //! assert_eq!(serde_json::Value::from(out), serde_json::json!({ "name": "x", "port": 8080 }));
 //! ```
+
+// The builders keep the names they have in TypeScript and Go (Min,
+// Required, DateTime), as do their chain methods.
+#![allow(non_snake_case)]
 
 pub mod algebra;
 pub mod argu;
@@ -36,11 +40,11 @@ pub mod stringify;
 pub mod validate;
 pub mod value;
 
-pub use algebra::{extend, omit, partial, pick, Names};
+pub use algebra::{Extend, Names, Omit, Partial, Pick};
 pub use argu::{Argu, ArguError, Signature};
 pub use builders::*;
 pub use context::{Context, PathPart, State, Update, UpdateErr};
-pub use discriminated::{discriminated, Disc};
+pub use discriminated::{Disc, Discriminated};
 pub use error::{FieldError, ValidationError};
 pub use expr::build;
 pub use expr::{expr, expr_apply, ExprError};
@@ -66,14 +70,14 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 #[derive(Clone, Debug)]
 pub struct Schema {
     root: Node,
-    /// The `define`d nodes by name, for `refer`.
+    /// The `Define`d nodes by name, for `Refer`.
     defs: Arc<HashMap<String, Arc<Node>>>,
     /// No validator anywhere in the tree: a verdict needs no path.
     pure: bool,
 }
 
 /// Compile a spec.
-pub fn shape(spec: impl Into<Spec>) -> Schema {
+pub fn Shape(spec: impl Into<Spec>) -> Schema {
     Schema::new(spec)
 }
 
@@ -110,7 +114,7 @@ impl Schema {
         json_schema(&self.root)
     }
 
-    /// The `define`d nodes of the schema, by name.
+    /// The `Define`d nodes of the schema, by name.
     pub fn defs(&self) -> &HashMap<String, Arc<Node>> {
         &self.defs
     }
@@ -199,7 +203,7 @@ pub(crate) fn prepare_node(n: &mut Node) {
 }
 
 /// Walk a compiled tree once: every object node gets the set of keys it
-/// accepts and its keys to share with the paths, and every `define`d node
+/// accepts and its keys to share with the paths, and every `Define`d node
 /// is collected by name. Reports whether the tree has no validator at all.
 fn prepare(n: &mut Node, defs: &mut HashMap<String, Arc<Node>>) -> bool {
     let mut pure = n.befores.is_empty() && n.afters.is_empty();
@@ -302,7 +306,7 @@ mod tests {
 
     #[test]
     fn api() {
-        let s = shape(1);
+        let s = Shape(1);
         assert_eq!(s.validate(Value::Undefined).unwrap(), Value::Num(1.0));
         assert!(s.matches(&Value::Num(2.0)));
         assert!(!s.matches(&Value::Str("x".into())));
@@ -324,7 +328,7 @@ mod serde_tests {
 
     #[test]
     fn validates_into_a_type() {
-        let s = shape(obj([
+        let s = Shape(obj([
             ("name", Spec::from(Token::String)),
             ("port", Spec::from(8080)),
         ]));
@@ -341,7 +345,7 @@ mod serde_tests {
         let bad = s.validate_into::<Config>(Value::from(serde_json::json!({"name": 1})));
         assert!(matches!(bad, Err(IntoError::Validation(_))));
         assert!(bad.unwrap_err().to_string().contains("not of type string"));
-        let s = shape(obj([
+        let s = Shape(obj([
             ("name", Spec::from(Token::String)),
             ("port", Spec::from(-1)),
         ]));

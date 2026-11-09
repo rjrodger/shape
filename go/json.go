@@ -185,7 +185,7 @@ func jsonValidatorCall(v *validator, calls []jsonCall) []jsonCall {
 		return append(calls, jsonCall{n: name, a: args})
 	case name == "Check":
 		jsonFault("a check function")
-	case name == "One" || name == "Some" || name == "All" || name == "Discriminated":
+	case name == "All" || name == "Discriminated":
 		// The list itself is the head of the expression.
 	default:
 		jsonFault("a custom check " + name)
@@ -625,22 +625,38 @@ func nodeJSON(n *node) any {
 			head = jsonCall{n: "Discriminated", a: []jsonArg{
 				jx(jsonText(n.disc.tag)), {j: jsonBranches(n), side: true}}}
 		} else {
-			mode := "One"
+			mode := "All"
 			switch n.listMode {
-			case listSome:
-				mode = "Some"
-			case listAll:
-				mode = "All"
+			case listNof:
+				// A Nof's count leads its shapes: a number inline, a shape
+				// as its value.
+				mode = "Nof"
+				if n.nofCount == nil {
+					head.a = append(head.a, jx(fmtFloat(n.nofExact)))
+				} else {
+					head.a = append(head.a, jsonArgOf(n.nofCount))
+				}
 			}
-			head = jsonCall{n: mode}
+			head.n = mode
 			for _, b := range n.list {
 				head.a = append(head.a, jsonArgOf(b))
 			}
 		}
-		calls := append(jsonRequiredCalls(n, true), jsonFlagCalls(n, false)...)
+		// A default the node injects is a Default around the list, which
+		// makes it optional too.
+		dflt := n.hasDefault && !n.required && !n.skippable
+		var calls []jsonCall
+		if !dflt {
+			calls = jsonRequiredCalls(n, true)
+		}
+		calls = append(calls, jsonFlagCalls(n, false)...)
 		calls = append(calls, jsonValidatorCalls(n, nil)...)
 		calls = append(calls, jsonTailCalls(n)...)
-		text := jsonChainText(jsonCallText(head, refs, ""), calls, refs)
+		headText := jsonCallText(head, refs, "")
+		if dflt {
+			headText = "Default(" + jsonLiteral(n.defaultValue, "the default") + "," + headText + ")"
+		}
+		text := jsonChainText(headText, calls, refs)
 		if len(refs) == 0 {
 			return text
 		}
@@ -677,7 +693,7 @@ func nodeJSON(n *node) any {
 			head = "Required"
 		}
 		headRequired = n.required
-		if n.hasDefault && n.defaultValue != nil {
+		if n.hasDefault && (n.defaultValue != nil || n.defaultNull) {
 			head += "(" + jsonLiteral(n.defaultValue, "the default") + ")"
 		}
 		if n.open && (n.objRest == nil || jsonIsOpen(n.objRest)) {

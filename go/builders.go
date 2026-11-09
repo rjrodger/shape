@@ -211,12 +211,19 @@ func (n *Node) Empty() *Node {
 func Default(dval any, spec ...any) *Node {
 	var nb *Node
 	if len(spec) == 0 {
-		nb = buildize(dval)
+		// A nil here is the null default, so the shape is the null literal:
+		// buildize(nil) would be no shape at all.
+		if dval == nil {
+			nb = newNodeWrap(&node{kind: KindNull})
+		} else {
+			nb = buildize(dval)
+		}
 	} else {
 		nb = buildize(spec[0])
 		// An untyped shape (Required(), Exact(1)) is built over the default
-		// instead, and so takes the default's kind, as in TS.
-		if nb.n.kind == KindAny && dval != nil {
+		// instead, and so takes the default's kind, as in TS; a null default
+		// makes it the null kind.
+		if nb.n.kind == KindAny {
 			if base, err := normalize(dval); err == nil {
 				base.befores = append(append([]validator{}, nb.n.befores...), base.befores...)
 				bumpValidatorGen()
@@ -240,6 +247,7 @@ func Default(dval any, spec ...any) *Node {
 	nb.n.skippable = false
 	nb.n.hasDefault = true
 	nb.n.defaultValue = dval
+	nb.n.defaultNull = dval == nil
 	return nb
 }
 
@@ -250,6 +258,7 @@ func (n *Node) Default(dval any) *Node {
 	n.n.skippable = false
 	n.n.hasDefault = true
 	n.n.defaultValue = dval
+	n.n.defaultNull = dval == nil
 	return n
 }
 
@@ -327,9 +336,10 @@ func Type(kind any, spec ...any) *Node {
 		return nb
 	}
 
-	// Any keeps the value it is given as its default, as TS Any(0) does;
-	// the other tokens bring their own.
-	keep := tn.kind == KindAny && nb.n.hasDefault && nb.n.defaultValue != nil
+	// Any keeps the value it is given as its default, as TS Any(0) does, a
+	// null included (Any(null)); the other tokens bring their own.
+	keep := tn.kind == KindAny && nb.n.hasDefault && (nb.n.defaultValue != nil || nb.n.kind == KindNull)
+	nb.n.defaultNull = keep && nb.n.defaultValue == nil
 	nb.n.kind = tn.kind
 	nb.n.kindSet = true
 	nb.n.required = tn.required
@@ -918,19 +928,53 @@ func (n *Node) After(fn func(val any, update *Update, state *State) bool) *Node 
 	return n
 }
 
-// One requires the value to satisfy exactly one of the given shapes.
-func One(shapes ...any) *Node {
-	return makeListBuilder(listOne, shapes)
-}
-
-// Some requires the value to satisfy at least one shape.
-func Some(shapes ...any) *Node {
-	return makeListBuilder(listSome, shapes)
-}
-
 // All requires the value to satisfy every shape.
 func All(shapes ...any) *Node {
 	return makeListBuilder(listAll, shapes)
+}
+
+// nofFault is the message of a Nof whose count is neither a whole number of
+// zero or more nor a shape.
+const nofFault = "Shape: Nof needs a whole number of zero or more, or a shape for the count"
+
+// Nof requires the number of shapes the value satisfies to be one the count
+// admits. The count is a whole number, for exactly that many, or a shape the
+// number must satisfy: Nof(1, ...) is exactly one, Nof(Min(1), ...) at least
+// one, Nof(0, s) not s. A shape is tried only while the shapes left untried
+// could still change the verdict. A count of exactly one produces: the one
+// shape the value satisfies makes the result. Any other count only checks,
+// and the value is left as it was given. An absent value is not tried, so
+// whether it may be absent is the node's required or optional.
+func Nof(count any, shapes ...any) *Node {
+	exact, isNumber := toFloat64(count)
+	var counter *Schema
+	if isNumber {
+		if exact != math.Trunc(exact) || exact < 0 || math.IsInf(exact, 1) {
+			return fault(nofFault)
+		}
+	} else {
+		// A count that is itself a builder's fault is the fault: it is never
+		// validated, so its message would otherwise be lost.
+		if cn, ok := count.(*Node); ok && cn.n.argFault {
+			return cn
+		}
+		var err error
+		if counter, err = Shape(count); err != nil {
+			return fault(err.Error())
+		}
+	}
+	nb := makeListBuilder(listNof, shapes)
+	nb.n.nofExact = exact
+	nb.n.nofOne = len(shapes) > 0
+	for c := 0; c <= len(shapes); c++ {
+		ok := (counter == nil && float64(c) == exact) || (counter != nil && counter.Match(float64(c)))
+		nb.n.nofOK = append(nb.n.nofOK, ok)
+		nb.n.nofOne = nb.n.nofOne && ok == (c == 1)
+	}
+	if counter != nil {
+		nb.n.nofCount = counter.root
+	}
+	return nb
 }
 
 func makeListBuilder(mode listMode, shapes []any) *Node {
@@ -1398,9 +1442,8 @@ func GBefore(fn func(any, *Update, *State) bool, spec ...any) *Node {
 func GAfter(fn func(any, *Update, *State) bool, spec ...any) *Node {
 	return After(fn, spec...)
 }
-func GOne(shapes ...any) *Node               { return One(shapes...) }
-func GSome(shapes ...any) *Node              { return Some(shapes...) }
 func GAll(shapes ...any) *Node               { return All(shapes...) }
+func GNof(count any, shapes ...any) *Node    { return Nof(count, shapes...) }
 func GChild(child any, spec ...any) *Node    { return Child(child, spec...) }
 func GRest(child any, spec ...any) *Node     { return Rest(child, spec...) }
 func GDefine(name string, spec ...any) *Node { return Define(name, spec...) }
@@ -1453,6 +1496,11 @@ func toFloat(v any) float64 {
 func boundDefers(state *State) bool {
 	n := state.Node
 	if state.absent && (n.skippable || !n.required) {
+		return true
+	}
+	// An absent value fails a declared null kind, as it fails any other:
+	// its nil only looks like the null.
+	if state.absent && n.kind == KindNull {
 		return true
 	}
 	return typeWillFail(n, state.Value)

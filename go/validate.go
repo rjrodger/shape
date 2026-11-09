@@ -220,7 +220,7 @@ func validateStructure(n *node, state *State, absent bool, path []string, pathAr
 
 	// Composition shortcuts. An absent value on a node that does not require
 	// one is not put to the branches: TS drops the errors such a check would
-	// raise, so Optional(One(...)) given nothing is simply absent.
+	// raise, so Optional(All(...)) given nothing is simply absent.
 	if n.kind == KindList && n.listMode != listNone && !(absent && !n.required) {
 		before := verr.count()
 		out := evaluateList(n, state.Value, path, pathArr, key, parent, ctx, match, verr, absent)
@@ -662,9 +662,10 @@ func validateObject(n *node, in any, path []string, pathArr []any, parent any, c
 			}
 			// A nil produced value means nothing was injected (required error, or
 			// an optional field with no default) — omit the key, matching TS.
-			// The exception is a null literal, whose default is the null
-			// itself: TS injects it, so the key is present and null.
-			if produced == nil && !(cn.kind == KindNull && cn.hasDefault && !cn.required) {
+			// The exception is a null default, a null literal's own or one
+			// Default(null, ...) gave: TS injects it, so the key is present
+			// and null.
+			if produced == nil && !(cn.hasDefault && !cn.required && (cn.kind == KindNull || cn.defaultNull)) {
 				continue
 			}
 		} else {
@@ -868,70 +869,6 @@ func evaluateList(n *node, in any, path []string, pathArr []any, key string, par
 	}
 
 	switch n.listMode {
-	case listOne:
-		passN := 0
-		var winner any = in
-		for _, sn := range n.list {
-			sub := &ValidationError{}
-			out := validateNode(sn, branchIn, path, pathArr, key, parent, ctx, true, sub)
-			if !sub.hasAny() {
-				passN++
-				if passN == 1 {
-					if !match {
-						out2 := validateNode(sn, branchIn, path, pathArr, key, parent, ctx, false, &ValidationError{})
-						winner = out2
-					} else {
-						winner = out
-					}
-					break
-				}
-			}
-		}
-		if passN != 1 {
-			state := &State{Path: path, PathArr: pathArr, Key: key, Value: in, Node: n, Match: match, Ctx: ctx, absent: absent}
-			err := makeErr(state, WhyOne, 4030,
-				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" does not satisfy one of: %s", listShapeNames(n)))
-			if n.faultMsg != "" {
-				if !err.terse {
-					err.Text = expandErrText(n.faultMsg, err.Path, in)
-				}
-			}
-			if !n.silent {
-				verr.add(err)
-			}
-			return in
-		}
-		return winner
-	case listSome:
-		// Every branch sees the value as it was given, never one another
-		// branch changed: each matching branch produces from the original
-		// (copy-on-write, so the original stays as it was), and the last
-		// one's result stands.
-		matched := false
-		var winner any = branchIn
-		for _, sn := range n.list {
-			sub := &ValidationError{}
-			validateNode(sn, branchIn, path, pathArr, key, parent, ctx, true, sub)
-			if !sub.hasAny() {
-				matched = true
-				winner = validateNode(sn, branchIn, path, pathArr, key, parent, ctx, match, &ValidationError{})
-			}
-		}
-		if !matched {
-			state := &State{Path: path, PathArr: pathArr, Key: key, Value: in, Node: n, Match: match, Ctx: ctx, absent: absent}
-			err := makeErr(state, WhySome, 4031,
-				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" does not satisfy any of: %s", listShapeNames(n)))
-			if n.faultMsg != "" {
-				if !err.terse {
-					err.Text = expandErrText(n.faultMsg, err.Path, in)
-				}
-			}
-			if !n.silent {
-				verr.add(err)
-			}
-			return in
-		}
-		return winner
 	case listAll:
 		passAll := true
 		out := in
@@ -965,8 +902,84 @@ func evaluateList(n *node, in any, path []string, pathArr []any, key string, par
 			return in
 		}
 		return out
+	case listNof:
+		// An absent value is not tried: the required check speaks for it.
+		if absent {
+			return in
+		}
+		// A branch is tried only while the untried could change the verdict.
+		k, tried, total, matched := 0, 0, len(n.list), 0
+		var matchedOut any
+		for nofSpan(n.nofOK, k, total-tried) == nofSome {
+			sub := &ValidationError{}
+			out := validateNode(n.list[tried], branchIn, path, pathArr, key, parent, ctx, true, sub)
+			if !sub.hasAny() {
+				k++
+				matched, matchedOut = tried, out
+			}
+			tried++
+		}
+		if nofSpan(n.nofOK, k, total-tried) == nofNone {
+			state := &State{Path: path, PathArr: pathArr, Key: key, Value: in, Node: n, Match: match, Ctx: ctx, absent: absent}
+			admitted := strconv.Itoa(k)
+			if tried < total {
+				admitted += " to " + strconv.Itoa(k+total-tried)
+			}
+			// The message is the Nof's own, so a Fault does not replace it:
+			// as in TypeScript, a Fault speaks for structural failures only.
+			err := makeErr(state, WhyNof, 4033,
+				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" satisfies %s of: %s; the count must be %s.",
+					admitted, listShapeNames(n), nofCountText(n)))
+			if !n.silent {
+				verr.add(err)
+			}
+			return in
+		}
+		// Exactly one: the branch the value satisfies produces it.
+		if n.nofOne {
+			if !match {
+				return validateNode(n.list[matched], branchIn, path, pathArr, key, parent, ctx, false, &ValidationError{})
+			}
+			return matchedOut
+		}
+		return in
 	}
 	return in
+}
+
+// The verdicts of a span of counts, for a Nof deciding whether to try
+// another branch.
+const (
+	nofNone = 0
+	nofSome = 1
+	nofAll  = 2
+)
+
+// nofSpan reports whether the counts from k to k+open are all admitted, some
+// or none: a branch is tried only while it is some.
+func nofSpan(ok []bool, k, open int) int {
+	yes := 0
+	for c := k; c <= k+open; c++ {
+		if ok[c] {
+			yes++
+		}
+	}
+	switch yes {
+	case 0:
+		return nofNone
+	case open + 1:
+		return nofAll
+	}
+	return nofSome
+}
+
+// nofCountText renders a Nof's count as TypeScript does: the whole number,
+// or the shape for it.
+func nofCountText(n *node) string {
+	if n.nofCount == nil {
+		return fmtFloat(n.nofExact)
+	}
+	return stringifyNode(n.nofCount, true)
 }
 
 func listShapeNames(n *node) string {

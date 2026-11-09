@@ -12,7 +12,7 @@ if (ShapeModule.Shape) {
   ShapeModule = ShapeModule.Shape
 }
 const Shape: ShapeX = ShapeModule
-const { buildize, Min, Max, Some, One, All, Open, Coerce, fromJsonSchema } = ShapeModule
+const { buildize, Min, Max, Nof, All, Open, Coerce, fromJsonSchema } = ShapeModule
 
 describe('review', () => {
   test('a chained Rest keeps the tuple', () => {
@@ -42,17 +42,14 @@ describe('review', () => {
     assert.deepEqual(Shape({ a: Min(2, 'abc') })({}), { a: 'abc' })
   })
 
-  test('One, Some and All never change the value they are given', () => {
-    // Every Some branch sees the original; the last matching result stands.
+  test('All and Nof never change the value they are given', () => {
+    // A Nof that only checks leaves the value as it was given.
     const input = {}
-    assert.deepEqual(Shape(Some(Open({ a: 1 }), Open({ a: 2 })))(input), { a: 2 })
+    assert.deepEqual(Shape(Nof(Min(1), Open({ a: 1 }), Open({ a: 2 })))(input), {})
     assert.deepEqual(input, {})
-    assert.deepEqual(Shape(Some(Open({ a: 1 }), Open({ b: 2 })))({}), { b: 2 })
-    assert.equal(Shape(Some(Coerce(Number), Max(2)))('12'), '12')
-    assert.equal(Shape(Some(Max(2), Coerce(Number)))('12'), 12)
-    assert.deepEqual(Shape(Some(Coerce(Number), Open({ a: 1 })))({}), { a: 1 })
+    assert.equal(Shape(Nof(Min(1), Coerce(Number), Max(2)))('12'), '12')
     // A failing branch leaks nothing into the value.
-    assert.deepEqual(Shape(Some({ x: Number, y: 1 }, Open({ z: 3 })))({}), { z: 3 })
+    assert.deepEqual(Shape(Nof(1, { x: Number, y: 1 }, Open({ z: 3 })))({}), { z: 3 })
     // All threads a copy; a failing composition leaves the input untouched.
     const inner = {}
     const parent = { x: inner }
@@ -62,9 +59,9 @@ describe('review', () => {
     const failing = {}
     assert.throws(() => Shape(All(Open({ a: 1 }), { z: String }))(failing), /does not satisfy all of/)
     assert.deepEqual(failing, {})
-    // One produces from a copy too.
+    // A count of one produces from a copy too.
     const one = {}
-    assert.deepEqual(Shape(One(Open({ a: 1 }), String))(one), { a: 1 })
+    assert.deepEqual(Shape(Nof(1, Open({ a: 1 }), String))(one), { a: 1 })
     assert.deepEqual(one, {})
   })
 

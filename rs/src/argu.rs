@@ -1,6 +1,6 @@
 //! Argu: positional arguments matched against an ordered spec, as a call
 //! signature is: `argu.validate(args, "foo", spec)` gives the arguments by
-//! name. A `skip` slot is optional and shifts the ones after it; a `rest`
+//! name. A `Skip` slot is optional and shifts the ones after it; a `Rest`
 //! slot captures whatever remains.
 
 use crate::context::Context;
@@ -187,7 +187,7 @@ impl Signature {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::builders::{rest, skip};
+    use crate::builders::{Rest, Skip};
     use crate::node::Token;
 
     #[test]
@@ -227,7 +227,7 @@ mod tests {
                 vec![Value::from("x")],
                 "",
                 [
-                    ("a", Spec::from(skip(Token::Number))),
+                    ("a", Spec::from(Skip(Token::Number))),
                     ("b", Spec::from(Token::String)),
                 ],
             )
@@ -241,7 +241,7 @@ mod tests {
                 vec![Value::from(1), Value::from("x")],
                 "",
                 [
-                    ("a", Spec::from(skip(Token::Number))),
+                    ("a", Spec::from(Skip(Token::Number))),
                     ("b", Spec::from(Token::String)),
                 ],
             )
@@ -251,7 +251,7 @@ mod tests {
             serde_json::json!({"a": 1, "b": "x"})
         );
         let out = argu
-            .validate(vec![], "", [("a", Spec::from(skip(Token::Number)))])
+            .validate(vec![], "", [("a", Spec::from(Skip(Token::Number)))])
             .unwrap();
         assert_eq!(
             serde_json::Value::from(Value::Obj(out)),
@@ -266,7 +266,7 @@ mod tests {
                     ("a", Spec::from(Token::Number)),
                     (
                         "d",
-                        Spec::from(rest(Token::Number, crate::spec::arr::<Spec>([]))),
+                        Spec::from(Rest(Token::Number, crate::spec::arr::<Spec>([]))),
                     ),
                 ],
             )
@@ -283,7 +283,7 @@ mod tests {
                     ("a", Spec::from(Token::Number)),
                     (
                         "d",
-                        Spec::from(rest(Token::Any, crate::spec::arr::<Spec>([]))),
+                        Spec::from(Rest(Token::Any, crate::spec::arr::<Spec>([]))),
                     ),
                 ],
             )
@@ -300,7 +300,7 @@ mod tests {
                     ("a", Spec::from(Token::Number)),
                     (
                         "d",
-                        Spec::from(rest(Token::Number, crate::spec::arr::<Spec>([])))
+                        Spec::from(Rest(Token::Number, crate::spec::arr::<Spec>([])))
                     )
                 ],
             )

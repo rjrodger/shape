@@ -75,12 +75,12 @@ throwing. See [the Shape API](../docs/reference/shape-api.md) and
 
 ## Builders
 
-Every builder is a named export, a property of `Shape`, and—except `One`,
-`Some`, `All`, `Exact` and `Discriminated`—a chainable method on a node.
+Every builder is a named export, a property of `Shape`, and—except `All`,
+`Nof`, `Exact` and `Discriminated`—a chainable method on a node.
 `G`-prefixed aliases (`GMin`, `GPick`, …) avoid clashes with local names.
 
 ```js
-const { Shape, Required, Optional, Min, Max, Email, Exact, Coerce, One, Open } = require('shape')
+const { Shape, Required, Optional, Min, Max, Email, Exact, Coerce, Nof, Open } = require('shape')
 
 Shape({
   name:  Min(1, String),                 // required, at least one character
@@ -88,7 +88,7 @@ Shape({
   email: Email,                          // a required email address
   role:  Exact('admin', 'user'),         // one of these
   tags:  Optional([String]),             // an optional array of strings
-  id:    One(Number, String),            // either kind
+  id:    Nof(1, Number, String),         // exactly one of these kinds
   addr:  Open({ city: String }),         // other keys allowed
 })
 
@@ -104,7 +104,7 @@ Required(Number).Min(2)                  // the same builders, chained
 | Bounds | `Min` `Max` `Above` `Below` `Len`—value for numbers, length for strings, arrays and objects |
 | Custom checks | `Check` (a function or a `RegExp`) `Before` `After` |
 | Isolation | `Catch(fallback, …)` `Transform(fn, …)` `Describe(text, …)` |
-| Composition | `One` `Some` `All` `Discriminated(tag, { … })` |
+| Composition | `All` `Nof(count, …)` `Discriminated(tag, { … })` |
 | Objects / arrays | `Open` `Closed` `Child` `Rest` |
 | Object algebra | `Pick` `Omit` `Partial` `Extend`—each builds a new object shape out of another |
 | References | `Define` `Refer` `Rename` |

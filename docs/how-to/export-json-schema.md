@@ -74,13 +74,19 @@ alongside the validation results.
 | `Exact` | `enum` |
 | `Email`, `Url`, `Uuid`, `DateTime`, `Ipv4`, `Ipv6` | `format`; `Ip` is an `anyOf` of the two |
 | a bare `/re/`, `Check(/re/)` | `pattern` |
-| `One`, `Some` / `All` | `anyOf` / `allOf` |
+| `All` | `allOf` |
+| `Nof` | a count of none, exactly one or every branch: `not` (of an `anyOf` when there are several), `oneOf`, `allOf`; at least one is `anyOf`, and not every one is `not` of an `allOf` |
 | `Discriminated` | `oneOf`, each branch with the tag as a `const` and required |
 | `Nullable` | `type: [t, "null"]` |
 | `Define(name)` / `Refer(name)` | the definition under `$defs`; `{ "$ref": "#/$defs/name" }` |
 | `Describe` | `description` |
 | `Never` | `{ "not": {} }` |
 | `Any`, `Func`, a function `Check` | `{}`—nothing to say |
+
+JSON Schema has no keyword for any other count, so a `Nof` such as
+`Nof(Min(2), a, b, c)` exports the bound it implies: `anyOf` when the count
+never admits none, `not` of an `allOf` when it never admits every branch.
+The schema then accepts more than the shape does.
 
 `Catch`, `Transform` and `Ignore` are transparent: the schema describes the
 shape inside them. `Coerce`, `Rename` and `Key` change what comes *out*, not
@@ -134,15 +140,16 @@ s := shape.MustShape(spec)
 | Schema | Shape |
 | ------ | ----- |
 | `type: string`, `number`, `integer`, `boolean`, `null` | `String`, `Number`, `Integer`, `Boolean`, a required `null`; a string with no `minLength` may be empty (`Empty(String)`) |
-| `type: [t, "null"]`, `type: [a, b]` | `Nullable(t)`, `One(a, b)` |
+| `type: [t, "null"]`, `type: [a, b]` | `Nullable(t)`, `Nof(Min(1), a, b)` |
 | `properties`, `required` | an object; a listed property is `Required`, one with a `default` optional with it, and any other `Skip` (absent stays absent); a required name with no schema is `Required()` |
 | `additionalProperties` | absent or `true`: `Open`; `false`: closed; a schema: `Child(shape)` |
 | `items`, `prefixItems` | `[shape]`; a tuple, closed when `items` is `false`, open (`Rest(Any)`) when absent, `Rest(shape)` otherwise |
 | `minimum`… `maxProperties`, `exclusiveMinimum` / `exclusiveMaximum` (number or draft-4 boolean) | `Min`, `Max`, `Above`, `Below` on the typed node; on an untyped schema a bare bound, which applies to whatever kind the value is |
 | `pattern`, `format` (`email`, `uri`, `uuid`, `date-time`, `ipv4`, `ipv6`) | a regexp; `Email`, `Url`, `Uuid`, `DateTime`, `Ipv4`, `Ipv6`; the export's `anyOf` of the two address formats is `Ip`. An unknown format is ignored |
 | `enum`, `const` | `Exact(...)` |
-| `anyOf`, `oneOf`, `allOf` | `One`, `One`, `All`; a `oneOf` of objects that each require a distinct string `const` on one property is `Discriminated` on it |
-| `not: {}`, `true`, `false` | `Never`; `Any`; `Never` (a boolean is read as a subschema—the document itself must be an object) |
+| `anyOf`, `oneOf`, `allOf` | `Nof(Min(1), …)`, `Nof(1, …)`, `All`; a `oneOf` of objects that each require a distinct string `const` on one property is `Discriminated` on it |
+| `not` | `Nof(0, s)`, checked ahead of the other keywords as `All(Nof(0, s), …)`, so it applies to the value as given, before a default fills it; `not: {}` is `Never`, whatever else the schema says |
+| `true`, `false` | `Any`; `Never` (a boolean is read as a subschema—the document itself must be an object) |
 | `default`, `description` | `Default`, `Describe` |
 | `$ref: "#/$defs/name"` (or `definitions`), `$ref: "#"` | the definition, inlined where it is referenced; a definition that refers to itself is `Define`d at its outermost use and `Refer`red within, so recursion validates |
 
@@ -155,9 +162,10 @@ shape (`items: null`) is an error naming the location, such as
 ### Round trips
 
 Export → import → export gives the same document for every rendering in the
-preceding table, with two exceptions to know about: a definition used more
-than once comes back inlined at each use (no `$defs`), and a `Date` comes
-back as a `DateTime` string. A default the shape itself would reject (such as
+preceding table, with three exceptions to know about: a definition used more
+than once comes back inlined at each use (no `$defs`), a `Date` comes back as
+a `DateTime` string, and a `Nof` exported as both an `anyOf` and a `not`
+comes back as an `allOf` of the two. A default the shape itself would reject (such as
 `Optional(String)`'s `""` against `minLength: 1`) round-trips unchanged: it is
 read back as a default, since a default is a value the shape produces rather
 than one it checks. The

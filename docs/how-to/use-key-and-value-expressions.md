@@ -33,6 +33,31 @@ s := shape.MustShape(map[string]any{
 The bare property name (`name`, `tags`) is what appears in the output and in
 error paths.
 
+### The value is the example
+
+The value beside a key expression is its example. A builder that takes a
+shape reads the example as that shape: `'port: Min(1)': 8080` is a number of
+at least 1 that defaults to 8080. A composition reads its arguments as
+branches and a count, so for `All` and `Nof` the example is the default
+instead:
+
+```js
+const s = Shape({ 'id: Nof(1, Number, String)': 0 })
+
+s({})             // → { id: 0 }
+s({ id: 'x42' })  // OK
+s({ id: true })   // throws: satisfies 0 of: Number, String; the count must be 1.
+```
+
+The outermost `All` or `Nof` in the expression takes the default, wherever
+the example would otherwise have gone. A builder around the composition
+still applies after it, so `'id: Required(Nof(1, Number, String))': 0` stays
+required.
+
+`Exact` adds the example to the values it allows, so the default is always
+one of them: `'role: Exact("admin", "user")': 'guest'` allows `guest` too. An
+example the list already has is not added a second time.
+
 ### Turn key expressions off
 
 **TS**
