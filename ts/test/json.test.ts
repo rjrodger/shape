@@ -336,8 +336,11 @@ function corpusSpec(v: any): any {
         }
       }
     }
+    // Own properties: an assigned __proto__ key would set the prototype.
     const out: any = {}
-    for (const k of ks) out[k] = corpusSpec(v[k])
+    for (const k of ks) {
+      Object.defineProperty(out, k, { value: corpusSpec(v[k]), enumerable: true, writable: true, configurable: true })
+    }
     return out
   }
   return v

@@ -135,9 +135,10 @@ function decodeSpec(v: any, Shape: any): any {
       return Shape.Discriminated(tag, out)
     }
 
+    // Own properties: an assigned __proto__ key would set the prototype.
     const out: Record<string, any> = {}
     for (const k of keys) {
-      out[k] = decodeSpec(v[k], Shape)
+      Object.defineProperty(out, k, { value: decodeSpec(v[k], Shape), enumerable: true, writable: true, configurable: true })
     }
 
     return out

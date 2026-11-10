@@ -16,6 +16,17 @@ keyexpr-child-array-not-array	{"a: Child(Number)":[]}	{"a":{}}		"Validation fail
 keyexpr-bare-literal	{"a: 5":3}	{}	{"a":5}	
 keyexpr-bare-literal-present	{"a: 5":3}	{"a":9}	{"a":9}	
 keyexpr-nof-keeps-choice	{"a: Nof(1,String,Number)":5}	{"a":"q"}	{"a":"q"}	
+proto-key-default	{"toString":"x"}	{}	{"toString":"x"}	
+proto-key-own-value	{"toString":"x"}	{"toString":"y"}	{"toString":"y"}	
+proto-key-own-wrong-type	{"valueOf":"x"}	{"valueOf":1}		"Validation failed for property \"valueOf\" with number \"1\" because the number is not of type string."
+proto-key-constructor	{"constructor":"x"}	{}	{"constructor":"x"}	
+proto-key-constructor-own	{"constructor":"x"}	{"constructor":"y"}	{"constructor":"y"}	
+proto-key-required-missing	{"hasOwnProperty":{"$type":"Number"}}	{}		"Validation failed for property \"hasOwnProperty\" because the property is missing."
+proto-key-dunder-proto	{"__proto__":"x"}	{}	{"__proto__":"x"}	
+proto-key-dunder-proto-own	{"__proto__":"x"}	{"__proto__":"y"}	{"__proto__":"y"}	
+proto-key-jsonschema-required	{"$jsonschema":{"type":"object","required":["toString"]}}	{}		"Validation failed for property \"toString\" because the property is missing."
+proto-key-closed-extra	{"a":1}	{"toString":1}		"Validation failed for object \"{toString:1}\" because the property \"toString\" is not allowed."
+proto-key-closed-extra-dunder	{"a":1}	{"__proto__":1}		"Validation failed for object \"{__proto__:1}\" because the property \"__proto__\" is not allowed."
 keyexpr-nof-example-is-default	{"a: Nof(1,String,Number)":5}	{}	{"a":5}	
 keyexpr-nof-example-not-a-branch	{"a: Nof(1,String,Number)":5}	{"a":7}	{"a":7}	
 keyexpr-nof-example-fail-message	{"a: Nof(1,String,Number)":5}	{"a":true}		"Value \"true\" for property \"a\" satisfies 0 of: String, Number; the count must be 1."

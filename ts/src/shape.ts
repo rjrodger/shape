@@ -46,7 +46,12 @@ const KEY_EXPR_RE = /^\s*("(\\.|[^"\\])*"|[^\s]+):\s*(.*?)\s*$/
 // Kept off the node itself so nothing leaks into its spec or its JSON.
 // A compiled child list: the keys, their nodes, and for each the leaf fast
 // path it may take (see fastKind; 0 when it may not).
-type Compiled = { keys: string[], nodes: Node<any>[], fast: number[], vgen: number, known: Set<string> | null }
+type Compiled = {
+  keys: string[], nodes: Node<any>[], fast: number[], vgen: number, known: Set<string> | null,
+  // For each key, whether Object.prototype has a member of that name, so
+  // only those keys pay for an own-property check.
+  proto: boolean[],
+}
 const COMPILED = new WeakMap<object, Compiled>()
 
 // Child shapes (Child, Rest, a one-element array) normalized to their full
@@ -423,6 +428,29 @@ const TNAT = {
 // Utility shortcuts.
 const keys = (arg: any) => Object.keys(arg)
 const defprop = (o: any, p: any, a: any) => Object.defineProperty(o, p, a)
+const hasOwn = (o: any, k: any) => Object.prototype.hasOwnProperty.call(o, k)
+
+// The names an object inherits from Object.prototype: toString, valueOf,
+// constructor, __proto__ and the rest. A key with one of these names is
+// read as the value's own property only, so an input without it has no
+// such value whatever the prototype lends, as in Go and Rust.
+const PROTO_KEYS = new Set(Object.getOwnPropertyNames(Object.prototype))
+const ownval = (o: any, k: string) => (PROTO_KEYS.has(k) && !hasOwn(o, k)) ? undefined : o[k]
+
+// Write a key as an own property: assigning __proto__ would set the
+// prototype rather than add the key.
+const setprop = (o: any, k: any, v: any) => {
+  if ('__proto__' === k) {
+    ownprop(o, k, v)
+  }
+  else {
+    o[k] = v
+  }
+}
+
+// The constructor an object is an instance of, read from its prototype: an
+// own "constructor" key is a property like any other.
+const ctorOf = (v: any) => Object.getPrototypeOf(v)?.constructor
 const isarr = (arg: any) => Array.isArray(arg)
 const JP = (arg: string) => JSON.parse(arg)
 const JS = (a0: any, a1?: any) => JSON.stringify(a0, a1)
@@ -894,9 +922,9 @@ function nodize<S>(shape?: any, depth?: number, meta?: NodeMeta): Node<S> {
     }
     else if (
       null != v &&
-      Function !== v.constructor &&
-      Object !== v.constructor &&
-      null != v.constructor
+      Function !== ctorOf(v) &&
+      Object !== ctorOf(v) &&
+      null != ctorOf(v)
     ) {
       let strdesc = toString.call(v)
 
@@ -911,8 +939,8 @@ function nodize<S>(shape?: any, depth?: number, meta?: NodeMeta): Node<S> {
       }
       else {
         t = (S.instance as ValType)
-        u.n = v.constructor.name
-        u.i = v.constructor
+        u.n = ctorOf(v).name
+        u.i = ctorOf(v)
       }
 
       f = v
@@ -1187,11 +1215,12 @@ function shapify<const S>(intop?: S, inopts?: ShapeOptions) {
                   compiled.vgen = VGEN
                 }
                 const cfast = compiled.fast
+                const cproto = compiled.proto
                 if (0 < ckeys.length) {
                   s.pI = start
                   for (let kI = 0; kI < ckeys.length; kI++) {
                     const rk = ckeys[kI]
-                    const cv = val[rk]
+                    const cv = cproto[kI] && !hasOwn(val, rk) ? undefined : val[rk]
                     const f = cfast[kI]
                     if (fastOk && 0 !== f && fastValid(f, cv)) {
                       continue
@@ -1275,7 +1304,7 @@ function shapify<const S>(intop?: S, inopts?: ShapeOptions) {
 
 
                   let nvs = nodize(ov, 1 + s.dI, meta)
-                  n.v[rk] = nvs
+                  setprop(n.v, rk, nvs)
 
                   if (!knownKeys.has(rk)) {
                     n.k.push(rk)
@@ -1283,7 +1312,7 @@ function shapify<const S>(intop?: S, inopts?: ShapeOptions) {
                   }
 
                   s.nodes[s.nI] = nvs
-                  s.vals[s.nI] = val[rk]
+                  s.vals[s.nI] = ownval(val, rk)
                   s.parents[s.nI] = val
                   s.keys[s.nI] = rk
                   s.nI++
@@ -1300,6 +1329,7 @@ function shapify<const S>(intop?: S, inopts?: ShapeOptions) {
                   fast: fastKinds(n.k.map((k: string) => n.v[k])),
                   vgen: VGEN,
                   known: new Set(n.k),
+                  proto: n.k.map((k: string) => PROTO_KEYS.has(k)),
                 })
               }
               }
@@ -1319,7 +1349,7 @@ function shapify<const S>(intop?: S, inopts?: ShapeOptions) {
               if (!aligned) {
                 for (let vkI = 0; vkI < valKeys.length; vkI++) {
                   const k = valKeys[vkI]
-                  if (!(null !== known && known.has(k)) && undefined === n.v[k]) {
+                  if (!(null !== known && known.has(k)) && !hasOwn(n.v, k)) {
                     (extra ??= []).push(k)
                   }
                 }
@@ -1393,7 +1423,7 @@ function shapify<const S>(intop?: S, inopts?: ShapeOptions) {
               for (let ekI = 0; ekI < elementKeys.length; ekI++) {
                 elementNodes.push(n.v[ekI] = nodize(n.v[ekI], 1 + s.dI))
               }
-              compiled = { keys: elementKeys, nodes: elementNodes, fast: [], vgen: VGEN, known: null }
+              compiled = { keys: elementKeys, nodes: elementNodes, fast: [], vgen: VGEN, known: null, proto: [] }
               COMPILED.set(n, compiled)
             }
             const elementKeys = compiled.keys
@@ -1504,7 +1534,7 @@ function shapify<const S>(intop?: S, inopts?: ShapeOptions) {
           if (
             !skip &&
             n.r &&
-            (S.undefined !== s.type || !s.parent.hasOwnProperty(parentKey))
+            (S.undefined !== s.type || !hasOwn(s.parent, parentKey))
           ) {
             s.ignoreVal = true
             s.curerr.push(makeErrImpl(S.required, s, 1060))
@@ -1556,7 +1586,7 @@ function shapify<const S>(intop?: S, inopts?: ShapeOptions) {
       let setParent = !s.match && null != s.parent && !done && !ignoreVal
 
       if (setParent) {
-        s.parent[s.key] = s.val
+        setprop(s.parent, s.key, s.val)
       }
 
       if (s.nextSibling) {
@@ -2315,7 +2345,7 @@ function build(v: any, opts: ShapeOptions = {}, top = true): any {
       // The example of a key expression is a value, so a string there is
       // the string itself ({ 'a: String.Optional': 'x' }).
       else {
-        out[k] = (S.string === typeof cv && isKeyExpr(k)) ? cv : build(cv, opts, false)
+        setprop(out, k, (S.string === typeof cv && isKeyExpr(k)) ? cv : build(cv, opts, false))
       }
     }
 
@@ -2941,8 +2971,8 @@ const Discriminated = function <T extends string, B extends Record<string, any>>
   const shapes = new Map<string, any>()
   for (const t of tags) {
     const bn = nodize(branches[t])
-    if (S.object === bn.t && null != bn.v && undefined === bn.v[tag]) {
-      bn.v[tag] = nodize(t)
+    if (S.object === bn.t && null != bn.v && !hasOwn(bn.v, tag)) {
+      setprop(bn.v, tag, nodize(t))
     }
     shapes.set(t, shapify(bn))
   }
@@ -2955,7 +2985,7 @@ const Discriminated = function <T extends string, B extends Record<string, any>>
       return true
     }
 
-    const tv = null != val && S.object === typeof val && !isarr(val) ? val[tag] : undefined
+    const tv = null != val && S.object === typeof val && !isarr(val) ? ownval(val, tag) : undefined
     if (undefined === tv) {
       update.err = makeErr(state,
         S.Value + ' ' + S.$VALUE + S.forprop + S.$PATH +
@@ -3062,7 +3092,7 @@ function objectNode(base: Node<any>, entries: Entry[]): Node<any> {
   if (null != f && S.object === typeof f && !isarr(f)) {
     f = {}
     for (const e of entries) {
-      if (undefined !== base.f[e.key]) {
+      if (hasOwn(base.f, e.key) && undefined !== base.f[e.key]) {
         ownprop(f, e.key, base.f[e.key])
       }
     }
@@ -3760,10 +3790,10 @@ const Rename = function <V = any>(this: any, inopts: any, shape?: Node<V> | V): 
           let fromDflt = s.ctx.Rename.fromDflt[cn] || {}
 
           // Only use claim if it was not a default value.
-          if (undefined !== s.parent[cn] && !fromDflt.yes) {
-            update.val = s.parent[cn]
+          if (undefined !== ownval(s.parent, cn) && !fromDflt.yes) {
+            update.val = ownval(s.parent, cn)
             if (!s.match) {
-              s.parent[name] = update.val
+              setprop(s.parent, name, update.val)
             }
             update.node = fromDflt.node
 
@@ -3825,7 +3855,7 @@ const Rename = function <V = any>(this: any, inopts: any, shape?: Node<V> | V): 
     attach(node.b, before)
 
     let after: any = (val: any, update: Update, s: State) => {
-      s.parent[name] = val
+      setprop(s.parent, name, val)
 
       if (!s.match &&
         !keep &&
@@ -4905,7 +4935,7 @@ function jsonObject(n: Node<any>): { children: any, chain: string | null, refs: 
       jsonFault('the property name ' + JSON.stringify(k) + ' of a value with no key form')
     }
     else {
-      children[k] = nodeJson(c)
+      setprop(children, k, nodeJson(c))
     }
   }
 
@@ -5142,12 +5172,12 @@ function jsonBranches(n: Node<any>): any {
   tags.forEach((t: string, i: number) => {
     const b = jsonNode(n.u.list[i])
     const j = nodeJson(b)
-    const tn = S.object === b.t ? b.v[tag] : undefined
+    const tn = S.object === b.t && hasOwn(b.v, tag) ? b.v[tag] : undefined
     if (undefined !== tn && S.string === tn.t && !tn.r && t === tn.f &&
       0 === tn.b.length && 0 === tn.a.length && undefined === tn.z) {
       delete j[tag]
     }
-    out[t] = j
+    setprop(out, t, j)
   })
   return out
 }
@@ -5192,9 +5222,9 @@ function stringify(
       else if (
         null != val &&
         S.object === typeof (val) &&
-        val.constructor &&
-        S.Object !== val.constructor.name &&
-        S.Array !== val.constructor.name
+        ctorOf(val) &&
+        S.Object !== ctorOf(val).name &&
+        S.Array !== ctorOf(val).name
       ) {
 
         let strdesc = toString.call(val)
@@ -5203,7 +5233,7 @@ function stringify(
         }
         else {
           val =
-            S.function === typeof val.toString ? val.toString() : val.constructor.name
+            S.function === typeof val.toString ? val.toString() : ctorOf(val).name
         }
 
       }
@@ -6023,7 +6053,7 @@ function importObject(s: any, ctx: any, path: string): any {
   }
   // A required name with no property schema must still be present.
   for (const k of required) {
-    if (S.string === typeof k && undefined === obj[k]) {
+    if (S.string === typeof k && !hasOwn(obj, k)) {
       ownprop(obj, k, Required())
     }
   }

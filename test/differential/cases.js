@@ -416,6 +416,13 @@ function build() {
   add('ke-skip-number', { 'a: Skip(Number)': 5 }, OBJS)
   add('ke-child-array', { 'a: Child(Number)': [] }, OBJS)
   add('ke-nof-of', { 'a: Nof(1,String,Number)': 5 }, OBJS)
+  // Keys Object.prototype has are the input's own or absent. A __proto__ key
+  // is parsed: written in a literal it would set the prototype.
+  const PROTO_IN = [{}, { toString: 'y' }, { valueOf: 2 }, { constructor: true }, { toString: 1 },
+    JSON.parse('{"__proto__": "y"}'), JSON.parse('{"__proto__": 1}'), { a: 1 }]
+  add('proto-keys', { constructor: B, toString: 'x', valueOf: 1 }, PROTO_IN)
+  add('proto-key-dunder', JSON.parse('{"__proto__": "x"}'), PROTO_IN)
+  add('proto-key-open', { $open: { hasOwnProperty: 'x' } }, PROTO_IN)
   // Under a composition the example is the outermost composition's default.
   add('ke-all-of', { 'a: All(Number,Min(2))': 5 }, OBJS)
   add('ke-nof-count-shape', { 'a: Nof(Min(1),String,Number)': 5 }, OBJS)
