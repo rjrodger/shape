@@ -140,6 +140,7 @@ j, _ := s.JSON()                      // the shape as declarative JSON
 back, _ := shape.Build(j)             // and back: the same shape again
 schema := s.JSONSchema()              // a JSON Schema (draft 2020-12), as map[string]any
 spec, _ := shape.FromJSONSchema(doc)  // and back: a spec built from a JSON Schema
+                                      // (FromJSONSchemaWith takes options, such as Strict)
 err := s.ValidateInto(input, &out)    // validate, then decode the result into a struct
 std := s.Standard()                   // Standard Schema V1-style interface: Version, Vendor, Validate
 ```
@@ -203,7 +204,7 @@ detail; the tables here list the Go signatures.
 | `Skip(spec?)`                    | optional, no default injection                                     |
 | `Ignore(spec?)`                  | like `Skip`, and drop the value if anything in its subtree fails   |
 | `Empty(spec?)`                   | allow the empty string for a `String` shape                        |
-| `Nullable(spec?)`                | accept an explicit `nil` as the value                              |
+| `Nullable(spec?)`                | accept an explicit `nil` as the value, whatever a check makes of it |
 | `Fault(msg, spec?)`              | override the structural error message of this node                 |
 
 ### Type / equality / coercion
@@ -211,8 +212,8 @@ detail; the tables here list the Go signatures.
 | Builder                          | Effect                                                             |
 | -------------------------------- | ------------------------------------------------------------------ |
 | `Type(kind, spec?)`              | force a `Kind`, `TypeToken`, kind name or node's type on the node  |
-| `Exact(values...)`               | require equality with one of the listed literals (numbers by value, so `Exact(1)` matches `1.0`; the rest by `reflect.DeepEqual`) |
-| `Never(spec?)`                   | always fails to match                                              |
+| `Exact(values...)`               | require equality with one of the listed literals (numbers by value, so `Exact(1)` matches `1.0`; the rest by `reflect.DeepEqual`); a value is required until `Optional` or `Skip` |
+| `Never(spec?)`                   | never matches; under `Optional` or `Skip` the value must be absent |
 | `Func(spec?)`                    | a function-typed value; optional of itself (the `Function` token is required) |
 | `Coerce(spec?)`                  | convert a string/number/bool to the node's kind first, where unambiguous |
 | `.Any()`, `.Integer()`, `.Date()` | chain shortcuts for the `Any`, `Integer` and `Date` tokens        |

@@ -77,6 +77,10 @@ type node struct {
 	nofCount *node
 	nofOK    []bool
 	nofOne   bool
+	// The JSON kind of each branch of a Nof of exactly one, where every
+	// branch is of a different kind and takes values of that kind only
+	// (see nofKinds): a value is then put to the branch of its kind alone.
+	nofKinds []string
 
 	// Exact value match.
 	exactVals []any

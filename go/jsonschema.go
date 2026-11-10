@@ -97,16 +97,34 @@ func nodeSchema(n *node, defs map[string]any) map[string]any {
 
 	checkSchema(n, s)
 
+	// Nullable adds null to the types, to the list where there is one.
 	if n.nullable {
 		if t, ok := s["type"]; ok {
-			s["type"] = []any{t, "null"}
+			types, isList := t.([]any)
+			if !isList {
+				types = []any{t}
+			}
+			s["type"] = append(append([]any{}, types...), "null")
+		}
+	}
+
+	// A tuple position the shape requires must be there, and so must every
+	// one before it.
+	if n.kind == KindArray {
+		need := 0
+		for i, cn := range n.arrChildren {
+			if cn.required {
+				need = i + 1
+			}
+		}
+		if have, _ := toFloat64(s["minItems"]); float64(need) > have {
+			s["minItems"] = need
 		}
 	}
 
 	// A nil default is the zero of a kind that has none (Any, Date): TS has
 	// no default there at all. Only the null kind's null is a default.
-	if !n.required && !n.skippable && n.hasDefault && !isFunction(n.defaultValue) && !isNaN(n.defaultValue) &&
-		(n.defaultValue != nil || n.kind == KindNull || n.defaultNull) {
+	if !n.required && !n.skippable && hasDefaultValue(n) && !isFunction(n.defaultValue) && !isNaN(n.defaultValue) {
 		s["default"] = n.defaultValue
 	}
 
@@ -216,10 +234,59 @@ func listSchema(n *node, s map[string]any, defs map[string]any) {
 		return
 	}
 	if n.listMode == listNof {
-		nofSchema(n.nofOK, branches, s)
+		if !kindsSchema(n.nofKinds, branches, s) {
+			nofSchema(n.nofOK, branches, s)
+		}
 	} else {
 		s["allOf"] = branches
 	}
+}
+
+// The JSON kinds, every one of which a schema with no type lets through.
+var jsonKinds = []string{"null", "boolean", "number", "string", "object", "array"}
+
+// The keywords that apply to one kind of value only.
+var jsonSchemaKindKeywords = map[string][]string{
+	"number": {"minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum"},
+	"string": {"minLength", "maxLength", "pattern", "format"},
+	"object": {"properties", "required", "additionalProperties", "minProperties", "maxProperties"},
+	"array":  {"items", "prefixItems", "minItems", "maxItems"},
+}
+
+// The kind of value a schema's type names, as TS's KIND_OF_TYPE reads it (a
+// regexp reads as a string there too).
+var jsonSchemaTypeKind = map[string]string{
+	"null": "null", "boolean": "boolean", "number": "number", "integer": "number",
+	"string": "string", "regexp": "string", "object": "object", "array": "array",
+}
+
+// kindsSchema writes exactly one of a shape for every JSON kind as a schema
+// with no type: the keywords of each kind side by side. A shape that says
+// more than its kind's keywords can say is counted, as oneOf, so kindsSchema
+// reports whether it wrote the schema.
+func kindsSchema(kinds []string, branches []any, s map[string]any) bool {
+	for _, k := range jsonKinds {
+		if !contains(kinds, k) {
+			return false
+		}
+	}
+	for _, b := range branches {
+		bs := b.(map[string]any)
+		t, _ := bs["type"].(string)
+		for k := range bs {
+			if k != "type" && !contains(jsonSchemaKindKeywords[jsonSchemaTypeKind[t]], k) {
+				return false
+			}
+		}
+	}
+	for _, b := range branches {
+		for k, v := range b.(map[string]any) {
+			if k != "type" {
+				s[k] = v
+			}
+		}
+	}
+	return true
 }
 
 // nofSchema writes a count of the shapes as the keywords that count: none

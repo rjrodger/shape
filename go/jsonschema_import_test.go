@@ -195,7 +195,12 @@ func TestJSONSchemaImportKeywords(t *testing.T) {
 	ok(`{"type":["string","null"]}`, Null)
 	ok(`{"type":"null"}`, Null)
 	bad(`{"type":"null"}`, 1.0, "not of type null")
-	bad(`{"type":["string","number"]}`, true, "satisfies 0 of: String, Number; the count must be Min(1).")
+	// Types of different kinds: the value's kind chooses among them.
+	bad(`{"type":["string","number"]}`, true, "satisfies 0 of: String, Number; the count must be 1.")
+	bad(`{"type":["string","number"],"minLength":2}`, "a", "minimum length of 2")
+	ok(`{"type":["string","number"],"minLength":2}`, 1.0)
+	ok(`{"type":["integer","number"]}`, 1.5)
+	ok(`{"type":["string","number","null"]}`, Null)
 	ok(`{"type":"boolean"}`, false)
 	ok(`{}`, "anything")
 	ok(`{"properties":{"a":{"type":"number"}}}`, map[string]any{"a": 1.0, "b": 2.0})
@@ -207,7 +212,8 @@ func TestJSONSchemaImportKeywords(t *testing.T) {
 	// Boolean schemas.
 	ok(`{"type":"object","properties":{"a":true}}`, map[string]any{"a": 1.0})
 	bad(`{"type":"object","properties":{"b":false}}`, map[string]any{"b": 1.0}, "no value is allowed")
-	bad(`{"type":"object","properties":{"b":false}}`, map[string]any{}, "no value is allowed")
+	// A false property schema is met by leaving the property out.
+	ok(`{"type":"object","properties":{"b":false}}`, map[string]any{})
 
 	// Numbers, including draft-4 boolean exclusives.
 	bad(`{"type":"number","minimum":1,"exclusiveMinimum":true}`, 1.0, "above 1")
@@ -260,7 +266,7 @@ func TestJSONSchemaImportKeywords(t *testing.T) {
 	bad(`{"oneOf":[{"type":"string"},{"type":"number"}]}`, true, "satisfies 0 of: String, Number; the count must be 1.")
 	bad(`{"oneOf":[{"type":"number"},{"type":"integer"}]}`, 1.0, "satisfies 2 of: Number, Integer; the count must be 1.")
 	ok(`{"oneOf":[{"type":"number"},{"type":"integer"}]}`, 1.5)
-	bad(`{"allOf":[{"type":"number"},{"minimum":1}]}`, 0.0, "does not satisfy all of: Number, Min(1)")
+	bad(`{"allOf":[{"type":"number"},{"minimum":1}]}`, 0.0, "must be a minimum of 1 (was 0).")
 	bad(`{"minLength":2}`, "a", "minimum length of 2")
 	bad(`{"maxItems":1}`, []any{1.0, 2.0}, "maximum length of 1")
 	bad(`{"exclusiveMinimum":1}`, 1.0, "above 1")
@@ -279,7 +285,8 @@ func TestJSONSchemaImportKeywords(t *testing.T) {
 	bad(`{"not":{"type":"string"}}`, "x", "satisfies 1 of: String; the count must be 0.")
 	bad(`{"not":true}`, 1.0, "satisfies 1 of: Any; the count must be 0.")
 	ok(`{"type":"string","not":{"pattern":"^a"}}`, "b")
-	bad(`{"type":"string","not":{"pattern":"^a"}}`, "ab", "does not satisfy all of: Nof(0,/^a/), String")
+	bad(`{"type":"string","not":{"pattern":"^a"}}`, "ab", "satisfies 1 of: /^a/; the count must be 0.")
+	bad(`{"type":"string","not":{"pattern":"^a"}}`, 1.0, "not of type string")
 	bad(`{"enum":["a","b"],"not":{}}`, "a", "no value is allowed")
 	importErr(t, `{"not":1}`, "JSON Schema: a schema must be an object or boolean at /not")
 
@@ -357,7 +364,7 @@ func TestJSONSchemaImportReferences(t *testing.T) {
 }
 
 func TestJSONSchemaImportFaults(t *testing.T) {
-	if _, err := FromJSONSchema(3); err == nil || err.Error() != "JSON Schema: the schema must be an object" {
+	if _, err := FromJSONSchema(3); err == nil || err.Error() != "JSON Schema: the schema must be an object or boolean" {
 		t.Fatalf("got %v", err)
 	}
 	importErr(t, `{"properties":{"a":"x"}}`, "JSON Schema: a schema must be an object or boolean at /properties/a")
@@ -372,8 +379,7 @@ func TestJSONSchemaImportFaults(t *testing.T) {
 	importErr(t, `{"type":3}`, `JSON Schema: unknown type "3" at /`)
 	importErr(t, `{"type":["string",3]}`, `JSON Schema: unknown type "3" at /`)
 	importErr(t, `{"type":"string","pattern":"("}`, `JSON Schema: bad pattern "(" at /`)
-	importErr(t, `{"enum":[]}`, "JSON Schema: enum must be a non-empty array at /")
-	importErr(t, `{"enum":"x"}`, "JSON Schema: enum must be a non-empty array at /")
+	importErr(t, `{"enum":"x"}`, "JSON Schema: enum must be an array at /")
 	importErr(t, `{"type":"array","prefixItems":[{"type":"x"}]}`, `JSON Schema: unknown type "x" at /prefixItems/0`)
 	importErr(t, `{"type":"array","prefixItems":[{"type":"string"}],"items":{"type":"x"}}`, `JSON Schema: unknown type "x" at /items`)
 	importErr(t, `{"type":"array","items":{"type":"x"}}`, `JSON Schema: unknown type "x" at /items`)
@@ -393,4 +399,221 @@ func TestJSONSchemaImportFaults(t *testing.T) {
 		}
 	}()
 	MustFromJSONSchema(3)
+}
+
+// jsv imports a schema document and validates a value against it.
+func jsv(t *testing.T, doc string, in any) (any, error) {
+	t.Helper()
+	return importShape(t, doc).Validate(in)
+}
+
+func jsvErr(t *testing.T, doc string, in any, want string) {
+	t.Helper()
+	if _, err := jsv(t, doc, in); err == nil || err.Error() != want {
+		t.Fatalf("%s with %v: got %v, want %q", doc, in, err, want)
+	}
+}
+
+func jsvOK(t *testing.T, doc string, in any, want any) {
+	t.Helper()
+	out, err := jsv(t, doc, in)
+	if err != nil || !reflect.DeepEqual(jsonNorm(out), jsonNorm(want)) {
+		t.Fatalf("%s with %v: got %#v, %v", doc, in, out, err)
+	}
+}
+
+// Every keyword of a schema applies, beside the others
+// (ts/test/jsonschema-import.test.ts every-keyword).
+func TestJSONSchemaImportEveryKeyword(t *testing.T) {
+	// Beside a composition, the type and its keywords still hold, and each
+	// failing part reports its own errors.
+	either := `{"type":"object","properties":{"a":{"type":"string"}},"oneOf":[{"required":["a"]},{"required":["b"]}]}`
+	jsvErr(t, either, map[string]any{"a": 5.0}, `Validation failed for property "a" with number "5" because the number is not of type string.`)
+	jsvOK(t, either, map[string]any{"a": "x"}, map[string]any{"a": "x"})
+	mustErr(t, importShape(t, either), map[string]any{"c": 1.0}, "satisfies 0 of: ")
+	mustErr(t, importShape(t, `{"allOf":[{"type":"object","properties":{"a":{"type":"string"}}}],"required":["b"]}`),
+		map[string]any{"a": "x"}, `property "b" because the property is missing`)
+	mustErr(t, importShape(t, `{"type":"string","anyOf":[{"minLength":2},{"pattern":"^x"}]}`), 5.0, "not of type string")
+	jsvOK(t, `{"type":"string","anyOf":[{"minLength":2},{"pattern":"^x"}]}`, "x", "x")
+
+	// An enum or const keeps only the values the other keywords allow.
+	jsvErr(t, `{"type":"string","enum":["a",1]}`, 1.0, `Value "1" for property "" must be exactly one of: a`)
+	mustErr(t, importShape(t, `{"enum":["a","bb"],"minLength":2}`), "a", "exactly one of: bb")
+	mustErr(t, importShape(t, `{"type":"number","const":"x"}`), "x", "no value is allowed")
+	jsvOK(t, `{"enum":["a","b"],"const":"b"}`, "b", "b")
+	mustErr(t, importShape(t, `{"enum":["a","b"],"const":"b"}`), "a", "exactly one of: b")
+	mustErr(t, importShape(t, `{"enum":[]}`), 1.0, "no value is allowed")
+	jsvErr(t, `{"enum":[[1,2],[1,3],{"a":1,"b":2},{"b":1},{"a":1},"x",null],"const":{"a":1}}`, 1.0,
+		`Value "1" for property "" must be exactly one of: {"a":1}`)
+	// A null in an enum is the value null, which the other keywords judge.
+	jsvErr(t, `{"type":["string","null"],"enum":["a",null,1]}`, 1.0, `Value "1" for property "" must be exactly one of: a, null`)
+	jsvOK(t, `{"type":["string","null"],"enum":["a",null,1]}`, Null, nil)
+
+	// An enum beside a reference to a definition still being read keeps
+	// the reference beside it.
+	tree := `{"$defs":{"n":{"type":"object","properties":{"k":{"enum":["x","y"],"$ref":"#/$defs/k"},
+		"kids":{"type":"array","items":{"$ref":"#/$defs/n"}}}},"k":{"$ref":"#/$defs/n"}},"$ref":"#/$defs/n"}`
+	mustErr(t, importShape(t, tree), map[string]any{"k": "z"}, "exactly one of: x, y")
+
+	// A property the schema does not require may be absent, whatever its
+	// schema.
+	optional := `{"type":"object","properties":{"e":{"enum":["a"]},"c":{"const":1},"f":false,"n":{"not":{}}}`
+	jsvOK(t, optional+`}`, map[string]any{}, map[string]any{})
+	mustErr(t, importShape(t, optional+`}`), map[string]any{"e": "b"}, "exactly one of: a")
+	mustErr(t, importShape(t, optional+`}`), map[string]any{"f": 1.0}, "no value is allowed")
+	mustErr(t, importShape(t, optional+`,"required":["f"]}`), map[string]any{}, "no value is allowed")
+
+	// From 2019-09 a $ref is a keyword like any other; before, it stands for
+	// its whole schema.
+	listed := `"$defs":{"a":{"type":"array"}},"definitions":{"a":{"type":"array"}}`
+	three := []any{1.0, 2.0, 3.0}
+	mustErr(t, importShape(t, `{`+listed+`,"$ref":"#/$defs/a","maxItems":2}`), three, "maximum length of 2")
+	jsvOK(t, `{`+listed+`,"$schema":"http://json-schema.org/draft-07/schema#","$ref":"#/$defs/a","maxItems":2}`, three, three)
+	mustErr(t, importShape(t, `{`+listed+`,"$schema":"https://json-schema.org/draft/2020-12/schema","$ref":"#/$defs/a","maxItems":2}`),
+		three, "maximum length of 2")
+	jsvOK(t, `{`+listed+`,"$ref":"#/$defs/a","default":[1]}`, nil, []any{1.0})
+
+	// A property name that reads as a key expression is refused when the
+	// parts beside an enum are tried, as it is when the spec is built.
+	if _, err := FromJSONSchema(js(t, `{"type":"object","enum":[{}],"properties":{"a: (":{}},"additionalProperties":false}`)); err == nil {
+		t.Fatal("a key expression that does not parse should be refused")
+	}
+}
+
+// A schema without a type checks each kind of value with that kind's
+// keywords only (ts/test/jsonschema-import.test.ts kinds).
+func TestJSONSchemaImportKinds(t *testing.T) {
+	jsvOK(t, `{"format":"email"}`, 12.0, 12.0)
+	jsvErr(t, `{"format":"email"}`, "nope", `Value "nope" for property "" is not a valid email address.`)
+	jsvOK(t, `{"minLength":2}`, 1.0, 1.0)
+	jsvOK(t, `{"pattern":"^a"}`, true, true)
+	jsvOK(t, `{"minimum":1}`, "x", "x")
+	jsvOK(t, `{"minimum":1}`, Null, nil)
+	jsvErr(t, `{"minimum":1}`, 0.0, `Value "0" for property "" must be a minimum of 1 (was 0).`)
+	jsvOK(t, `{"properties":{"a":{"type":"number"}}}`, "str", "str")
+	jsvOK(t, `{"properties":{"a":{"default":3}}}`, map[string]any{}, map[string]any{"a": 3.0})
+	mustErr(t, importShape(t, `{"properties":{"a":{"type":"number"}}}`), map[string]any{"a": "x"}, `property "a" with string "x"`)
+	jsvOK(t, `{"items":{"type":"number"}}`, map[string]any{"x": 1.0}, map[string]any{"x": 1.0})
+	mustErr(t, importShape(t, `{"items":{"type":"number"}}`), []any{"x"}, "not of type number")
+	jsvOK(t, `{"anyOf":[{"format":"ipv4"},{"format":"ipv6"}]}`, 3.0, 3.0)
+	jsvOK(t, `{"required":["a"]}`, []any{1.0}, []any{1.0})
+	jsvOK(t, `{"minItems":1,"minProperties":1,"minLength":1,"minimum":1}`, false, false)
+
+	// Several types: the value's kind chooses among them.
+	mustErr(t, importShape(t, `{"type":["string","object"],"properties":{"a":{"type":"number"}}}`), map[string]any{"a": "x"}, `property "a"`)
+	jsvOK(t, `{"type":["string","string"]}`, "a", "a")
+	// One null type is a type of its own.
+	jsvOK(t, `{"type":["null","null"]}`, Null, nil)
+
+	// In a subschema of a schema with one type, only that kind applies.
+	mustErr(t, importShape(t, `{"type":"string","allOf":[{"minLength":2},{"maxLength":3}]}`), "a", "minimum length of 2")
+	mustErr(t, importShape(t, `{"type":"number","anyOf":[{"minimum":5},{"maximum":1}]}`), 3.0, "satisfies 0 of: Number.Min(5), Number.Max(1)")
+	mustErr(t, importShape(t, `{"type":"array","oneOf":[{"maxItems":1},{"minItems":3}]}`), []any{1.0, 2.0}, "satisfies 0 of")
+	mustErr(t, importShape(t, `{"type":"object","oneOf":[{"maxProperties":1},{"minProperties":3}]}`),
+		map[string]any{"a": 1.0, "b": 2.0}, "satisfies 0 of")
+	// A minimum says nothing of a boolean, so not refuses every one.
+	jsvErr(t, `{"type":"boolean","not":{"minimum":1}}`, true, `Value "true" for property "" satisfies 1 of: Any; the count must be 0.`)
+	jsvOK(t, `{"type":["integer"],"allOf":[{"minimum":1}]}`, 2.0, 2.0)
+
+	// The kinds export as the keywords side by side, with no type.
+	schemaWant(t, "kinds", importShape(t, `{"minimum":1,"minLength":2,"properties":{"a":{"type":"number"}},"maxItems":3}`).JSONSchema(),
+		`{`+draft+`,"minimum":1,"minLength":2,"properties":{"a":{"type":"number"}},"maxItems":3}`)
+	schemaWant(t, "types", importShape(t, `{"type":["string","number","null"]}`).JSONSchema(),
+		`{`+draft+`,"oneOf":[{"type":"string"},{"type":"number"}]}`)
+	// A kind's shape that says more than its keywords is counted, as oneOf.
+	schemaWant(t, "ip", importShape(t, `{"anyOf":[{"format":"ipv4"},{"format":"ipv6"}]}`).JSONSchema(),
+		`{`+draft+`,"oneOf":[{"type":"null"},{"type":"boolean"},{"type":"number"},
+		{"type":"string","minLength":1,"anyOf":[{"format":"ipv4"},{"format":"ipv6"}]},{"type":"object"},{"type":"array"}]}`)
+	schemaWant(t, "described", importShape(t, `{"minimum":1,"description":"d"}`).JSONSchema(),
+		`{`+draft+`,"minimum":1,"description":"d"}`)
+
+	importErr(t, `{"pattern":"("}`, `JSON Schema: bad pattern "(" at /`)
+}
+
+// A whole schema may be true or false; a prefixItems position may be absent;
+// and strict refuses what the import would pass over
+// (ts/test/jsonschema-import.test.ts documents-tuples-strict).
+func TestJSONSchemaImportDocumentsTuplesStrict(t *testing.T) {
+	jsvOK(t, `true`, map[string]any{"a": 1.0}, map[string]any{"a": 1.0})
+	jsvErr(t, `false`, 1.0, `Validation failed for number "1" because no value is allowed.`)
+
+	tuple := `{"type":"array","prefixItems":[{"type":"string"},{"type":"number"}]}`
+	jsvOK(t, tuple, []any{}, []any{})
+	jsvOK(t, tuple, []any{"a"}, []any{"a"})
+	jsvOK(t, tuple, []any{"a", 1.0}, []any{"a", 1.0})
+	mustErr(t, importShape(t, tuple), []any{1.0}, "not of type string")
+	// An array has no holes, so a default needs every position before it.
+	filled := `{"type":"array","prefixItems":[{"type":"string"},{"default":7},{}]}`
+	jsvOK(t, filled, []any{"a"}, []any{"a", 7.0})
+	jsvErr(t, filled, []any{}, `Validation failed for index "0" because the element is missing.`)
+	bools := `{"type":"array","prefixItems":[true,false]}`
+	jsvOK(t, bools, []any{1.0}, []any{1.0})
+	mustErr(t, importShape(t, bools), []any{1.0, 2.0}, "no value is allowed")
+
+	for _, k := range []string{"$dynamicRef", "$recursiveRef", "contains", "dependencies", "dependentRequired", "dependentSchemas",
+		"if", "multipleOf", "patternProperties", "propertyNames", "unevaluatedItems", "unevaluatedProperties", "uniqueItems"} {
+		schema := map[string]any{"type": "object", "properties": map[string]any{"a": map[string]any{k: true}}}
+		mustOK(t, MustShape(MustFromJSONSchema(schema)), map[string]any{"a": 1.0})
+		_, err := FromJSONSchemaWith(schema, JSONSchemaImportOptions{Strict: true})
+		if want := `JSON Schema: unsupported keyword "` + k + `" at /properties/a`; err == nil || err.Error() != want {
+			t.Fatalf("strict %s: got %v", k, err)
+		}
+	}
+	strict, err := FromJSONSchemaWith(map[string]any{"uniqueItems": false}, JSONSchemaImportOptions{Strict: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out := mustOK(t, MustShape(strict), []any{1.0, 1.0}); len(out.([]any)) != 2 {
+		t.Fatalf("got %#v", out)
+	}
+	plain, err := FromJSONSchemaWith(map[string]any{"type": "number"}, JSONSchemaImportOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustOK(t, MustShape(plain), 1.0)
+
+	// A type that is no type name is named as JavaScript writes it.
+	importErr(t, `{"type":null}`, `JSON Schema: unknown type "null" at /`)
+	importErr(t, `{"type":{}}`, `JSON Schema: unknown type "[object Object]" at /`)
+	importErr(t, `{"type":[["a",null,1]]}`, `JSON Schema: unknown type "a,,1" at /`)
+	importErr(t, `{"type":true}`, `JSON Schema: unknown type "true" at /`)
+	importErr(t, `{"type":1.5}`, `JSON Schema: unknown type "1.5" at /`)
+	// The subschema of not is read for the kind the type names before the
+	// type is found unknown, as TypeScript reads it.
+	importErr(t, `{"type":"regexp","not":{"properties":3}}`, `JSON Schema: unknown type "regexp" at /`)
+	importErr(t, `{"not":{"properties":3}}`, `JSON Schema: properties must be an object at /not/properties`)
+}
+
+// Equality of JSON values, as enum and const compare them.
+func TestJSONEqual(t *testing.T) {
+	m := func(kv ...any) map[string]any {
+		out := map[string]any{}
+		for i := 0; i < len(kv); i += 2 {
+			out[kv[i].(string)] = kv[i+1]
+		}
+		return out
+	}
+	for _, c := range []struct {
+		x, y any
+		want bool
+	}{
+		{m("a", []any{1.0, m("b", nil)}), m("a", []any{1.0, m("b", nil)}), true},
+		{m("a", 1.0), m("a", 1.0, "b", 2.0), false},
+		{m("a", 1.0), m("b", 1.0), false},
+		{m("a", 1.0), m("a", 2.0), false},
+		{[]any{1.0, "x"}, []any{1.0, "x"}, true},
+		{[]any{1.0}, []any{1.0, 2.0}, false},
+		{[]any{1.0, "x"}, []any{1.0, "y"}, false},
+		{m(), []any{}, false},
+		{[]any{}, "x", false},
+		{"x", m(), false},
+		{1.0, 1, true},
+		{nil, nil, true},
+		{nil, 0.0, false},
+		{"1", 1.0, false},
+	} {
+		if got := jsonEqual(c.x, c.y); got != c.want {
+			t.Fatalf("jsonEqual(%#v, %#v) = %v", c.x, c.y, got)
+		}
+	}
 }

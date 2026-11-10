@@ -130,7 +130,7 @@ func TestJSONValueForm(t *testing.T) {
 	roundTrip(t, A("x"), `["\"x\""]`, A("y"), A(1.0))
 	roundTrip(t, A(""), `["\"\""]`, A(""), A(1.0))
 	roundTrip(t, A(Empty("x")), `["Optional(\"x\").Empty"]`, A(""), A(1.0))
-	roundTrip(t, A(Exact(1.0, "a", nil, true)), `["Any.Exact(1,\"a\",null,true)"]`, A("a"), A(2.0))
+	roundTrip(t, A(Exact(1.0, "a", nil, true)), `["Required.Exact(1,\"a\",null,true)"]`, A("a"), A(2.0))
 	roundTrip(t, map[string]any{"a": Optional(7.0).Exact(2.0)}, `{"a":"Optional(7).Exact(2)"}`,
 		map[string]any{}, map[string]any{"a": 2.0}, map[string]any{"a": 3.0})
 }
@@ -226,7 +226,7 @@ func TestJSONKinds(t *testing.T) {
 		`{"a":"Any","b":"Required","c":"Never","d":"Date","e":"Optional(Date)","f":"Optional(Function)","g":"Function"}`,
 		M("b", 1.0, "d", time.Now()), M("c", 1.0), M())
 	roundTrip(t, M("a", Type(Any).Open(), "b", Type(Any).Default(3.0), "e", Skip(Never())),
-		`{"a":"Any.Open","b":"Any(3)","e":"Never.Skip"}`, M("a", M("z", 1.0)), M())
+		`{"a":"Any.Open","b":"Any(3)","e":"Skip(Never)"}`, M("a", M("z", 1.0)), M())
 	roundTrip(t, M("a", MustExpr("NaN"), "b", Required(MustExpr("NaN")), "c", Min(2, MustExpr("NaN")), "d", MustExpr("Skip(null)"), "e", MustExpr("Required(null)")),
 		`{"a":"NaN","b":"Required(NaN)","c":"Optional(NaN).Min(2)","d":"Skip(null)","e":"Required(null)"}`,
 		M("e", nil), M(), M("d", 1.0))
@@ -289,7 +289,7 @@ func TestJSONCannot(t *testing.T) {
 	cannot(t, M("a", Exact(math.Inf(1))), "cannot express the Exact value +Inf")
 	cannot(t, M("a", Check(regexp.MustCompile("^a")).Check(func(val any, update *Update, state *State) bool { return true })), "cannot express a check function")
 	roundTrip(t, M("a", Exact(math.NaN()), "b", Min(int8(2), Number), "c", Max(float32(3), Number)),
-		`{"a":"Any.Exact(NaN)","b: Number.Min(2)":0,"c: Number.Max(3)":0}`, M("b", 2.0, "c", 3.0), M("b", 1.0))
+		`{"a":"Required.Exact(NaN)","b: Number.Min(2)":0,"c: Number.Max(3)":0}`, M("b", 2.0, "c", 3.0), M("b", 1.0))
 	cannot(t, M("a", Exact(M())), "cannot express the Exact value object")
 	cannot(t, M("a", Type(Any).Default(M())), "cannot express the default object")
 	cannot(t, M("a", Type(Kind("bigint"))), "cannot express a bigint value")

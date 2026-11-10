@@ -317,6 +317,12 @@ func (p *exprParser) parseChained(carrier any) (*Node, error) {
 		if err != nil {
 			return nil, err
 		}
+		// Chained onto a node, Never keeps whether the node requires a
+		// value, as TS's Never called on the node does; bare, it requires
+		// one.
+		if node, ok := carrier.(*Node); ok && head == "Never" && len(args) == 0 {
+			return node.Never(), nil
+		}
 		// Chain: append carrier as final arg unless explicitly provided as the last.
 		args = append(args, carrier)
 		return callExprBuilder(fn, args)

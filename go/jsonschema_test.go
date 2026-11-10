@@ -38,7 +38,7 @@ func TestJSONSchemaKinds(t *testing.T) {
 		"h":{"minimum":2,"minLength":2,"minItems":2,"minProperties":2},"i":{},
 		"j":{"type":"object","default":{}},"k":{"type":"string","format":"date-time"},
 		"l":{"type":"string","minLength":1,"default":"x"},"m":{"not":{}},"n":{},"o":{}},
-		"required":["a","b","c","d","f"],"additionalProperties":false}`)
+		"required":["a","b","c","d","f","m"],"additionalProperties":false}`)
 }
 
 func TestJSONSchemaObjectsAndArrays(t *testing.T) {
@@ -50,8 +50,8 @@ func TestJSONSchemaObjectsAndArrays(t *testing.T) {
 	schemaWant(t, "containers", s.JSONSchema(), `{`+draft+`,"type":"object","properties":{
 		"a":{"type":"object","properties":{"t":{"type":"number","default":1}}},
 		"b":{"type":"object","additionalProperties":{"type":"number"},"default":{}},
-		"c":{"type":"array","prefixItems":[{"type":"number"}],"items":false},
-		"d":{"type":"array","prefixItems":[{"type":"string","minLength":1},{"type":"boolean"}],"items":{"type":"number"}},
+		"c":{"type":"array","prefixItems":[{"type":"number"}],"items":false,"minItems":1},
+		"d":{"type":"array","prefixItems":[{"type":"string","minLength":1},{"type":"boolean"}],"items":{"type":"number"},"minItems":2},
 		"e":{"type":"array"},"f":{"type":"array","items":{"type":"number"}},"g":{"type":"object"},
 		"h":{"type":"object","properties":{"z":{"type":"number","default":1}},"additionalProperties":{"type":"number"}},
 		"i":{"type":"number"},"j":{"type":"array","items":{"type":"number"}},"k":{"type":"array"},"l":{"type":"array"}},
@@ -79,7 +79,7 @@ func TestJSONSchemaChecks(t *testing.T) {
 		"q":{"type":"string","minLength":1,"format":"uri"},"r":{"type":"string","minLength":1,"format":"uuid"},
 		"s":{"type":"string","minLength":1,"format":"date-time"},"t":{"type":"string","minLength":1,"format":"ipv4"},
 		"u":{"type":"string","minLength":1,"format":"ipv6"}},
-		"required":["a","e","g","h","i","k","l","m","n","o","p","q","r","s","t","u"],"additionalProperties":false}`)
+		"required":["a","e","f","g","h","i","k","l","m","n","o","p","q","r","s","t","u"],"additionalProperties":false}`)
 }
 
 func TestJSONSchemaCompositionAndReferences(t *testing.T) {

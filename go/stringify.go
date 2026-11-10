@@ -33,7 +33,7 @@ func stringifyNode(n *node, inline bool) string {
 		}
 		return suffix(base, n)
 	case KindNull:
-		return "null"
+		return suffix("null", n)
 	case KindNaN:
 		return "NaN"
 	case KindAny:

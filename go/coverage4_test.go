@@ -171,7 +171,7 @@ func TestValidateBranches(t *testing.T) {
 	mustErr(t, MustShape(map[string]any{"a": af}), map[string]any{"a": 1.0}, "after failed")
 
 	// All with one failing branch.
-	mustErr(t, MustShape(map[string]any{"a": All(Number, Min(10.0))}), map[string]any{"a": 1.0}, "satisfy all")
+	mustErr(t, MustShape(map[string]any{"a": All(Number, Min(10.0))}), map[string]any{"a": 1.0}, "must be a minimum of 10 (was 1).")
 
 	// Nof with no matching branch.
 	mustErr(t, MustShape(map[string]any{"a": Nof(Min(1), Number, Boolean)}), map[string]any{"a": "x"}, "satisfies 0 of")
