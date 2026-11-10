@@ -1121,6 +1121,20 @@ function shapify<const S>(intop?: S, inopts?: ShapeOptions) {
       let done = false
       let fatal = false
 
+      // Shapes of different kinds (see Nof) put a value to the shape of its
+      // kind, which stands in this node's place where that cannot change
+      // what the composition was given: a scalar, or a value that is this
+      // validation's own copy.
+      const kinds = n.u.nof?.kinds
+      if (undefined !== kinds && undefined !== s.val && 1 === n.b.length && 0 === n.a.length &&
+        (null === s.val || S.object !== typeof s.val || s.ctx.own$)) {
+        const kI = kinds.indexOf(kindOf(s.val))
+        if (-1 < kI) {
+          n = s.node = n.u.list[kI]
+          s.type = n.t
+        }
+      }
+
       // Context skip can override node skip
       let skip = (n.d === skipd ||
         (skipa && skipa.has(n.d)) ||
@@ -3422,9 +3436,10 @@ const All = function <const S extends readonly any[]>(this: any, ...inshapes: S)
     // failing composition leaves it as it was. A failing branch's errors
     // are the errors, each said once.
     const err: ErrDesc[] = []
+    const path$ = patharr(state)
     let out = clone(val)
     for (let shape of shapes) {
-      let subctx = { ...state.ctx, err: [] as ErrDesc[], path$: patharr(state) }
+      let subctx = { ...state.ctx, err: [] as ErrDesc[], path$ }
       const res = shape(out, subctx)
       if (0 < subctx.err.length) {
         pass = false
@@ -3516,7 +3531,7 @@ const Nof = function Nof(this: any, count: any, ...inshapes: any[]): Node<any> {
     const kI = undefined === kinds ? -1 : kinds.indexOf(kindOf(val) as string)
     if (-1 < kI) {
       const err: ErrDesc[] = []
-      const out = shapes[kI](clone(val), { ...state.ctx, err, path$: patharr(state) })
+      const out = shapes[kI](clone(val), { ...state.ctx, err, path$: patharr(state), own$: true })
       if (0 < err.length) {
         update.err = err
         return false

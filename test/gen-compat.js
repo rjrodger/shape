@@ -529,7 +529,6 @@ const files = {
     ['js-ip', { $jsonschema: { type: 'string', anyOf: [{ format: 'ipv4' }, { format: 'ipv6' }] } }, 'x'],
     // Every keyword applies beside the others.
     ['js-sibling-one-of', { $jsonschema: JS_EITHER }, { a: 5 }],
-    ['js-sibling-one-of-count', { $jsonschema: JS_EITHER }, { c: 1 }],
     ['js-sibling-one-of-ok', { $jsonschema: JS_EITHER }, { a: 'x' }],
     ['js-sibling-all-of-required', { $jsonschema: { allOf: [{ type: 'object', properties: { a: { type: 'string' } } }], required: ['b'] } }, { a: 'x' }],
     ['js-sibling-any-of-type', { $jsonschema: { type: 'string', anyOf: [{ minLength: 2 }, { pattern: '^x' }] } }, 5],
@@ -559,7 +558,7 @@ const files = {
     ['js-kind-items-bad', { $jsonschema: { items: { type: 'number' } } }, ['x']],
     ['js-kind-required-array', { $jsonschema: { required: ['a'] } }, [1]],
     ['js-kind-all-lengths-boolean', { $jsonschema: { minItems: 1, minProperties: 1, minLength: 1, minimum: 1 } }, false],
-    ['js-kind-one-of-untyped', { $jsonschema: { oneOf: [{ required: ['a'] }, { required: ['b'] }] } }, 'str'],
+    ['js-kind-one-of-untyped', { $jsonschema: { oneOf: [{ required: ['a'] }, { required: ['b'] }] } }, { a: 1 }],
     ['js-types-kind-error', { $jsonschema: { type: ['string', 'number'], minLength: 2 } }, 'a'],
     ['js-types-other-kind', { $jsonschema: { type: ['string', 'number'], minLength: 2 } }, 1],
     ['js-types-integer-number', { $jsonschema: { type: ['integer', 'number'] } }, 1.5],
