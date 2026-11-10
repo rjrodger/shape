@@ -37,7 +37,7 @@ pub fn stringify_node(n: &Node, inline: bool) -> String {
             };
             suffix(base, n)
         }
-        Kind::Null => "null".to_string(),
+        Kind::Null => suffix("null".to_string(), n),
         Kind::NaN => "NaN".to_string(),
         Kind::Any => {
             // The Any token carries no default at all: it renders as "Any".

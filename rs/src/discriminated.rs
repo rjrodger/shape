@@ -107,6 +107,7 @@ fn choose(tag: &str, state: &mut State<'_>, update: &mut Update) -> bool {
         is_match: state.is_match,
         path: state.path_arr.to_vec(),
         paths: true,
+        own: false,
     };
     validate_node(
         bn,

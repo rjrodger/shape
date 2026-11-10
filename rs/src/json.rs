@@ -770,10 +770,9 @@ pub fn node_json(n: &Node) -> R<Value> {
                     }
                     head
                 }
-                Kind::Never => {
-                    head_required = false;
-                    "Never".to_string()
-                }
+                // Never is required by itself: Optional(Never) and
+                // Skip(Never) say that the value must be absent.
+                Kind::Never => "Never".to_string(),
                 Kind::Null => {
                     if !n.required
                         && !n.skippable

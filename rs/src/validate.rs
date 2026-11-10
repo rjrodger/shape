@@ -50,6 +50,10 @@ pub(crate) struct Walk<'c> {
     /// Whether the path is kept: a terse walk of a schema with no
     /// validators has nothing that reads it.
     pub paths: bool,
+    /// The value walked is the walk's own copy, as a shape of the kind of
+    /// a `Nof`'s value is given one (TypeScript's `own$`): a shape of a
+    /// kind is then put to its value in the node's place.
+    pub own: bool,
 }
 
 impl<'c> Walk<'c> {
@@ -148,10 +152,31 @@ pub(crate) fn validate_node_with(
     let mut node_over: Option<Arc<Node>> = None;
     let mut done = false;
 
-    for b in befores {
+    // A before that puts another node in this one's place (Refer, a claimed
+    // Rename) leaves that node's befores to run, from its first, each once:
+    // TS restarts its loop on the new node.
+    let mut ran: Option<Vec<(*const Node, usize)>> = None;
+    let mut bi = 0;
+    loop {
+        let holder = node_over.clone();
+        let bs: &[Validator] = match holder.as_deref() {
+            Some(nn) => &nn.befores,
+            None => befores,
+        };
+        let Some(b) = bs.get(bi) else { break };
+        let at: *const Node = holder
+            .as_deref()
+            .map_or(n as *const Node, |nn| nn as *const Node);
+        bi += 1;
+        if let Some(r) = ran.as_mut() {
+            if r.contains(&(at, bi - 1)) {
+                continue;
+            }
+            r.push((at, bi - 1));
+        }
         let cur_node: &Node = node_over.as_deref().unwrap_or(n);
         let mut update = Update::default();
-        let ok = {
+        let (ok, nulled) = {
             let value: &Value = over.as_ref().unwrap_or_else(|| cur.get());
             let mut state = State {
                 path_arr: &w.path,
@@ -165,8 +190,12 @@ pub(crate) fn validate_node_with(
                 check_name: &b.name,
                 defs: w.defs,
             };
-            (b.func)(&mut state, &mut update)
+            let ok = (b.func)(&mut state, &mut update);
+            (ok, null_passes(ok, value, cur_node))
         };
+        if nulled {
+            continue;
+        }
         if let Some(v) = update.val.take() {
             match &mut cur {
                 Cur::Mut(_) => cur.set(v),
@@ -174,6 +203,10 @@ pub(crate) fn validate_node_with(
             }
         }
         if let Some(nn) = update.node.take() {
+            if !std::ptr::eq(Arc::as_ptr(&nn), at) {
+                ran.get_or_insert_with(|| (0..bi).map(|j| (at, j)).collect());
+                bi = 0;
+            }
             node_over = Some(nn);
         }
         let cur_node: &Node = node_over.as_deref().unwrap_or(n);
@@ -213,7 +246,7 @@ pub(crate) fn validate_node_with(
     // Afters run whatever the structural check reported.
     for a in afters {
         let mut update = Update::default();
-        let ok = {
+        let (ok, nulled) = {
             let value: &Value = over.as_ref().unwrap_or_else(|| cur.get());
             let mut state = State {
                 path_arr: &w.path,
@@ -227,8 +260,12 @@ pub(crate) fn validate_node_with(
                 check_name: &a.name,
                 defs: w.defs,
             };
-            (a.func)(&mut state, &mut update)
+            let ok = (a.func)(&mut state, &mut update);
+            (ok, null_passes(ok, value, n))
         };
+        if nulled {
+            continue;
+        }
         if let Some(v) = update.val.take() {
             kept = true;
             match &mut cur {
@@ -253,6 +290,13 @@ pub(crate) fn validate_node_with(
 /// one raises nothing, unless the check insisted with `done`.
 fn absent_skips(n: &Node, value: &Value, absent: bool, update: &Update) -> bool {
     absent && value.is_undefined() && (n.skippable || !n.required) && !update.done
+}
+
+/// Nullable allows null, whatever a check made of it: a failed check
+/// against a present null on a nullable node raises nothing, stops nothing
+/// and changes nothing, as TypeScript's `handleValidate` drops its update.
+fn null_passes(ok: bool, value: &Value, n: &Node) -> bool {
+    !ok && value.is_null() && n.nullable
 }
 
 /// The location of an error. A value renders as "undefined" when it is
@@ -390,6 +434,14 @@ fn validate_structure(
     verr: &mut ValidationError,
 ) -> bool {
     if n.kind == Kind::List && n.list_mode != ListMode::None && (n.required || !absent) {
+        // Nullable allows a present null, whatever the composition makes
+        // of it: its errors are dropped.
+        let mut dropped = ValidationError::default();
+        let verr = if n.nullable && cur.get().is_null() {
+            &mut dropped
+        } else {
+            verr
+        };
         let before = verr.count();
         let kept = evaluate_list(
             n,
@@ -424,10 +476,14 @@ fn validate_structure(
         return true;
     }
 
-    // Never rejects a value present or absent.
+    // Never rejects a present value, and an absent one where the node
+    // requires a value: Optional or Skip around it means the value must be
+    // absent. A builder's fault rejects either, as it would have thrown.
     if n.kind == Kind::Never {
-        let at = at_of(w, key, n, cur.get(), parent_is_array, "");
-        add_structural(&at, n, silent, WHY_NEVER, MARK_NEVER, verr);
+        if !cur.get().is_undefined() || n.required || n.arg_fault {
+            let at = at_of(w, key, n, cur.get(), parent_is_array, "");
+            add_structural(&at, n, silent, WHY_NEVER, MARK_NEVER, verr);
+        }
         return !absent;
     }
 
@@ -646,7 +702,11 @@ fn validate_object(
             if !unknown.is_empty() {
                 let value = cur.get();
                 let joined = unknown.join(", ");
-                let at = at_of(w, &joined, n, value, parent_is_array, "");
+                // TypeScript reports the keys once it has started on the
+                // declared ones, so an object that declares any names its
+                // value as a property, even in an array.
+                let parent = parent_is_array && n.obj_children.is_empty();
+                let at = at_of(w, &joined, n, value, parent, "");
                 let mut err = make_err(&at, WHY_CLOSED, MARK_OBJECT_CLOSED, "");
                 err.plural = unknown.len() > 1;
                 if !err.terse {
@@ -1084,6 +1144,39 @@ fn evaluate_list(
             if absent {
                 return true;
             }
+            // Shapes of different kinds: the value is put only to the
+            // shape of its kind, whose errors are then the errors. A value
+            // of no kind listed is counted, and fails, as any other.
+            let chosen = n.nof_kinds.as_ref().and_then(|kinds| {
+                let kind = cur.get().json_kind()?;
+                kinds.iter().position(|k| *k == kind)
+            });
+            if let Some(i) = chosen {
+                // TypeScript puts a scalar, or a value that is the walk's
+                // own copy, to the shape of its kind in the node's place,
+                // where the node has no check of its own; anything else it
+                // validates as the root of a shape of its own, on a copy
+                // that is then that validation's own. Which one shows only
+                // in an error at the shape's root, naming its value as an
+                // index or a property.
+                let scalar = !matches!(cur.get(), Value::Obj(_) | Value::Arr(_) | Value::Date(_));
+                let in_place = n.befores.is_empty() && n.afters.is_empty() && (scalar || w.own);
+                let own = w.own;
+                w.own = own || !in_place;
+                let before = cur.get().clone();
+                let mut sub = ValidationError::default();
+                let parent = in_place && parent_is_array;
+                let kept = validate_node(&n.list[i], cur.reborrow(), key, parent, w, &mut sub);
+                w.own = own;
+                if !sub.has_any() {
+                    return kept;
+                }
+                cur.set(before);
+                if !silent {
+                    sub.issues.into_iter().for_each(|e| verr.add(e));
+                }
+                return true;
+            }
             let total = n.list.len();
             let (mut k, mut tried, mut matched) = (0, 0, 0);
             while nof_span(&n.nof_ok, k, total - tried) == Admits::Some {
@@ -1134,50 +1227,62 @@ fn evaluate_list(
             true
         }
         _ => {
-            // All threads the value through its branches; a branch that
-            // fails leaves the value as the one before it produced.
-            let original = cur.get().clone();
-            let mut pass_all = true;
-            let mut kept = true;
+            // All threads the value through its branches, each producing
+            // from what the one before it made, on a copy: the subject
+            // itself is never changed, so a failing composition leaves it
+            // as it was, and a verdict-only walk threads it alike. A
+            // failing branch's errors are the errors, each said once.
+            let mut out = cur.get().clone();
+            let mut errs: Vec<FieldError> = Vec::new();
+            let mut pass = true;
             for sn in &n.list {
-                let before = cur.get().clone();
+                let mut res = out.clone();
                 let mut sub = ValidationError::default();
-                let k = validate_node(sn, cur.reborrow(), key, parent_is_array, w, &mut sub);
+                // TypeScript runs a branch as the root of a shape of its
+                // own, so a structural error names its value as a
+                // property, though it sits in an array.
+                let kept = validate_node(sn, Cur::Mut(&mut res), key, false, w, &mut sub);
                 if sub.has_any() {
-                    pass_all = false;
-                    cur.set(before);
-                } else {
-                    kept = k;
+                    pass = false;
+                    // TypeScript checks a container in place, so what a
+                    // failing branch made of its parts is what the next
+                    // branch sees; a value it replaced is not.
+                    if same_container(&out, &res) {
+                        out = res;
+                    }
+                    for e in sub.issues {
+                        if !errs.iter().any(|x| x.path == e.path && x.text == e.text) {
+                            errs.push(e);
+                        }
+                    }
+                } else if kept {
+                    // A branch that drops its value (Ignore) passes the
+                    // previous one on.
+                    out = res;
                 }
             }
-            if !pass_all {
-                cur.set(original.clone());
-                let text = format!(
-                    "Value \"$VALUE\" for property \"$PATH\" does not satisfy all of: {}",
-                    list_names(n)
-                );
-                list_error_text(
-                    n,
-                    silent,
-                    &original,
-                    key,
-                    parent_is_array,
-                    w,
-                    verr,
-                    "All",
-                    4032,
-                    &text,
-                );
+            if !pass {
+                if !silent {
+                    errs.into_iter().for_each(|e| verr.add(e));
+                }
                 return true;
             }
             // An absent subject stays absent, for the required check to
             // see, as in TypeScript.
-            if original.is_undefined() {
-                cur.set(original);
+            if !absent {
+                cur.set(out);
             }
-            kept
+            true
         }
     }
+}
+
+/// Whether two values are containers of the same kind.
+fn same_container(x: &Value, y: &Value) -> bool {
+    matches!(
+        (x, y),
+        (Value::Obj(_), Value::Obj(_)) | (Value::Arr(_), Value::Arr(_))
+    )
 }
 
 #[cfg(test)]
@@ -1284,6 +1389,7 @@ mod tests {
             is_match: false,
             path: Vec::new(),
             paths: true,
+            own: false,
         };
         let mut verr = ValidationError::default();
         let mut val = j(r#"{"a":"x"}"#);
@@ -1475,6 +1581,113 @@ mod tests {
         );
         let s = at_a(after(Skip(Token::Number), fail()));
         assert_eq!(run(&s, "{}"), "{}");
+
+        // Nullable allows a present null whatever an after makes of it,
+        // and nothing the after would have changed is kept.
+        let nine = chk("Nine", |_, u| {
+            u.val = Some(Value::Num(9.0));
+            false
+        });
+        let s = at_a(after(Nullable(Any()), nine));
+        assert_eq!(run(&s, r#"{"a":null}"#), r#"{"a":null}"#);
+        assert_eq!(s.error(&j(r#"{"a":1}"#))[0].check, "Nine");
+    }
+
+    // A shape of a Nof's kind takes a scalar in the node's place, and a
+    // container as the root of a validation of its own, whose copy is then
+    // its own; a branch of All is always such a root. An error at the
+    // shape's root names its value as an index or a property accordingly,
+    // as TypeScript's does, and a closed object that declares keys names it
+    // as a property.
+    #[test]
+    fn errors_name_the_value_as_typescript_does() {
+        let t = |k: Token| Spec::from(k);
+        let closed = || Spec::from(Closed(obj::<&str, Spec>([])));
+        let in_array = |n: Spec| Schema::new(arr([n]));
+        let import = |doc: &str| Schema::new(crate::from_json_schema(&j(doc)).unwrap());
+        let cases: Vec<(Schema, &str, &str)> = vec![
+            (
+                in_array(Spec::from(Nof(1, [t(Token::Boolean), t(Token::Integer)]))),
+                "[1.5]",
+                "Validation failed for index \"0\" with number \"1.5\" because the number is not of type integer.",
+            ),
+            (
+                in_array(Spec::from(Nof(1, [t(Token::Boolean), t(Token::String)]))),
+                "[\"\"]",
+                "Validation failed for index \"0\" with string \"\" because an empty string is not allowed.",
+            ),
+            (
+                in_array(Spec::from(Nof(1, [t(Token::Number), closed()]))),
+                r#"[{"z":1}]"#,
+                "Validation failed for property \"0\" with object \"{z:1}\" because the property \"z\" is not allowed.",
+            ),
+            (
+                Schema::new(Nof(
+                    1,
+                    [
+                        t(Token::String),
+                        arr([Spec::from(Nof(1, [t(Token::Number), closed()]))]),
+                    ],
+                )),
+                r#"[{"z":1}]"#,
+                "Validation failed for index \"0\" with object \"{z:1}\" because the index \"z\" is not allowed.",
+            ),
+            (
+                import(r#"{"items": {"additionalProperties": false}}"#),
+                r#"[{"z":1}]"#,
+                "Validation failed for index \"0\" with object \"{z:1}\" because the index \"z\" is not allowed.",
+            ),
+            (
+                import(r#"{"items": {"properties": {"a": {"type": "number"}}, "additionalProperties": false}}"#),
+                r#"[{"a":1,"z":2}]"#,
+                "Validation failed for property \"0\" with object \"{a:1,z:2}\" because the property \"z\" is not allowed.",
+            ),
+            (
+                in_array(Spec::from(All([t(Token::Number), Spec::from(Min(2, Any()))]))),
+                "[\"x\"]",
+                "Validation failed for property \"0\" with string \"x\" because the string is not of type number.\n\
+                 Value \"x\" for property \"0\" must be a minimum length of 2 (was 1).",
+            ),
+            (
+                Schema::new(Closed(arr([Spec::from(All([t(Token::String), t(Token::Number)]))]))),
+                "[]",
+                "Validation failed for property \"0\" because the property is missing.",
+            ),
+            (
+                in_array(obj([("a", 1)])),
+                r#"[{"z":1}]"#,
+                "Validation failed for property \"0\" with object \"{z:1}\" because the property \"z\" is not allowed.",
+            ),
+            (
+                in_array(closed()),
+                r#"[{"y":1,"z":1}]"#,
+                "Validation failed for index \"0\" with object \"{y:1,z:1}\" because the properties \"y, z\" are not allowed.",
+            ),
+        ];
+        for (s, input, want) in cases {
+            assert_eq!(run(&s, input), format!("ERR {}", want), "{}", input);
+        }
+        // A verdict threads All's value as producing it does.
+        let s = Schema::new(All([
+            Spec::from(Coerce(Token::Number)),
+            Spec::from(Min(2, Any())),
+        ]));
+        assert!(s.valid(&j("\"5\"")) && !s.valid(&j("\"1\"")));
+    }
+
+    // A silent composition raises nothing, whichever way it fails.
+    #[test]
+    fn silent_compositions() {
+        let mut all = All([Spec::from(Token::Number), Spec::from(Min(2, Any()))]);
+        all.silent = true;
+        assert_eq!(run(&at_a(all), r#"{"a":1}"#), r#"{"a":1}"#);
+        let mut kinds = Nof(
+            1,
+            [Spec::from(Min(2, Token::String)), Spec::from(Token::Number)],
+        );
+        assert!(kinds.nof_kinds.is_some());
+        kinds.silent = true;
+        assert_eq!(run(&at_a(kinds), r#"{"a":"x"}"#), r#"{"a":"x"}"#);
     }
 
     #[test]

@@ -51,7 +51,9 @@ pub use expr::{expr, expr_apply, ExprError};
 pub use isolate::{Inner, TransformFn};
 pub use json::{node_json, JsonError};
 pub use jsonschema::json_schema;
-pub use jsonschema_import::{from_json_schema, JsonSchemaError};
+pub use jsonschema_import::{
+    from_json_schema, from_json_schema_with, JsonSchemaError, JsonSchemaImportOptions,
+};
 pub use node::{Kind, ListMode, Node, Token, Validator, ValidatorFn};
 pub use normalize::Options;
 pub use spec::{arr, from_map, null, obj, Spec};
@@ -143,6 +145,7 @@ impl Schema {
                 is_match: false,
                 path: Vec::new(),
                 paths: true,
+                own: false,
             };
             walk_root(&self.root, Cur::Mut(&mut value), &mut w, &mut verr)
         };
@@ -170,6 +173,7 @@ impl Schema {
             is_match: true,
             path: Vec::new(),
             paths: !self.pure,
+            own: false,
         };
         walk_root(&self.root, Cur::Ref(input), &mut w, &mut verr);
         !verr.has_any()
@@ -190,6 +194,7 @@ impl Schema {
             is_match: true,
             path: Vec::new(),
             paths: true,
+            own: false,
         };
         walk_root(&self.root, Cur::Ref(input), &mut w, &mut verr);
         verr.issues
