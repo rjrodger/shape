@@ -1125,7 +1125,7 @@ function shapify<const S>(intop?: S, inopts?: ShapeOptions) {
       // kind, which stands in this node's place where that cannot change
       // what the composition was given: a scalar, or a value that is this
       // validation's own copy.
-      const kinds = n.u.nof?.kinds
+      const kinds = S.list === n.t ? n.u.nof?.kinds : undefined
       if (undefined !== kinds && undefined !== s.val && 1 === n.b.length && 0 === n.a.length &&
         (null === s.val || S.object !== typeof s.val || s.ctx.own$)) {
         const kI = kinds.indexOf(kindOf(s.val))
@@ -1145,7 +1145,9 @@ function shapify<const S>(intop?: S, inopts?: ShapeOptions) {
       // that puts another node in this one's place (Refer, a claimed Rename)
       // leaves that node's checks to run, from its first, each check once.
       if (0 < n.b.length) {
-        defineFirst(n, s)
+        if (n.u.defines) {
+          defineFirst(n, s)
+        }
         let ran: Validate[] | null = null
         for (let bI = 0; bI < n.b.length; bI++) {
           const vf = n.b[bI]
@@ -1164,7 +1166,9 @@ function shapify<const S>(intop?: S, inopts?: ShapeOptions) {
           fatal = fatal || !!update.fatal
           if (n !== was) {
             ran = null === ran ? was.b.slice(0, bI + 1) : ran
-            defineFirst(n, s)
+            if (n.u.defines) {
+              defineFirst(n, s)
+            }
             bI = -1
           }
         }
@@ -3836,6 +3840,7 @@ const Define = function <V = any>(this: any, inopts: any, shape?: Node<V> | V): 
     definer.n = S.Define
     definer.a = [name]
     attach(node.b, definer)
+    node.u.defines = true
   }
 
   return node

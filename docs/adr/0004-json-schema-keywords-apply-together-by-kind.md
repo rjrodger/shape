@@ -63,8 +63,12 @@ option; `Nof` already expresses it.
 
 ## Consequences
 
-- Imported schemas pass 74% of the required tests of the official suite for
-  draft 2020-12 in TypeScript, from 65%, and none that passed before fails.
+- Imported schemas pass 75% of the required tests of the official suite for
+  draft 2020-12 in Go and Rust, from 67%, and 74% in TypeScript, from 65%;
+  none that passed before fails, in any of the three.
+- A schema without a `type` costs more to validate than the object it used
+  to be read as: in TypeScript, three such objects nested take about twice
+  as long.
 - `All`'s message is new for every user of `All`. `Nof`'s is new for a
   branch of a kind the value has, among branches of different kinds; a
   value of no listed kind still reads as a count.
