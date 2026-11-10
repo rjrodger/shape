@@ -1148,7 +1148,9 @@ function shapify<const S>(intop?: S, inopts?: ShapeOptions) {
         }
 
         else if (S.never === s.type) {
-          s.curerr.push(makeErrImpl(S.never, s, 1070))
+          if (!valundef || n.r) {
+            s.curerr.push(makeErrImpl(S.never, s, 1070))
+          }
         }
 
         // Handle objects.
@@ -2304,6 +2306,13 @@ function keyExprNode(src: string, example: any, depth: number, meta?: NodeMeta) 
   node.f = ex.f
   node.n = null != ex.v && S.object === typeof (ex.v) ? keys(ex.v).length : 0
 
+  // An Exact asks for a value only until it has a default, as a Default
+  // around it would make it optional: here the example is that default,
+  // unless the expression says Required outright.
+  if (node.b.some((v: any) => S.Exact === v.n) && !/\bRequired\b/.test(src)) {
+    node.r = false
+  }
+
   return node
 }
 
@@ -2400,6 +2409,13 @@ function handleValidate(vf: Validate, s: State): Update {
     // Skip allows undefined
     if (undefined === s.val && (s.node.p || !s.node.r) && true !== update.done) {
       delete update.err
+      return update
+    }
+
+    // Nullable allows null, whatever the check made of it.
+    if (null === s.val && s.node.u.nullable) {
+      delete update.err
+      delete update.done
       return update
     }
 
@@ -3320,9 +3336,15 @@ const Empty = function <V = any>(this: any, shape?: Node<V> | V): Node<V> {
 
 
 // Value will never match anything.
+// Absent is still governed by required or optional: Never alone requires a
+// value, and so fails always; Optional or Skip around it means the value
+// must be absent.
 const Never = bare<never>()(function Never <V = never>(this: any, shape?: Node<V> | V): Node<never> {
   let node = buildize(this, shape)
   node.t = (S.never as ValType)
+  if (!this?.$?.shape$) {
+    node.r = true
+  }
   return node as Node<never>
 })
 
@@ -3397,13 +3419,20 @@ const All = function <const S extends readonly any[]>(this: any, ...inshapes: S)
 
     // The value is threaded through the branches, each producing from what
     // the one before it made; the subject itself is never changed, so a
-    // failing composition leaves it as it was.
+    // failing composition leaves it as it was. A failing branch's errors
+    // are the errors, each said once.
+    const err: ErrDesc[] = []
     let out = clone(val)
     for (let shape of shapes) {
-      let subctx = { ...state.ctx, err: [] }
+      let subctx = { ...state.ctx, err: [] as ErrDesc[], path$: patharr(state) }
       const res = shape(out, subctx)
       if (0 < subctx.err.length) {
         pass = false
+        for (const e of subctx.err) {
+          if (!err.some((x: ErrDesc) => x.path === e.path && x.text === e.text)) {
+            err.push(e)
+          }
+        }
       }
       else if (undefined !== res) {
         // A branch that drops its value (Ignore) passes the previous one on.
@@ -3417,12 +3446,7 @@ const All = function <const S extends readonly any[]>(this: any, ...inshapes: S)
     }
     else if (!pass) {
       update.why = S.All
-      update.err = [
-        makeErr(state,
-          S.Value + ' ' + S.$VALUE + S.forprop + S.$PATH +
-          ' does not satisfy all of: ' +
-          `${inshapes.map(x => stringify(x, true)).join(', ')}`)
-      ]
+      update.err = err
     }
 
     return pass
@@ -3476,8 +3500,28 @@ const Nof = function Nof(this: any, count: any, ...inshapes: any[]): Node<any> {
   // Whether the count admits exactly one shape and nothing else.
   const one = 1 < ok.length && ok.every((v: boolean, c: number) => v === (1 === c))
 
+  // Exactly one of shapes of different kinds is the shape of the value's
+  // kind: the value is put to that shape alone.
+  const kinds = one ? nofKinds(node.u.list) : undefined
+  node.u.nof.kinds = kinds
+
   const validator = function Nof(val: any, update: Update, state: State) {
     if (undefined === val) {
+      return true
+    }
+
+    // Shapes of different kinds: the value is put only to the shape of its
+    // kind, whose errors are then the errors. A value of no kind listed is
+    // counted, and fails, as any other.
+    const kI = undefined === kinds ? -1 : kinds.indexOf(kindOf(val) as string)
+    if (-1 < kI) {
+      const err: ErrDesc[] = []
+      const out = shapes[kI](clone(val), { ...state.ctx, err, path$: patharr(state) })
+      if (0 < err.length) {
+        update.err = err
+        return false
+      }
+      update.val = out
       return true
     }
 
@@ -3524,6 +3568,35 @@ const Nof = function Nof(this: any, count: any, ...inshapes: any[]): Node<any> {
 const NOF_NONE = 0
 const NOF_SOME = 1
 
+
+// The kind of a JSON value, by its type or its node's.
+const KIND_OF_TYPE: any = {
+  null: 'null', boolean: 'boolean', number: 'number', integer: 'number',
+  string: 'string', regexp: 'string', object: 'object', array: 'array',
+}
+
+function kindOf(val: any): string | undefined {
+  return null === val ? 'null' : isarr(val) ? 'array' : KIND_OF_TYPE[typeof val]
+}
+
+
+// The checks that leave a shape's kind as it was: a shape with no others
+// takes a value of its own kind only.
+const KIND_KEEPING: any = {
+  Above: 1, Below: 1, Check: 1, DateTime: 1, Define: 1, Email: 1, Exact: 1, Ip: 1, Ipv4: 1,
+  Ipv6: 1, Len: 1, Max: 1, Min: 1, Url: 1, Uuid: 1,
+}
+
+// The kinds of the shapes, where each is of a different kind and takes
+// values of that kind only.
+function nofKinds(list: any[]): string[] | undefined {
+  const kinds = list.map((n: any) =>
+    !n.u.nullable && n.b.concat(n.a).every((v: any) => KIND_KEEPING[v.n]) ?
+      KIND_OF_TYPE[n.t] : undefined)
+  return kinds.every((k: any, i: number) => undefined !== k && i === kinds.indexOf(k)) ?
+    kinds : undefined
+}
+
 // Whether the counts from k to k + open are all admitted (2), some (1) or
 // none (0): a shape is tried only while it is some.
 function nofSpan(ok: boolean[], k: number, open: number): number {
@@ -3538,6 +3611,12 @@ function nofSpan(ok: boolean[], k: number, open: number): number {
 // Value must match excatly one of the literal values provided.
 const Exact = function <const T extends readonly any[]>(this: any, ...vals: T): Node<Literal<T[number]>> {
   const node = buildize(this)
+
+  // Exact asks for a value, as a type token does, so Optional or Skip after
+  // it lets the value be absent. Chained, the node stays as it was.
+  if (!this?.$?.shape$) {
+    node.r = true
+  }
 
   const validator = function Exact(val: any, update: Update, state: State) {
     for (let i = 0; i < vals.length; i++) {
@@ -3554,6 +3633,13 @@ const Exact = function <const T extends readonly any[]>(this: any, ...vals: T): 
           return true
         }
       }
+    }
+
+    // Absent, where the node does not require a value and has no default
+    // to put in its place.
+    if (undefined === val &&
+      (state.node.p || (!state.node.r && undefined === state.node.f))) {
+      return true
     }
 
     update.err =
@@ -4456,7 +4542,8 @@ function node2json(n: Node<any>): any {
   else if (S.any === t) {
     let s = ''
 
-    if (n.r) {
+    // Required is implicit with Exact.
+    if (n.r && !n.b.some((v: any) => S.Exact === v.n)) {
       s += S.Required
     }
 
@@ -4559,6 +4646,9 @@ function node2json(n: Node<any>): any {
   }
   else if (S.never === t) {
     return S.Never + bdesc(n)
+  }
+  else if (S.null === t) {
+    return 'null' + bdesc(n)
   }
 }
 
@@ -5115,7 +5205,6 @@ function nodeJson(n: Node<any>): any {
   }
   else if (S.never === t) {
     head = S.Never
-    headRequired = false
   }
   else if (S.null === t) {
     if (!n.r && !n.p && 0 === n.b.length && 0 === n.a.length &&
@@ -5412,7 +5501,17 @@ function nodeSchema(raw: any, defs: any): any {
   checkSchema(n, s)
 
   if (n.u.nullable && undefined !== s.type) {
-    s.type = [s.type, 'null']
+    s.type = (isarr(s.type) ? s.type : [s.type]).concat('null')
+  }
+
+  // A tuple position the shape requires must be there, and so must every
+  // one before it.
+  if (S.array === n.t) {
+    const need = 1 + keys(n.v).reduce((m: number, k: string) =>
+      !isNaN(+k) && nodize(n.v[k]).r ? Math.max(m, +k) : m, -1)
+    if (need > (s.minItems || 0)) {
+      s.minItems = need
+    }
   }
 
   if (!n.r && !n.p && undefined !== n.f && S.function !== typeof n.f && !isNaN2(n.f)) {
@@ -5513,12 +5612,36 @@ function listSchema(n: Node<any>, s: any, defs: any) {
     s.oneOf = branches
   }
   else if (undefined !== n.u.nof) {
-    nofSchema(n.u.nof.ok, branches, s)
+    if (!kindsSchema(n.u.nof.kinds, branches, s)) {
+      nofSchema(n.u.nof.ok, branches, s)
+    }
   }
   else {
     s.allOf = branches
   }
 }
+
+
+// Exactly one of a shape for every JSON kind is a schema with no type: the
+// keywords of each kind side by side. A shape that says more than its
+// kind's keywords can say is counted, as oneOf.
+function kindsSchema(kinds: string[] | undefined, branches: any[], s: any): boolean {
+  if (undefined === kinds || !JSON_KINDS.every((k: string) => kinds.includes(k)) ||
+    !branches.every((b: any) => keys(b).every((k: string) =>
+      'type' === k || (JSON_SCHEMA_KIND_KEYWORDS[KIND_OF_TYPE[b.type]] || []).includes(k)))) {
+    return false
+  }
+  for (const b of branches) {
+    for (const k of keys(b)) {
+      if ('type' !== k) {
+        s[k] = b[k]
+      }
+    }
+  }
+  return true
+}
+
+const JSON_KINDS = ['null', 'boolean', 'number', 'string', 'object', 'array']
 
 
 // A count of the shapes, as the keywords that count: none of them is not,
@@ -5735,15 +5858,39 @@ const JSON_SCHEMA_FORMAT_BUILDER: any = {
 }
 
 
-function fromJsonSchema(schema: any): any {
-  if (null == schema || S.object !== typeof schema || Array.isArray(schema)) {
-    throw new Error('JSON Schema: the schema must be an object')
+// The drafts in which a $ref stands for the whole schema it sits in, so the
+// keywords beside it are ignored. From 2019-09 on, a $ref is one keyword
+// among the others.
+const JSON_SCHEMA_REF_ALONE = /^https?:\/\/json-schema\.org\/draft-0[3-7]\/schema#?$/
+
+// Keywords the import recognises but does not enforce. It passes over them,
+// as it does a keyword it does not know, unless it is strict.
+const JSON_SCHEMA_UNSUPPORTED = [
+  '$dynamicRef', '$recursiveRef', 'contains', 'dependencies', 'dependentRequired',
+  'dependentSchemas', 'if', 'multipleOf', 'patternProperties', 'propertyNames',
+  'unevaluatedItems', 'unevaluatedProperties', 'uniqueItems',
+]
+
+
+type JsonSchemaImportOptions = {
+  // Refuse a keyword the import would pass over.
+  strict?: boolean
+}
+
+
+function fromJsonSchema(schema: any, opts?: JsonSchemaImportOptions): any {
+  if (S.boolean !== typeof schema &&
+    (null == schema || S.object !== typeof schema || Array.isArray(schema))) {
+    throw new Error('JSON Schema: the schema must be an object or boolean')
   }
   const ctx = {
     root: schema,
     defs: schema.$defs || schema.definitions || {},
     stack: [] as string[],
     recursive: {} as any,
+    backrefs: 0,
+    refAlone: S.string === typeof schema.$schema && JSON_SCHEMA_REF_ALONE.test(schema.$schema),
+    strict: true === opts?.strict,
   }
   return importSchema(schema, ctx, '')
 }
@@ -5754,7 +5901,9 @@ function jsonSchemaFault(msg: string, path: string): Error {
 }
 
 
-function importSchema(s: any, ctx: any, path: string): any {
+// A kind, where given, is the one kind of value the enclosing schema lets
+// through to this one (see importKindSplit).
+function importSchema(s: any, ctx: any, path: string, kind?: string): any {
   if (true === s) {
     return Any()
   }
@@ -5765,13 +5914,9 @@ function importSchema(s: any, ctx: any, path: string): any {
     throw jsonSchemaFault('a schema must be an object or boolean', path)
   }
 
-  let spec: any
-  if (S.string === typeof s.$ref) {
-    spec = importRef(s.$ref, ctx, path)
-  }
-  else {
-    spec = importKeywords(s, ctx, path)
-  }
+  let spec: any = S.string === typeof s.$ref && ctx.refAlone ?
+    importRef(s.$ref, ctx, path) :
+    importKeywords(s, ctx, path, kind)
 
   if (S.string === typeof s.description) {
     spec = Describe(s.description, spec)
@@ -5805,6 +5950,7 @@ function importRef(ref: string, ctx: any, path: string): any {
   const refname = '' === name ? '$root' : name
   if (ctx.stack.includes(name)) {
     ctx.recursive[name] = true
+    ctx.backrefs++
     return Refer(refname)
   }
 
@@ -5820,44 +5966,102 @@ function importRef(ref: string, ctx: any, path: string): any {
 }
 
 
-function importKeywords(s: any, ctx: any, path: string): any {
+// Every keyword applies, each a part of All. Not comes first, so that it
+// sees the value as given. An enum or a const keeps only the values the
+// other parts allow, and so stays one Exact, with Exact's message.
+function importKeywords(s: any, ctx: any, path: string, kind?: string): any {
+  if (ctx.strict) {
+    for (const k of JSON_SCHEMA_UNSUPPORTED) {
+      if (undefined !== s[k] && !('uniqueItems' === k && false === s[k])) {
+        throw jsonSchemaFault('unsupported keyword "' + k + '"', path)
+      }
+    }
+  }
+
   let spec: any
 
-  if (undefined !== s.enum) {
-    if (!Array.isArray(s.enum) || 0 === s.enum.length) {
-      throw jsonSchemaFault('enum must be a non-empty array', path)
-    }
-    spec = Exact(...s.enum)
-  }
-  else if (undefined !== s.const) {
-    spec = Exact(s.const)
-  }
-  else if (undefined !== s.allOf) {
-    spec = All(...importBranches(s.allOf, ctx, path + '/allOf'))
-  }
-  else if (undefined !== s.oneOf) {
-    spec = importDiscriminated(importBranchList(s.oneOf, path + '/oneOf'), ctx, path + '/oneOf') ||
-      Nof(1, ...importBranches(s.oneOf, ctx, path + '/oneOf'))
-  }
-  else if (undefined !== s.anyOf && !isIpFormats(s.anyOf)) {
-    spec = Nof(Min(1), ...importBranches(s.anyOf, ctx, path + '/anyOf'))
+  // not: {} admits nothing, whatever else the schema says.
+  if (isEmptyObject(s.not)) {
+    spec = Never()
   }
   else {
-    spec = importTyped(s, ctx, path)
-  }
+    // The subschemas of not, allOf, anyOf and oneOf see the same value, so
+    // they need only meet the one kind this schema lets through, if it has
+    // one.
+    const inner = typeKind(s) || kind
+    const backrefs = ctx.backrefs
+    const parts: any[] = []
+    if (undefined !== s.not) {
+      parts.push(Nof(0, importSchema(s.not, ctx, path + '/not', inner)))
+    }
+    if (S.string === typeof s.$ref) {
+      parts.push(importRef(s.$ref, ctx, path))
+    }
+    const typed = importTyped(s, ctx, path, kind)
+    if (!isBareAny(typed)) {
+      parts.push(typed)
+    }
+    if (undefined !== s.allOf) {
+      parts.push(All(...importBranches(s.allOf, ctx, path + '/allOf', inner)))
+    }
+    if (undefined !== s.anyOf && !isIpFormats(s.anyOf)) {
+      parts.push(Nof(Min(1), ...importBranches(s.anyOf, ctx, path + '/anyOf', inner)))
+    }
+    if (undefined !== s.oneOf) {
+      parts.push(
+        importDiscriminated(importBranchList(s.oneOf, path + '/oneOf'), ctx, path + '/oneOf') ||
+        Nof(1, ...importBranches(s.oneOf, ctx, path + '/oneOf', inner)))
+    }
 
-  // Not is a count of none. It holds beside the other keywords, ahead of
-  // them so that it sees the value as given; not: {} admits nothing, so it
-  // is Never whatever else the schema says.
-  if (undefined !== s.not) {
-    const not = isEmptyObject(s.not) ? undefined : Nof(0, importSchema(s.not, ctx, path + '/not'))
-    spec = undefined === not ? Never() : isBareAny(spec) ? not : All(not, spec)
+    spec = undefined !== s.enum || undefined !== s.const ?
+      importExact(s, parts, backrefs < ctx.backrefs, path) :
+      0 === parts.length ? Any() : 1 === parts.length ? parts[0] : All(...parts)
   }
 
   if (undefined !== s.default) {
     spec = Default(s.default, spec)
   }
   return spec
+}
+
+
+// An enum or a const, less the values the other parts refuse. A part that
+// refers back to a definition still being read cannot be tried yet, so the
+// parts then stay beside the Exact.
+function importExact(s: any, parts: any[], backref: boolean, path: string): any {
+  let vals: any[]
+  if (undefined !== s.enum) {
+    if (!Array.isArray(s.enum)) {
+      throw jsonSchemaFault('enum must be an array', path)
+    }
+    vals = undefined === s.const ? s.enum : s.enum.filter((v: any) => jsonEqual(v, s.const))
+  }
+  else {
+    vals = [s.const]
+  }
+
+  if (backref) {
+    return All(0 === vals.length ? Never() : Exact(...vals), ...parts)
+  }
+  if (0 < parts.length) {
+    const rest = Shape(1 === parts.length ? parts[0] : All(...parts))
+    vals = vals.filter((v: any) => rest.match(clone(v)))
+  }
+  return 0 === vals.length ? Never() : Exact(...vals)
+}
+
+
+// Equality of JSON values, as enum and const compare them.
+function jsonEqual(x: any, y: any): boolean {
+  if (x === y) {
+    return true
+  }
+  if (null == x || null == y || S.object !== typeof x || S.object !== typeof y ||
+    isarr(x) !== isarr(y)) {
+    return false
+  }
+  const xk = keys(x)
+  return xk.length === keys(y).length && xk.every((k: string) => hasOwn(y, k) && jsonEqual(x[k], y[k]))
 }
 
 
@@ -5869,8 +6073,8 @@ function importBranchList(list: any, path: string): any[] {
 }
 
 
-function importBranches(list: any, ctx: any, path: string): any[] {
-  return importBranchList(list, path).map((b: any, i: number) => importSchema(b, ctx, path + '/' + i))
+function importBranches(list: any, ctx: any, path: string, kind?: string): any[] {
+  return importBranchList(list, path).map((b: any, i: number) => importSchema(b, ctx, path + '/' + i, kind))
 }
 
 
@@ -5899,33 +6103,36 @@ function isIpFormats(anyOf: any): boolean {
 }
 
 
-function importTyped(s: any, ctx: any, path: string): any {
-  let types: any[] = Array.isArray(s.type) ? s.type : (undefined === s.type ? [] : [s.type])
-  const nullable = types.includes('null') && 1 < types.length
-  types = nullable ? types.filter((t: any) => 'null' !== t) : types
+// The one kind of value a schema's type lets through, if it names one.
+function typeKind(s: any): string | undefined {
+  const t = Array.isArray(s.type) && 1 === s.type.length ? s.type[0] : s.type
+  return S.string === typeof t ? KIND_OF_TYPE[t] : undefined
+}
 
-  for (const t of types) {
+
+function importTyped(s: any, ctx: any, path: string, kind?: string): any {
+  const given: any[] = Array.isArray(s.type) ? s.type : (undefined === s.type ? [] : [s.type])
+  for (const t of given) {
     if (S.string !== typeof t || undefined === JSON_SCHEMA_KIND[t]) {
       throw jsonSchemaFault('unknown type "' + t + '"', path)
     }
   }
 
+  // Null beside another type is Nullable, and a number covers an integer.
+  let types = given.filter((t: any, i: number) => i === given.indexOf(t))
+  const nullable = types.includes('null') && 1 < types.length
+  types = types.filter((t: any) =>
+    !(nullable && 'null' === t) && !('integer' === t && types.includes('number')))
+
   if (0 === types.length) {
-    // No type: the shape the keywords imply, or anything.
-    if (undefined !== s.properties || undefined !== s.additionalProperties || undefined !== s.required) {
-      types = ['object']
-    }
-    else if (undefined !== s.items || undefined !== s.prefixItems) {
-      types = ['array']
-    }
-    else {
-      return importUntyped(s, path)
-    }
+    return importKindSplit(s, ctx, path, kind)
   }
 
-  let spec: any = 1 === types.length ?
+  // The types are of different kinds, so the value's kind chooses among
+  // them (see Nof).
+  const spec: any = 1 === types.length ?
     importKind(types[0], s, ctx, path) :
-    Nof(Min(1), ...types.map((t: any) => importKind(t, s, ctx, path)))
+    Nof(1, ...types.map((t: any) => importKind(t, s, ctx, path)))
 
   return nullable ? Nullable(spec) : spec
 }
@@ -5951,32 +6158,41 @@ function importKind(t: string, s: any, ctx: any, path: string): any {
 }
 
 
-// Keywords without a type: a pattern or format reads as a string, a bound
-// applies to whatever kind the value turns out to be (as a bare Min does),
-// and anything else says nothing.
-function importUntyped(s: any, path: string): any {
-  if (S.string === typeof s.pattern || undefined !== JSON_SCHEMA_FORMAT_BUILDER[s.format] || isIpFormats(s.anyOf)) {
-    return importString(s, path)
-  }
-  // Beside a numeric exclusive bound the length keywords are that bound
-  // written for strings, arrays and objects (Above(1) exports minLength 2),
-  // so only a plain minimum or maximum is a second bound there.
-  const view = {
-    minimum: S.number === typeof s.exclusiveMinimum ? s.minimum :
-      firstNumber(s.minimum, s.minLength, s.minItems, s.minProperties),
-    maximum: S.number === typeof s.exclusiveMaximum ? s.maximum :
-      firstNumber(s.maximum, s.maxLength, s.maxItems, s.maxProperties),
-    exclusiveMinimum: s.exclusiveMinimum,
-    exclusiveMaximum: s.exclusiveMaximum,
-  }
-  // A bare bound (Min(1)) rather than one on an Any node, as a user writes.
-  const spec = importNumber(undefined, view)
-  return undefined === spec ? Any() : spec
+// The keywords that apply to one kind of value only.
+const JSON_SCHEMA_KIND_KEYWORDS: any = {
+  number: ['minimum', 'maximum', 'exclusiveMinimum', 'exclusiveMaximum'],
+  string: ['minLength', 'maxLength', 'pattern', 'format'],
+  object: ['properties', 'required', 'additionalProperties', 'minProperties', 'maxProperties'],
+  array: ['items', 'prefixItems', 'minItems', 'maxItems'],
 }
 
 
-function firstNumber(...vals: any[]): number | undefined {
-  return vals.find((v: any) => S.number === typeof v)
+// A schema without a type checks each kind of value with the keywords of
+// that kind, and lets every other kind through: { minLength: 2 } fails "a"
+// and passes 1. Where the enclosing schema lets one kind through, only that
+// kind's keywords can apply.
+function importKindSplit(s: any, ctx: any, path: string, kind?: string): any {
+  const has = (k: string) => (undefined === kind || k === kind) &&
+    (JSON_SCHEMA_KIND_KEYWORDS[k].some((w: string) => undefined !== s[w]) ||
+      ('string' === k && isIpFormats(s.anyOf)))
+  if (!['number', 'string', 'object', 'array'].some(has)) {
+    return Any()
+  }
+  if (undefined !== kind) {
+    return 'number' === kind ? importNumber(Number, s) :
+      'string' === kind ? importString(s, path) :
+        'object' === kind ? importObject(s, ctx, path) :
+          importArray(s, ctx, path)
+  }
+  // A shape for each kind of JSON value: the value's kind chooses (see Nof).
+  return Nof(1,
+    Required(null),
+    Boolean,
+    has('number') ? importNumber(Number, s) : Number,
+    has('string') ? importString(s, path) : Empty(String),
+    has('object') ? importObject(s, ctx, path) : Open({}),
+    has('array') ? importArray(s, ctx, path) : [],
+  )
 }
 
 
@@ -6098,7 +6314,14 @@ function importArray(s: any, ctx: any, path: string): any {
   if (undefined !== s.prefixItems) {
     // Closed makes a one-element list a tuple rather than an element shape;
     // items says what may follow (anything, when it is absent or true).
-    const tuple = Closed(s.prefixItems.map((e: any, i: number) => importSchema(e, ctx, path + '/prefixItems/' + i)))
+    // A position may be absent, but for one before a position with a
+    // default to fill in: an array has no holes.
+    const dflt = (e: any) => isPlainObject(e) && undefined !== e.default
+    const last = s.prefixItems.reduce((m: number, e: any, i: number) => dflt(e) ? i : m, -1)
+    const tuple = Closed(s.prefixItems.map((e: any, i: number) => {
+      const spec = importSchema(e, ctx, path + '/prefixItems/' + i)
+      return dflt(e) ? spec : i < last ? Required(spec) : Skip(spec)
+    }))
     if (false === s.items) {
       spec = tuple
     }
@@ -6418,6 +6641,7 @@ export type {
   Context,
   ErrDesc,
   ShapeOptions,
+  JsonSchemaImportOptions,
   Builder,
   Node,
   State,

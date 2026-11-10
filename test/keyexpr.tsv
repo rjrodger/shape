@@ -31,7 +31,7 @@ keyexpr-nof-example-is-default	{"a: Nof(1,String,Number)":5}	{}	{"a":5}
 keyexpr-nof-example-not-a-branch	{"a: Nof(1,String,Number)":5}	{"a":7}	{"a":7}	
 keyexpr-nof-example-fail-message	{"a: Nof(1,String,Number)":5}	{"a":true}		"Value \"true\" for property \"a\" satisfies 0 of: String, Number; the count must be 1."
 keyexpr-all-example-is-default	{"a: All(Number,Min(2))":5}	{}	{"a":5}	
-keyexpr-all-example-fail-message	{"a: All(Number,Min(2))":5}	{"a":1}		"Value \"1\" for property \"a\" does not satisfy all of: Number, Min(2)"
+keyexpr-all-example-fail-message	{"a: All(Number,Min(2))":5}	{"a":1}		"Value \"1\" for property \"a\" must be a minimum of 2 (was 1)."
 keyexpr-nof-count-shape-example	{"a: Nof(Min(1),String,Number)":5}	{}	{"a":5}	
 keyexpr-optional-nof-example	{"a: Optional(Nof(1,String,Number))":5}	{"a":7}	{"a":7}	
 keyexpr-required-nof-example	{"a: Required(Nof(1,String,Number))":5}	{}		"Validation failed for property \"a\" because the property is missing."

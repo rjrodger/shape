@@ -109,7 +109,7 @@ fault-replaces-type-text	{"a":{"$expr":"Fault(\"boom\",Email)"}}	{"a":1}		"boom"
 fault-keeps-nof-text	{"a":{"$expr":"Fault(\"boom\",Nof(1,Number,String))"}}	{"a":true}		"Value \"true\" for property \"a\" satisfies 0 of: Number, String; the count must be 1."
 fault-keeps-nof-none-text	{"a":{"$expr":"Fault(\"boom\",Nof(0,String))"}}	{"a":"x"}		"Value \"x\" for property \"a\" satisfies 1 of: String; the count must be 0."
 fault-replaces-nof-missing	{"a":{"$expr":"Fault(\"boom\",Nof(1,Number,String))"}}	{}		"boom"
-fault-keeps-all-text	{"a":{"$expr":"Fault(\"boom\",All(Number,Min(2)))"}}	{"a":1}		"Value \"1\" for property \"a\" does not satisfy all of: Number, Min(2)"
+fault-keeps-all-text	{"a":{"$expr":"Fault(\"boom\",All(Number,Min(2)))"}}	{"a":1}		"Value \"1\" for property \"a\" must be a minimum of 2 (was 1)."
 catch-fallback	{"a":{"$expr":"Catch(0,Number)"}}	{"a":"x"}	{"a":0}	
 catch-passes-through	{"a":{"$expr":"Catch(0,Number)"}}	{"a":5}	{"a":5}	
 catch-inner-bound	{"a":{"$expr":"Catch(\"none\",Min(2,String))"}}	{"a":"x"}	{"a":"none"}	
@@ -127,3 +127,20 @@ disc-unknown-tag	{"p":{"$discriminated":["kind",{"dog":{"bark":{"$type":"Boolean
 disc-not-object	{"p":{"$discriminated":["kind",{"dog":{"bark":{"$type":"Boolean"}},"fish":{"fins":{"$type":"Number"}}}]}}	{"p":1}		"Value \"1\" for property \"p\" is not an object with a \"kind\" property."
 disc-required-absent	{"p":{"$discriminated":["kind",{"dog":{"bark":{"$type":"Boolean"}},"fish":{"fins":{"$type":"Number"}}}]}}	{}		"Validation failed for property \"p\" because the property is missing."
 disc-optional-absent	{"p":{"$optional":{"$discriminated":["kind",{"dog":{"bark":{"$type":"Boolean"}},"fish":{"fins":{"$type":"Number"}}}]}}}	{}	{}	
+exact-bare-absent	{"a":{"$expr":"Exact(\"x\",\"y\")"}}	{}		"Value \"undefined\" for property \"a\" must be exactly one of: x, y"
+exact-optional-absent	{"a":{"$expr":"Optional(Exact(\"x\",\"y\"))"}}	{}	{}	
+exact-skip-absent	{"a":{"$expr":"Skip(Exact(\"x\",\"y\"))"}}	{}	{}	
+exact-chained-optional-absent	{"a":{"$expr":"Exact(\"x\",\"y\").Optional"}}	{}	{}	
+exact-optional-other	{"a":{"$expr":"Optional(Exact(\"x\",\"y\"))"}}	{"a":"z"}		"Value \"z\" for property \"a\" must be exactly one of: x, y"
+exact-required-absent	{"a":{"$expr":"Required(Exact(\"x\",\"y\"))"}}	{}		"Value \"undefined\" for property \"a\" must be exactly one of: x, y"
+exact-default-listed-absent	{"a":{"$expr":"Default(\"x\",Exact(\"x\",\"y\"))"}}	{}	{"a":"x"}	
+exact-default-unlisted-absent	{"a":{"$expr":"Default(\"z\",Exact(\"x\",\"y\"))"}}	{}		"Value \"undefined\" for property \"a\" must be exactly one of: x, y"
+never-bare-absent	{"a":{"$expr":"Never"}}	{}		"Validation failed for property \"a\" with value \"undefined\" because no value is allowed."
+never-optional-absent	{"a":{"$expr":"Optional(Never)"}}	{}	{}	
+never-skip-absent	{"a":{"$expr":"Skip(Never)"}}	{}	{}	
+never-optional-present	{"a":{"$expr":"Optional(Never)"}}	{"a":1}		"Validation failed for property \"a\" with number \"1\" because no value is allowed."
+nullable-exact-null	{"a":{"$expr":"Nullable(Exact(1))"}}	{"a":null}	{"a":null}	
+nullable-exact-other	{"a":{"$expr":"Nullable(Exact(1))"}}	{"a":2}		"Value \"2\" for property \"a\" must be exactly one of: 1"
+nullable-exact-absent	{"a":{"$expr":"Nullable(Exact(1))"}}	{}		"Value \"undefined\" for property \"a\" must be exactly one of: 1"
+nullable-nof-null	{"a":{"$expr":"Nullable(Nof(1,String,Number))"}}	{"a":null}	{"a":null}	
+nullable-all-null	{"a":{"$expr":"Nullable(All(String,Min(1)))"}}	{"a":null}	{"a":null}	

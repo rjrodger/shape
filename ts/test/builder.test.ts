@@ -53,6 +53,7 @@ const {
   Min,
   Never,
   Nof,
+  Nullable,
   Open,
   Optional,
   Refer,
@@ -390,6 +391,33 @@ describe('builder', () => {
   })
 
 
+  // Exactly one of shapes of different kinds: the value's kind chooses,
+  // and that shape's errors are the errors.
+  test('builder-nof-kinds', () => {
+    const g0 = Shape(Nof(1, Min(2, String), Number, { a: 1 }))
+    throws(() => g0('a'), 'Value "a" for property "" must be a minimum length of 2 (was 1).')
+    deepEqual(g0(5), 5)
+    deepEqual(g0({}), { a: 1 })
+    throws(() => g0({ a: 'x' }), 'Validation failed for property "a" with string "x" because the string is not of type number.')
+    throws(() => g0(true), 'Value "true" for property "" satisfies 0 of: String.Min(2), Number, {"a":1}; the count must be 1.')
+
+    // Otherwise every shape is tried, and the count is the message: a
+    // nullable shape, one that may take another kind, two of one kind.
+    throws(() => Shape(Nof(1, Nullable(Min(2, String)), Number))('a'), 'satisfies 0 of')
+    throws(() => Shape(Nof(1, Min(1, Shape.Coerce(Number)), String))('3'), 'satisfies 2 of')
+    throws(() => Shape(Nof(1, Min(1, String), Max(3, String)))('ab'), 'satisfies 2 of')
+    throws(() => Shape(Nof(1, Min(2, String), Number))(null), 'satisfies 0 of')
+
+    // A check is no kind, so every shape is tried, and each is named.
+    throws(() => Shape(Nof(1, Check((v: any) => v > 10), String))(1),
+      'Value "1" for property "" satisfies 0 of: Check((v) => v > 10), String; the count must be 1.')
+
+    // A shape inside a branch's literal is written as the shape.
+    throws(() => Shape(Nof(1, String, { x: Min(1, Number), y: Any() }))(true),
+      'Value "true" for property "" satisfies 0 of: String, {"x":0,"y":"Any"}; the count must be 1.')
+  })
+
+
   test('builder-nof', () => {
     const Integer = Shape.Integer
 
@@ -486,9 +514,9 @@ describe('builder', () => {
         ',"$$ref1":{"y":"\\"a\\"","$$":"Open"}}')
     deepEqual(g0({ x: 11, y: 'aa' }), { x: 11, y: 'aa' })
     deepEqual(g0({}), { x: 1, y: 'a' })
-    throws(() => g0({ x: 'b', y: 'a' }), 
-      'Value "{x:b,y:a}" for property "" does not satisfy all of:' +
-      ' {x:1,$$:Open}, {y:a,$$:Open}')
+    // A failing branch's own errors are the errors.
+    throws(() => g0({ x: 'b', y: 'a' }),
+      'Validation failed for property "x" with string "b" because the string is not of type number.')
     throws(() =>
       g0(), 'Validation failed for value "undefined" because the value is required.')
 
@@ -497,9 +525,8 @@ describe('builder', () => {
     let g0s = Shape(All(Open({ x: 1 }), Open({ y: 'a' })).Skip())
     deepEqual(g0s({ x: 11, y: 'aa' }), { x: 11, y: 'aa' })
     deepEqual(g0s({}), { x: 1, y: 'a' })
-    throws(() => g0s({ x: 'b', y: 'a' }), 
-      'Value "{x:b,y:a}" for property "" does not satisfy all of:' +
-      ' {x:1,$$:Open}, {y:a,$$:Open}')
+    throws(() => g0s({ x: 'b', y: 'a' }),
+      'Validation failed for property "x" with string "b" because the string is not of type number.')
     deepEqual(g0s(), undefined)
 
     // TODO: Optional
@@ -512,26 +539,26 @@ describe('builder', () => {
     })
     // console.dir(g1.spec(), { depth: null })
     deepEqual(g1({ a: 11 }), { a: 11 })
-    throws(() => g1({ a: 0 }), 
-      'Value "0" for property "a" does not satisfy all of: ' +
-      'Check((v) => v > 10), Check((v) => v < 20)')
+    throws(() => g1({ a: 0 }),
+      'Validation failed for property "a" with number "0" because check "(v) => v > 10" failed.')
 
     let g2 = Shape(All({ x: 1, y: Any() }, { x: Any(), y: 'a' }))
     deepEqual(g2({ x: 11, y: 'AA' }), { x: 11, y: 'AA' })
     // g2({ x: 11, y: true })
-    throws(() => g2({ x: 11, y: true }), 'Value "{x:11,y:true}" for property "" does not satisfy all of:' +
-        ' {"x":1,"y":"Any"}, {"x":"Any","y":"a"}')
+    throws(() => g2({ x: 11, y: true }),
+      'Validation failed for property "y" with boolean "true" because the boolean is not of type string.')
 
     let g3 = Shape(All({ x: 1, y: Any() }, { x: Any(), y: { z: 'a' } }))
     deepEqual(g3({ x: 11, y: { z: 'AA' } }), { x: 11, y: { z: 'AA' } })
-    throws(() => g3({ x: 11, y: { z: true } }), 'Value "{x:11,y:{z:true}}" for property "" does not satisfy all of:' +
-        ' {"x":1,"y":"Any"}, {"x":"Any","y":{"z":"a"}}')
+    throws(() => g3({ x: 11, y: { z: true } }),
+      'Validation failed for property "y.z" with boolean "true" because the boolean is not of type string.')
 
     let g4 = Shape(All(Open({ x: 1 }), Open({ y: 2 })))
     deepEqual(g4({ x: 11, y: 22 }), { x: 11, y: 22 })
-    throws(() => g4({ x: 'X', y: 'Y' }), 
-      'Value "{x:X,y:Y}" for property "" does not satisfy all of:' +
-      ' {x:1,$$:Open}, {y:2,$$:Open}'
+    // Each failing branch speaks.
+    throws(() => g4({ x: 'X', y: 'Y' }),
+      'Validation failed for property "x" with string "X" because the string is not of type number.\n' +
+      'Validation failed for property "y" with string "Y" because the string is not of type number.'
     )
   })
 
@@ -706,6 +733,14 @@ describe('builder', () => {
     throws(() => g0(1), 'Validation failed for number "1" because no value is allowed.')
     let g1 = Shape({ a: Never() })
     throws(() => g1({ a: 'x' }), 'Validation failed for property "a" with string "x" because no value is allowed.')
+
+    // Never alone requires a value it cannot have; optional, the value must
+    // be absent.
+    throws(() => g1({}), 'Validation failed for property "a" with value "undefined" because no value is allowed.')
+    for (const g2 of [Shape({ a: Optional(Never()) }), Shape({ a: Skip(Never()) }), Shape({ a: Never().Optional() })]) {
+      deepEqual(g2({}), {})
+      throws(() => g2({ a: 1 }), 'Validation failed for property "a" with number "1" because no value is allowed.')
+    }
   })
 
 
@@ -743,6 +778,35 @@ describe('builder', () => {
     deepEqual(g1('foo'), 'foo')
     deepEqual(g1('bar'), 'bar')
     throws(() => g1('zed'), 'exactly one of: foo, bar')
+
+    // Exact requires a value, as a type token does, until it is made
+    // optional; a default it allows stands in for an absent value, and one
+    // it does not is still an error.
+    const g2 = Shape({ a: Exact('x', 'y') })
+    throws(() => g2({}), 'Value "undefined" for property "a" must be exactly one of: x, y')
+    for (const g3 of [Shape({ a: Optional(Exact('x', 'y')) }), Shape({ a: Skip(Exact('x', 'y')) }),
+      Shape({ a: Exact('x', 'y').Optional() })]) {
+      deepEqual(g3({}), {})
+      deepEqual(g3({ a: 'y' }), { a: 'y' })
+      throws(() => g3({ a: 'z' }), 'must be exactly one of: x, y')
+    }
+    deepEqual(Shape({ a: Default('x', Exact('x', 'y')) })({}), { a: 'x' })
+    throws(() => Shape({ a: Default('z', Exact('x', 'y')) })({}), 'must be exactly one of: x, y')
+    throws(() => Shape({ a: Required(Exact('x', 'y')) })({}), 'must be exactly one of: x, y')
+  })
+
+
+  // Nullable accepts null whatever a check would make of it.
+  test('builder-nullable-checks', () => {
+    deepEqual(Shape(Nullable(Exact(1)))(null), null)
+    throws(() => Shape(Nullable(Exact(1)))(2), 'must be exactly one of: 1')
+    deepEqual(Shape(Nullable(Nof(1, String, Number)))(null), null)
+    throws(() => Shape(Nullable(Nof(1, String, Number)))(true), 'satisfies 0 of: String, Number')
+    deepEqual(Shape(Nullable(All(String, Min(1))))(null), null)
+    deepEqual(Shape(Nullable(Check((v: any) => 1 === v)))(null), null)
+    throws(() => Shape(Nullable(Check((v: any) => 1 === v)))(2), 'check')
+    deepEqual(Shape({ a: Nullable(Exact('x')) })({ a: null }), { a: null })
+    throws(() => Shape({ a: Nullable(Exact('x')) })({}), 'must be exactly one of: x')
   })
 
 
@@ -1925,8 +1989,7 @@ Validation failed for property "x" because the property is missing.`)
 
     let shape_AllB0 = Shape(All(Number, Check((v: any) => v > 10)))
     deepEqual(shape_AllB0(11), 11)
-    throws(() => shape_AllB0(10), 'Value "10" for property "" does not satisfy all of: ' +
-        'Number, Check((v) => v > 10)')
+    throws(() => shape_AllB0(10), 'Validation failed for number "10" because check "(v) => v > 10" failed.')
 
     let shape_AllB1 = Shape(All())
     deepEqual(shape_AllB1(123), 123)
@@ -1937,8 +2000,8 @@ Validation failed for property "x" because the property is missing.`)
     deepEqual(shape_AllB2({}), { a: { b: 'B' } })
     deepEqual(shape_AllB2({ a: { b: 'X' } }), { a: { b: 'X' } })
     deepEqual(shape_AllB2({ a: { b: 'X', c: 'Y' } }), { a: { b: 'X', c: 'Y' } })
-    throws(() => shape_AllB2({ a: { b: 'X', c: 'Y', d: 'Z' } }), 'Value "{b:X,c:Y,d:Z}" for property "a" does not satisfy all of:' +
-        ' {b:String,$$:Open}, Max(2)')
+    throws(() => shape_AllB2({ a: { b: 'X', c: 'Y', d: 'Z' } }),
+      'Value "{b:X,c:Y,d:Z}" for property "a" must be a maximum length of 2 (was 3).')
     deepEqual(shape_AllB2({}), { a: { b: 'B' } })
 
     let shape_AllB3 = Shape({ a: Skip(All(Open({ b: String }), Max(2))) })

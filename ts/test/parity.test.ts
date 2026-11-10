@@ -248,7 +248,7 @@ describe('parity', () => {
       /satisfies 0 of: String, Number; the count must be 1\.$/)
     assert.deepEqual(Shape({ 'a: All(Number,Min(2))': 5 })({}), { a: 5 })
     assert.match(failure({ 'a: All(Number,Min(2))': 5 }, { a: 1 }),
-      /does not satisfy all of: Number, Min\(2\)$/)
+      /must be a minimum of 2 \(was 1\)\.$/)
 
     // Inside a count, a branch or a wrapper, the outermost composition takes it.
     assert.deepEqual(Shape({ 'a: Nof(Min(1),String,Number)': 5 })({}), { a: 5 })

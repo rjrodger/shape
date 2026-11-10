@@ -79,7 +79,7 @@ describe('json', () => {
     roundTrip(['x'], ['"x"'], ['y'], [1])
     roundTrip([''], ['""'], [''], [1])
     roundTrip([Empty('x')], ['Optional("x").Empty'], [''], [1])
-    roundTrip([Exact(1, 'a', null, true)], ['Any.Exact(1,"a",null,true)'], ['a'], [2])
+    roundTrip([Exact(1, 'a', null, true)], ['Required.Exact(1,"a",null,true)'], ['a'], [2])
     roundTrip({ a: Optional(7).Exact(2) }, { a: 'Optional(7).Exact(2)' }, {}, { a: 2 }, { a: 3 })
   })
 
@@ -162,7 +162,7 @@ describe('json', () => {
       { a: 'Any', b: 'Required', c: 'Never', d: 'Date', e: 'Optional(Date)', f: 'Optional(Function)', g: 'Function' },
       { b: 1, d: new Date(), g: () => 1 }, { c: 1 }, {})
     roundTrip({ a: Open(), b: Any(3), c: Required(undefined), d: Optional(undefined), e: Skip(Never) },
-      { a: 'Any.Open', b: 'Any(3)', c: 'Required(undefined)', d: 'Optional(undefined)', e: 'Never.Skip' },
+      { a: 'Any.Open', b: 'Any(3)', c: 'Required(undefined)', d: 'Optional(undefined)', e: 'Skip(Never)' },
       { a: { z: 1 } }, {}, { c: 1 })
     roundTrip({ a: NaN, b: Required(NaN), c: Min(2, NaN), d: Skip(null), e: Required(null) },
       { a: 'NaN', b: 'Required(NaN)', c: 'Optional(NaN).Min(2)', d: 'Skip(null)', e: 'Required(null)' },

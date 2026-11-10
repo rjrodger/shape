@@ -50,7 +50,7 @@ describe('jsonschema', () => {
         m: { not: {} },
         n: {},
       },
-      required: ['a', 'b', 'c', 'd', 'f'],
+      required: ['a', 'b', 'c', 'd', 'f', 'm'],
       additionalProperties: false,
     })
   })
@@ -65,11 +65,13 @@ describe('jsonschema', () => {
     deepEqual(s.properties, {
       a: { type: 'object', properties: { t: { type: 'number', default: 1 } } },
       b: { type: 'object', additionalProperties: { type: 'number' }, default: {} },
-      c: { type: 'array', prefixItems: [{ type: 'number' }], items: false },
+      // A position the tuple requires must be there.
+      c: { type: 'array', prefixItems: [{ type: 'number' }], items: false, minItems: 1 },
       d: {
         type: 'array',
         prefixItems: [{ type: 'string', minLength: 1 }, { type: 'boolean' }],
         items: { type: 'number' },
+        minItems: 2,
       },
       e: { type: 'array' },
       f: { type: 'array', items: { type: 'number' } },

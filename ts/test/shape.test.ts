@@ -1900,8 +1900,8 @@ Validation failed for index "1" with number "1" because the number is not of typ
       a: { b: All(Number, Check((v: any, _u: Update, s: State) => v < s.ctx.max)) }
     })
     matchObject(g1({ a: { b: 3 } }, c0), { a: { b: 3 } })
-    throws(() => g1({ a: { b: 11 } }, c0), 'Value "11" for property "a.b" does not satisfy all of: ' +
-        'Number, Check((v, _u, s) => v < s.ctx.max)')
+    throws(() => g1({ a: { b: 11 } }, c0), 'Validation failed for property "a.b" with number "11" because ' +
+        'check "(v, _u, s) => v < s.ctx.max" failed.')
   })
 
 
