@@ -185,9 +185,18 @@ const files = {
     ['coerce-date-from-iso', { a: { $expr: 'Coerce(Date)' } }, { a: '2020-01-01T00:00:00Z' }],
     ['coerce-date-with-offset', { a: { $expr: 'Coerce(Date)' } }, { a: '2020-01-01T12:30:00.5+02:00' }],
     ['coerce-date-invalid-day', { a: { $expr: 'Coerce(Date)' } }, { a: '2020-02-30T00:00:00Z' }],
+    // A digit is an ASCII digit: the Rust regex crate's \d took any Unicode
+    // digit, and the parse that followed panicked.
+    ['coerce-date-unicode-digit', { a: { $expr: 'Coerce(Date)' } }, { a: '1963-06-1৪T00:00:00Z' }],
+    ['coerce-date-unicode-offset', { a: { $expr: 'Coerce(Date)' } }, { a: '1963-06-14T00:00:00+0১:00' }],
+    ['coerce-number-unicode-digits', { a: { $expr: 'Coerce(Number)' } }, { a: '১২' }],
     ['coerce-date-from-millis', { a: { $expr: 'Coerce(Date)' } }, { a: 1577836800000 }],
     ['coerce-before-bound', { a: { $expr: 'Coerce(Min(2,Number))' } }, { a: '1' }],
     ['format-email-ok', { a: { $expr: 'Email' } }, { a: 'a@b.co' }],
+    ['format-datetime-unicode-digit', { a: { $expr: 'DateTime' } }, { a: '1963-06-1৪T00:00:00Z' }],
+    ['format-ipv4-unicode-digit', { a: { $expr: 'Ipv4' } }, { a: '১.2.3.4' }],
+    ['format-ipv6-unicode-digit', { a: { $expr: 'Ipv6' } }, { a: '::ffff:১.2.3.4' }],
+    ['format-url-unicode-port', { a: { $expr: 'Url' } }, { a: 'http://example.com:৮০' }],
     ['format-email-bad', { a: { $expr: 'Email' } }, { a: 'nope' }],
     ['format-email-not-string', { a: { $expr: 'Email' } }, { a: 1 }],
     ['format-email-required', { a: { $expr: 'Email' } }, {}],

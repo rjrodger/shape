@@ -9,12 +9,14 @@ use regex::Regex;
 use std::sync::{Arc, OnceLock};
 
 /// Strict ISO 8601 / RFC 3339 date-time. Calendar ranges are checked so
-/// that 2024-02-30 is rejected rather than rolled over into March.
+/// that 2024-02-30 is rejected rather than rolled over into March. Digits
+/// are ASCII, as JavaScript's and Go's `\d` are: the regex crate's `\d`
+/// takes any Unicode digit, which no number parse reads.
 fn iso_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
         Regex::new(
-            r"^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?(Z|[+-]\d{2}:\d{2})$",
+            r"^([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})(?:\.([0-9]+))?(Z|[+-][0-9]{2}:[0-9]{2})$",
         )
         .unwrap()
     })
@@ -34,12 +36,10 @@ struct IsoParts {
 
 fn iso_parts(s: &str) -> Option<IsoParts> {
     let m = iso_re().captures(s)?;
-    let num = |i: usize| {
-        m.get(i)
-            .map(|x| x.as_str().parse::<i64>().unwrap())
-            .unwrap_or(0)
-    };
-    let (y, mo, d, h, mi, sec) = (num(1), num(2), num(3), num(4), num(5), num(6));
+    // Every read is total: what the pattern admits always parses, and what
+    // it might one day admit by mistake is no date rather than a panic.
+    let num = |i: usize| m.get(i).map_or(Some(0), |x| x.as_str().parse::<i64>().ok());
+    let (y, mo, d, h, mi, sec) = (num(1)?, num(2)?, num(3)?, num(4)?, num(5)?, num(6)?);
     if !(1..=12).contains(&mo) || h > 23 || mi > 59 || sec > 59 {
         return None;
     }
@@ -52,20 +52,18 @@ fn iso_parts(s: &str) -> Option<IsoParts> {
         return None;
     }
     // The fraction is read to milliseconds, as a JavaScript Date keeps it.
-    let ms = m
-        .get(7)
-        .map(|f| {
-            let digits: String = f.as_str().chars().take(3).collect();
-            let padded = format!("{:0<3}", digits);
-            padded.parse::<i64>().unwrap()
-        })
-        .unwrap_or(0);
-    let zone = m.get(8).unwrap().as_str();
+    let ms = match m.get(7) {
+        Some(f) => format!("{:0<3}", f.as_str().chars().take(3).collect::<String>())
+            .parse::<i64>()
+            .ok()?,
+        None => 0,
+    };
+    let zone = m.get(8)?.as_str();
     let off = if zone == "Z" {
         0
     } else {
-        let oh: i64 = zone[1..3].parse().unwrap();
-        let om: i64 = zone[4..6].parse().unwrap();
+        let oh: i64 = zone.get(1..3)?.parse().ok()?;
+        let om: i64 = zone.get(4..6)?.parse().ok()?;
         if oh > 23 || om > 59 {
             return None;
         }
@@ -115,7 +113,9 @@ pub(crate) fn parse_iso_date_time(s: &str) -> Option<i64> {
 /// `Number()` would accept that a strict parse would not.
 fn numeric_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| Regex::new(r"^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$").unwrap())
+    RE.get_or_init(|| {
+        Regex::new(r"^[+-]?(?:[0-9]+\.?[0-9]*|\.[0-9]+)(?:[eE][+-]?[0-9]+)?$").unwrap()
+    })
 }
 
 /// The value a Coerce node converts `val` to for kind `k`, or None to leave
@@ -213,6 +213,30 @@ mod tests {
         assert!(parse_iso_date_time("2020-01-01").is_none());
         assert!(is_iso_date_time("2000-02-29T00:00:00Z"));
         assert!(!is_iso_date_time("1900-02-29T00:00:00Z"));
+    }
+
+    #[test]
+    fn only_ascii_digits_are_digits() {
+        // A Unicode digit in any field is no date, never a panic: these
+        // reached a parse that unwrapped, and the offset a byte slice that
+        // split a character.
+        for s in [
+            "1963-06-1\u{09ea}T00:00:00Z",
+            "\u{0661}963-06-14T00:00:00Z",
+            "1963-06-14T00:00:00.\u{0665}Z",
+            "1963-06-14T00:00:00+0\u{09e7}:00",
+            "1963-06-14T00:00:00+01:\u{0663}0",
+        ] {
+            assert!(parse_iso_date_time(s).is_none(), "{}", s);
+        }
+        assert_eq!(
+            coerce_to(Kind::Number, &Value::from("\u{09e7}\u{09e8}")),
+            None
+        );
+        assert_eq!(
+            coerce_to(Kind::Number, &Value::from("12")),
+            Some(Value::Num(12.0))
+        );
     }
 
     #[test]
