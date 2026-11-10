@@ -6,6 +6,11 @@ refer-undefined-lax	{"b":{"$expr":"Refer(\"nope\")"}}	{"b":2}	{"b":2}
 refer-undefined-strict	{"b":{"$call":["Refer",{"name":"nope","strict":true}]}}	{"b":2}		"Value \"2\" for property \"b\" refers to \"nope\", which is not defined."
 refer-undefined-strict-absent	{"b":{"$call":["Refer",{"name":"nope","strict":true}]}}	{}	{}	
 refer-undefined-strict-fill	{"b":{"$call":["Refer",{"name":"nope","strict":true,"fill":true}]}}	{}	{}	
+refer-define-check	{"a":{"$expr":"Define(\"t\",Min(2,Number))"},"b":{"$expr":"Refer(\"t\")"}}	{"a":3,"b":1}		"Value \"1\" for property \"b\" must be a minimum of 2 (was 1)."
+refer-define-check-ok	{"a":{"$expr":"Define(\"t\",Min(2,Number))"},"b":{"$expr":"Refer(\"t\")"}}	{"a":3,"b":5}	{"a":3,"b":5}	
+refer-define-nof	{"a":{"$expr":"Define(\"t\",Nof(1,Number,String))"},"b":{"$expr":"Refer(\"t\")"}}	{"a":1,"b":true}		"Value \"true\" for property \"b\" satisfies 0 of: Number, String; the count must be 1."
+refer-define-self	{"a":{"$expr":"Define(\"s\",Refer(\"s\"))"},"b":{"$expr":"Refer(\"s\")"}}	{"a":1,"b":2}	{"a":1,"b":2}	
+refer-define-cycle	{"a":{"$expr":"Define(\"x\",Refer(\"y\"))"},"b":{"$expr":"Define(\"y\",Refer(\"x\"))"},"c":{"$expr":"Refer(\"x\")"}}	{"a":1,"b":2,"c":3}	{"a":1,"b":2,"c":3}	
 null-required	{"a":{"$expr":"null"}}	{"a":null}	{"a":null}	
 null-literal-default-injected	{"a":null}	{}	{"a":null}	
 null-dsl-default-injected	{"a":{"$expr":"null"}}	{}	{"a":null}	

@@ -146,6 +146,17 @@ Some differences are inherent to Go and are unlikely ever to close.
   `{b: String, c: [Number]}`). Scalar and chained branches (`String.Min(2)`,
   `/^a/`, `Number`) agree, and those are what the corpus pins.
 
+- **`Exact` compares by value.** TypeScript compares object and array
+  literals by identity, so an `Exact` of an object matches nothing that was
+  not that very object; Go and Rust compare structurally. Scalars behave
+  alike. The same holds for an imported `enum` or `const` whose value is an
+  object or an array.
+
+- **A check around a composition.** Go and Rust run a node's own checks
+  before its `All` or `Nof`, and one that fails ends them, so
+  `Min(2, Nof(1, Boolean, Integer))` given `1.5` reports the bound alone;
+  TypeScript reports the `Nof`'s error as well.
+
 - **Structs are a Go-only convenience.** A struct is read into the same
   `map[string]any` model that TypeScript's plain objects occupy, on the way in
   (as a value, by its `json` tags) and on the way out (`ValidateInto`), and a
@@ -198,9 +209,6 @@ Its own divergences, each deliberate:
   node that accepts nothing and reports the message at validation. In the
   string form (`Schema::parse`, key expressions) the fault is an error at
   parse time, as `expr` throws in TypeScript.
-- **`Exact` compares by value.** TypeScript compares object and array
-  literals by identity, so an `Exact` of an object matches nothing that was
-  not that very object; Rust compares structurally. Scalars behave alike.
 - **Error rendering of the value.** A failing after check reports the value
   as it stands at that point, an injected default included, as TypeScript
   does (`with number "0"`); Go renders the original absence.

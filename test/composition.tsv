@@ -70,3 +70,4 @@ nof-kinds-boolean-branch	{"a":{"$expr":"Nof(1,Boolean,Number)"}}	{"a":"x"}		"Val
 nof-kinds-nullable-branch	{"a":{"$expr":"Nof(1,Nullable(Min(2,String)),Number)"}}	{"a":"a"}		"Value \"a\" for property \"a\" satisfies 0 of: String.Min(2), Number; the count must be 1."
 nof-kinds-coerce-branch	{"a":{"$expr":"Nof(1,Coerce(Number),String)"}}	{"a":"3"}		"Value \"3\" for property \"a\" satisfies 2 of: Number, String; the count must be 1."
 nof-kinds-same-kind	{"a":{"$expr":"Nof(1,Min(1,String),Max(3,String))"}}	{"a":"ab"}		"Value \"ab\" for property \"a\" satisfies 2 of: String.Min(1), String.Max(3); the count must be 1."
+nof-kinds-in-array	{"a":[{"$expr":"Nof(1,Integer,String)"}]}	{"a":[1.5]}		"Validation failed for index \"a.0\" with number \"1.5\" because the number is not of type integer."

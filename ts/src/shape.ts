@@ -1140,15 +1140,33 @@ function shapify<const S>(intop?: S, inopts?: ShapeOptions) {
         (skipa && skipa.has(n.d)) ||
         (skipk && 1 === n.d && skipk.has(s.key))) ? true : n.p
 
-      // Call Befores
+      // Call Befores. A node's definitions are registered first, so that a
+      // check of the node (a composition's branch) can refer to it. A check
+      // that puts another node in this one's place (Refer, a claimed Rename)
+      // leaves that node's checks to run, from its first, each check once.
       if (0 < n.b.length) {
+        defineFirst(n, s)
+        let ran: Validate[] | null = null
         for (let bI = 0; bI < n.b.length; bI++) {
-          let update = handleValidate(n.b[bI], s)
+          const vf = n.b[bI]
+          if (null !== ran) {
+            if (ran.includes(vf)) {
+              continue
+            }
+            ran.push(vf)
+          }
+          const was = n
+          let update = handleValidate(vf, s)
           n = s.node
           if (undefined !== update.done) {
             done = update.done
           }
           fatal = fatal || !!update.fatal
+          if (n !== was) {
+            ran = null === ran ? was.b.slice(0, bI + 1) : ran
+            defineFirst(n, s)
+            bI = -1
+          }
         }
       }
 
@@ -2397,6 +2415,16 @@ function build(v: any, opts: ShapeOptions = {}, top = true): any {
   }
 
   return out
+}
+
+
+// Register the definitions a node carries, ahead of its other checks.
+function defineFirst(n: Node<any>, s: State) {
+  for (let bI = 0; bI < n.b.length; bI++) {
+    if (S.Define === (n.b[bI] as any).n) {
+      n.b[bI](s.val, {}, s)
+    }
+  }
 }
 
 
@@ -6387,8 +6415,10 @@ function importDiscriminated(branches: any[], ctx: any, path: string): any {
         return undefined
       }
     }
+    // A branch that does not require the tag could match a value without
+    // one, so it is no tagged branch.
     const t = b.properties[tag].const
-    if (tags.includes(t)) {
+    if (tags.includes(t) || !b.required.includes(tag)) {
       return undefined
     }
     tags.push(t)
