@@ -197,6 +197,33 @@ describe('parity', () => {
   })
 
 
+  test('a key Object.prototype has is read as an own property', () => {
+    // An input without the key has no value for it, whatever the prototype
+    // lends: Go and Rust have no prototype to lend one. A literal __proto__
+    // key would set the prototype, so the specs are parsed.
+    for (const k of ['toString', 'valueOf', 'hasOwnProperty', 'constructor', '__proto__']) {
+      const shape = Shape(JSON.parse(`{"${k}": "x"}`))
+      const out = shape({})
+      assert.equal(Object.getOwnPropertyDescriptor(out, k)?.value, 'x', k)
+      assert.equal(Object.getPrototypeOf(out), Object.prototype, k)
+      assert.equal(Object.getOwnPropertyDescriptor(shape(JSON.parse(`{"${k}": "y"}`)), k)?.value, 'y', k)
+      assert.match(failure(JSON.parse(`{"${k}": "x"}`), JSON.parse(`{"${k}": 1}`)), /is not of type string/, k)
+    }
+
+    // A required one is missing, and the importer requires it too.
+    assert.match(failure({ toString: Number }, {}), /property "toString" because the property is missing/)
+    assert.match(failure(ShapeModule.fromJsonSchema({ type: 'object', required: ['toString'] }), {}),
+      /property "toString" because the property is missing/)
+
+    // An own constructor key is a property, not the mark of a class instance.
+    assert.deepEqual(Shape({ constructor: 'x' })({ constructor: 'y' }), { constructor: 'y' })
+
+    // A Discriminated tag is read the same way.
+    assert.match(failure(ShapeModule.Discriminated('toString', { a: { x: Number } }), { x: 1 }),
+      /is not an object with a "toString" property/)
+  })
+
+
   test('an Exact that lists the example does not list it twice', () => {
     assert.match(failure({ 'role: Exact("admin","user")': 'user' }, { role: 'x' }),
       /must be exactly one of: admin, user$/)

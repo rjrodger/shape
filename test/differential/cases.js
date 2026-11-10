@@ -50,6 +50,14 @@ const FORMATS = [
   'fe80::1%eth0', '', ' ', 1, null, true, [], {},
 ]
 
+// Digits that are not ASCII digits, in each format that reads digits. Kept
+// apart from FORMATS: a length bound counts them in bytes in Go, as the
+// parity page records.
+const DIGITS = [
+  '1963-06-1৪T00:00:00Z', '2020-01-01T00:00:00+0১:00', '১.2.3.4',
+  '::ffff:১.2.3.4', 'http://example.com:৮০',
+]
+
 // A discriminated union over "kind", and values around its two branches.
 // Multi-key objects keep alphabetical order (see OBJS).
 const DISC = { $discriminated: ['kind', { dog: { bark: B }, fish: { fins: N } }] }
@@ -147,6 +155,7 @@ function build() {
   // check, and Fault's reach — structural text only.
   for (const f of ['Email', 'Url', 'Uuid', 'DateTime', 'Ip', 'Ipv4', 'Ipv6']) {
     add('fmt-' + f, E(f), FORMATS)
+    add('fmt-digits-' + f, E(f), DIGITS)
     add('fmt-obj-' + f, { a: E(f) }, OBJS)
   }
   add('fmt-optional', { a: E('Optional(Email)') }, OBJS)
@@ -339,6 +348,11 @@ function build() {
   add('expr-fault-nof', E('Nof(-1,String)'), SCALARS)
   add('expr-removed-one', E('One(String,Number)'), ['x'])
   add('expr-removed-some', E('Some(String,Number)'), ['x'])
+  // A Unicode digit is no digit, in a number literal or a coerced string.
+  add('expr-unicode-digits', E('Min(١.٥)'), ['x'])
+  add('coerce-unicode-number', E('Coerce(Number)'), ['১২', '١', '12'])
+  add('coerce-unicode-date', E('Coerce(Date)'),
+    ['1963-06-1৪T00:00:00Z', '1963-06-14T00:00:00.٥Z', '1963-06-14T00:00:00+0১:00', '2020-01-01T00:00:00Z'])
   add('expr-fault-nof-fraction', E('Nof(1.5,String)'), SCALARS)
   add('c-all-ignore', E('All(Ignore(Min(2,Number)),Number)'), SCALARS)
 
@@ -402,6 +416,13 @@ function build() {
   add('ke-skip-number', { 'a: Skip(Number)': 5 }, OBJS)
   add('ke-child-array', { 'a: Child(Number)': [] }, OBJS)
   add('ke-nof-of', { 'a: Nof(1,String,Number)': 5 }, OBJS)
+  // Keys Object.prototype has are the input's own or absent. A __proto__ key
+  // is parsed: written in a literal it would set the prototype.
+  const PROTO_IN = [{}, { toString: 'y' }, { valueOf: 2 }, { constructor: true }, { toString: 1 },
+    JSON.parse('{"__proto__": "y"}'), JSON.parse('{"__proto__": 1}'), { a: 1 }]
+  add('proto-keys', { constructor: B, toString: 'x', valueOf: 1 }, PROTO_IN)
+  add('proto-key-dunder', JSON.parse('{"__proto__": "x"}'), PROTO_IN)
+  add('proto-key-open', { $open: { hasOwnProperty: 'x' } }, PROTO_IN)
   // Under a composition the example is the outermost composition's default.
   add('ke-all-of', { 'a: All(Number,Min(2))': 5 }, OBJS)
   add('ke-nof-count-shape', { 'a: Nof(Min(1),String,Number)': 5 }, OBJS)

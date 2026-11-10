@@ -31,8 +31,11 @@ function canon(v) {
   if (Array.isArray(v)) return v.map(canon)
 
   if (null !== v && 'object' === typeof v) {
+    // Own properties: an assigned __proto__ key would set the prototype.
     const out = {}
-    for (const k of Object.keys(v).sort()) out[k] = canon(v[k])
+    for (const k of Object.keys(v).sort()) {
+      Object.defineProperty(out, k, { value: canon(v[k]), enumerable: true, writable: true, configurable: true })
+    }
     return out
   }
 

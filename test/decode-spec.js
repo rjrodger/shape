@@ -36,8 +36,11 @@ function decodeSpec(v, Shape) {
       }
     }
 
+    // Own properties: an assigned __proto__ key would set the prototype.
     const out = {}
-    for (const kk of keys) out[kk] = decodeSpec(v[kk], Shape)
+    for (const kk of keys) {
+      Object.defineProperty(out, kk, { value: decodeSpec(v[kk], Shape), enumerable: true, writable: true, configurable: true })
+    }
     return out
   }
 
