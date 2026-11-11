@@ -22,7 +22,7 @@ import { inspect } from 'util'
 
 
 // Package version.
-const VERSION = '12.0.1'
+const VERSION = '12.1.0'
 
 // Unique symbol for marking and recognizing Shape shapes.
 const SHAPE$ = Symbol.for('shape$')
