@@ -57,6 +57,21 @@ impl Value {
         }
     }
 
+    /// The kind of JSON value this is, as TypeScript's `kindOf` reads it:
+    /// by its `typeof`, with null and an array told apart. A date is an
+    /// object there; a bigint, a function and no value at all are no kind.
+    pub fn json_kind(&self) -> Option<&'static str> {
+        Some(match self {
+            Value::Null => "null",
+            Value::Arr(_) => "array",
+            Value::Bool(_) => "boolean",
+            Value::Num(_) => "number",
+            Value::Str(_) => "string",
+            Value::Obj(_) | Value::Date(_) => "object",
+            Value::Undefined | Value::BigInt(_) | Value::Func(_) => return None,
+        })
+    }
+
     pub fn as_obj(&self) -> Option<&Map> {
         match self {
             Value::Obj(m) => Some(m),
@@ -586,6 +601,40 @@ mod tests {
         assert_eq!(
             out,
             r#"{"n":null,"d":"1970-01-01T00:00:00.000Z","b":"3","f":null,"e":[null]}"#
+        );
+    }
+
+    #[test]
+    fn json_kinds_as_typescript_reads_them() {
+        let kinds: Vec<Option<&str>> = [
+            Value::Null,
+            Value::Arr(vec![]),
+            Value::Bool(true),
+            Value::Num(f64::NAN),
+            Value::from("x"),
+            Value::Obj(Map::new()),
+            Value::Date(0),
+            Value::Undefined,
+            Value::BigInt(BigInt::from(1)),
+            Value::Func(1),
+        ]
+        .iter()
+        .map(Value::json_kind)
+        .collect();
+        assert_eq!(
+            kinds,
+            [
+                Some("null"),
+                Some("array"),
+                Some("boolean"),
+                Some("number"),
+                Some("string"),
+                Some("object"),
+                Some("object"),
+                None,
+                None,
+                None
+            ]
         );
     }
 

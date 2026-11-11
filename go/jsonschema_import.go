@@ -13,27 +13,49 @@ import (
 // token, bounds become size builders, formats and patterns their builders,
 // enum and const become Exact, properties and items become objects and
 // arrays, the compositions become All, Nof and Discriminated (anyOf a count
-// of at least one, oneOf of exactly one, not of none), and a definition is inlined
-// where it is referenced — Define and Refer only where
-// a definition refers to itself. A property that is not required and has no
-// default is Skip. Unknown keywords are ignored; an unknown type or reference
-// is an error. The canonical TypeScript builds the same spec, and the
-// differential harness compares the export of what each imports.
+// of at least one, oneOf of exactly one, not of none), and a definition is
+// inlined where it is referenced — Define and Refer only where a definition
+// refers to itself. Every keyword of a schema applies, each a part of All;
+// an enum or a const keeps the values the other parts allow. A schema with
+// no type checks each kind of value with that kind's keywords only, and a
+// subschema of not, allOf, anyOf or oneOf is read for the one kind its
+// parent's type lets through. A property that is not required and has no
+// default is Skip. Unknown keywords are ignored (unless the import is
+// strict); an unknown type or reference is an error. The canonical
+// TypeScript builds the same spec, and the differential harness compares the
+// export of what each imports.
+
+// JSONSchemaImportOptions controls FromJSONSchemaWith.
+type JSONSchemaImportOptions struct {
+	// Strict refuses a keyword the import recognises but does not enforce
+	// (contains, multipleOf, patternProperties, ...), which it otherwise
+	// passes over as it does a keyword it does not know. A uniqueItems of
+	// false asks nothing, and is allowed.
+	Strict bool
+}
 
 // FromJSONSchema builds a spec from a JSON Schema document, as decoded by
-// encoding/json (map[string]any, []any, float64, bool, string, nil). Compile
-// it with Shape, or compose it further with the builders.
+// encoding/json (map[string]any, []any, float64, bool, string, nil): an
+// object, or a boolean (true accepts anything, false nothing). Compile it
+// with Shape, or compose it further with the builders.
 func FromJSONSchema(schema any) (any, error) {
-	m, ok := schema.(map[string]any)
-	if !ok {
-		return nil, fmt.Errorf("JSON Schema: the schema must be an object")
+	return FromJSONSchemaWith(schema, JSONSchemaImportOptions{})
+}
+
+// FromJSONSchemaWith is FromJSONSchema with options.
+func FromJSONSchemaWith(schema any, opts JSONSchemaImportOptions) (any, error) {
+	m, isObject := schema.(map[string]any)
+	if _, isBool := schema.(bool); !isObject && !isBool {
+		return nil, fmt.Errorf("JSON Schema: the schema must be an object or boolean")
 	}
 	defs, _ := m["$defs"].(map[string]any)
 	if defs == nil {
 		defs, _ = m["definitions"].(map[string]any)
 	}
-	ctx := &jsonSchemaImport{root: m, defs: defs, recursive: map[string]bool{}}
-	return ctx.schema(m, "")
+	draft, _ := m["$schema"].(string)
+	ctx := &jsonSchemaImport{root: m, defs: defs, recursive: map[string]bool{},
+		refAlone: jsonSchemaRefAlone.MatchString(draft), strict: opts.Strict}
+	return ctx.schema(schema, "", "")
 }
 
 // MustFromJSONSchema is FromJSONSchema, panicking on error.
@@ -50,6 +72,25 @@ type jsonSchemaImport struct {
 	defs      map[string]any
 	stack     []string
 	recursive map[string]bool
+	// backrefs counts the references made back to a definition still being
+	// read: a part that holds one cannot be tried yet (see exact).
+	backrefs int
+	// refAlone is set for a document of draft 7 or earlier, where a $ref
+	// stands for the whole schema it sits in, so the keywords beside it are
+	// ignored. From 2019-09 on, a $ref is one keyword among the others.
+	refAlone bool
+	strict   bool
+}
+
+// The drafts in which a $ref stands alone.
+var jsonSchemaRefAlone = regexp.MustCompile(`^https?://json-schema\.org/draft-0[3-7]/schema#?$`)
+
+// Keywords the import recognises but does not enforce. It passes over them,
+// as it does a keyword it does not know, unless it is strict.
+var jsonSchemaUnsupported = []string{
+	"$dynamicRef", "$recursiveRef", "contains", "dependencies", "dependentRequired",
+	"dependentSchemas", "if", "multipleOf", "patternProperties", "propertyNames",
+	"unevaluatedItems", "unevaluatedProperties", "uniqueItems",
 }
 
 func jsonSchemaFault(msg, path string) error {
@@ -63,7 +104,9 @@ var jsonSchemaKinds = map[string]bool{
 	"string": true, "number": true, "integer": true, "boolean": true, "null": true, "object": true, "array": true,
 }
 
-func (c *jsonSchemaImport) schema(s any, path string) (any, error) {
+// schema imports one schema. A kind, where given, is the one kind of value
+// the enclosing schema lets through to this one (see kindSplit).
+func (c *jsonSchemaImport) schema(s any, path, kind string) (any, error) {
 	if b, ok := s.(bool); ok {
 		if b {
 			return Any, nil
@@ -77,10 +120,10 @@ func (c *jsonSchemaImport) schema(s any, path string) (any, error) {
 
 	var spec any
 	var err error
-	if ref, ok := m["$ref"].(string); ok {
+	if ref, isRef := m["$ref"].(string); isRef && c.refAlone {
 		spec, err = c.ref(ref, path)
 	} else {
-		spec, err = c.keywords(m, path)
+		spec, err = c.keywords(m, path, kind)
 	}
 	if err != nil {
 		return nil, err
@@ -121,6 +164,7 @@ func (c *jsonSchemaImport) ref(ref, path string) (any, error) {
 	for _, n := range c.stack {
 		if n == name {
 			c.recursive[name] = true
+			c.backrefs++
 			return Refer(refname), nil
 		}
 	}
@@ -128,7 +172,7 @@ func (c *jsonSchemaImport) ref(ref, path string) (any, error) {
 	c.stack = append(c.stack, name)
 	wasRecursive := c.recursive[name]
 	c.recursive[name] = false
-	spec, err := c.schema(def, path)
+	spec, err := c.schema(def, path, "")
 	recursive := c.recursive[name]
 	c.recursive[name] = wasRecursive
 	c.stack = c.stack[:len(c.stack)-1]
@@ -142,69 +186,87 @@ func (c *jsonSchemaImport) ref(ref, path string) (any, error) {
 	return spec, nil
 }
 
-func (c *jsonSchemaImport) keywords(m map[string]any, path string) (any, error) {
-	var spec any
-	var err error
-
-	if e, ok := m["enum"]; ok {
-		vals, ok := e.([]any)
-		if !ok || len(vals) == 0 {
-			return nil, jsonSchemaFault("enum must be a non-empty array", path)
-		}
-		spec = Exact(vals...)
-	} else if v, ok := m["const"]; ok {
-		spec = Exact(v)
-	} else if all, ok := m["allOf"]; ok {
-		branches, err := c.branches(all, path+"/allOf")
-		if err != nil {
-			return nil, err
-		}
-		spec = All(branches...)
-	} else if one, ok := m["oneOf"]; ok {
-		list, err := branchList(one, path+"/oneOf")
-		if err != nil {
-			return nil, err
-		}
-		spec, err = c.discriminated(list, path+"/oneOf")
-		if err != nil {
-			return nil, err
-		}
-		if spec == nil {
-			branches, err := c.branches(list, path+"/oneOf")
-			if err != nil {
-				return nil, err
+// keywords imports a schema's keywords, every one of which applies, each a
+// part of All. Not comes first, so that it sees the value as given. An enum
+// or a const keeps only the values the other parts allow, and so stays one
+// Exact, with Exact's message.
+func (c *jsonSchemaImport) keywords(m map[string]any, path, kind string) (any, error) {
+	if c.strict {
+		for _, k := range jsonSchemaUnsupported {
+			if v, has := m[k]; has && !(k == "uniqueItems" && v == false) {
+				return nil, jsonSchemaFault("unsupported keyword \""+k+"\"", path)
 			}
-			spec = Nof(1, branches...)
-		}
-	} else if anyOf, ok := m["anyOf"]; ok && !isIpFormats(anyOf) {
-		branches, err := c.branches(anyOf, path+"/anyOf")
-		if err != nil {
-			return nil, err
-		}
-		spec = Nof(Min(1), branches...)
-	} else {
-		spec, err = c.typed(m, path)
-		if err != nil {
-			return nil, err
 		}
 	}
 
-	// Not is a count of none. It holds beside the other keywords, ahead of
-	// them so that it sees the value as given; not: {} admits nothing, so it
-	// is Never whatever else the schema says.
-	if not, ok := m["not"]; ok {
-		if isEmptyObject(not) {
-			spec = Never()
-		} else {
-			ns, err := c.schema(not, path+"/not")
+	var spec any
+	if isEmptyObject(m["not"]) {
+		// not: {} admits nothing, whatever else the schema says.
+		spec = Never()
+	} else {
+		// The subschemas of not, allOf, anyOf and oneOf see the same value,
+		// so they need only meet the one kind this schema lets through, if
+		// it has one.
+		inner := typeKind(m)
+		if inner == "" {
+			inner = kind
+		}
+		backrefs := c.backrefs
+		var parts []any
+		if not, has := m["not"]; has {
+			ns, err := c.schema(not, path+"/not", inner)
 			if err != nil {
 				return nil, err
 			}
-			if spec == Any {
-				spec = Nof(0, ns)
-			} else {
-				spec = All(Nof(0, ns), spec)
+			parts = append(parts, Nof(0, ns))
+		}
+		if ref, isRef := m["$ref"].(string); isRef {
+			rs, err := c.ref(ref, path)
+			if err != nil {
+				return nil, err
 			}
+			parts = append(parts, rs)
+		}
+		typed, err := c.typed(m, path, kind)
+		if err != nil {
+			return nil, err
+		}
+		// The Any of a schema with no type and no keyword of a kind says
+		// nothing.
+		if typed != Any {
+			parts = append(parts, typed)
+		}
+		if all, has := m["allOf"]; has {
+			branches, err := c.branches(all, path+"/allOf", inner)
+			if err != nil {
+				return nil, err
+			}
+			parts = append(parts, All(branches...))
+		}
+		if anyOf, has := m["anyOf"]; has && !isIpFormats(anyOf) {
+			branches, err := c.branches(anyOf, path+"/anyOf", inner)
+			if err != nil {
+				return nil, err
+			}
+			parts = append(parts, Nof(Min(1), branches...))
+		}
+		if one, has := m["oneOf"]; has {
+			part, err := c.oneOf(one, path+"/oneOf", inner)
+			if err != nil {
+				return nil, err
+			}
+			parts = append(parts, part)
+		}
+
+		_, hasEnum := m["enum"]
+		_, hasConst := m["const"]
+		if hasEnum || hasConst {
+			spec, err = c.exact(m, parts, backrefs < c.backrefs, path)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			spec = joinParts(parts)
 		}
 	}
 
@@ -212,6 +274,126 @@ func (c *jsonSchemaImport) keywords(m map[string]any, path string) (any, error) 
 		spec = Default(d, spec)
 	}
 	return spec, nil
+}
+
+// joinParts is the parts of a schema as one spec: nothing is anything, and
+// more than one are All of them.
+func joinParts(parts []any) any {
+	switch len(parts) {
+	case 0:
+		return Any
+	case 1:
+		return parts[0]
+	}
+	return All(parts...)
+}
+
+// oneOf is a count of exactly one, or a discriminated union where the
+// branches are objects told apart by a const property.
+func (c *jsonSchemaImport) oneOf(one any, path, kind string) (any, error) {
+	list, err := branchList(one, path)
+	if err != nil {
+		return nil, err
+	}
+	disc, err := c.discriminated(list, path)
+	if disc != nil || err != nil {
+		return disc, err
+	}
+	branches, err := c.branches(list, path, kind)
+	if err != nil {
+		return nil, err
+	}
+	return Nof(1, branches...), nil
+}
+
+// exact is an enum or a const, less the values the other parts refuse. A
+// part that refers back to a definition still being read cannot be tried
+// yet, so the parts then stay beside the Exact.
+func (c *jsonSchemaImport) exact(m map[string]any, parts []any, backref bool, path string) (any, error) {
+	cv, hasConst := m["const"]
+	vals := []any{cv}
+	if e, hasEnum := m["enum"]; hasEnum {
+		list, ok := e.([]any)
+		if !ok {
+			return nil, jsonSchemaFault("enum must be an array", path)
+		}
+		vals = list
+		if hasConst {
+			vals = []any{}
+			for _, v := range list {
+				if jsonEqual(v, cv) {
+					vals = append(vals, v)
+				}
+			}
+		}
+	}
+
+	if backref {
+		return All(append([]any{exactOf(vals)}, parts...)...), nil
+	}
+	if len(parts) > 0 {
+		// A property name that reads as a key expression can refuse to
+		// build, as it can in TypeScript.
+		rest, err := Shape(joinParts(parts))
+		if err != nil {
+			return nil, err
+		}
+		kept := []any{}
+		for _, v := range vals {
+			// A null in the list is a value, present and null.
+			in := v
+			if in == nil {
+				in = Null
+			}
+			if rest.Match(in) {
+				kept = append(kept, v)
+			}
+		}
+		vals = kept
+	}
+	return exactOf(vals), nil
+}
+
+// exactOf is Exact of the values, or Never where there are none.
+func exactOf(vals []any) *Node {
+	if len(vals) == 0 {
+		return Never()
+	}
+	return Exact(vals...)
+}
+
+// jsonEqual is the equality of JSON values, as enum and const compare them:
+// objects and arrays by their contents.
+func jsonEqual(x, y any) bool {
+	xm, xIsMap := x.(map[string]any)
+	ym, yIsMap := y.(map[string]any)
+	xa, xIsArr := x.([]any)
+	ya, yIsArr := y.([]any)
+	switch {
+	case xIsMap && yIsMap:
+		if len(xm) != len(ym) {
+			return false
+		}
+		for k, v := range xm {
+			if w, has := ym[k]; !has || !jsonEqual(v, w) {
+				return false
+			}
+		}
+		return true
+	case xIsArr && yIsArr:
+		if len(xa) != len(ya) {
+			return false
+		}
+		for i := range xa {
+			if !jsonEqual(xa[i], ya[i]) {
+				return false
+			}
+		}
+		return true
+	case xIsMap || yIsMap || xIsArr || yIsArr:
+		return false
+	}
+	return exactEqual(x, y)
 }
 
 func branchList(v any, path string) ([]any, error) {
@@ -222,14 +404,14 @@ func branchList(v any, path string) ([]any, error) {
 	return list, nil
 }
 
-func (c *jsonSchemaImport) branches(v any, path string) ([]any, error) {
+func (c *jsonSchemaImport) branches(v any, path, kind string) ([]any, error) {
 	list, err := branchList(v, path)
 	if err != nil {
 		return nil, err
 	}
 	out := make([]any, len(list))
 	for i, b := range list {
-		spec, err := c.schema(b, fmt.Sprintf("%s/%d", path, i))
+		spec, err := c.schema(b, fmt.Sprintf("%s/%d", path, i), kind)
 		if err != nil {
 			return nil, err
 		}
@@ -257,79 +439,93 @@ func isIpFormats(v any) bool {
 	return anyOf[0].(map[string]any)["format"] == "ipv4" && anyOf[1].(map[string]any)["format"] == "ipv6"
 }
 
-func (c *jsonSchemaImport) typed(m map[string]any, path string) (any, error) {
-	var types []any
-	switch t := m["type"].(type) {
-	case []any:
-		types = t
-	case nil:
-	default:
-		types = []any{t}
+// typeKind is the one kind of value a schema's type lets through, if it
+// names one.
+func typeKind(m map[string]any) string {
+	t := m["type"]
+	if list, ok := t.([]any); ok && len(list) == 1 {
+		t = list[0]
 	}
+	name, _ := t.(string)
+	return jsonSchemaTypeKind[name]
+}
 
-	nullable := false
-	if len(types) > 1 {
-		for _, t := range types {
-			if t == "null" {
-				nullable = true
-			}
-		}
-	}
-	if nullable {
-		kept := []any{}
-		for _, t := range types {
-			if t != "null" {
-				kept = append(kept, t)
-			}
-		}
-		types = kept
-	}
-
-	for _, t := range types {
-		if name, ok := t.(string); !ok || !jsonSchemaKinds[name] {
-			return nil, jsonSchemaFault(fmt.Sprintf("unknown type %q", fmt.Sprint(t)), path)
-		}
-	}
-
-	if len(types) == 0 {
-		// No type: the shape the keywords imply, or anything.
-		_, hasProps := m["properties"]
-		_, hasAdditional := m["additionalProperties"]
-		_, hasRequired := m["required"]
-		_, hasItems := m["items"]
-		_, hasPrefix := m["prefixItems"]
-		if hasProps || hasAdditional || hasRequired {
-			types = []any{"object"}
-		} else if hasItems || hasPrefix {
-			types = []any{"array"}
+// typed is the types of a schema: one, or exactly one of several, which are
+// of different kinds, so the value's kind chooses among them (see Nof). With
+// no type, each kind of value is checked by its own keywords (kindSplit).
+func (c *jsonSchemaImport) typed(m map[string]any, path, kind string) (any, error) {
+	var given []any
+	if t, has := m["type"]; has {
+		if list, ok := t.([]any); ok {
+			given = list
 		} else {
-			return c.untyped(m, path)
+			given = []any{t}
+		}
+	}
+	for _, t := range given {
+		if name, ok := t.(string); !ok || !jsonSchemaKinds[name] {
+			return nil, jsonSchemaFault("unknown type \""+jsText(t)+"\"", path)
 		}
 	}
 
-	var spec any
-	if len(types) == 1 {
-		var err error
-		spec, err = c.kind(types[0].(string), m, path)
+	// Null beside another type is Nullable, and a number covers an integer.
+	var types []string
+	for _, t := range given {
+		if !contains(types, t.(string)) {
+			types = append(types, t.(string))
+		}
+	}
+	nullable := contains(types, "null") && len(types) > 1
+	var kept []string
+	for _, t := range types {
+		if !(nullable && t == "null") && !(t == "integer" && contains(types, "number")) {
+			kept = append(kept, t)
+		}
+	}
+
+	if len(kept) == 0 {
+		return c.kindSplit(m, path, kind)
+	}
+
+	specs := make([]any, len(kept))
+	for i, t := range kept {
+		spec, err := c.kind(t, m, path)
 		if err != nil {
 			return nil, err
 		}
-	} else {
-		kinds := make([]any, len(types))
-		for i, t := range types {
-			k, err := c.kind(t.(string), m, path)
-			if err != nil {
-				return nil, err
-			}
-			kinds[i] = k
-		}
-		spec = Nof(Min(1), kinds...)
+		specs[i] = spec
 	}
-
+	spec := specs[0]
+	if len(specs) > 1 {
+		spec = Nof(1, specs...)
+	}
 	if nullable {
 		spec = Nullable(spec)
 	}
 	return spec, nil
+}
+
+// jsText is a JSON value as JavaScript's String() writes it.
+func jsText(v any) string {
+	switch x := v.(type) {
+	case nil:
+		return "null"
+	case map[string]any:
+		return "[object Object]"
+	case []any:
+		// An array joins its elements, a null as nothing.
+		parts := make([]string, len(x))
+		for i, e := range x {
+			if e != nil {
+				parts[i] = jsText(e)
+			}
+		}
+		return strings.Join(parts, ",")
+	}
+	if f, ok := toFloat64(v); ok {
+		return fmtFloat(f)
+	}
+	return fmt.Sprint(v)
 }
 
 func (c *jsonSchemaImport) kind(t string, m map[string]any, path string) (any, error) {
@@ -359,50 +555,59 @@ var jsonSchemaFormatBuilder = map[string]func(spec ...any) *Node{
 	"ipv6":      Ipv6,
 }
 
-// Keywords without a type: a pattern or format reads as a string, a bound
-// applies to whatever kind the value turns out to be (as a bare Min does),
-// and anything else says nothing.
-func (c *jsonSchemaImport) untyped(m map[string]any, path string) (any, error) {
-	_, hasPattern := m["pattern"].(string)
-	format, _ := m["format"].(string)
-	if hasPattern || jsonSchemaFormatBuilder[format] != nil || isIpFormats(m["anyOf"]) {
-		return importString(m, path)
-	}
-	// Beside a numeric exclusive bound the length keywords are that bound
-	// written for strings, arrays and objects (Above(1) exports minLength 2),
-	// so only a plain minimum or maximum is a second bound there.
-	view := map[string]any{}
-	if _, exclusive := m["exclusiveMinimum"].(float64); exclusive {
-		if v, ok := m["minimum"].(float64); ok {
-			view["minimum"] = v
+// kindSplit is a schema without a type, which checks each kind of value with
+// the keywords of that kind and lets every other kind through: {minLength:
+// 2} fails "a" and passes 1. Where the enclosing schema lets one kind
+// through, only that kind's keywords can apply.
+func (c *jsonSchemaImport) kindSplit(m map[string]any, path, kind string) (any, error) {
+	has := func(k string) bool {
+		if kind != "" && k != kind {
+			return false
 		}
-	} else if v, ok := firstNumber(m, "minimum", "minLength", "minItems", "minProperties"); ok {
-		view["minimum"] = v
-	}
-	if _, exclusive := m["exclusiveMaximum"].(float64); exclusive {
-		if v, ok := m["maximum"].(float64); ok {
-			view["maximum"] = v
+		for _, w := range jsonSchemaKindKeywords[k] {
+			if _, ok := m[w]; ok {
+				return true
+			}
 		}
-	} else if v, ok := firstNumber(m, "maximum", "maxLength", "maxItems", "maxProperties"); ok {
-		view["maximum"] = v
+		return k == "string" && isIpFormats(m["anyOf"])
 	}
-	view["exclusiveMinimum"] = m["exclusiveMinimum"]
-	view["exclusiveMaximum"] = m["exclusiveMaximum"]
-	// A bare bound (Min(1)) rather than one on an Any node, as a user writes.
-	spec := importNumber(nil, view)
-	if spec == nil {
+	if !has("number") && !has("string") && !has("object") && !has("array") {
 		return Any, nil
 	}
-	return spec, nil
-}
+	switch kind {
+	case "number":
+		return importNumber(Number, m), nil
+	case "string":
+		return importString(m, path)
+	case "object":
+		return c.object(m, path)
+	case "array":
+		return c.array(m, path)
+	}
 
-func firstNumber(m map[string]any, keys ...string) (float64, bool) {
-	for _, k := range keys {
-		if v, ok := m[k].(float64); ok {
-			return v, true
+	// A shape for each kind of JSON value: the value's kind chooses (see
+	// Nof).
+	var number, str, obj, arr any = Number, Empty(String), Open(map[string]any{}), []any{}
+	var err error
+	if has("number") {
+		number = importNumber(Number, m)
+	}
+	if has("string") {
+		if str, err = importString(m, path); err != nil {
+			return nil, err
 		}
 	}
-	return 0, false
+	if has("object") {
+		if obj, err = c.object(m, path); err != nil {
+			return nil, err
+		}
+	}
+	if has("array") {
+		if arr, err = c.array(m, path); err != nil {
+			return nil, err
+		}
+	}
+	return Nof(1, Required(nil), Boolean, number, str, obj, arr), nil
 }
 
 func importString(m map[string]any, path string) (any, error) {
@@ -509,7 +714,7 @@ func (c *jsonSchemaImport) object(m map[string]any, path string) (any, error) {
 	} else if !has || ap == true {
 		spec = Open(obj)
 	} else {
-		child, err := c.schema(ap, path+"/additionalProperties")
+		child, err := c.schema(ap, path+"/additionalProperties", "")
 		if err != nil {
 			return nil, err
 		}
@@ -528,19 +733,24 @@ func (c *jsonSchemaImport) object(m map[string]any, path string) (any, error) {
 // A property is required when listed, has its default when given, and is
 // otherwise Skip: absent stays absent.
 func (c *jsonSchemaImport) property(ps any, required bool, path string) (any, error) {
-	spec, err := c.schema(ps, path)
+	spec, err := c.schema(ps, path, "")
 	if err != nil {
 		return nil, err
 	}
-	if m, ok := ps.(map[string]any); ok {
-		if _, has := m["default"]; has {
-			return spec, nil
-		}
+	if hasDefaultKeyword(ps) {
+		return spec, nil
 	}
 	if required {
 		return Required(spec), nil
 	}
 	return Skip(spec), nil
+}
+
+// hasDefaultKeyword reports whether a schema is an object with a default.
+func hasDefaultKeyword(s any) bool {
+	m, _ := s.(map[string]any)
+	_, has := m["default"]
+	return has
 }
 
 func (c *jsonSchemaImport) array(m map[string]any, path string) (any, error) {
@@ -551,9 +761,28 @@ func (c *jsonSchemaImport) array(m map[string]any, path string) (any, error) {
 		if !ok {
 			return nil, jsonSchemaFault("prefixItems must be an array", path+"/prefixItems")
 		}
-		elems, err := c.branches(list, path+"/prefixItems")
-		if err != nil {
-			return nil, err
+		// A position may be absent, but for one before a position with a
+		// default to fill in: an array has no holes.
+		last := -1
+		for i, e := range list {
+			if hasDefaultKeyword(e) {
+				last = i
+			}
+		}
+		elems := make([]any, len(list))
+		for i, e := range list {
+			elem, err := c.schema(e, fmt.Sprintf("%s/prefixItems/%d", path, i), "")
+			if err != nil {
+				return nil, err
+			}
+			switch {
+			case hasDefaultKeyword(e):
+				elems[i] = elem
+			case i < last:
+				elems[i] = Required(elem)
+			default:
+				elems[i] = Skip(elem)
+			}
 		}
 		// Closed makes a one-element list a tuple rather than an element
 		// shape; items says what may follow (anything, when it is absent
@@ -564,7 +793,7 @@ func (c *jsonSchemaImport) array(m map[string]any, path string) (any, error) {
 		} else if !hasItems || items == true {
 			spec = Rest(Any, tuple)
 		} else {
-			rest, err := c.schema(items, path+"/items")
+			rest, err := c.schema(items, path+"/items", "")
 			if err != nil {
 				return nil, err
 			}
@@ -573,7 +802,7 @@ func (c *jsonSchemaImport) array(m map[string]any, path string) (any, error) {
 	} else if !hasItems || items == true {
 		spec = []any{}
 	} else {
-		elem, err := c.schema(items, path+"/items")
+		elem, err := c.schema(items, path+"/items", "")
 		if err != nil {
 			return nil, err
 		}

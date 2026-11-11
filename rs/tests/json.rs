@@ -209,7 +209,8 @@ fn value_form() {
             Value::Null,
             Value::from(true),
         ])]),
-        r#"["Any.Exact(1,\"a\",null,true)"]"#,
+        // A bare Exact asks for a value, so its head is Required.
+        r#"["Required.Exact(1,\"a\",null,true)"]"#,
         &[v(r#"["a"]"#), v("[2]")],
     );
     round_trip(
@@ -487,8 +488,20 @@ fn kinds() {
             ("b", Spec::from(expr("Any(3)").unwrap())),
             ("e", Spec::from(Skip(Never(Any())))),
         ]),
-        r#"{"a":{},"b":"Any(3)","e":"Never.Skip"}"#,
+        // Never is required by itself: Skip holds it.
+        r#"{"a":{},"b":"Any(3)","e":"Skip(Never)"}"#,
         &[v(r#"{"a":{"z":1}}"#), v("{}")],
+    );
+    round_trip(
+        obj([
+            ("a", Spec::from(Optional(Never(Any())))),
+            ("b", Spec::from(Required(Never(Any())))),
+            ("c", Spec::from(Optional(Token::String).Never())),
+        ]),
+        // Optional around Never lets the value be absent; the chained
+        // .Never() keeps the node optional.
+        r#"{"a":"Optional(Never)","b":"Never","c":"Optional(Never)"}"#,
+        &[v("{}"), v(r#"{"b":1}"#), v(r#"{"a":1,"c":1}"#)],
     );
     round_trip(
         obj([

@@ -350,6 +350,41 @@ function build() {
   add('expr-removed-some', E('Some(String,Number)'), ['x'])
   // A Unicode digit is no digit, in a number literal or a coerced string.
   add('expr-unicode-digits', E('Min(١.٥)'), ['x'])
+
+  // Exact and Never ask for a value until made optional; Nullable takes a
+  // null whatever a check makes of it.
+  add('x-exact-bare-obj', { a: E('Exact(1,2)') }, OBJS)
+  add('x-exact-optional-obj', { a: E('Optional(Exact("x",1))') }, OBJS)
+  add('x-exact-skip-obj', { a: E('Skip(Exact(1,2))') }, OBJS)
+  add('x-exact-chained-optional-obj', { a: E('Exact(1,2).Optional') }, OBJS)
+  add('x-exact-default-obj', { a: E('Default(1,Exact(1,2))') }, OBJS)
+  add('x-exact-required-obj', { a: E('Required(Exact(1,2))') }, OBJS)
+  add('x-never-bare-obj', { a: E('Never') }, OBJS)
+  add('x-never-optional-obj', { a: E('Optional(Never)') }, OBJS)
+  add('x-never-skip-obj', { a: E('Skip(Never)') }, OBJS)
+  add('nullable-exact', E('Nullable(Exact(1,"a"))'), SCALARS)
+  add('nullable-nof', E('Nullable(Nof(1,String,Number))'), SCALARS)
+  add('nullable-all', E('Nullable(All(Number,Min(2)))'), SCALARS)
+  add('nullable-check-re', E('Nullable(Check(/^a/))'), SCALARS)
+  add('nullable-exact-obj', { a: E('Nullable(Exact(1))') }, OBJS)
+
+  // A failing branch of All reports its own errors, each once.
+  add('c-all-branch-errors', CALL('All', { $open: { a: N } }, { $open: { b: T } }), OBJS)
+  add('c-all-same-errors', E('All(String,Min(2,String))'), SCALARS)
+  add('c-all-obj-absent', { a: E('All(String,Number)') }, OBJS)
+
+  // Exactly one of shapes of different kinds: the value's kind chooses.
+  add('c-nof-kinds', E('Nof(1,Min(2,String),Max(5,Number))'), SCALARS)
+  // Inputs of the kinds listed only: a count names object and array
+  // branches, which the ports render their own way (see the parity page).
+  const CONTAINERS = SCALARS.concat(OBJS, ARRS).filter((v) => null !== v && 'object' === typeof v)
+  add('c-nof-kinds-containers', CALL('Nof', 1, { a: N }, [N], E('Min(2,String)')),
+    CONTAINERS.concat(['x', 'abc', '']))
+  add('c-nof-kinds-null', E('Nof(1,Required(null),Boolean,Integer)'), SCALARS)
+  add('c-nof-kinds-regexp', E('Nof(1,/^a/,Number)'), SCALARS)
+  add('c-nof-kinds-formats', E('Nof(1,Email,Number)'), FORMATS)
+  add('c-nof-kinds-nullable', E('Nof(1,Nullable(String),Number)'), SCALARS)
+  add('c-nof-kinds-same', E('Nof(1,Min(1,String),Max(3,String))'), SCALARS)
   add('coerce-unicode-number', E('Coerce(Number)'), ['১২', '١', '12'])
   add('coerce-unicode-date', E('Coerce(Date)'),
     ['1963-06-1৪T00:00:00Z', '1963-06-14T00:00:00.٥Z', '1963-06-14T00:00:00+0১:00', '2020-01-01T00:00:00Z'])
@@ -479,6 +514,30 @@ function build() {
   add('nan-required', { a: E('Required(NaN)') }, OBJS)
   add('nan-bound-obj', { a: E('Min(2,NaN)') }, OBJS)
   add('key-1', { a: E('Key()') }, OBJS)
+
+  // JSON Schema: every keyword applies; a schema without a type checks each
+  // kind of value with that kind's keywords only.
+  const JS = (schema) => ({ $jsonschema: schema })
+  add('js-kind-num', JS({ minimum: 1, maximum: 5 }), SCALARS)
+  add('js-kind-str', JS({ minLength: 2, pattern: '^a' }), SCALARS)
+  add('js-kind-format', JS({ format: 'email' }), FORMATS)
+  add('js-kind-obj', JS({ properties: { a: { type: 'number' } }, required: ['a'] }), OBJS)
+  add('js-kind-arr', JS({ items: { type: 'number' }, minItems: 1 }), ARRS)
+  add('js-kind-every', JS({ minimum: 1, minLength: 1, minItems: 1, minProperties: 1 }), SCALARS)
+  add('js-types', JS({ type: ['string', 'number', 'null'], minLength: 2, minimum: 0 }), SCALARS)
+  add('js-types-obj-arr', JS({ type: ['object', 'array'], properties: { a: { type: 'string' } }, items: { type: 'number' } }), CONTAINERS)
+  // Inputs the oneOf passes only, for the same reason.
+  add('js-sibling-one-of', JS({ type: 'object', properties: { a: { type: 'number' } }, oneOf: [{ required: ['a'] }, { required: ['b'] }] }),
+    [{ a: 1 }, { a: 'x' }, { a: null }, { b: 2 }, { a: {} }, { a: [] }, { b: 'x' }])
+  add('js-sibling-all-of', JS({ type: 'object', allOf: [{ required: ['a'] }, { properties: { b: { type: 'string' } } }] }), OBJS)
+  add('js-sibling-any-of', JS({ anyOf: [{ minimum: 2 }, { minLength: 2 }] }), SCALARS)
+  add('js-enum-typed', JS({ type: 'string', enum: ['x', 1, 'abc'] }), SCALARS)
+  add('js-optional-props', JS({ type: 'object', properties: { a: { enum: [1] }, b: false, c: { const: 'x' } } }), OBJS)
+  add('js-tuple', JS({ type: 'array', prefixItems: [{ type: 'number' }, { type: 'string' }] }), ARRS)
+  add('js-not-typed', JS({ type: 'string', not: { minLength: 3 } }), SCALARS)
+  add('js-ref-siblings', JS({ $defs: { n: { type: 'number' } }, $ref: '#/$defs/n', minimum: 2 }), SCALARS)
+  add('js-document-true', JS(true), SCALARS)
+  add('js-document-false', JS(false), SCALARS)
 
   // Deep nesting.
   add('deep-1', { a: { b: { c: N } } },

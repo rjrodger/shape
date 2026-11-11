@@ -173,15 +173,41 @@ func validateNode(n *node, in any, path []string, pathArr []any, key string, par
 	// Run before-validators. They may replace the value or the node, and a
 	// failing one ends the structural checks (TS handleValidate sets
 	// update.done) — but every before still runs, and so do the afters.
+	//
+	// A before that puts another node in this one's place (Refer, a claimed
+	// Rename) leaves that node's befores to run, from its first, each once:
+	// TS restarts its loop on the new node, and a Refer back to a node whose
+	// befores have begun does not run them again.
 	done := false
-	for _, b := range n.befores {
+	var ran map[beforeAt]bool
+	for bI := 0; bI < len(n.befores); bI++ {
+		if ran != nil {
+			if ran[beforeAt{n, bI}] {
+				continue
+			}
+			ran[beforeAt{n, bI}] = true
+		}
+		b := n.befores[bI]
 		update := &state.upd
 		*update = Update{}
 		state.checkName = b.name
 		ok := b.fn(state.Value, update, state)
+		if !ok && nullPasses(state) {
+			continue
+		}
 		applyUpdate(state, update)
 		in = state.Value
+		was := n
 		n = state.Node
+		if n != was {
+			if ran == nil {
+				ran = map[beforeAt]bool{}
+				for i := 0; i <= bI; i++ {
+					ran[beforeAt{was, i}] = true
+				}
+			}
+			bI = -1
+		}
 		if !ok && absentSkips(state, update) {
 			continue
 		}
@@ -205,6 +231,12 @@ func validateNode(n *node, in any, path []string, pathArr []any, key string, par
 	return out
 }
 
+// beforeAt names one before of one node, so that each runs once per value.
+type beforeAt struct {
+	n *node
+	i int
+}
+
 // absentSkips reports whether a failed check is to raise nothing: TS drops the
 // errors of a check run against an absent value on a node that does not
 // require one ("Skip allows undefined"), unless the check insisted with Done.
@@ -213,10 +245,26 @@ func absentSkips(state *State, update *Update) bool {
 	return state.absent && state.Value == nil && (n.skippable || !n.required) && !update.Done
 }
 
+// nullPasses reports whether a failed check is to be passed over entirely:
+// Nullable allows a present null, whatever the check made of it, so its
+// errors, its Done and its update are all dropped (TS handleValidate).
+func nullPasses(state *State) bool {
+	return !state.absent && state.Value == nil && state.Node.nullable
+}
+
 // validateStructure runs the structural checks — composition, nullable, Never,
 // the missing-value rules and the kind check — and returns the produced value.
 // The afters run afterwards whatever it reported, as they do in TS.
 func validateStructure(n *node, state *State, absent bool, path []string, pathArr []any, key string, parent any, ctx *Context, match bool, verr *ValidationError) any {
+
+	// Nullable: an explicit null is accepted as the value, whatever a
+	// composition would make of it (TS drops the errors of the All or Nof
+	// check, as it does any check's). Absent is still governed by
+	// required/optional below, since a nil that is absent is not yet in play
+	// here — the absent sentinel was translated above.
+	if state.Value == nil && !absent && n.nullable {
+		return state.Value
+	}
 
 	// Composition shortcuts. An absent value on a node that does not require
 	// one is not put to the branches: TS drops the errors such a check would
@@ -233,17 +281,16 @@ func validateStructure(n *node, state *State, absent bool, path []string, pathAr
 		return out
 	}
 
-	// Nullable: an explicit null is accepted as the value. Absent is still
-	// governed by required/optional below, since a nil that is absent is not
-	// yet in play here — the absent sentinel was translated above.
-	if state.Value == nil && !absent && n.nullable {
-		return state.Value
-	}
-
-	// Never rejects any value, present or absent. This precedes the missing-value
-	// handling below: an absent value against Never is "no value is allowed",
-	// not "the value is required".
+	// Never rejects any present value, and an absent one where the node
+	// requires a value: Never alone does, so it fails always, while Optional
+	// or Skip around it means the value must be absent. This precedes the
+	// missing-value handling below: an absent value against Never is "no
+	// value is allowed", not "the value is required", and nothing is
+	// injected for it.
 	if n.kind == KindNever {
+		if absent && !n.required {
+			return state.Value
+		}
 		err := makeErr(state, WhyNever, markNever, "")
 		if n.faultMsg != "" {
 			if !err.terse {
@@ -420,6 +467,9 @@ func runAfters(state *State, verr *ValidationError) {
 		*update = Update{}
 		state.checkName = a.name
 		ok := a.fn(state.Value, update, state)
+		if !ok && nullPasses(state) {
+			continue
+		}
 		applyUpdate(state, update)
 		if !ok && !absentSkips(state, update) {
 			emitUpdateErrors(state, update, verr)
@@ -470,15 +520,23 @@ func validateArray(n *node, in any, path []string, pathArr []any, parent any, ct
 			}
 			p.set(i, validateElem(cn, v, path, pathArr, i, p.parent(), ctx, match, verr), match)
 		}
-		// Missing tuple positions get their default.
+		// Missing tuple positions get their default. A position that
+		// produces nothing (skipped, optional with no default, or in error)
+		// is left out, as an absent property is; one after it that does
+		// produce leaves a null in its place, as TS's array has a hole
+		// there.
 		for i := len(arr); i < tupleLen; i++ {
 			cn := n.arrChildren[i]
 			v := validateNode(cn, undefinedVal, append(path, strconv.Itoa(i)), append(pathArr, i), strconv.Itoa(i), p.parent(), ctx, match, verr)
-			if !match {
-				p.ensure()
-				p.out = append(p.out, v)
-				p.par = p.out
+			if match || absentOmits(cn, v) {
+				continue
 			}
+			p.ensure()
+			for len(p.out) < i {
+				p.out = append(p.out, nil)
+			}
+			p.out = append(p.out, v)
+			p.par = p.out
 		}
 		return p.result(match)
 	case n.arrChild != nil:
@@ -657,15 +715,7 @@ func validateObject(n *node, in any, path []string, pathArr []any, parent any, c
 
 		if !has {
 			produced = validateNode(cn, undefinedVal, kpath, kpathArr, k, parentOf, ctx, match, verr)
-			if cn.skippable && (produced == nil || cn.silent) {
-				continue
-			}
-			// A nil produced value means nothing was injected (required error, or
-			// an optional field with no default) — omit the key, matching TS.
-			// The exception is a null default, a null literal's own or one
-			// Default(null, ...) gave: TS injects it, so the key is present
-			// and null.
-			if produced == nil && !(cn.hasDefault && !cn.required && (cn.kind == KindNull || cn.defaultNull)) {
+			if absentOmits(cn, produced) {
 				continue
 			}
 		} else {
@@ -778,6 +828,19 @@ func validateObject(n *node, in any, path []string, pathArr []any, parent any, c
 	return out
 }
 
+// absentOmits reports whether what a node produced for an absent value is
+// left out of its parent rather than put in place. A skipped node puts
+// nothing; otherwise a nil means nothing was injected (a required error, or
+// an optional value with no default), matching TS. The exception is a null
+// default, a null literal's own or one Default(null, ...) gave: TS injects
+// it, so the key is present and null.
+func absentOmits(cn *node, produced any) bool {
+	if cn.skippable && (produced == nil || cn.silent) {
+		return true
+	}
+	return produced == nil && !(cn.hasDefault && !cn.required && (cn.kind == KindNull || cn.defaultNull))
+}
+
 // reportUnknown records the one error naming every key of obj the closed
 // object n does not consume, sorted because Go map iteration is random and
 // the message order is compared exactly. The error is appended, or put in at
@@ -873,26 +936,28 @@ func evaluateList(n *node, in any, path []string, pathArr []any, key string, par
 		passAll := true
 		out := in
 		// All threads the value through its branches, so once a branch has
-		// produced one it is no longer absent.
+		// produced one it is no longer absent; a branch that produces nothing
+		// from an absent value passes it on absent. Each branch is put the
+		// value as a call of its own is, at the All's path (see branchNode),
+		// and a failing branch's errors are the errors, each said once.
 		branchOut := branchIn
+		var errs []FieldError
 		for _, sn := range n.list {
 			sub := &ValidationError{}
-			res := validateNode(sn, branchOut, path, pathArr, key, parent, ctx, match, sub)
+			res := branchNode(sn, branchOut, path, pathArr, key, ctx, match, sub)
 			if sub.hasAny() {
-				// The branch errors are diagnostic only: TS collects them into a
-				// throwaway context and reports just the composite failure.
 				passAll = false
-			} else {
+				errs = appendUnique(errs, sub.Issues)
+			} else if res != nil || !isUndef(branchOut) {
 				out = res
 				branchOut = res
 			}
 		}
 		if !passAll {
-			state := &State{Path: path, PathArr: pathArr, Key: key, Value: in, Node: n, Match: match, Ctx: ctx, absent: absent}
-			err := makeErr(state, WhyAll, 4032,
-				fmt.Sprintf("Value \"$VALUE\" for property \"$PATH\" does not satisfy all of: %s", listShapeNames(n)))
 			if !n.silent {
-				verr.add(err)
+				for _, e := range errs {
+					verr.add(e)
+				}
 			}
 			return in
 		}
@@ -906,6 +971,28 @@ func evaluateList(n *node, in any, path []string, pathArr []any, key string, par
 		// An absent value is not tried: the required check speaks for it.
 		if absent {
 			return in
+		}
+		// Shapes of different kinds: the value is put only to the shape of
+		// its kind, whose errors are then the errors, and which produces the
+		// value. A value of no kind listed is counted, and fails, as any
+		// other.
+		if kI, kind := nofKindIndex(nofKindsNow(n), in); kI >= 0 {
+			sub := &ValidationError{}
+			var res any
+			if nofInPlace(n, kind, ctx) {
+				res = validateNode(n.list[kI], in, path, pathArr, key, parent, ctx, match, sub)
+			} else {
+				res = ownBranch(n.list[kI], in, path, pathArr, key, ctx, match, sub)
+			}
+			if sub.hasAny() {
+				if !n.silent {
+					for _, e := range sub.Issues {
+						verr.add(e)
+					}
+				}
+				return in
+			}
+			return res
 		}
 		// A branch is tried only while the untried could change the verdict.
 		k, tried, total, matched := 0, 0, len(n.list), 0
@@ -945,6 +1032,70 @@ func evaluateList(n *node, in any, path []string, pathArr []any, key string, par
 		return in
 	}
 	return in
+}
+
+// branchNode validates one branch of a composition as TypeScript runs it, a
+// call of its own on the value at the composition's path: the branch's root
+// has no parent, so a failure there names a "property", whatever holds the
+// composition.
+func branchNode(sn *node, in any, path []string, pathArr []any, key string, ctx *Context, match bool, verr *ValidationError) any {
+	return validateNode(sn, in, path, pathArr, key, nil, ctx, match, verr)
+}
+
+// appendUnique appends the errors not listed already, by path and text: a
+// failing All says each of its branches' errors once.
+func appendUnique(list []FieldError, add []FieldError) []FieldError {
+next:
+	for _, e := range add {
+		for _, x := range list {
+			if x.Path == e.Path && x.Text == e.Text {
+				continue next
+			}
+		}
+		list = append(list, e)
+	}
+	return list
+}
+
+// nofKindIndex is the index of the branch of a value's kind among the kinds
+// of a Nof's branches, and that kind; -1 where they have none (see
+// nofKinds) or none is of its kind.
+func nofKindIndex(kinds []string, v any) (int, string) {
+	if kinds == nil {
+		return -1, ""
+	}
+	k := kindOf(v)
+	for i, x := range kinds {
+		if x == k {
+			return i, k
+		}
+	}
+	return -1, k
+}
+
+// nofInPlace reports whether the branch of a value's kind stands in the
+// Nof's own place, as TS's walk puts it there: where the Nof is the node's
+// one check, and the value a scalar, or the value a call of its own was
+// given (see Context.own). There, a failure at the branch names the value
+// as the Nof's parent holds it, an "index" in an array; elsewhere the branch
+// is a call of its own (see ownBranch).
+func nofInPlace(n *node, kind string, ctx *Context) bool {
+	return len(n.befores) == 0 && len(n.afters) == 0 &&
+		((kind != "object" && kind != "array") || (ctx != nil && ctx.own))
+}
+
+// ownBranch validates the branch of a value's kind as a call of its own (see
+// branchNode), whose value is then its own copy: a Nof of kinds within puts
+// any value in its own place.
+func ownBranch(sn *node, in any, path []string, pathArr []any, key string, ctx *Context, match bool, verr *ValidationError) any {
+	if ctx == nil {
+		ctx = newContext(nil)
+	}
+	own := ctx.own
+	ctx.own = true
+	out := branchNode(sn, in, path, pathArr, key, ctx, match, verr)
+	ctx.own = own
+	return out
 }
 
 // The verdicts of a span of counts, for a Nof deciding whether to try
@@ -1112,6 +1263,14 @@ func emptyContainer(k Kind) any {
 		return []any{}
 	}
 	return map[string]any{}
+}
+
+// hasDefaultValue reports whether the node has a default, as TS's n.f is
+// defined: a nil default is the zero of a kind that has none (Any, Date),
+// which TS has no default for at all; only the null kind's null and an
+// explicit null default are defaults.
+func hasDefaultValue(n *node) bool {
+	return n.hasDefault && (n.defaultValue != nil || n.kind == KindNull || n.defaultNull)
 }
 
 // cloneDefault produces the value injected for an absent, unrequired node.

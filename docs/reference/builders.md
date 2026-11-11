@@ -24,7 +24,7 @@ a node. Most take an optional trailing `spec` that they narrow or wrap.
 | `Skip(spec?)` | Optional **and** skip default injection—an absent value leaves the key out. |
 | `Ignore(spec?)` | Like `Skip`, and drop the value (and its errors) if it fails to match—anywhere in its subtree. |
 | `Empty(spec?)` | Allow the empty string `""` for a `String` shape. |
-| `Nullable(spec?)` | Accept an explicit `null` as the value. Absent is still governed by required/optional. |
+| `Nullable(spec?)` | Accept an explicit `null` as the value, whatever a check on the node makes of it: `Nullable(Exact(1))` accepts `null`. Absent is still governed by required/optional. |
 | `Fault(message, spec?)` | Override the **structural** error message for this node (a check's own message is kept, and so is a composition's). |
 
 Notes:
@@ -47,8 +47,8 @@ Notes:
 | `Type(kind, spec?)` | Force a specific type/kind, adopting its required/default state. TS accepts a wrapper (`Number`), a name (`'Number'`, `'Integer'`) or a sample value (`null`, an object); Go accepts a `Kind`, `TypeToken`, kind name, or an already-built node. Structural children are not carried across, so `Type(Object)` is a closed object and `Type(Array)` accepts any elements. |
 | `Integer(spec?)` | A number with no fractional part. Behaves as a type token: required, with the latent default `0`, so `Optional(Integer)` injects `0`. TS: a builder, usable bare (`{ n: Integer }`) or called; Go: the `Integer` token, `Type(Integer, spec)` or `.Integer()`. |
 | `Date` | A date value. TS: the `Date` constructor as a type marker (a `Date` instance); Go: the `Date` token (a `time.Time`). `.Date()` chains in both. A `Date` instance / `time.Time` in a spec is an optional date with that default. |
-| `Exact(values…)` | Require equality with one of the listed literals. Also matches from the node default. |
-| `Never(spec?)` | Never matches—always fails. |
+| `Exact(values…)` | Require equality with one of the listed literals. Like a type marker it requires a value until made optional, so `Optional(Exact('a'))` and `Skip(Exact('a'))` may be absent. A default stands in for an absent value when it is one of the literals, and is an error when it is not. |
+| `Never(spec?)` | Never matches. Alone it requires a value it can never have, and so always fails; under `Optional` or `Skip` the value must be absent. |
 | `Func(spec?)` | A function value. A builder, not a type marker, so it is optional of itself: `Function` is the required form. |
 | `Any(spec?)` | Match any value (optionally carrying a default). |
 
@@ -147,7 +147,7 @@ A bound outside the isolation still applies to what comes out:
 
 | Builder | Effect |
 | ------- | ------ |
-| `All(shapes…)` | Passes only if every branch matches; the value is threaded through each, so later branches see what earlier ones produced (`All(Open({a:1}), Open({b:2}))` on `{}` gives `{a:1,b:2}`). |
+| `All(shapes…)` | Passes only if every branch matches; the value is threaded through each, so later branches see what earlier ones produced (`All(Open({a:1}), Open({b:2}))` on `{}` gives `{a:1,b:2}`). A failure reports the errors of the branches that fail, each once. |
 | `Nof(count, shapes…)` | Passes if the number of branches the value matches is one the count admits. The count is a whole number, for exactly that many (`Nof(1, …)` is exactly one, `Nof(0, s)` is not `s`), or a shape the number must satisfy (`Nof(Min(1), …)` is at least one). A count of exactly one produces: the branch that matched makes the result. Any other count leaves the value as it was given. |
 | `Discriminated(tag, { name: shape, … })` | A tagged union: the branch is chosen by the string value of the `tag` property and the value validated against that branch **alone**, so the errors are its own rather than a list of every alternative. |
 
@@ -167,6 +167,21 @@ failure can report a range of counts:
 Value "1" for property "v" satisfies 2 of: Number, Integer; the count must be 1.
 Value "x" for property "v" satisfies 1 to 3 of: String, Number, Boolean; the count must be 0.
 ```
+
+When the count admits exactly one branch and each branch is of a different
+kind of value (null, boolean, number, string, object, array; an integer is a
+number and a regexp a string), the value's kind chooses the branch. The value
+is put to that branch alone, which produces it and whose errors are the
+errors:
+
+```
+Value "a" for property "v" must be a minimum length of 2 (was 1).
+```
+
+That is `Nof(1, Min(2, String), Number)` given `"a"`. A value of a kind
+no branch has fails with the count, as before. A branch that is `Nullable`,
+or carries a check that can change the value (`Coerce`, `Catch`,
+`Transform`, a `Before` or `After` function), keeps every branch tried.
 
 A count that is neither a whole number of zero or more nor a shape throws
 `Shape: Nof needs a whole number of zero or more, or a shape for the count`

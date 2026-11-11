@@ -23,9 +23,16 @@ func buildize(spec any) *Node {
 	n, err := normalize(spec)
 	if err != nil {
 		// Builders accept any spec; deferred errors surface at validation time.
-		return newNodeWrap(&node{kind: KindNever, faultMsg: err.Error()})
+		return newNodeWrap(faultNode(err.Error()))
 	}
 	return newNodeWrap(n)
+}
+
+// faultNode is the node a spec that cannot be built stands for: it accepts
+// nothing and says why. It is required, as a bare Never is, so an absent
+// value meets the fault too.
+func faultNode(msg string) *node {
+	return &node{kind: KindNever, faultMsg: msg, required: true, requiredSet: true}
 }
 
 // Required marks the value as required. Single-arg form Required(spec) wraps an
@@ -299,7 +306,9 @@ func (n *Node) Nullable() *Node {
 	return n
 }
 
-// Never always fails to match.
+// Never always fails to match. Absent is still governed by required or
+// optional: Never alone requires a value, and so fails always; Optional or
+// Skip around it means the value must be absent.
 func Never(spec ...any) *Node {
 	var nb *Node
 	if len(spec) == 0 {
@@ -308,10 +317,12 @@ func Never(spec ...any) *Node {
 		nb = buildize(spec[0])
 	}
 	nb.n.kind = KindNever
+	nb.n.required = true
+	nb.n.requiredSet = true
 	return nb
 }
 
-// Never (chained).
+// Never (chained): the node keeps whether it requires a value.
 func (n *Node) Never() *Node {
 	n.n.kind = KindNever
 	return n
@@ -373,10 +384,14 @@ func typeRefNode(kind any) *node {
 	return nil
 }
 
-// Exact requires the value equal one of the provided literals.
+// Exact requires the value equal one of the provided literals. It asks for a
+// value, as a type token does, so Optional or Skip around it lets the value
+// be absent; chained, the node keeps whether it requires one.
 func Exact(vals ...any) *Node {
 	nb := buildize(nil)
 	nb.n.kind = KindAny
+	nb.n.required = true
+	nb.n.requiredSet = true
 	nb.n.hasExact = true
 	nb.n.exactVals = append([]any{}, vals...)
 	listText := formatList(vals)
@@ -384,19 +399,29 @@ func Exact(vals ...any) *Node {
 		name: "Exact",
 		args: append([]any{}, vals...),
 		fn: func(val any, update *Update, state *State) bool {
-			for _, want := range vals {
-				if exactEqual(val, want) {
-					return true
+			// An absent value is no listed value, null included (TS: a value
+			// undefined is === to none of them).
+			if !state.absent {
+				for _, want := range vals {
+					if exactEqual(val, want) {
+						return true
+					}
 				}
 			}
 			// The default stands in for an absent value only; a present null
 			// is a value in its own right (TS: undefined === val).
-			if state.absent && state.Node.hasDefault {
+			n := state.Node
+			if state.absent && n.hasDefault {
 				for _, want := range vals {
-					if exactEqual(state.Node.defaultValue, want) {
+					if exactEqual(n.defaultValue, want) {
 						return true
 					}
 				}
+			}
+			// Absent, where the node does not require a value and has no
+			// default to put in its place.
+			if state.absent && (n.skippable || (!n.required && !hasDefaultValue(n))) {
+				return true
 			}
 			update.Why = WhyExact
 			update.Mark = 4010
@@ -498,7 +523,17 @@ func exactRat(v any) *big.Rat {
 }
 
 func fault(msg string) *Node {
-	return newNodeWrap(&node{kind: KindNever, faultMsg: msg, argFault: true})
+	n := faultNode(msg)
+	n.argFault = true
+	return newNodeWrap(n)
+}
+
+// becomeFault makes a chained builder's node the fault of a wrong argument:
+// it accepts nothing, an absent value included, and says why.
+func (n *Node) becomeFault(f *Node) *Node {
+	n.n.kind, n.n.faultMsg, n.n.argFault = KindNever, f.n.faultMsg, f.n.argFault
+	n.n.required, n.n.requiredSet = true, true
+	return n
 }
 
 // boundArg reports whether a bound is a finite number: a numeric value, a
@@ -573,8 +608,7 @@ func (n *Node) Min(min any) *Node {
 	other := Min(min)
 	if other.n.kind == KindNever && other.n.faultMsg != "" {
 		// The argument was wrong: this node becomes the fault.
-		n.n.kind, n.n.faultMsg, n.n.argFault = KindNever, other.n.faultMsg, other.n.argFault
-		return n
+		return n.becomeFault(other)
 	}
 	n.n.befores = append(n.n.befores, other.n.befores...)
 	bumpValidatorGen()
@@ -631,8 +665,7 @@ func (n *Node) Max(max any) *Node {
 	other := Max(max)
 	if other.n.kind == KindNever && other.n.faultMsg != "" {
 		// The argument was wrong: this node becomes the fault.
-		n.n.kind, n.n.faultMsg, n.n.argFault = KindNever, other.n.faultMsg, other.n.argFault
-		return n
+		return n.becomeFault(other)
 	}
 	n.n.befores = append(n.n.befores, other.n.befores...)
 	bumpValidatorGen()
@@ -689,8 +722,7 @@ func (n *Node) Above(above any) *Node {
 	other := Above(above)
 	if other.n.kind == KindNever && other.n.faultMsg != "" {
 		// The argument was wrong: this node becomes the fault.
-		n.n.kind, n.n.faultMsg, n.n.argFault = KindNever, other.n.faultMsg, other.n.argFault
-		return n
+		return n.becomeFault(other)
 	}
 	n.n.befores = append(n.n.befores, other.n.befores...)
 	bumpValidatorGen()
@@ -747,8 +779,7 @@ func (n *Node) Below(below any) *Node {
 	other := Below(below)
 	if other.n.kind == KindNever && other.n.faultMsg != "" {
 		// The argument was wrong: this node becomes the fault.
-		n.n.kind, n.n.faultMsg, n.n.argFault = KindNever, other.n.faultMsg, other.n.argFault
-		return n
+		return n.becomeFault(other)
 	}
 	n.n.befores = append(n.n.befores, other.n.befores...)
 	bumpValidatorGen()
@@ -805,8 +836,7 @@ func (n *Node) Len(length int) *Node {
 	other := Len(length)
 	if other.n.kind == KindNever && other.n.faultMsg != "" {
 		// The argument was wrong: this node becomes the fault.
-		n.n.kind, n.n.faultMsg, n.n.argFault = KindNever, other.n.faultMsg, other.n.argFault
-		return n
+		return n.becomeFault(other)
 	}
 	n.n.befores = append(n.n.befores, other.n.befores...)
 	bumpValidatorGen()
@@ -977,6 +1007,84 @@ func Nof(count any, shapes ...any) *Node {
 	return nb
 }
 
+// The kind of JSON value a node's type takes: number covers integer, and
+// string a regexp.
+var kindOfType = map[Kind]string{
+	KindNull: "null", KindBoolean: "boolean", KindNumber: "number", KindInteger: "number",
+	KindString: "string", KindRegexp: "string", KindObject: "object", KindArray: "array",
+}
+
+// The checks that leave a shape's kind as it was: a shape with no others
+// takes a value of its own kind only. A function Check is the caller's and
+// may take anything; a Check of a regexp is named by its pattern.
+var kindKeeping = map[string]bool{
+	"Above": true, "Below": true, "DateTime": true, "Define": true, "Email": true, "Exact": true,
+	"Ip": true, "Ipv4": true, "Ipv6": true, "Len": true, "Max": true, "Min": true, "Url": true, "Uuid": true,
+}
+
+// nofKinds is the kinds of the shapes, where each is of a different kind and
+// takes values of that kind only; nil otherwise. A nullable shape takes a
+// null too, and a renamed or ignored one does more than check (in TS they
+// carry validators that keep no kind).
+func nofKinds(list []*node) []string {
+	kinds := make([]string, len(list))
+	for i, sn := range list {
+		k := kindOfType[sn.kind]
+		if k == "" || sn.nullable || sn.silent || sn.renameTo != "" || contains(kinds[:i], k) ||
+			!keepsKind(sn.befores) || !keepsKind(sn.afters) {
+			return nil
+		}
+		kinds[i] = k
+	}
+	return kinds
+}
+
+// keepsKind reports whether every check leaves a shape's kind as it was.
+func keepsKind(vs []validator) bool {
+	for _, v := range vs {
+		if !kindKeeping[v.name] && !strings.HasPrefix(v.name, "/") {
+			return false
+		}
+	}
+	return true
+}
+
+// nofKindsNow is the kinds of a Nof's branches as they stand (see
+// nofKinds), where its count admits exactly one: a retained *Node may have
+// been re-chained to another kind since the Nof was built, as in TS.
+func nofKindsNow(n *node) []string {
+	if !n.nofOne {
+		return nil
+	}
+	return nofKinds(n.list)
+}
+
+// kindOf is the kind of a JSON value, as nofKinds names a shape's: "" for a
+// value of none (a function), which no shape is of.
+func kindOf(v any) string {
+	switch v.(type) {
+	case nil:
+		return "null"
+	case bool:
+		return "boolean"
+	case string:
+		return "string"
+	case time.Time:
+		// typeof a Date is "object" in JS.
+		return "object"
+	}
+	switch {
+	case isNumber(v):
+		return "number"
+	case isAnyArray(v):
+		return "array"
+	}
+	if _, ok := objectValue(v); ok {
+		return "object"
+	}
+	return ""
+}
+
 func makeListBuilder(mode listMode, shapes []any) *Node {
 	nb := buildize(nil)
 	nb.n.kind = KindList
@@ -986,7 +1094,7 @@ func makeListBuilder(mode listMode, shapes []any) *Node {
 	for _, s := range shapes {
 		sn, err := normalize(s)
 		if err != nil {
-			sn = &node{kind: KindNever, faultMsg: err.Error()}
+			sn = faultNode(err.Error())
 		}
 		nb.n.list = append(nb.n.list, sn)
 	}
@@ -1006,7 +1114,7 @@ func Child(child any, spec ...any) *Node {
 	}
 	cn, err := normalize(child)
 	if err != nil {
-		cn = &node{kind: KindNever, faultMsg: err.Error()}
+		cn = faultNode(err.Error())
 	}
 	switch nb.n.kind {
 	case KindObject:
@@ -1031,7 +1139,7 @@ func Child(child any, spec ...any) *Node {
 func (n *Node) Child(child any) *Node {
 	cn, err := normalize(child)
 	if err != nil {
-		cn = &node{kind: KindNever, faultMsg: err.Error()}
+		cn = faultNode(err.Error())
 	}
 	switch n.n.kind {
 	case KindObject:
@@ -1054,7 +1162,7 @@ func Rest(child any, spec ...any) *Node {
 	}
 	cn, err := normalize(child)
 	if err != nil {
-		cn = &node{kind: KindNever, faultMsg: err.Error()}
+		cn = faultNode(err.Error())
 	}
 	if nb.n.kind != KindArray {
 		nb.n.kind = KindArray
@@ -1123,7 +1231,7 @@ func (n *Node) Date() *Node { return Type(Date, n) }
 func (n *Node) Rest(child any) *Node {
 	cn, err := normalize(child)
 	if err != nil {
-		cn = &node{kind: KindNever, faultMsg: err.Error()}
+		cn = faultNode(err.Error())
 	}
 	if n.n.kind != KindArray {
 		n.n.kind = KindArray
@@ -1629,6 +1737,10 @@ func formatList(vals []any) string {
 			out += "null"
 		case string:
 			out += x
+		case map[string]any, []any:
+			// An object or array value is its JSON, as TS stringifies it
+			// (its keys sorted here, see the parity page).
+			out += jsonRender(x)
 		default:
 			out += fmt.Sprintf("%v", x)
 		}

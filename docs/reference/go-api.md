@@ -37,6 +37,11 @@ description) and `(*Node).Inner()` the underlying private node, as
 ```go
 func FromJSONSchema(schema any) (any, error) // a spec built from a JSON Schema (as decoded by encoding/json)
 func MustFromJSONSchema(schema any) any
+func FromJSONSchemaWith(schema any, opts JSONSchemaImportOptions) (any, error)
+
+type JSONSchemaImportOptions struct {
+    Strict bool // refuse a keyword the import would ignore
+}
 ```
 
 See [Export and import a JSON Schema](../how-to/export-json-schema.md).

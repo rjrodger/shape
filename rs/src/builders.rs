@@ -131,9 +131,15 @@ pub fn Fault(msg: impl Into<String>, spec: impl Into<Spec>) -> Node {
     buildize(spec).Fault(msg)
 }
 
-/// A node that accepts nothing.
+/// A node that accepts nothing. An absent value is still governed by
+/// required or optional: Never alone requires a value, and so always
+/// fails; Optional or Skip around it means the value must be absent. The
+/// chained `.Never()` keeps the node's flags.
 pub fn Never(spec: impl Into<Spec>) -> Node {
-    buildize(spec).Never()
+    let mut n = buildize(spec).Never();
+    n.required = true;
+    n.required_set = true;
+    n
 }
 
 /// The kind the node asserts, given a kind, a token, a kind name or a node
@@ -148,13 +154,18 @@ pub fn Func(spec: impl Into<Spec>) -> Node {
     buildize(spec).Func()
 }
 
-/// The value must equal one of the literals.
+/// The value must equal one of the literals. Exact asks for a value, as a
+/// type token does, so Optional or Skip around it lets the value be
+/// absent; the chained `.Exact(..)` keeps the node's flags.
 pub fn Exact<I>(vals: I) -> Node
 where
     I: IntoIterator,
     I::Item: Into<Value>,
 {
-    Any().Exact(vals)
+    let mut n = Any().Exact(vals);
+    n.required = true;
+    n.required_set = true;
+    n
 }
 
 /// A minimum value, or length.
@@ -282,7 +293,47 @@ where
         }
     }
     n.nof_one = total > 0 && n.nof_ok.iter().enumerate().all(|(c, ok)| *ok == (c == 1));
+    // Exactly one of shapes of different kinds is the shape of the value's
+    // kind: the value is put to that shape alone.
+    if n.nof_one {
+        n.nof_kinds = nof_kinds(&n.list);
+    }
     n
+}
+
+/// The checks that leave a shape's kind as it was, by validator name: a
+/// shape with no others takes a value of its own kind only. A check by
+/// regexp is named by its pattern; a check by function is no such check.
+const KIND_KEEPING: [&str; 14] = [
+    "Above", "Below", "DateTime", "Define", "Email", "Exact", "Ip", "Ipv4", "Ipv6", "Len", "Max",
+    "Min", "Url", "Uuid",
+];
+
+/// Whether a shape takes values of its own kind only: it is not Nullable,
+/// and every check it carries keeps the kind. Ignore and Rename are checks
+/// in TypeScript, and so do not.
+fn keeps_kind(n: &Node) -> bool {
+    !n.nullable
+        && !n.is_ignore()
+        && n.rename_to.is_none()
+        && n.befores
+            .iter()
+            .chain(n.afters.iter())
+            .all(|v| KIND_KEEPING.contains(&v.name.as_str()) || v.name.starts_with('/'))
+}
+
+/// The kinds of the shapes, where each is of a different kind and takes
+/// values of that kind only.
+pub(crate) fn nof_kinds(list: &[Node]) -> Option<Vec<&'static str>> {
+    let mut kinds: Vec<&'static str> = Vec::with_capacity(list.len());
+    for n in list {
+        let kind = n.kind.json_kind().filter(|_| keeps_kind(n))?;
+        if kinds.contains(&kind) {
+            return None;
+        }
+        kinds.push(kind);
+    }
+    Some(kinds)
 }
 
 fn list_node<I>(mode: ListMode, shapes: I) -> Node
@@ -977,7 +1028,15 @@ impl Node {
                 }
                 // The default stands in for an absent value only; a present
                 // null is a value in its own right.
-                if state.absent && state.node.has_default && wanted.contains(&state.node.default) {
+                let absent = state.value.is_undefined();
+                let node = state.node;
+                if absent && node.has_default && wanted.contains(&node.default) {
+                    return true;
+                }
+                // Absent, where the node does not require a value and has
+                // no default to put in its place.
+                let no_default = !node.has_default || node.default.is_undefined();
+                if absent && (node.skippable || (!node.required && no_default)) {
                     return true;
                 }
                 update.why = Some("Exact".to_string());
@@ -1594,13 +1653,18 @@ mod tests {
             run(&at_a(some_ns()), &a("true")),
             "ERR Value \"true\" for property \"a\" satisfies 0 of: Number, String; the count must be Min(1)."
         );
+        // A failing branch's own errors are the errors of All.
         let all_nm = || All([Spec::from(Token::Number), Spec::from(Min(2, Any()))]);
         assert_eq!(
             run(&at_a(all_nm()), &a("1")),
-            "ERR Value \"1\" for property \"a\" does not satisfy all of: Number, Min(2)"
+            "ERR Value \"1\" for property \"a\" must be a minimum of 2 (was 1)."
         );
         assert_eq!(run(&at_a(all_nm()), &a("5")), a("5"));
-        assert_eq!(at_a(all_nm()).error(&j(&a("1")))[0].mark, 4032);
+        let e = &at_a(all_nm()).error(&j(&a("1")))[0];
+        assert_eq!(
+            (e.why.as_str(), e.mark, e.path.as_str()),
+            ("Min", 4011, "a")
+        );
         assert_eq!(
             run(
                 &at_a(Nof(
@@ -1616,7 +1680,7 @@ mod tests {
                 &at_a(All([Spec::from(Token::String), Spec::from(Token::Any)])),
                 &a("1")
             ),
-            "ERR Value \"1\" for property \"a\" does not satisfy all of: String, Any"
+            "ERR Validation failed for property \"a\" with number \"1\" because the number is not of type string."
         );
         assert_eq!(
             run(
@@ -1671,7 +1735,7 @@ mod tests {
         );
         assert_eq!(
             run(&at_a(Fault("F", all_nm())), &a("1")),
-            "ERR Value \"1\" for property \"a\" does not satisfy all of: Number, Min(2)"
+            "ERR Value \"1\" for property \"a\" must be a minimum of 2 (was 1)."
         );
         assert!(!at_a(Fault("F", one_ns())).valid(&j(&a("true"))));
         // A count other than exactly one only checks: the value stays as
@@ -1693,7 +1757,7 @@ mod tests {
         ]));
         assert_eq!(
             run(&s, &a("\"5\"")),
-            "ERR Value \"5\" for property \"a\" does not satisfy all of: Number, Min(9)"
+            "ERR Value \"5\" for property \"a\" must be a minimum of 9 (was 5)."
         );
         // A branch that produces nothing leaves a required composition with
         // no value, so the missing property is reported.
@@ -2097,6 +2161,195 @@ mod tests {
             a("null")
         );
         assert_eq!(run(&at_a(Optional(Nullable(Token::Number))), "{}"), a("0"));
+    }
+
+    // Exact and Never require a value until made optional, as a type token
+    // does; chained, they keep the node's flags.
+    #[test]
+    fn exact_and_never_require_a_value() {
+        let exact = || Exact(["x", "y"]);
+        let listed = "ERR Value \"undefined\" for property \"a\" must be exactly one of: x, y";
+        assert_eq!(run(&at_a(exact()), "{}"), listed);
+        assert!(exact().required);
+        for n in [Optional(exact()), Skip(exact()), exact().Optional()] {
+            let s = at_a(n);
+            assert_eq!(run(&s, "{}"), "{}");
+            assert_eq!(run(&s, &a("\"y\"")), a("\"y\""));
+            assert_eq!(
+                run(&s, &a("\"z\"")),
+                "ERR Value \"z\" for property \"a\" must be exactly one of: x, y"
+            );
+        }
+        // A default it allows stands in for an absent value; one it does
+        // not is still an error.
+        assert_eq!(run(&at_a(Default("x", exact())), "{}"), a("\"x\""));
+        assert_eq!(run(&at_a(Default("z", exact())), "{}"), listed);
+        assert_eq!(run(&at_a(Required(exact())), "{}"), listed);
+        assert_eq!(run(&at_a(Skip(Token::String).Exact(["x"])), "{}"), "{}");
+        assert_eq!(
+            run(&at_a(Optional(Token::String).Exact(["x"])), "{}"),
+            "ERR Value \"undefined\" for property \"a\" must be exactly one of: x"
+        );
+
+        let never = "ERR Validation failed for property \"a\" with value \"undefined\" because no value is allowed.";
+        assert_eq!(run(&at_a(Never(Any())), "{}"), never);
+        assert!(Never(Any()).required && !Any().Never().required);
+        for n in [
+            Optional(Never(Any())),
+            Skip(Never(Any())),
+            Never(Any()).Optional(),
+        ] {
+            let s = at_a(n);
+            assert_eq!(run(&s, "{}"), "{}");
+            assert_eq!(
+                run(&s, &a("1")),
+                "ERR Validation failed for property \"a\" with number \"1\" because no value is allowed."
+            );
+        }
+        // A builder's fault rejects an absent value too.
+        assert_eq!(
+            run(&at_a(Optional(Token::Number).Min("x")), "{}"),
+            "ERR Shape: Min needs a number"
+        );
+    }
+
+    // Nullable accepts null whatever a check would make of it.
+    #[test]
+    fn nullable_accepts_null_whatever_a_check_makes_of_it() {
+        let null_ok = |n: Node| run(&Schema::new(n), "null");
+        assert_eq!(null_ok(Nullable(Exact([1]))), "null");
+        assert_eq!(
+            run(&Schema::new(Nullable(Exact([1]))), "2"),
+            "ERR Value \"2\" for property \"\" must be exactly one of: 1"
+        );
+        let ns = || Nof(1, [Spec::from(Token::String), Spec::from(Token::Number)]);
+        assert_eq!(null_ok(Nullable(ns())), "null");
+        assert_eq!(
+            run(&Schema::new(Nullable(ns())), "true"),
+            "ERR Value \"true\" for property \"\" satisfies 0 of: String, Number; the count must be 1."
+        );
+        assert_eq!(
+            null_ok(Nullable(All([
+                Spec::from(Token::String),
+                Spec::from(Min(1, Any()))
+            ]))),
+            "null"
+        );
+        let one = || Check(|st, _| st.value == &Value::from(1), Any());
+        assert_eq!(null_ok(Nullable(one())), "null");
+        assert_eq!(
+            run(&Schema::new(Nullable(one())), "2"),
+            "ERR Validation failed for number \"2\" because check \"Check\" failed."
+        );
+        let s = at_a(Nullable(Exact(["x"])));
+        assert_eq!(run(&s, &a("null")), a("null"));
+        assert_eq!(
+            run(&s, "{}"),
+            "ERR Value \"undefined\" for property \"a\" must be exactly one of: x"
+        );
+    }
+
+    // Exactly one of shapes of different kinds: the value's kind chooses,
+    // and that shape's errors are the errors.
+    #[test]
+    fn nof_kinds() {
+        let g0 = Schema::new(Nof(
+            1,
+            [
+                Spec::from(Min(2, Token::String)),
+                Spec::from(Token::Number),
+                obj([("a", 1)]),
+            ],
+        ));
+        assert_eq!(
+            g0.node().nof_kinds,
+            Some(vec!["string", "number", "object"])
+        );
+        assert_eq!(
+            run(&g0, "\"a\""),
+            "ERR Value \"a\" for property \"\" must be a minimum length of 2 (was 1)."
+        );
+        assert_eq!(run(&g0, "5"), "5");
+        assert_eq!(run(&g0, "{}"), "{\"a\":1}");
+        assert_eq!(
+            run(&g0, "{\"a\":\"x\"}"),
+            "ERR Validation failed for property \"a\" with string \"x\" because the string is not of type number."
+        );
+        // A value of no kind listed is counted, as any other; an object
+        // branch is named in the port's own rendering.
+        assert_eq!(
+            run(&g0, "true"),
+            "ERR Value \"true\" for property \"\" satisfies 0 of: String.Min(2), Number, {a: 1}; the count must be 1."
+        );
+        assert!(!g0.valid(&j("true")) && g0.valid(&j("5")));
+
+        // Otherwise every shape is tried, and the count is the message: a
+        // nullable shape, one that may take another kind, a check by
+        // function, two of one kind, a count other than exactly one.
+        let s = |t: Token| Spec::from(t);
+        for n in [
+            Nof(
+                1,
+                [
+                    Spec::from(Nullable(Min(2, Token::String))),
+                    s(Token::Number),
+                ],
+            ),
+            Nof(
+                1,
+                [Spec::from(Min(1, Coerce(Token::Number))), s(Token::String)],
+            ),
+            Nof(
+                1,
+                [
+                    Spec::from(Check(|_, _| true, Token::Number)),
+                    s(Token::String),
+                ],
+            ),
+            Nof(
+                1,
+                [
+                    Spec::from(Min(1, Token::String)),
+                    Spec::from(Max(3, Token::String)),
+                ],
+            ),
+            Nof(Min(1, Any()), [s(Token::String), s(Token::Number)]),
+            Nof(1, [Spec::from(Ignore(Token::String)), s(Token::Number)]),
+            Nof(
+                1,
+                [Spec::from(Rename("b", Token::String)), s(Token::Number)],
+            ),
+            Nof(1, [s(Token::Any), s(Token::Number)]),
+        ] {
+            assert_eq!(n.nof_kinds, None, "{}", stringify_node(&n, true));
+        }
+        assert_eq!(
+            run(&Schema::new(Nof(1, [Spec::from(Min(1, Coerce(Token::Number))), s(Token::String)])), "\"3\""),
+            "ERR Value \"3\" for property \"\" satisfies 2 of: Number.Min(1), String; the count must be 1."
+        );
+        // A format and a check by regexp keep the kind, so two such
+        // strings are two of one kind.
+        let re = Regex::new("^a").unwrap();
+        let strings = Nof(
+            1,
+            [
+                Spec::from(CheckRe(re, Token::String)),
+                Spec::from(Email(Any())),
+            ],
+        );
+        assert_eq!(strings.nof_kinds, None);
+        let typed = Nof(
+            1,
+            [
+                Spec::from(CheckRe(Regex::new("^a").unwrap(), Token::String)),
+                s(Token::Number),
+            ],
+        );
+        assert_eq!(typed.nof_kinds, Some(vec!["string", "number"]));
+        assert_eq!(
+            run(&Schema::new(typed), "\"b\""),
+            "ERR Validation failed for string \"b\" because check \"/^a/\" failed."
+        );
     }
 
     #[test]

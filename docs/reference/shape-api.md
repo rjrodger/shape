@@ -43,7 +43,7 @@ s := shape.MustShapeWith(spec, options)
 | `shape.json()` | `s.JSON()` | the declarative JSON of the shape, which `build` reads back—see [Serialize a shape](../how-to/serialize-a-shape.md). |
 | `build(json)` | `Build(json)` | the shape that JSON describes. |
 | `shape.jsonSchema()` | `s.JSONSchema()` | a JSON Schema (draft 2020-12) for the values accepted—see [the how-to](../how-to/export-json-schema.md). |
-| `fromJsonSchema(schema)` | `FromJSONSchema(schema)` | a spec built from a JSON Schema, to compile with `Shape`—see [the how-to](../how-to/export-json-schema.md#import). |
+| `fromJsonSchema(schema, opts?)` | `FromJSONSchema(schema)`, `FromJSONSchemaWith(schema, opts)` | a spec built from a JSON Schema, to compile with `Shape`; `{ strict: true }` refuses a keyword the import would ignore—see [the how-to](../how-to/export-json-schema.md#import). |
 | `Shape.isShape(v)` | `shape.IsShape(v)` | is `v` a compiled shape? |
 
 ## The validation context

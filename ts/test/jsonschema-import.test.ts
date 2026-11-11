@@ -138,7 +138,12 @@ describe('jsonschema-import', () => {
     equal(v({ type: ['string', 'null'] }, null), null)
     equal(v({ type: 'null' }, null), null)
     throws(() => v({ type: 'null' }, 1), /not of type null/)
-    throws(() => v({ type: ['string', 'number'] }, true), /satisfies 0 of: String, Number; the count must be Min\(1\)\.$/)
+    // Types of different kinds: the value's kind chooses among them.
+    throws(() => v({ type: ['string', 'number'] }, true), /satisfies 0 of: String, Number; the count must be 1\.$/)
+    throws(() => v({ type: ['string', 'number'], minLength: 2 }, 'a'), /minimum length of 2/)
+    equal(v({ type: ['string', 'number'], minLength: 2 }, 1), 1)
+    equal(v({ type: ['integer', 'number'] }, 1.5), 1.5)
+    equal(v({ type: ['string', 'number', 'null'] }, null), null)
     equal(v({ type: 'boolean' }, false), false)
     equal(v({}, 'anything'), 'anything')
     deepEqual(v({ properties: { a: { type: 'number' } } }, { a: 1, b: 2 }), { a: 1, b: 2 })
@@ -149,7 +154,8 @@ describe('jsonschema-import', () => {
     // Boolean schemas.
     deepEqual(v({ type: 'object', properties: { a: true } }, { a: 1 }), { a: 1 })
     throws(() => v({ type: 'object', properties: { b: false } }, { b: 1 }), /no value is allowed/)
-    throws(() => v({ type: 'object', properties: { b: false } }, {}), /no value is allowed/)
+    // A false property schema is met by leaving the property out.
+    deepEqual(v({ type: 'object', properties: { b: false } }, {}), {})
 
     // Numbers, including draft-4 boolean exclusives.
     throws(() => v({ type: 'number', minimum: 1, exclusiveMinimum: true }, 1), /above 1/)
@@ -202,7 +208,7 @@ describe('jsonschema-import', () => {
     throws(() => v({ oneOf: [{ type: 'number' }, { type: 'integer' }] }, 1),
       /satisfies 2 of: Number, Integer; the count must be 1\.$/)
     equal(v({ oneOf: [{ type: 'number' }, { type: 'integer' }] }, 1.5), 1.5)
-    throws(() => v({ allOf: [{ type: 'number' }, { minimum: 1 }] }, 0), /does not satisfy all of: Number, Min\(1\)/)
+    throws(() => v({ allOf: [{ type: 'number' }, { minimum: 1 }] }, 0), /must be a minimum of 1 \(was 0\)\.$/)
     throws(() => v({ minLength: 2 }, 'a'), /minimum length of 2/)
     throws(() => v({ maxItems: 1 }, [1, 2]), /maximum length of 1/)
     throws(() => v({ exclusiveMinimum: 1 }, 1), /above 1/)
@@ -221,13 +227,13 @@ describe('jsonschema-import', () => {
     throws(() => v({ not: { type: 'string' } }, 'x'), /satisfies 1 of: String; the count must be 0\.$/)
     throws(() => v({ not: true }, 1), /satisfies 1 of: Any; the count must be 0\.$/)
     equal(v({ type: 'string', not: { pattern: '^a' } }, 'b'), 'b')
-    throws(() => v({ type: 'string', not: { pattern: '^a' } }, 'ab'), /does not satisfy all of: Nof\(0,\/\^a\/\), String/)
-    throws(() => v({ type: 'string', not: { pattern: '^a' } }, 1), /does not satisfy all of/)
+    throws(() => v({ type: 'string', not: { pattern: '^a' } }, 'ab'), /satisfies 1 of: \/\^a\/; the count must be 0\.$/)
+    throws(() => v({ type: 'string', not: { pattern: '^a' } }, 1), /not of type string/)
     throws(() => v({ enum: ['a', 'b'], not: {} }, 'a'), /no value is allowed/)
     // Not sees the value as given, before a default fills it.
     deepEqual(v({ type: 'object', properties: { a: { default: 1 } }, not: { required: ['a'] } }, {}), { a: 1 })
     throws(() => v({ type: 'object', properties: { a: { default: 1 } }, not: { required: ['a'] } }, { a: 2 }),
-      /does not satisfy all of/)
+      /satisfies 1 of: .*; the count must be 0\.$/)
 
     // A discriminated oneOf, and a oneOf whose branches overlap.
     const disc = Shape(fromJsonSchema({
@@ -287,6 +293,130 @@ describe('jsonschema-import', () => {
     deepEqual(v({ type: 'object', properties: { a: { type: 'object', default: { q: 1 }, additionalProperties: { type: 'number' } } } }, {}), { a: { q: 1 } })
   })
 
+  // Every keyword of a schema applies, beside the others.
+  test('every-keyword', () => {
+    const v = (schema: any, input: any) => Shape(fromJsonSchema(schema))(input)
+
+    // Beside a composition, the type and its keywords still hold, and each
+    // failing part reports its own errors.
+    const either = { type: 'object', properties: { a: { type: 'string' } }, oneOf: [{ required: ['a'] }, { required: ['b'] }] }
+    throws(() => v(either, { a: 5 }), /^ShapeError: Validation failed for property "a" with number "5" because the number is not of type string\.$/)
+    deepEqual(v(either, { a: 'x' }), { a: 'x' })
+    throws(() => v(either, { c: 1 }), /satisfies 0 of: \{a:Required,\$\$:Open\}, \{b:Required,\$\$:Open\}; the count must be 1\.$/)
+    throws(() => v({ allOf: [{ type: 'object', properties: { a: { type: 'string' } } }], required: ['b'] }, { a: 'x' }),
+      /property "b" because the property is missing/)
+    throws(() => v({ type: 'string', anyOf: [{ minLength: 2 }, { pattern: '^x' }] }, 5), /not of type string/)
+    equal(v({ type: 'string', anyOf: [{ minLength: 2 }, { pattern: '^x' }] }, 'x'), 'x')
+
+    // An enum or const keeps only the values the other keywords allow.
+    throws(() => v({ type: 'string', enum: ['a', 1] }, 1), /^ShapeError: Value "1" for property "" must be exactly one of: a$/)
+    throws(() => v({ enum: ['a', 'bb'], minLength: 2 }, 'a'), /exactly one of: bb$/)
+    throws(() => v({ type: 'number', const: 'x' }, 'x'), /no value is allowed/)
+    equal(v({ enum: ['a', 'b'], const: 'b' }, 'b'), 'b')
+    throws(() => v({ enum: ['a', 'b'], const: 'b' }, 'a'), /exactly one of: b$/)
+    throws(() => v({ enum: [] }, 1), /no value is allowed/)
+    throws(() => v({ enum: [[1, 2], [1, 3], { a: 1, b: 2 }, { b: 1 }, { a: 1 }, 'x', null], const: { a: 1 } }, 1),
+      /must be exactly one of: \{"a":1\}$/)
+
+    // An enum beside a reference to a definition still being read keeps
+    // the reference beside it.
+    const tree = Shape(fromJsonSchema({
+      $defs: { n: { type: 'object', properties: { k: { enum: ['x', 'y'], $ref: '#/$defs/k' }, kids: { type: 'array', items: { $ref: '#/$defs/n' } } } },
+        k: { $ref: '#/$defs/n' } },
+      $ref: '#/$defs/n',
+    }))
+    throws(() => tree({ k: 'z' }), /exactly one of: x, y/)
+
+    // A property the schema does not require may be absent, whatever its schema.
+    const optional = { type: 'object', properties: { e: { enum: ['a'] }, c: { const: 1 }, f: false, n: { not: {} } } }
+    deepEqual(v(optional, {}), {})
+    throws(() => v(optional, { e: 'b' }), /exactly one of: a/)
+    throws(() => v(optional, { f: 1 }), /no value is allowed/)
+    throws(() => v({ ...optional, required: ['f'] }, {}), /no value is allowed/)
+
+    // From 2019-09 a $ref is a keyword like any other; before, it stands
+    // for its whole schema.
+    const listed = { $defs: { a: { type: 'array' } }, definitions: { a: { type: 'array' } } }
+    throws(() => v({ ...listed, $ref: '#/$defs/a', maxItems: 2 }, [1, 2, 3]), /maximum length of 2/)
+    deepEqual(v({ ...listed, $schema: 'http://json-schema.org/draft-07/schema#', $ref: '#/$defs/a', maxItems: 2 }, [1, 2, 3]), [1, 2, 3])
+    throws(() => v({ ...listed, $schema: 'https://json-schema.org/draft/2020-12/schema', $ref: '#/$defs/a', maxItems: 2 }, [1, 2, 3]),
+      /maximum length of 2/)
+    deepEqual(v({ ...listed, $ref: '#/$defs/a', default: [1] }, undefined), [1])
+  })
+
+
+  // A schema without a type checks each kind of value with that kind's
+  // keywords only.
+  test('kinds', () => {
+    const v = (schema: any, input: any) => Shape(fromJsonSchema(schema))(input)
+    equal(v({ format: 'email' }, 12), 12)
+    throws(() => v({ format: 'email' }, 'nope'), /^ShapeError: Value "nope" for property "" is not a valid email address\.$/)
+    equal(v({ minLength: 2 }, 1), 1)
+    equal(v({ pattern: '^a' }, true), true)
+    equal(v({ minimum: 1 }, 'x'), 'x')
+    equal(v({ minimum: 1 }, null), null)
+    throws(() => v({ minimum: 1 }, 0), /^ShapeError: Value "0" for property "" must be a minimum of 1 \(was 0\)\.$/)
+    equal(v({ properties: { a: { type: 'number' } } }, 'str'), 'str')
+    deepEqual(v({ properties: { a: { default: 3 } } }, {}), { a: 3 })
+    throws(() => v({ properties: { a: { type: 'number' } } }, { a: 'x' }), /property "a" with string "x"/)
+    deepEqual(v({ items: { type: 'number' } }, { x: 1 }), { x: 1 })
+    throws(() => v({ items: { type: 'number' } }, ['x']), /not of type number/)
+    deepEqual(v({ anyOf: [{ format: 'ipv4' }, { format: 'ipv6' }] }, 3), 3)
+    deepEqual(v({ required: ['a'] }, [1]), [1])
+    deepEqual(v({ minItems: 1, minProperties: 1, minLength: 1, minimum: 1 }, false), false)
+
+    // Several types: the value's kind chooses among them.
+    throws(() => v({ type: ['string', 'object'], properties: { a: { type: 'number' } } }, { a: 'x' }), /property "a"/)
+    equal(v({ type: ['string', 'string'] }, 'a'), 'a')
+
+    // In a subschema of a schema with one type, only that kind applies.
+    throws(() => v({ type: 'string', allOf: [{ minLength: 2 }, { maxLength: 3 }] }, 'a'), /minimum length of 2/)
+    throws(() => v({ type: 'number', anyOf: [{ minimum: 5 }, { maximum: 1 }] }, 3), /satisfies 0 of: Number\.Min\(5\), Number\.Max\(1\)/)
+    throws(() => v({ type: 'array', oneOf: [{ maxItems: 1 }, { minItems: 3 }] }, [1, 2]), /satisfies 0 of/)
+    // A minimum says nothing of a boolean, so not refuses every one.
+    throws(() => v({ type: 'boolean', not: { minimum: 1 } }, true), /satisfies 1 of: Any; the count must be 0\.$/)
+    equal(v({ type: ['integer'], allOf: [{ minimum: 1 }] }, 2), 2)
+
+    // The kinds export as the keywords side by side, with no type.
+    deepEqual(Shape(fromJsonSchema({ minimum: 1, minLength: 2, properties: { a: { type: 'number' } }, maxItems: 3 })).jsonSchema(), {
+      $schema: 'https://json-schema.org/draft/2020-12/schema',
+      minimum: 1, minLength: 2, properties: { a: { type: 'number' } }, maxItems: 3,
+    })
+    deepEqual(Shape(fromJsonSchema({ type: ['string', 'number', 'null'] })).jsonSchema().oneOf.length, 2)
+    deepEqual(Shape(fromJsonSchema({ type: ['string', 'number', 'null'] })).jsonSchema().type, undefined)
+  })
+
+
+  // A whole schema may be true or false; a prefixItems position may be
+  // absent; and strict refuses what the import would pass over.
+  test('documents-tuples-strict', () => {
+    equal(Shape(fromJsonSchema(true))({ a: 1 }).a, 1)
+    throws(() => Shape(fromJsonSchema(false))(1), /no value is allowed/)
+
+    const tuple = Shape(fromJsonSchema({ type: 'array', prefixItems: [{ type: 'string' }, { type: 'number' }] }))
+    deepEqual(tuple([]), [])
+    deepEqual(tuple(['a']), ['a'])
+    deepEqual(tuple(['a', 1]), ['a', 1])
+    throws(() => tuple([1]), /not of type string/)
+    // An array has no holes, so a default needs every position before it.
+    const filled = Shape(fromJsonSchema({ type: 'array', prefixItems: [{ type: 'string' }, { default: 7 }, {}] }))
+    deepEqual(filled(['a']), ['a', 7])
+    throws(() => filled([]), /index "0" because the element is missing/)
+    const bools = Shape(fromJsonSchema({ type: 'array', prefixItems: [true, false] }))
+    deepEqual(bools([1]), [1])
+    throws(() => bools([1, 2]), /no value is allowed/)
+
+    for (const k of ['$dynamicRef', '$recursiveRef', 'contains', 'dependencies', 'dependentRequired', 'dependentSchemas',
+      'if', 'multipleOf', 'patternProperties', 'propertyNames', 'unevaluatedItems', 'unevaluatedProperties', 'uniqueItems']) {
+      const schema = { type: 'object', properties: { a: { [k]: 'x' === k ? 1 : true } } }
+      equal(Shape(fromJsonSchema(schema))({ a: 1 }).a, 1)
+      throws(() => fromJsonSchema(schema, { strict: true }),
+        (e: any) => 'JSON Schema: unsupported keyword "' + k + '" at /properties/a' === e.message)
+    }
+    equal(Shape(fromJsonSchema({ uniqueItems: false }, { strict: true }))([1, 1]).length, 2)
+    equal(Shape(fromJsonSchema({ type: 'number' }, {}))(1), 1)
+  })
+
   test('references', () => {
     const defs = {
       $defs: { p: { type: 'object', properties: { n: { type: 'string' } }, required: ['n'] } },
@@ -316,7 +446,7 @@ describe('jsonschema-import', () => {
   })
 
   test('faults', () => {
-    throws(() => fromJsonSchema(3 as any), /^Error: JSON Schema: the schema must be an object$/)
+    throws(() => fromJsonSchema(3 as any), /^Error: JSON Schema: the schema must be an object or boolean$/)
     throws(() => fromJsonSchema(null as any), /must be an object/)
     throws(() => fromJsonSchema([] as any), /must be an object/)
     throws(() => fromJsonSchema({ properties: { a: 'x' } }), /^Error: JSON Schema: a schema must be an object or boolean at \/properties\/a$/)
@@ -333,8 +463,7 @@ describe('jsonschema-import', () => {
     throws(() => fromJsonSchema({ type: ['string', 'number'], pattern: '(' }), /^Error: JSON Schema: bad pattern "\(" at \/$/)
     throws(() => fromJsonSchema({ type: ['x', 'null'] }), /unknown type "x"/)
     throws(() => fromJsonSchema({ type: 'string', pattern: '(' }), /^Error: JSON Schema: bad pattern "\(" at \/$/)
-    throws(() => fromJsonSchema({ enum: [] }), /enum must be a non-empty array/)
-    throws(() => fromJsonSchema({ enum: 'x' }), /enum must be a non-empty array/)
+    throws(() => fromJsonSchema({ enum: 'x' }), /^Error: JSON Schema: enum must be an array at \/$/)
     throws(() => fromJsonSchema({ type: 'array', prefixItems: [{ type: 'x' }] }), /at \/prefixItems\/0$/)
     throws(() => fromJsonSchema({ anyOf: [{ type: 'x' }] }), /at \/anyOf\/0$/)
     throws(() => fromJsonSchema({ oneOf: [{ type: 'x' }] }), /at \/oneOf\/0$/)

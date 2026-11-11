@@ -199,8 +199,10 @@ writing a string value bare, as a composite message does. The grammar is the one
 
 `Schema::json_schema()` and `shape::json_schema(&node)` export;
 `shape::from_json_schema(&Value)` imports, returning a `Spec` to compile or
-compose further, or a `JsonSchemaError`. `shape::jsonschema::JSON_SCHEMA_DRAFT`
-is the `$schema` URL written.
+compose further, or a `JsonSchemaError`.
+`shape::from_json_schema_with(&Value, &JsonSchemaImportOptions)` takes the
+options: `strict: true` refuses a keyword the import would ignore.
+`shape::jsonschema::JSON_SCHEMA_DRAFT` is the `$schema` URL written.
 
 ## Positional arguments (`Argu`)
 

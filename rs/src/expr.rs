@@ -302,6 +302,16 @@ impl<'s> Parser<'s> {
                 return Ok(n.Exact(exact_vals(args)?));
             }
         }
+        // Chained onto a node, Never keeps the node's flags, as Exact does:
+        // only the bare call requires a value. A shape argument would lend
+        // the node only its kind, which Never replaces, so it is read and
+        // passed over.
+        if head == "Never" {
+            if let Spec::Node(n) = carrier {
+                self.parse_args()?;
+                return Ok(n.Never());
+            }
+        }
         if is_builder(&head) {
             let mut args = self.parse_args()?;
             // The carrier is the final argument.
@@ -716,9 +726,24 @@ pub(crate) fn key_expr_node(src: &str, example: Spec) -> Node {
             node.has_default = true;
             node.default = v.clone();
             node.literal = Some(v);
+            // An Exact asks for a value only until it has a default, as a
+            // Default around it would make it optional: here the example is
+            // that default, unless the expression says Required outright.
+            if node.befores.iter().any(|b| b.name == "Exact") && !says_required(src) {
+                node.required = false;
+            }
         }
     }
     node
+}
+
+/// Whether an expression names Required as a word of its own, as the
+/// canonical `/\bRequired\b/` finds it: no ASCII word character either side.
+fn says_required(src: &str) -> bool {
+    let word = |c: Option<char>| c.is_some_and(|c| c.is_ascii_alphanumeric() || c == '_');
+    src.match_indices("Required").any(|(i, w)| {
+        !word(src[..i].chars().next_back()) && !word(src[i + w.len()..].chars().next())
+    })
 }
 
 /// The token that stands for a key expression's example in the expression
@@ -1201,7 +1226,7 @@ mod tests {
         // No value leaves the expression alone; a null is an example as any
         // other value is, and Min(2) with it is the null kind.
         assert_eq!(s("Min(2)", Spec::Value(Value::Undefined)), "Min(2)");
-        assert_eq!(s("Min(2)", Spec::Value(Value::Null)), "null");
+        assert_eq!(s("Min(2)", Spec::Value(Value::Null)), "null.Min(2)");
         // A bare literal has no builder to hand the example to.
         assert_eq!(s("5", Spec::from(3)), "5");
         // A value-taking builder reads the example as its argument, and it
@@ -1233,5 +1258,69 @@ mod tests {
             split_key_expr("a: Min(1) "),
             Some(("a".into(), "Min(1)".into()))
         );
+    }
+
+    // An Exact asks for a value only until the example becomes its
+    // default, unless the expression says Required as a word of its own.
+    #[test]
+    fn an_exact_with_an_example_is_optional_unless_required() {
+        let required = |src: &str| key_expr_node(src, Spec::from(7)).required;
+        assert!(!required("Exact()"));
+        assert!(!required("Exact"));
+        assert!(required("Required(Exact())"));
+        assert!(required("Exact().Required"));
+        let s = |src: &str| {
+            let schema = crate::Schema::new(obj([(format!("a: {}", src), Spec::from(7))]));
+            match schema.validate(Value::Obj(crate::value::Map::new())) {
+                Ok(v) => serde_json::Value::from(v).to_string(),
+                Err(e) => e.to_string(),
+            }
+        };
+        assert_eq!(s("Exact()"), r#"{"a":7}"#);
+        assert_eq!(
+            s("Required(Exact())"),
+            "Validation failed for property \"a\" because the property is missing."
+        );
+        // The canonical /\bRequired\b/: no ASCII word character either side.
+        assert!(says_required("Required"));
+        assert!(says_required("(Required)"));
+        assert!(says_required("Exact(1).Required"));
+        assert!(!says_required("NotRequired"));
+        assert!(!says_required("Requireds"));
+        assert!(!says_required("Required_ x_Required"));
+        assert!(!says_required("Exact(1)"));
+    }
+
+    // Bare, Never requires a value; chained, it keeps the node's flags.
+    #[test]
+    fn never_chained_keeps_its_flags() {
+        let bare = expr("Never").unwrap();
+        assert!(bare.kind == Kind::Never && bare.required);
+        let optional = expr("Optional(String).Never").unwrap();
+        assert!(optional.kind == Kind::Never && !optional.required);
+        assert!(expr("Optional(String).Never()")
+            .map(|n| !n.required)
+            .unwrap());
+        // A shape argument is passed over.
+        assert!(expr("Optional(String).Never(Number)")
+            .map(|n| !n.required)
+            .unwrap());
+        assert!(expr("String.Never").unwrap().required);
+        assert!(!expr("Skip(Never)").unwrap().required);
+        // A key expression's example is an argument of the bare call.
+        let s = |key: &str, input: &str| {
+            let schema = Schema::new(obj([(key, Spec::from(1))]));
+            match schema.validate(Value::from(
+                serde_json::from_str::<serde_json::Value>(input).unwrap(),
+            )) {
+                Ok(v) => serde_json::Value::from(v).to_string(),
+                Err(e) => e.to_string(),
+            }
+        };
+        assert_eq!(
+            s("a: Never", "{}"),
+            "Validation failed for property \"a\" with value \"undefined\" because no value is allowed."
+        );
+        assert_eq!(s("a: Optional(Never)", "{}"), "{}");
     }
 }

@@ -305,8 +305,8 @@ func TestIgnoreSuppressesBoundErrors(t *testing.T) {
 
 func TestCompositeMessageRendersAbsentValue(t *testing.T) {
 	// A missing value renders as "undefined", not "null", in a $VALUE template.
-	mustErr(t, MustShape(map[string]any{"a": MustExpr("All(String,Number)")}),
-		map[string]any{}, `Value "undefined" for property "a"`)
+	mustErr(t, MustShape(map[string]any{"a": MustExpr("All(Exact(1))")}),
+		map[string]any{}, `Value "undefined" for property "a" must be exactly one of: 1`)
 }
 
 func TestTypeRefFromInternalNode(t *testing.T) {

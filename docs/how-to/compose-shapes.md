@@ -41,6 +41,14 @@ s := shape.MustShape(map[string]any{"id": shape.Nof(1, shape.Number, shape.Strin
 Exactly one means exactly one: a value two branches both satisfy fails. The
 branch that matched produces the value, so its defaults are filled in.
 
+When the branches are of different kinds, as here, the value's kind picks
+the branch, and a value of that kind that fails gets the branch's own error:
+
+```js
+Shape({ id: Nof(1, Number, Min(3, String)) })({ id: 'x' })
+// throws: Value "x" for property "id" must be a minimum length of 3 (was 1).
+```
+
 ## At least one: `Nof(Min(1), …)`
 
 ```js
@@ -59,6 +67,9 @@ so defaults from earlier branches are visible to later ones.
 ```js
 Shape({ v: All(Number, Min(1), Max(9)) })   // number, and 1..9
 ```
+
+A failure reports the errors of the branches that fail: `12` here gives
+`Value "12" for property "v" must be a maximum of 9 (was 12).`
 
 ## A counted number of them: `Nof`
 

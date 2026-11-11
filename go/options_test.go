@@ -42,6 +42,31 @@ func TestKeyExprDefaultsApply(t *testing.T) {
 	}
 }
 
+// An Exact asks for a value only until it has a default: a key expression's
+// example is that default, so the property is optional, unless the
+// expression says Required outright (ts/src/shape.ts keyExprNode).
+func TestKeyExprExactExampleDefault(t *testing.T) {
+	for spec, want := range map[string]any{
+		"a: Exact(1,2)":          map[string]any{"a": 1.0},
+		"a: Exact":               map[string]any{"a": 1.0},
+		"a: Optional(Exact(1))":  map[string]any{"a": 1.0},
+		"a: Exact(1).Catch(5)":   map[string]any{"a": 5.0},
+		"a: Required(Exact(1))":  nil,
+		"a: Exact(1,2).Required": nil,
+	} {
+		out, err := MustShape(map[string]any{spec: 1.0}).Validate(map[string]any{})
+		if want == nil {
+			if err == nil || err.Error() != `Validation failed for property "a" because the property is missing.` {
+				t.Fatalf("%s: got %v, %v", spec, out, err)
+			}
+			continue
+		}
+		if err != nil || !reflect.DeepEqual(out, want) {
+			t.Fatalf("%s: got %v, %v", spec, out, err)
+		}
+	}
+}
+
 func TestKeyExprDisable(t *testing.T) {
 	// With KeyExpr.Disable, the literal key is preserved.
 	s, err := ShapeWith(map[string]any{

@@ -190,7 +190,7 @@ func extendNode(extra any, spec []any) (*node, error) {
 // surfaces at validation as it does for any other bad spec.
 func algebraNode(n *node, err error) *Node {
 	if err != nil {
-		return newNodeWrap(&node{kind: KindNever, faultMsg: err.Error()})
+		return newNodeWrap(faultNode(err.Error()))
 	}
 	return newNodeWrap(n)
 }

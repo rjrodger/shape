@@ -25,6 +25,11 @@ type Context struct {
 	// True when the call wants a verdict only (Match, Valid): an error is
 	// recorded without its path, text or value rendering, and only counted.
 	terse bool
+	// True within the branch a Nof of shapes of different kinds put a value
+	// to in a call of its own: the value there is that call's own copy, so a
+	// Nof of kinds within puts any value to its branch in its own place, as
+	// TS's own$ says (see nofInPlace).
+	own bool
 }
 
 // newState hands out the State for one node from the call's stack of them,

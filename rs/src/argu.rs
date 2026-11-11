@@ -112,6 +112,7 @@ fn run(n: &Node, val: Value, key: &str, is_match: bool) -> (Value, ValidationErr
             vec![crate::context::PathPart::Key(key.into())]
         },
         paths: true,
+        own: false,
     };
     let mut val = val;
     let kept = validate_node(n, Cur::Mut(&mut val), key, false, &mut w, &mut verr);

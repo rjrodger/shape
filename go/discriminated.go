@@ -20,8 +20,7 @@ type discriminated struct {
 // it is keyed by.
 func Discriminated(tag string, branches map[string]any) *Node {
 	if tag == "" || len(branches) == 0 {
-		return newNodeWrap(&node{kind: KindNever,
-			faultMsg: "Discriminated needs a tag property name and at least one branch"})
+		return newNodeWrap(faultNode("Discriminated needs a tag property name and at least one branch"))
 	}
 
 	d := &discriminated{tag: tag, branches: map[string]*node{}}

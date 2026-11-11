@@ -91,7 +91,20 @@ fn node_schema(n: &Node, defs: &mut Map) -> Map {
 
     if n.nullable {
         if let Some(t) = s.get("type").cloned() {
-            s.insert("type".to_string(), Value::Arr(vec![t, Value::from("null")]));
+            s.insert("type".to_string(), with_null(t));
+        }
+    }
+
+    // A tuple position the shape requires must be there, and so must every
+    // one before it.
+    if n.kind == Kind::Array {
+        let need = n
+            .arr_children
+            .iter()
+            .rposition(|c| c.required)
+            .map_or(0, |i| i + 1) as f64;
+        if need > s.get("minItems").and_then(Value::as_f64).unwrap_or(0.0) {
+            s.insert("minItems".to_string(), Value::Num(need));
         }
     }
 
@@ -115,6 +128,17 @@ fn node_schema(n: &Node, defs: &mut Map) -> Map {
         defs.insert(name.clone(), Value::Obj(s.clone()));
     }
     s
+}
+
+/// A type with "null" beside it, as Nullable writes it: a type that is
+/// already a list has "null" appended.
+fn with_null(t: Value) -> Value {
+    let mut types = match t {
+        Value::Arr(list) => list,
+        one => vec![one],
+    };
+    types.push(Value::from("null"));
+    Value::Arr(types)
 }
 
 fn describe_schema(n: &Node, s: &mut Map) {
@@ -223,11 +247,78 @@ fn list_schema(n: &Node, s: &mut Map, defs: &mut Map) {
         return;
     }
     match n.list_mode {
-        ListMode::Nof => nof_schema(&n.nof_ok, branches, s),
+        ListMode::Nof => {
+            if !kinds_schema(n.nof_kinds.as_deref(), &branches, s) {
+                nof_schema(&n.nof_ok, branches, s)
+            }
+        }
         _ => {
             s.insert("allOf".to_string(), Value::Arr(branches));
         }
     }
+}
+
+/// The JSON kinds, every one of which a schema with no type admits.
+const JSON_KINDS: [&str; 6] = ["null", "boolean", "number", "string", "object", "array"];
+
+/// The kind of value a JSON Schema type names (TypeScript's
+/// `KIND_OF_TYPE`): an integer is a number.
+pub(crate) fn kind_of_type(t: &str) -> Option<&'static str> {
+    Some(match t {
+        "null" => "null",
+        "boolean" => "boolean",
+        "number" | "integer" => "number",
+        "string" | "regexp" => "string",
+        "object" => "object",
+        "array" => "array",
+        _ => return None,
+    })
+}
+
+/// The keywords that apply to one kind of value only; none for a null or a
+/// boolean.
+pub(crate) fn kind_keywords(kind: &str) -> &'static [&'static str] {
+    match kind {
+        "number" => &["minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum"],
+        "string" => &["minLength", "maxLength", "pattern", "format"],
+        "object" => &[
+            "properties",
+            "required",
+            "additionalProperties",
+            "minProperties",
+            "maxProperties",
+        ],
+        "array" => &["items", "prefixItems", "minItems", "maxItems"],
+        _ => &[],
+    }
+}
+
+/// Exactly one of a shape for every JSON kind is a schema with no type: the
+/// keywords of each kind side by side. A shape that says more than its
+/// kind's keywords can say is counted, as oneOf.
+fn kinds_schema(kinds: Option<&[&str]>, branches: &[Value], s: &mut Map) -> bool {
+    let every = kinds.is_some_and(|kinds| JSON_KINDS.iter().all(|k| kinds.contains(k)));
+    // A type that narrows its kind (integer) says more than the kind.
+    let says = |b: &Value| {
+        let kind = b
+            .as_obj()
+            .and_then(|m| m.get("type"))
+            .and_then(Value::as_str)
+            .filter(|t| JSON_KINDS.contains(t));
+        let words = kind.and_then(kind_of_type).map_or(&[][..], kind_keywords);
+        kind.is_some()
+            && b.as_obj()
+                .is_some_and(|m| m.keys().all(|k| k == "type" || words.contains(&k.as_str())))
+    };
+    if !every || !branches.iter().all(says) {
+        return false;
+    }
+    for (k, v) in branches.iter().filter_map(Value::as_obj).flatten() {
+        if k != "type" {
+            s.insert(k.clone(), v.clone());
+        }
+    }
+    true
 }
 
 /// A count of the shapes, as the keywords that count: none of them is not,
@@ -486,23 +577,98 @@ mod tests {
         );
         assert_eq!(
             js(arr([Spec::from(Token::Number), Spec::from("x")])),
-            json!({"type": "array", "prefixItems": [{"type": "number"}, {"type": "string", "minLength": 1, "default": "x"}], "items": false})
+            json!({"type": "array", "prefixItems": [{"type": "number"}, {"type": "string", "minLength": 1, "default": "x"}], "items": false, "minItems": 1})
         );
         assert_eq!(
             js(Rest(
                 Token::String,
                 arr([Spec::from(Token::Number), Spec::from(1)])
             )),
-            json!({"type": "array", "prefixItems": [{"type": "number"}, {"type": "number", "default": 1}], "items": {"type": "string", "minLength": 1}})
+            json!({"type": "array", "prefixItems": [{"type": "number"}, {"type": "number", "default": 1}], "items": {"type": "string", "minLength": 1}, "minItems": 1})
         );
         assert_eq!(
             js(Rest(
                 Token::Any,
                 arr([Spec::from(Token::Number), Spec::from(1)])
             )),
-            json!({"type": "array", "prefixItems": [{"type": "number"}, {"type": "number", "default": 1}]})
+            json!({"type": "array", "prefixItems": [{"type": "number"}, {"type": "number", "default": 1}], "minItems": 1})
         );
         assert_eq!(js(arr(Vec::<Spec>::new())), json!({"type": "array"}));
+        // A tuple's required positions are minItems, and a larger minItems
+        // stands.
+        assert_eq!(
+            js(Min(
+                3,
+                Closed(arr([Spec::from(Token::Number), Spec::from(Token::Number)]))
+            )),
+            json!({"type": "array", "prefixItems": [{"type": "number"}, {"type": "number"}], "items": false, "minItems": 3})
+        );
+        assert_eq!(
+            js(Max(1, arr([Spec::from("x"), Spec::from(Token::Number)]))),
+            json!({"type": "array", "prefixItems": [{"type": "string", "minLength": 1, "default": "x"}, {"type": "number"}], "items": false, "maxItems": 1, "minItems": 2})
+        );
+        // Nullable appends null to a type, and to a list of types.
+        assert_eq!(
+            serde_json::Value::from(with_null(Value::Arr(vec![
+                Value::from("string"),
+                Value::from("number")
+            ]))),
+            json!(["string", "number", "null"])
+        );
+        assert_eq!(
+            js(Nullable(Nof(
+                1,
+                [Spec::from(Token::String), Spec::from(Token::Number)]
+            ))),
+            json!({"oneOf": [{"type": "string", "minLength": 1}, {"type": "number"}]})
+        );
+    }
+
+    // Exactly one of a shape for every JSON kind exports as the kinds'
+    // keywords side by side, with no type; a shape that says more than its
+    // kind's keywords can is counted, as oneOf.
+    #[test]
+    fn renders_a_shape_for_every_kind_as_no_type() {
+        let kinds = |number: Spec, string: Spec, object: Spec, array: Spec| {
+            js(Nof(
+                1,
+                [
+                    Spec::from(Required(crate::spec::null())),
+                    Spec::from(Token::Boolean),
+                    number,
+                    string,
+                    object,
+                    array,
+                ],
+            ))
+        };
+        assert_eq!(
+            kinds(
+                Spec::from(Min(1, Token::Number)),
+                Spec::from(Max(3, Empty(Token::String))),
+                Spec::from(Open(obj([("a", Spec::from(Token::Number))]))),
+                arr([Spec::from(Token::String)])
+            ),
+            json!({"minimum": 1, "maxLength": 3, "properties": {"a": {"type": "number"}}, "required": ["a"], "items": {"type": "string", "minLength": 1}})
+        );
+        assert_eq!(
+            kinds(
+                Spec::from(5),
+                Spec::from(Empty(Token::String)),
+                Spec::from(Open(obj::<&str, Spec>([]))),
+                arr::<Spec>([])
+            ),
+            json!({"oneOf": [{"type": "null"}, {"type": "boolean"}, {"type": "number", "default": 5}, {"type": "string"}, {"type": "object"}, {"type": "array"}]})
+        );
+        assert_eq!(
+            kinds(
+                Spec::from(Token::Integer),
+                Spec::from(Empty(Token::String)),
+                Spec::from(Open(obj::<&str, Spec>([]))),
+                arr::<Spec>([])
+            ),
+            json!({"oneOf": [{"type": "null"}, {"type": "boolean"}, {"type": "integer"}, {"type": "string"}, {"type": "object"}, {"type": "array"}]})
+        );
     }
 
     #[test]

@@ -32,6 +32,21 @@ pub enum Kind {
 }
 
 impl Kind {
+    /// The kind of JSON value a node of this kind takes, as TypeScript's
+    /// `KIND_OF_TYPE` reads it: an integer is a number and a regexp a
+    /// string. None for a kind that is no one kind of JSON value.
+    pub fn json_kind(self) -> Option<&'static str> {
+        Some(match self {
+            Kind::Null => "null",
+            Kind::Boolean => "boolean",
+            Kind::Number | Kind::Integer => "number",
+            Kind::String | Kind::Regexp => "string",
+            Kind::Object => "object",
+            Kind::Array => "array",
+            _ => return None,
+        })
+    }
+
     pub fn as_str(self) -> &'static str {
         match self {
             Kind::Any => "any",
@@ -229,6 +244,11 @@ pub struct Node {
     pub nof_count: Option<Box<Node>>,
     pub nof_ok: Vec<bool>,
     pub nof_one: bool,
+    /// The JSON kinds of a `Nof`'s shapes (`Kind::json_kind`), one per
+    /// shape, when the count admits exactly one and the shapes are each of
+    /// a different kind and take values of that kind only: the value's
+    /// kind then chooses the one shape it is put to.
+    pub nof_kinds: Option<Vec<&'static str>>,
 
     pub exact_vals: Vec<Value>,
     pub has_exact: bool,

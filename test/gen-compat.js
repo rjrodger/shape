@@ -34,6 +34,18 @@ const T = { $type: 'String' }, N = { $type: 'Number' }, B = { $type: 'Boolean' }
 const I = { $type: 'Integer' }, D = { $type: 'Date' }
 // A discriminated union over the "kind" property; each branch gets the tag added.
 const DISC = { $discriminated: ['kind', { dog: { bark: B }, fish: { fins: N } }] }
+// JSON Schemas used by more than one row.
+const JS_EITHER = { type: 'object', properties: { a: { type: 'string' } }, oneOf: [{ required: ['a'] }, { required: ['b'] }] }
+const JS_TREE = {
+  $defs: {
+    n: { type: 'object', properties: { k: { enum: ['x', 'y'], $ref: '#/$defs/k' }, kids: { type: 'array', items: { $ref: '#/$defs/n' } } } },
+    k: { $ref: '#/$defs/n' },
+  },
+  $ref: '#/$defs/n',
+}
+const JS_OPTIONAL = { type: 'object', properties: { e: { enum: ['a'] }, c: { const: 1 }, f: false, n: { not: {} } } }
+const JS_LIST = { $defs: { t: { properties: { v: { type: 'number' }, next: { $ref: '#/$defs/t' } } } }, $ref: '#/$defs/t' }
+const JS_FILLED = { type: 'array', prefixItems: [{ type: 'string' }, { default: 7 }, {}] }
 // A builder the string DSL cannot express, called by name with its arguments.
 const CALL = (name, ...args) => ({ $call: [name, ...args] })
 const ABASE = { a: 1, b: T, c: true }
@@ -237,6 +249,25 @@ const files = {
     ['disc-not-object', { p: DISC }, { p: 1 }],
     ['disc-required-absent', { p: DISC }, {}],
     ['disc-optional-absent', { p: { $optional: DISC } }, {}],
+    // Exact and Never ask for a value until made optional; Nullable takes a
+    // null whatever a check makes of it.
+    ['exact-bare-absent', { a: { $expr: 'Exact("x","y")' } }, {}],
+    ['exact-optional-absent', { a: { $expr: 'Optional(Exact("x","y"))' } }, {}],
+    ['exact-skip-absent', { a: { $expr: 'Skip(Exact("x","y"))' } }, {}],
+    ['exact-chained-optional-absent', { a: { $expr: 'Exact("x","y").Optional' } }, {}],
+    ['exact-optional-other', { a: { $expr: 'Optional(Exact("x","y"))' } }, { a: 'z' }],
+    ['exact-required-absent', { a: { $expr: 'Required(Exact("x","y"))' } }, {}],
+    ['exact-default-listed-absent', { a: { $expr: 'Default("x",Exact("x","y"))' } }, {}],
+    ['exact-default-unlisted-absent', { a: { $expr: 'Default("z",Exact("x","y"))' } }, {}],
+    ['never-bare-absent', { a: { $expr: 'Never' } }, {}],
+    ['never-optional-absent', { a: { $expr: 'Optional(Never)' } }, {}],
+    ['never-skip-absent', { a: { $expr: 'Skip(Never)' } }, {}],
+    ['never-optional-present', { a: { $expr: 'Optional(Never)' } }, { a: 1 }],
+    ['nullable-exact-null', { a: { $expr: 'Nullable(Exact(1))' } }, { a: null }],
+    ['nullable-exact-other', { a: { $expr: 'Nullable(Exact(1))' } }, { a: 2 }],
+    ['nullable-exact-absent', { a: { $expr: 'Nullable(Exact(1))' } }, {}],
+    ['nullable-nof-null', { a: { $expr: 'Nullable(Nof(1,String,Number))' } }, { a: null }],
+    ['nullable-all-null', { a: { $expr: 'Nullable(All(String,Min(1)))' } }, { a: null }],
   ],
   composition: [
     // All threads the result from branch to branch, and never changes the
@@ -304,6 +335,25 @@ const files = {
     ['nof-min-of-fail', { a: { $expr: 'Nof(Min(1),Number,String)' } }, { a: true }],
     ['nof-of-ignore-branch', { a: { $expr: 'Nof(1,Ignore(Min(2,Number)),String)' } }, { a: 1 }],
     ['all-of-ignore-branch', { a: { $expr: 'All(Ignore(Min(2,Number)),Number)' } }, { a: 1 }],
+    // A failing branch of All reports its own errors, each once.
+    ['all-branch-errors', CALL('All', { $open: { x: 1 } }, { $open: { y: 2 } }), { x: 'X', y: 'Y' }],
+    ['all-nested-path', { a: CALL('All', { $open: { b: { c: N } } }, { $open: { d: 1 } }) }, { a: { b: { c: 'x' } } }],
+    // Exactly one of shapes of different kinds: the value's kind chooses.
+    ['nof-kinds-branch-error', { a: { $expr: 'Nof(1,Min(2,String),Number)' } }, { a: 'a' }],
+    ['nof-kinds-ok', { a: { $expr: 'Nof(1,Min(2,String),Number)' } }, { a: 5 }],
+    ['nof-kinds-no-kind', { a: { $expr: 'Nof(1,Min(2,String),Number)' } }, { a: true }],
+    ['nof-kinds-null', { a: { $expr: 'Nof(1,Min(2,String),Number)' } }, { a: null }],
+    ['nof-kinds-object-default', { a: CALL('Nof', 1, N, { b: 1 }) }, { a: {} }],
+    ['nof-kinds-object-error', { a: CALL('Nof', 1, N, { b: 1 }) }, { a: { b: 'x' } }],
+    ['nof-kinds-null-branch', { a: { $expr: 'Nof(1,Required(null),Min(1,Number))' } }, { a: null }],
+    ['nof-kinds-array-branch', { a: CALL('Nof', 1, [N], { $expr: 'Min(2,String)' }) }, { a: ['x'] }],
+    ['nof-kinds-integer-branch', { a: { $expr: 'Nof(1,Integer,String)' } }, { a: 1.5 }],
+    ['nof-kinds-regexp-branch', { a: { $expr: 'Nof(1,/^a/,Number)' } }, { a: 'b' }],
+    ['nof-kinds-boolean-branch', { a: { $expr: 'Nof(1,Boolean,Number)' } }, { a: 'x' }],
+    ['nof-kinds-nullable-branch', { a: { $expr: 'Nof(1,Nullable(Min(2,String)),Number)' } }, { a: 'a' }],
+    ['nof-kinds-coerce-branch', { a: { $expr: 'Nof(1,Coerce(Number),String)' } }, { a: '3' }],
+    ['nof-kinds-same-kind', { a: { $expr: 'Nof(1,Min(1,String),Max(3,String))' } }, { a: 'ab' }],
+    ['nof-kinds-in-array', { a: [{ $expr: 'Nof(1,Integer,String)' }] }, { a: [1.5] }],
   ],
   checks: [
     // A Check is not called for an absent value; the required check speaks.
@@ -460,6 +510,9 @@ const files = {
     ['js-bool-schema', { $jsonschema: { type: 'object', properties: { a: true, b: false } } }, { b: 1 }],
     ['js-discriminated', { $jsonschema: { oneOf: [{ type: 'object', properties: { k: { const: 'a' }, x: { type: 'number' } }, required: ['k', 'x'] }, { type: 'object', properties: { k: { const: 'b' } }, required: ['k'] }] } }, { k: 'a', x: 'no' }],
     ['js-discriminated-unknown', { $jsonschema: { oneOf: [{ type: 'object', properties: { k: { const: 'a' } }, required: ['k'] }, { type: 'object', properties: { k: { const: 'b' } }, required: ['k'] }] } }, { k: 'c' }],
+    // A tag every branch requires, chosen in name order.
+    ['js-discriminated-untagged-branch', { $jsonschema: { oneOf: [{ type: 'object', properties: { k: { const: 'a' } }, required: ['k'] }, { type: 'object', properties: { k: { const: 'b' }, x: { type: 'number' } }, required: ['x'] }] } }, { x: 1 }],
+    ['js-discriminated-name-order', { $jsonschema: { oneOf: [{ type: 'object', properties: { z: { const: 'a' }, k: { const: 'x' } }, required: ['z', 'k'] }, { type: 'object', properties: { z: { const: 'b' }, k: { const: 'y' } }, required: ['z', 'k'] }] } }, { k: 'q', z: 'a' }],
     ['js-one-of-plain', { $jsonschema: { oneOf: [{ type: 'string' }, { type: 'number' }] } }, true],
     // A oneOf is a count of exactly one, and a not a count of none that holds
     // beside the other keywords, ahead of them.
@@ -479,6 +532,57 @@ const files = {
     ['js-describe', { $jsonschema: { type: 'object', properties: { a: { type: 'string', description: 'd' } }, required: ['a'] } }, { a: 1 }],
     ['js-any-empty', { $jsonschema: {} }, { anything: [1] }],
     ['js-ip', { $jsonschema: { type: 'string', anyOf: [{ format: 'ipv4' }, { format: 'ipv6' }] } }, 'x'],
+    // Every keyword applies beside the others.
+    ['js-sibling-one-of', { $jsonschema: JS_EITHER }, { a: 5 }],
+    ['js-sibling-one-of-ok', { $jsonschema: JS_EITHER }, { a: 'x' }],
+    ['js-sibling-all-of-required', { $jsonschema: { allOf: [{ type: 'object', properties: { a: { type: 'string' } } }], required: ['b'] } }, { a: 'x' }],
+    ['js-sibling-any-of-type', { $jsonschema: { type: 'string', anyOf: [{ minLength: 2 }, { pattern: '^x' }] } }, 5],
+    ['js-enum-beside-type', { $jsonschema: { type: 'string', enum: ['a', 1] } }, 1],
+    ['js-enum-beside-min-length', { $jsonschema: { enum: ['a', 'bb'], minLength: 2 } }, 'a'],
+    ['js-const-refused-by-type', { $jsonschema: { type: 'number', const: 'x' } }, 'x'],
+    ['js-enum-and-const', { $jsonschema: { enum: ['a', 'b'], const: 'b' } }, 'a'],
+    ['js-enum-empty', { $jsonschema: { enum: [] } }, 1],
+    ['js-enum-const-mixed', { $jsonschema: { enum: [[1, 2], { a: 1 }, 'x', null, 2], const: 'x' } }, 'y'],
+    ['js-enum-const-no-equal', { $jsonschema: { enum: [{ a: { b: 2 } }, { a: 1, b: 2 }, { b: 1 }, [1]], const: { a: { b: 1 } } } }, 1],
+    ['js-enum-beside-backref', { $jsonschema: JS_TREE }, { k: 'z' }],
+    ['js-optional-absent', { $jsonschema: JS_OPTIONAL }, {}],
+    ['js-optional-false-present', { $jsonschema: JS_OPTIONAL }, { f: 1 }],
+    ['js-required-false-absent', { $jsonschema: { ...JS_OPTIONAL, required: ['f'] } }, {}],
+    ['js-ref-siblings', { $jsonschema: { $defs: { a: { type: 'array' } }, $ref: '#/$defs/a', maxItems: 2 } }, [1, 2, 3]],
+    ['js-ref-siblings-draft-7', { $jsonschema: { $schema: 'http://json-schema.org/draft-07/schema#', definitions: { a: { type: 'array' } }, $ref: '#/definitions/a', maxItems: 2 } }, [1, 2, 3]],
+    ['js-ref-default', { $jsonschema: { $defs: { a: { type: 'number' } }, type: 'object', properties: { p: { $ref: '#/$defs/a', default: 1 } } } }, {}],
+    // A schema without a type checks each kind with that kind's keywords.
+    ['js-kind-format-number', { $jsonschema: { format: 'email' } }, 12],
+    ['js-kind-format-string', { $jsonschema: { format: 'email' } }, 'nope'],
+    ['js-kind-minimum-string', { $jsonschema: { minimum: 1 } }, 'x'],
+    ['js-kind-minimum-low', { $jsonschema: { minimum: 1 } }, 0],
+    ['js-kind-properties-string', { $jsonschema: { properties: { a: { type: 'number' } } } }, 'str'],
+    ['js-kind-properties-bad', { $jsonschema: { properties: { a: { type: 'number' } } } }, { a: 'x' }],
+    ['js-kind-properties-default', { $jsonschema: { properties: { a: { default: 3 } } } }, {}],
+    ['js-kind-items-object', { $jsonschema: { items: { type: 'number' } } }, { x: 1 }],
+    ['js-kind-items-bad', { $jsonschema: { items: { type: 'number' } } }, ['x']],
+    ['js-kind-required-array', { $jsonschema: { required: ['a'] } }, [1]],
+    ['js-kind-all-lengths-boolean', { $jsonschema: { minItems: 1, minProperties: 1, minLength: 1, minimum: 1 } }, false],
+    ['js-recursive-untyped', { $jsonschema: JS_LIST }, { v: 1, next: { v: 2, next: { v: 'y' } } }],
+    ['js-recursive-untyped-ok', { $jsonschema: JS_LIST }, { v: 1, next: { v: 2 } }],
+    ['js-kind-one-of-untyped', { $jsonschema: { oneOf: [{ required: ['a'] }, { required: ['b'] }] } }, { a: 1 }],
+    ['js-types-kind-error', { $jsonschema: { type: ['string', 'number'], minLength: 2 } }, 'a'],
+    ['js-types-other-kind', { $jsonschema: { type: ['string', 'number'], minLength: 2 } }, 1],
+    ['js-types-integer-number', { $jsonschema: { type: ['integer', 'number'] } }, 1.5],
+    ['js-types-nullable', { $jsonschema: { type: ['string', 'number', 'null'] } }, null],
+    ['js-types-repeated', { $jsonschema: { type: ['string', 'string'] } }, 'a'],
+    ['js-narrow-all-of', { $jsonschema: { type: 'string', allOf: [{ minLength: 2 }, { maxLength: 3 }] } }, 'a'],
+    ['js-narrow-any-of', { $jsonschema: { type: 'number', anyOf: [{ minimum: 5 }, { maximum: 1 }] } }, 3],
+    ['js-narrow-not-boolean', { $jsonschema: { type: 'boolean', not: { minimum: 1 } } }, true],
+    ['js-narrow-integer', { $jsonschema: { type: ['integer'], allOf: [{ minimum: 1 }] } }, 0],
+    // A whole schema may be true or false; a prefixItems position may be absent.
+    ['js-document-true', { $jsonschema: true }, { a: 1 }],
+    ['js-document-false', { $jsonschema: false }, 1],
+    ['js-tuple-short', { $jsonschema: { type: 'array', prefixItems: [{ type: 'string' }, { type: 'number' }] } }, ['a']],
+    ['js-tuple-wrong', { $jsonschema: { type: 'array', prefixItems: [{ type: 'string' }, { type: 'number' }] } }, [1]],
+    ['js-tuple-default', { $jsonschema: JS_FILLED }, ['a']],
+    ['js-tuple-default-missing', { $jsonschema: JS_FILLED }, []],
+    ['js-tuple-booleans', { $jsonschema: { type: 'array', prefixItems: [true, false] } }, [1, 2]],
   ],
   // The shared regexp subset (docs/reference/regexp.md): the same pattern
   // matches the same strings in every engine. \d, \w and \s are ASCII, .
@@ -518,6 +622,13 @@ const files = {
     ['refer-undefined-strict', { b: CALL('Refer', { name: 'nope', strict: true }) }, { b: 2 }],
     ['refer-undefined-strict-absent', { b: CALL('Refer', { name: 'nope', strict: true }) }, {}],
     ['refer-undefined-strict-fill', { b: CALL('Refer', { name: 'nope', strict: true, fill: true }) }, {}],
+    // A Refer runs every check of the node it names, and a node's
+    // definition is in place before its own checks run.
+    ['refer-define-check', { a: { $expr: 'Define("t",Min(2,Number))' }, b: { $expr: 'Refer("t")' } }, { a: 3, b: 1 }],
+    ['refer-define-check-ok', { a: { $expr: 'Define("t",Min(2,Number))' }, b: { $expr: 'Refer("t")' } }, { a: 3, b: 5 }],
+    ['refer-define-nof', { a: { $expr: 'Define("t",Nof(1,Number,String))' }, b: { $expr: 'Refer("t")' } }, { a: 1, b: true }],
+    ['refer-define-self', { a: { $expr: 'Define("s",Refer("s"))' }, b: { $expr: 'Refer("s")' } }, { a: 1, b: 2 }],
+    ['refer-define-cycle', { a: { $expr: 'Define("x",Refer("y"))' }, b: { $expr: 'Define("y",Refer("x"))' }, c: { $expr: 'Refer("x")' } }, { a: 1, b: 2, c: 3 }],
     ['null-required', { a: { $expr: 'null' } }, { a: null }],
     ['null-literal-default-injected', { a: null }, {}],
     ['null-dsl-default-injected', { a: { $expr: 'null' } }, {}],

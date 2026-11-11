@@ -57,7 +57,7 @@ describe('review', () => {
     assert.deepEqual(inner, {})
     assert.equal(Shape(All(Coerce(Number), Min(2)))('5'), 5)
     const failing = {}
-    assert.throws(() => Shape(All(Open({ a: 1 }), { z: String }))(failing), /does not satisfy all of/)
+    assert.throws(() => Shape(All(Open({ a: 1 }), { z: String }))(failing), /property "z" because the property is missing/)
     assert.deepEqual(failing, {})
     // A count of one produces from a copy too.
     const one = {}

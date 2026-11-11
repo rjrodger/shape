@@ -700,8 +700,9 @@ func nodeJSON(n *node) any {
 			head += ".Open"
 		}
 	case KindNever:
+		// Never requires a value by itself, as a type token does: Optional or
+		// Skip holds it.
 		head = "Never"
-		headRequired = false
 	case KindNull:
 		if !n.required && !n.skippable && len(n.befores) == 0 && len(n.afters) == 0 &&
 			!n.nullable && n.faultMsg == "" && n.meta["description"] == nil && n.renameTo == "" {
