@@ -234,7 +234,7 @@ func listSchema(n *node, s map[string]any, defs map[string]any) {
 		return
 	}
 	if n.listMode == listNof {
-		if !kindsSchema(n.nofKinds, branches, s) {
+		if !kindsSchema(nofKindsNow(n), branches, s) {
 			nofSchema(n.nofOK, branches, s)
 		}
 	} else {
@@ -272,7 +272,11 @@ func kindsSchema(kinds []string, branches []any, s map[string]any) bool {
 	}
 	for _, b := range branches {
 		bs := b.(map[string]any)
+		// A type that narrows its kind (integer) is more than the kind.
 		t, _ := bs["type"].(string)
+		if !contains(jsonKinds, t) {
+			return false
+		}
 		for k := range bs {
 			if k != "type" && !contains(jsonSchemaKindKeywords[jsonSchemaTypeKind[t]], k) {
 				return false

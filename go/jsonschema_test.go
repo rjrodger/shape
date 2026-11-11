@@ -140,3 +140,23 @@ func TestJSONSchemaDiscriminatedNonObject(t *testing.T) {
 		 "required":["kind"],"additionalProperties":false},
 		{"type":"string","minLength":1,"properties":{"kind":{"type":"string","const":"dog"}},"required":["kind"]}]}`)
 }
+
+// A shape for every JSON kind exports as a schema with no type, unless one
+// of them narrows its kind, as an integer does.
+func TestNofKindsExportNarrowed(t *testing.T) {
+	js := MustShape(Nof(1, Required(nil), Boolean, Integer, Empty(String), Open(map[string]any{}), []any{})).JSONSchema()
+	one, ok := js["oneOf"].([]any)
+	if !ok || len(one) != 6 {
+		t.Fatalf("oneOf = %v", js)
+	}
+	if b, _ := one[2].(map[string]any); b["type"] != "integer" {
+		t.Fatalf("integer branch = %v", one[2])
+	}
+	plain := MustShape(Nof(1, Required(nil), Boolean, Min(1, Number), Empty(String), Open(map[string]any{}), []any{})).JSONSchema()
+	if plain["minimum"] != 1.0 && plain["minimum"] != 1 {
+		t.Fatalf("untyped = %v", plain)
+	}
+	if _, has := plain["oneOf"]; has {
+		t.Fatalf("untyped = %v", plain)
+	}
+}

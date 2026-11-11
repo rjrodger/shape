@@ -298,15 +298,17 @@ pub(crate) fn kind_keywords(kind: &str) -> &'static [&'static str] {
 /// kind's keywords can say is counted, as oneOf.
 fn kinds_schema(kinds: Option<&[&str]>, branches: &[Value], s: &mut Map) -> bool {
     let every = kinds.is_some_and(|kinds| JSON_KINDS.iter().all(|k| kinds.contains(k)));
+    // A type that narrows its kind (integer) says more than the kind.
     let says = |b: &Value| {
-        let words = b
+        let kind = b
             .as_obj()
             .and_then(|m| m.get("type"))
             .and_then(Value::as_str)
-            .and_then(kind_of_type)
-            .map_or(&[][..], kind_keywords);
-        b.as_obj()
-            .is_some_and(|m| m.keys().all(|k| k == "type" || words.contains(&k.as_str())))
+            .filter(|t| JSON_KINDS.contains(t));
+        let words = kind.and_then(kind_of_type).map_or(&[][..], kind_keywords);
+        kind.is_some()
+            && b.as_obj()
+                .is_some_and(|m| m.keys().all(|k| k == "type" || words.contains(&k.as_str())))
     };
     if !every || !branches.iter().all(says) {
         return false;
@@ -657,6 +659,15 @@ mod tests {
                 arr::<Spec>([])
             ),
             json!({"oneOf": [{"type": "null"}, {"type": "boolean"}, {"type": "number", "default": 5}, {"type": "string"}, {"type": "object"}, {"type": "array"}]})
+        );
+        assert_eq!(
+            kinds(
+                Spec::from(Token::Integer),
+                Spec::from(Empty(Token::String)),
+                Spec::from(Open(obj::<&str, Spec>([]))),
+                arr::<Spec>([])
+            ),
+            json!({"oneOf": [{"type": "null"}, {"type": "boolean"}, {"type": "integer"}, {"type": "string"}, {"type": "object"}, {"type": "array"}]})
         );
     }
 

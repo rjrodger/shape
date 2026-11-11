@@ -16,7 +16,7 @@ const {
   Above, All, Below, Catch, Check, Child, Closed, Coerce, Default, Define, Describe,
   Discriminated, Email, Empty, Exact, Ignore, Integer, Ip, Len, Max, Min, Never,
   Nullable, Open, Optional, Refer, Rest, Skip, Transform, Url, Uuid,
-  DateTime, Ipv4, Ipv6, Func, Nof,
+  DateTime, Ipv4, Ipv6, Func, Nof, Required,
 } = Shape as any
 
 const DRAFT = 'https://json-schema.org/draft/2020-12/schema'
@@ -189,6 +189,13 @@ describe('jsonschema', () => {
     deepEqual(js(Nof(Min(0), String)), {})
     deepEqual(js(Nof(0)), {})
     deepEqual(js(Nof(1)), { not: {} })
+
+    // A shape for every JSON kind is a schema with no type, unless one of
+    // them narrows its kind, as an integer does.
+    deepEqual(js(Nof(1, Required(null), Boolean, Min(1, Number), Empty(String), Open({}), [])),
+      { minimum: 1 })
+    deepEqual(js(Nof(1, Required(null), Boolean, Integer, Empty(String), Open({}), [])).oneOf[2],
+      { type: 'integer' })
 
     // As a property, with its own annotations.
     deepEqual(js({ a: Optional(Describe('d', Nof(1, String, Number))) }),

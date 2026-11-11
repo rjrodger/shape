@@ -408,6 +408,14 @@ describe('builder', () => {
     throws(() => Shape(Nof(1, Min(1, String), Max(3, String)))('ab'), 'satisfies 2 of')
     throws(() => Shape(Nof(1, Min(2, String), Number))(null), 'satisfies 0 of')
 
+    // A shape re-chained after the Nof was built is of its new kind.
+    const retained = Required(Number)
+    const rechained = Shape(Nof(1, retained, String))
+    deepEqual(rechained.match('abc'), true)
+    retained.String()
+    deepEqual(rechained.match('abc'), false)
+    throws(() => rechained('abc'), 'satisfies 2 of')
+
     // A check is no kind, so every shape is tried, and each is named.
     throws(() => Shape(Nof(1, Check((v: any) => v > 10), String))(1),
       'Value "1" for property "" satisfies 0 of: Check((v) => v > 10), String; the count must be 1.')

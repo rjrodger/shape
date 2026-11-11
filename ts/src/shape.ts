@@ -1125,10 +1125,10 @@ function shapify<const S>(intop?: S, inopts?: ShapeOptions) {
       // kind, which stands in this node's place where that cannot change
       // what the composition was given: a scalar, or a value that is this
       // validation's own copy.
-      const kinds = S.list === n.t ? n.u.nof?.kinds : undefined
+      const kinds = S.list === n.t && undefined !== n.u.nof ? nofKindsNow(n) : undefined
       if (undefined !== kinds && undefined !== s.val && 1 === n.b.length && 0 === n.a.length &&
         (null === s.val || S.object !== typeof s.val || s.ctx.own$)) {
-        const kI = kinds.indexOf(kindOf(s.val))
+        const kI = kinds.indexOf(kindOf(s.val) as string)
         if (-1 < kI) {
           n = s.node = n.u.list[kI]
           s.type = n.t
@@ -3548,9 +3548,8 @@ const Nof = function Nof(this: any, count: any, ...inshapes: any[]): Node<any> {
   const one = 1 < ok.length && ok.every((v: boolean, c: number) => v === (1 === c))
 
   // Exactly one of shapes of different kinds is the shape of the value's
-  // kind: the value is put to that shape alone.
-  const kinds = one ? nofKinds(node.u.list) : undefined
-  node.u.nof.kinds = kinds
+  // kind: the value is put to that shape alone (see nofKindsNow).
+  node.u.nof.one = one
 
   const validator = function Nof(val: any, update: Update, state: State) {
     if (undefined === val) {
@@ -3560,6 +3559,7 @@ const Nof = function Nof(this: any, count: any, ...inshapes: any[]): Node<any> {
     // Shapes of different kinds: the value is put only to the shape of its
     // kind, whose errors are then the errors. A value of no kind listed is
     // counted, and fails, as any other.
+    const kinds = nofKindsNow(node)
     const kI = undefined === kinds ? -1 : kinds.indexOf(kindOf(val) as string)
     if (-1 < kI) {
       const err: ErrDesc[] = []
@@ -3633,6 +3633,19 @@ const KIND_KEEPING: any = {
   Above: 1, Below: 1, Check: 1, DateTime: 1, Define: 1, Email: 1, Exact: 1, Ip: 1, Ipv4: 1,
   Ipv6: 1, Len: 1, Max: 1, Min: 1, Url: 1, Uuid: 1,
 }
+
+// The kinds of a Nof's shapes, where its count admits exactly one and each
+// shape is of a different kind (see nofKinds), worked out again when a
+// builder may have re-chained a shape since (see VGEN).
+function nofKindsNow(n: Node<any>): string[] | undefined {
+  const nof = n.u.nof
+  if (nof.kgen !== VGEN) {
+    nof.kinds = nof.one ? nofKinds(n.u.list) : undefined
+    nof.kgen = VGEN
+  }
+  return nof.kinds
+}
+
 
 // The kinds of the shapes, where each is of a different kind and takes
 // values of that kind only.
@@ -5660,7 +5673,7 @@ function listSchema(n: Node<any>, s: any, defs: any) {
     s.oneOf = branches
   }
   else if (undefined !== n.u.nof) {
-    if (!kindsSchema(n.u.nof.kinds, branches, s)) {
+    if (!kindsSchema(nofKindsNow(n), branches, s)) {
       nofSchema(n.u.nof.ok, branches, s)
     }
   }
@@ -5675,8 +5688,8 @@ function listSchema(n: Node<any>, s: any, defs: any) {
 // kind's keywords can say is counted, as oneOf.
 function kindsSchema(kinds: string[] | undefined, branches: any[], s: any): boolean {
   if (undefined === kinds || !JSON_KINDS.every((k: string) => kinds.includes(k)) ||
-    !branches.every((b: any) => keys(b).every((k: string) =>
-      'type' === k || (JSON_SCHEMA_KIND_KEYWORDS[KIND_OF_TYPE[b.type]] || []).includes(k)))) {
+    !branches.every((b: any) => JSON_KINDS.includes(b.type) && keys(b).every((k: string) =>
+      'type' === k || (JSON_SCHEMA_KIND_KEYWORDS[b.type] || []).includes(k)))) {
     return false
   }
   for (const b of branches) {

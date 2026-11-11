@@ -222,19 +222,19 @@ func TestNofKinds(t *testing.T) {
 		{RenameWith("b", RenameOptions{}, Number), String},
 		{Ignore(Number), String},
 	} {
-		if MustShape(Nof(1, s...)).root.nofKinds != nil {
+		if nofKindsNow(MustShape(Nof(1, s...)).root) != nil {
 			t.Fatalf("%v should have no kinds", s)
 		}
 	}
 	// A regexp check, a format and a definition keep the kind; a bare
 	// regexp check has none.
-	if k := MustShape(Nof(1, Check(regexp.MustCompile("^a"), String), Define("d", Integer), []any{})).root.nofKinds; !reflect.DeepEqual(k, []string{"string", "number", "array"}) {
+	if k := nofKindsNow(MustShape(Nof(1, Check(regexp.MustCompile("^a"), String), Define("d", Integer), []any{})).root); !reflect.DeepEqual(k, []string{"string", "number", "array"}) {
 		t.Fatalf("kinds = %v", k)
 	}
-	if k := MustShape(Nof(1, Email(), Number)).root.nofKinds; !reflect.DeepEqual(k, []string{"string", "number"}) {
+	if k := nofKindsNow(MustShape(Nof(1, Email(), Number)).root); !reflect.DeepEqual(k, []string{"string", "number"}) {
 		t.Fatalf("kinds = %v", k)
 	}
-	if k := MustShape(Nof(1, Check(regexp.MustCompile("^a")), Number)).root.nofKinds; k != nil {
+	if k := nofKindsNow(MustShape(Nof(1, Check(regexp.MustCompile("^a")), Number)).root); k != nil {
 		t.Fatalf("kinds = %v", k)
 	}
 	// A scalar's shape stands in the Nof's place, so in an array it names an
@@ -566,5 +566,18 @@ func TestDeepEqualOutputs(t *testing.T) {
 	want := map[string]any{"x": 2, "y": "default"}
 	if !reflect.DeepEqual(out, want) {
 		t.Fatalf("expected %v, got %v", want, out)
+	}
+}
+
+// A shape re-chained after the Nof was built is of its new kind.
+func TestNofKindsRechained(t *testing.T) {
+	n := Required(Boolean)
+	s := MustShape(Nof(1, n, String))
+	if !s.Match("abc") {
+		t.Fatal("abc should match the string branch")
+	}
+	n.Type(String)
+	if s.Match("abc") {
+		t.Fatal("abc should match both branches once both are strings")
 	}
 }

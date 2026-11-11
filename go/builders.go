@@ -1004,11 +1004,6 @@ func Nof(count any, shapes ...any) *Node {
 	if counter != nil {
 		nb.n.nofCount = counter.root
 	}
-	// Exactly one of shapes of different kinds is the shape of the value's
-	// kind: the value is put to that shape alone.
-	if nb.n.nofOne {
-		nb.n.nofKinds = nofKinds(nb.n.list)
-	}
 	return nb
 }
 
@@ -1035,17 +1030,33 @@ func nofKinds(list []*node) []string {
 	kinds := make([]string, len(list))
 	for i, sn := range list {
 		k := kindOfType[sn.kind]
-		if k == "" || sn.nullable || sn.silent || sn.renameTo != "" || contains(kinds[:i], k) {
+		if k == "" || sn.nullable || sn.silent || sn.renameTo != "" || contains(kinds[:i], k) ||
+			!keepsKind(sn.befores) || !keepsKind(sn.afters) {
 			return nil
-		}
-		for _, v := range append(append([]validator{}, sn.befores...), sn.afters...) {
-			if !kindKeeping[v.name] && !strings.HasPrefix(v.name, "/") {
-				return nil
-			}
 		}
 		kinds[i] = k
 	}
 	return kinds
+}
+
+// keepsKind reports whether every check leaves a shape's kind as it was.
+func keepsKind(vs []validator) bool {
+	for _, v := range vs {
+		if !kindKeeping[v.name] && !strings.HasPrefix(v.name, "/") {
+			return false
+		}
+	}
+	return true
+}
+
+// nofKindsNow is the kinds of a Nof's branches as they stand (see
+// nofKinds), where its count admits exactly one: a retained *Node may have
+// been re-chained to another kind since the Nof was built, as in TS.
+func nofKindsNow(n *node) []string {
+	if !n.nofOne {
+		return nil
+	}
+	return nofKinds(n.list)
 }
 
 // kindOf is the kind of a JSON value, as nofKinds names a shape's: "" for a

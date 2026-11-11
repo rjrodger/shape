@@ -976,7 +976,7 @@ func evaluateList(n *node, in any, path []string, pathArr []any, key string, par
 		// its kind, whose errors are then the errors, and which produces the
 		// value. A value of no kind listed is counted, and fails, as any
 		// other.
-		if kI, kind := nofKindIndex(n.nofKinds, in); kI >= 0 {
+		if kI, kind := nofKindIndex(nofKindsNow(n), in); kI >= 0 {
 			sub := &ValidationError{}
 			var res any
 			if nofInPlace(n, kind, ctx) {
