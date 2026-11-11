@@ -5,7 +5,7 @@ import (
 	"sync/atomic"
 )
 
-const Version = "0.6.0"
+const Version = "0.7.0"
 
 // Schema is a compiled shape specification.
 type Schema struct {
