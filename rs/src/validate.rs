@@ -802,14 +802,11 @@ fn validate_object(
         // The scratch slot of an absent child on a read-only walk, made
         // only on that path.
         let mut scratch: Value;
-        let (child, was_absent) = match &mut oc {
+        let child = match &mut oc {
             Cur::Mut(map) => match guess_index(map, idx, k) {
                 // The key is cloned only when it is absent and must be made.
-                Some(pos) => (Cur::Mut(&mut map[pos]), false),
-                None => (
-                    Cur::Mut(map.entry(k.clone()).or_insert(Value::Undefined)),
-                    true,
-                ),
+                Some(pos) => Cur::Mut(&mut map[pos]),
+                None => Cur::Mut(map.entry(k.clone()).or_insert(Value::Undefined)),
             },
             Cur::Ref(map) => {
                 // A read-only walk of an aligned input finds the child by
@@ -820,10 +817,10 @@ fn validate_object(
                     claimed.or_else(|| guess(map, idx, k))
                 };
                 match found {
-                    Some(child) if !child.is_undefined() => (Cur::Ref(child), false),
+                    Some(child) if !child.is_undefined() => Cur::Ref(child),
                     _ => {
                         scratch = Value::Undefined;
-                        (Cur::Mut(&mut scratch), true)
+                        Cur::Mut(&mut scratch)
                     }
                 }
             }
@@ -836,10 +833,9 @@ fn validate_object(
         w.pop();
         if let Cur::Mut(m) = &mut oc {
             if !keep {
-                let empty = m.get(k).map(|x| x.is_undefined()).unwrap_or(false);
-                if was_absent || empty || cn.is_ignore() {
-                    m.shift_remove(k);
-                }
+                // A slot is left out only where nothing was there, or an
+                // Ignore dropped what was (see validate_node).
+                m.shift_remove(k);
             } else if let Some(to) = &cn.rename_to {
                 // The produced value moves under the new name.
                 if to != k {
@@ -848,9 +844,8 @@ fn validate_object(
                     } else {
                         m.shift_remove(k)
                     };
-                    if let Some(v) = v {
-                        m.insert(to.clone(), v);
-                    }
+                    // A slot kept holds a value (see validate_node).
+                    m.extend(v.map(|v| (to.clone(), v)));
                 }
             }
         }
@@ -1672,9 +1667,7 @@ mod tests {
     #[test]
     fn befores_replace_value_or_node_and_may_stop() {
         let dbl = chk("Dbl", |s, u| {
-            if let Value::Num(x) = s.value {
-                u.val = Some(Value::Num(x * 2.0));
-            }
+            u.val = s.value.as_f64().map(|x| Value::Num(x * 2.0));
             true
         });
         let s = at_a(before(buildize(Token::Number), dbl));
@@ -1733,9 +1726,7 @@ mod tests {
         assert_eq!(s.error(&j(r#"{"a":1}"#))[0].check, "Odd");
 
         let inc = chk("Inc", |s, u| {
-            if let Value::Num(x) = s.value {
-                u.val = Some(Value::Num(x + 1.0));
-            }
+            u.val = s.value.as_f64().map(|x| Value::Num(x + 1.0));
             true
         });
         let s = at_a(after(buildize(Token::Number), inc));
@@ -1927,6 +1918,18 @@ mod tests {
         assert!(!s.valid(&Value::Undefined));
         assert_eq!(s.error(&Value::Undefined)[0].path, "0");
         assert!(Schema::new(obj([("b", Spec::from(1))])).valid(&Value::Undefined));
+    }
+
+    #[test]
+    fn leaf_kinds_take_their_own_values() {
+        // A bigint and a function pass a node of their own kind.
+        let big = Schema::new(buildize(num_bigint::BigInt::from(1)));
+        assert!(big.valid(&Value::BigInt(num_bigint::BigInt::from(2))));
+        let func = Schema::new(buildize(Spec::Value(Value::Func(1))));
+        assert!(func.valid(&Value::Func(2)));
+        // A verdict renders no fault text, and still fails.
+        let fault = Schema::new(Fault("must be a number", buildize(Token::Number)));
+        assert!(!fault.valid(&j(r#""x""#)));
     }
 
     #[test]

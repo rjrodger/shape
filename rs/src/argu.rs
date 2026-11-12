@@ -168,9 +168,7 @@ impl Signature {
             } else {
                 let v = args.get(idx).cloned().unwrap_or(Value::Undefined);
                 out.insert(key.clone(), require(n, v, key)?);
-                if idx < args.len() {
-                    idx += 1;
-                }
+                idx = (idx + 1).min(args.len());
             }
         }
         if idx < args.len() {

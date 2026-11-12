@@ -25,11 +25,10 @@ impl Inner {
     /// shape still reads `Number.Min(2).Catch(0)`.
     fn desc(&self) -> String {
         let mut out = String::new();
-        for v in self.befores.iter().chain(self.afters.iter()) {
-            if let Some(s) = &v.suffix {
-                out.push_str(s);
-                out.push('.');
-            }
+        let suffixes = self.befores.iter().chain(self.afters.iter());
+        for s in suffixes.filter_map(|v| v.suffix.as_ref()) {
+            out.push_str(s);
+            out.push('.');
         }
         out
     }

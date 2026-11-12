@@ -724,14 +724,12 @@ pub(crate) fn key_expr_node(src: &str, example: Spec) -> Node {
             b.literal = ex.literal;
             if b.kind == Kind::Object && ex.kind == Kind::Object {
                 b.obj_children = ex.obj_children;
-                if b.obj_rest.is_none() {
-                    b.obj_rest = ex.obj_rest;
-                }
+                b.obj_rest = b.obj_rest.or(ex.obj_rest);
             } else if b.kind == Kind::Array && ex.kind == Kind::Array {
                 b.arr_children = ex.arr_children;
-                if b.arr_child.is_none() && b.arr_rest.is_none() {
-                    b.arr_child = ex.arr_child;
-                }
+                // A rest of the expression's own leaves the element shape out.
+                let no_rest = b.arr_rest.is_none();
+                b.arr_child = b.arr_child.or(ex.arr_child.filter(|_| no_rest));
             }
             return b;
         }

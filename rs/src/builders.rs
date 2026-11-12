@@ -1061,10 +1061,8 @@ impl Node {
     pub fn Closed(mut self) -> Node {
         self.obj_rest = None;
         if self.kind == Kind::Array && self.arr_children.is_empty() {
-            if let Some(c) = self.arr_child.take() {
-                // A single-shape array made fixed: a tuple of one.
-                self.arr_children = vec![*c];
-            }
+            // A single-shape array made fixed: a tuple of one.
+            self.arr_children = self.arr_child.take().map(|c| vec![*c]).unwrap_or_default();
         }
         self
     }

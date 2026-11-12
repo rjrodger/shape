@@ -211,9 +211,8 @@ impl Counted {
             .admitted
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        if seen.len() <= c {
-            seen.resize(c + 1, None);
-        }
+        let len = seen.len().max(c + 1);
+        seen.resize(len, None);
         seen[c] = Some(ok);
         ok
     }
