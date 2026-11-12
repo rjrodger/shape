@@ -3633,7 +3633,8 @@ const Nof = function Nof(this: any, count: any, ...inshapes: any[]): Node<any> {
 
     // Exactly one: the shape the value satisfies produces from a copy.
     if (one) {
-      update.val = shapes[matched](clone(val), { ...state.ctx, err: [], trial$: state.trials })
+      update.val = shapes[matched](clone(val),
+        { ...state.ctx, err: [], path$: patharr(state), trial$: state.trials })
     }
 
     return true

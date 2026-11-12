@@ -662,6 +662,9 @@ describe('builder', () => {
       { k: 'a', x: ['q', 1] }), 'Value "[q,1]" for property "x" needs more trials than the budget of 1.')
     throws(() => Shape({ a: [Nof(1, Contains(Min(1), Number), String)] }, { trials: 2 })({ a: [[1], ['x', 1]] }),
       'Value "[x,1]" for property "a.1" needs more trials than the budget of 2.')
+    // So does the branch Nof(1) produces from, which runs its trials again.
+    throws(() => Shape({ a: Nof(1, Nof(1, Min(0, Number), Max(5, Number)), Boolean) }, { trials: 4 })({ a: 7 }),
+      'Value "7" for property "a" needs more trials than the budget of 4.')
 
     // Each call has a budget of its own; a budget that is not a whole
     // number above zero is the default.
