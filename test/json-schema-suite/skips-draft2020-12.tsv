@@ -1,0 +1,271 @@
+# The skip ledger of the JSON Schema Test Suite's draft2020-12 tests (README.md): one row
+# per test the import cannot honour yet, in the ports that fail it, with the keywords it
+# waits on. A * in test covers a whole group, and in group and test a whole file. Each
+# runner fails on a failing test no row covers, on a covered test that passes, and on a
+# ledger longer than its bound. Columns: file, group, test, ports, waits on.
+# bound: 265
+additionalProperties.json	additionalProperties being false does not allow other properties	patternProperties are not additional properties	ts go rs	patternProperties
+additionalProperties.json	non-ASCII pattern with additionalProperties	matching the pattern is valid	ts go rs	patternProperties
+allOf.json	allOf combined with anyOf, oneOf	allOf: false, anyOf: false, oneOf: false	ts go rs	multipleOf
+allOf.json	allOf combined with anyOf, oneOf	allOf: false, anyOf: false, oneOf: true	ts go rs	multipleOf
+allOf.json	allOf combined with anyOf, oneOf	allOf: false, anyOf: true, oneOf: false	ts go rs	multipleOf
+allOf.json	allOf combined with anyOf, oneOf	allOf: false, anyOf: true, oneOf: true	ts go rs	multipleOf
+allOf.json	allOf combined with anyOf, oneOf	allOf: true, anyOf: false, oneOf: false	ts go rs	multipleOf
+allOf.json	allOf combined with anyOf, oneOf	allOf: true, anyOf: false, oneOf: true	ts go rs	multipleOf
+allOf.json	allOf combined with anyOf, oneOf	allOf: true, anyOf: true, oneOf: false	ts go rs	multipleOf
+anchor.json	Location-independent identifier	*	ts go rs	$anchor $ref
+anchor.json	Location-independent identifier with absolute URI	*	ts go rs	$anchor $id $ref
+anchor.json	Location-independent identifier with base URI change in subschema	*	ts go rs	$anchor $id $ref
+anchor.json	same $anchor with different base uri	*	ts go rs	$anchor $id $ref
+const.json	const with object	same object is valid	ts	const
+const.json	const with object	same object with different property order is valid	ts	const
+const.json	const with array	same array is valid	ts	const
+const.json	const with [false] does not match [0]	[false] is valid	ts	const
+const.json	const with [true] does not match [1]	[true] is valid	ts	const
+const.json	const with {"a": false} does not match {"a": 0}	{"a": false} is valid	ts	const
+const.json	const with {"a": true} does not match {"a": 1}	{"a": true} is valid	ts	const
+contains.json	contains keyword validation	array without items matching schema is invalid	ts go rs	contains
+contains.json	contains keyword validation	empty array is invalid	ts go rs	contains
+contains.json	contains keyword with const keyword	array without item 5 is invalid	ts go rs	contains
+contains.json	contains keyword with boolean schema true	empty array is invalid	ts go rs	contains
+contains.json	contains keyword with boolean schema false	any non-empty array is invalid	ts go rs	contains
+contains.json	contains keyword with boolean schema false	empty array is invalid	ts go rs	contains
+contains.json	items + contains	matches items, does not match contains	ts go rs	contains multipleOf
+contains.json	items + contains	does not match items, matches contains	ts go rs	contains multipleOf
+contains.json	items + contains	matches neither items nor contains	ts go rs	contains multipleOf
+contains.json	contains with false if subschema	empty array is invalid	ts go rs	contains if
+defs.json	*	*	ts go rs	$ref
+dependentRequired.json	single dependency	missing dependency	ts go rs	dependentRequired
+dependentRequired.json	multiple dependents required	missing dependency	ts go rs	dependentRequired
+dependentRequired.json	multiple dependents required	missing other dependency	ts go rs	dependentRequired
+dependentRequired.json	multiple dependents required	missing both dependencies	ts go rs	dependentRequired
+dependentRequired.json	dependencies with escaped characters	CRLF missing dependent	ts go rs	dependentRequired
+dependentRequired.json	dependencies with escaped characters	quoted quotes missing dependent	ts go rs	dependentRequired
+dependentSchemas.json	single dependency	wrong type	ts go rs	dependentSchemas
+dependentSchemas.json	single dependency	wrong type other	ts go rs	dependentSchemas
+dependentSchemas.json	single dependency	wrong type both	ts go rs	dependentSchemas
+dependentSchemas.json	boolean subschemas	object with property having schema false is invalid	ts go rs	dependentSchemas
+dependentSchemas.json	boolean subschemas	object with both properties is invalid	ts go rs	dependentSchemas
+dependentSchemas.json	dependencies with escaped characters	quoted quote	ts go rs	dependentSchemas
+dependentSchemas.json	dependencies with escaped characters	quoted tab invalid under dependent schema	ts go rs	dependentSchemas
+dependentSchemas.json	dependencies with escaped characters	quoted quote invalid under dependent schema	ts go rs	dependentSchemas
+dependentSchemas.json	dependent subschema incompatible with root	matches root	ts go rs	dependentSchemas
+dependentSchemas.json	dependent subschema incompatible with root	matches both	ts go rs	dependentSchemas
+dynamicRef.json	A $dynamicRef to a $dynamicAnchor in the same schema resource behaves like a normal $ref to an $anchor	An array containing non-strings is invalid	ts go rs	$dynamicAnchor $dynamicRef $id
+dynamicRef.json	A $dynamicRef to an $anchor in the same schema resource behaves like a normal $ref to an $anchor	An array containing non-strings is invalid	ts go rs	$anchor $dynamicRef $id
+dynamicRef.json	A $ref to a $dynamicAnchor in the same schema resource behaves like a normal $ref to an $anchor	*	ts go rs	$dynamicAnchor $id $ref
+dynamicRef.json	A $dynamicRef resolves to the first $dynamicAnchor still in scope that is encountered when the schema is evaluated	*	ts go rs	$dynamicAnchor $dynamicRef $id $ref
+dynamicRef.json	A $dynamicRef without anchor in fragment behaves identical to $ref	*	ts go rs	$dynamicAnchor $dynamicRef $id $ref
+dynamicRef.json	A $dynamicRef with intermediate scopes that don't include a matching $dynamicAnchor does not affect dynamic scope resolution	*	ts go rs	$dynamicAnchor $dynamicRef $id $ref
+dynamicRef.json	An $anchor with the same name as a $dynamicAnchor is not used for dynamic scope resolution	*	ts go rs	$anchor $dynamicAnchor $dynamicRef $id $ref
+dynamicRef.json	A $dynamicRef without a matching $dynamicAnchor in the same schema resource behaves like a normal $ref to $anchor	*	ts go rs	$anchor $dynamicAnchor $dynamicRef $id $ref
+dynamicRef.json	A $dynamicRef with a non-matching $dynamicAnchor in the same schema resource behaves like a normal $ref to $anchor	*	ts go rs	$anchor $dynamicAnchor $dynamicRef $id $ref
+dynamicRef.json	A $dynamicRef that initially resolves to a schema with a matching $dynamicAnchor resolves to the first $dynamicAnchor in the dynamic scope	*	ts go rs	$dynamicAnchor $dynamicRef $id $ref
+dynamicRef.json	A $dynamicRef that initially resolves to a schema without a matching $dynamicAnchor behaves like a normal $ref to $anchor	*	ts go rs	$anchor $dynamicAnchor $dynamicRef $id $ref
+dynamicRef.json	multiple dynamic paths to the $dynamicRef keyword	number list with string values	ts go rs	$dynamicAnchor $dynamicRef $id $ref if
+dynamicRef.json	multiple dynamic paths to the $dynamicRef keyword	string list with number values	ts go rs	$dynamicAnchor $dynamicRef $id $ref if
+dynamicRef.json	after leaving a dynamic scope, it is not used by a $dynamicRef	string matches /$defs/thingy, but the $dynamicRef does not stop here	ts go rs	$dynamicAnchor $dynamicRef $id $ref if
+dynamicRef.json	after leaving a dynamic scope, it is not used by a $dynamicRef	first_scope is not in dynamic scope for the $dynamicRef	ts go rs	$dynamicAnchor $dynamicRef $id $ref if
+dynamicRef.json	strict-tree schema, guards against misspelled properties	*	ts go rs	$dynamicAnchor $id $ref unevaluatedProperties
+dynamicRef.json	tests for implementation dynamic anchor and reference link	*	ts go rs	$dynamicAnchor $id $ref
+dynamicRef.json	$ref and $dynamicAnchor are independent of order - $defs first	*	ts go rs	$dynamicAnchor $id $ref
+dynamicRef.json	$ref and $dynamicAnchor are independent of order - $ref first	*	ts go rs	$dynamicAnchor $id $ref
+dynamicRef.json	$ref to $dynamicRef finds detached $dynamicAnchor	*	ts go rs	$ref
+dynamicRef.json	$dynamicRef points to a boolean schema	follow $dynamicRef to a false schema	ts go rs	$dynamicRef
+dynamicRef.json	$dynamicRef skips over intermediate resources - direct reference	*	ts go rs	$dynamicAnchor $dynamicRef $id $ref
+dynamicRef.json	$dynamicRef avoids the root of each schema, but scopes are still registered	*	ts go rs	$dynamicAnchor $dynamicRef $id $ref
+enum.json	heterogeneous enum validation	one of the enum is valid	ts	enum
+enum.json	heterogeneous enum validation	valid object matches	ts	enum
+enum.json	enum with [false] does not match [0]	[false] is valid	ts	enum
+enum.json	enum with [true] does not match [1]	[true] is valid	ts	enum
+enum.json	enum with [0] does not match [false]	[0] is valid	ts	enum
+enum.json	enum with [0] does not match [false]	[0.0] is valid	ts	enum
+enum.json	enum with [1] does not match [true]	[1] is valid	ts	enum
+enum.json	enum with [1] does not match [true]	[1.0] is valid	ts	enum
+format.json	email format	invalid email string is only an annotation by default	ts go rs	format
+format.json	ipv4 format	invalid ipv4 string is only an annotation by default	ts go rs	format
+format.json	ipv6 format	invalid ipv6 string is only an annotation by default	ts go rs	format
+format.json	date-time format	invalid date-time string is only an annotation by default	ts go rs	format
+format.json	uri format	invalid uri string is only an annotation by default	ts go rs	format
+format.json	uuid format	invalid uuid string is only an annotation by default	ts go rs	format
+if-then-else.json	if and then without else	invalid through then	ts go rs	if
+if-then-else.json	if and else without then	invalid through else	ts go rs	if multipleOf
+if-then-else.json	validate against correct branch, then vs else	invalid through then	ts go rs	if multipleOf
+if-then-else.json	validate against correct branch, then vs else	invalid through else	ts go rs	if multipleOf
+if-then-else.json	if with boolean schema true	boolean schema true in if always chooses the then path (invalid)	ts go rs	if
+if-then-else.json	if with boolean schema false	boolean schema false in if always chooses the else path (invalid)	ts go rs	if
+if-then-else.json	if appears at the end when serialized (keyword processing sequence)	no redirects to then and fails	ts go rs	if
+if-then-else.json	if appears at the end when serialized (keyword processing sequence)	invalid redirects to else and fails	ts go rs	if
+if-then-else.json	then: false fails when condition matches	matches if → then=false → invalid	ts go rs	if
+if-then-else.json	else: false fails when condition does not match	does not match if → else executes → invalid	ts go rs	if
+maxContains.json	maxContains with contains	empty data	ts go rs	contains
+maxContains.json	maxContains with contains	all elements match, invalid maxContains	ts go rs	contains
+maxContains.json	maxContains with contains	some elements match, invalid maxContains	ts go rs	contains
+maxContains.json	maxContains with contains, value with a decimal	too many elements match, invalid maxContains	ts go rs	contains
+maxContains.json	minContains < maxContains	actual < minContains < maxContains	ts go rs	contains
+maxContains.json	minContains < maxContains	minContains < maxContains < actual	ts go rs	contains
+maxContains.json	maxContains = 0 with minContains = 0	one matching item	ts go rs	contains
+maxLength.json	maxLength validation	two graphemes is long enough	ts go rs	maxLength
+minContains.json	minContains=1 with contains	empty data	ts go rs	contains
+minContains.json	minContains=1 with contains	no elements match	ts go rs	contains
+minContains.json	minContains=2 with contains	empty data	ts go rs	contains
+minContains.json	minContains=2 with contains	all elements match, invalid minContains	ts go rs	contains
+minContains.json	minContains=2 with contains	some elements match, invalid minContains	ts go rs	contains
+minContains.json	minContains=2 with contains with a decimal value	one element matches, invalid minContains	ts go rs	contains
+minContains.json	maxContains = minContains	empty data	ts go rs	contains
+minContains.json	maxContains = minContains	all elements match, invalid minContains	ts go rs	contains
+minContains.json	maxContains = minContains	all elements match, invalid maxContains	ts go rs	contains
+minContains.json	maxContains < minContains	*	ts go rs	contains
+minContains.json	minContains = 0 with maxContains	too many	ts go rs	contains
+minLength.json	minLength validation	one grapheme is not long enough	ts go rs	minLength
+multipleOf.json	by int	int by int fail	ts go rs	multipleOf
+multipleOf.json	by number	35 is not multiple of 1.5	ts go rs	multipleOf
+multipleOf.json	by small number	0.00751 is not multiple of 0.0001	ts go rs	multipleOf
+multipleOf.json	float division = inf	*	ts go rs	multipleOf
+not.json	collect annotations inside a 'not', even if collection is disabled	unevaluated property	ts go rs	unevaluatedProperties
+pattern.json	pattern with Unicode property escape requires unicode mode	*	ts go rs	pattern
+patternProperties.json	patternProperties validates properties matching a regex	a single invalid match is invalid	ts go rs	patternProperties
+patternProperties.json	patternProperties validates properties matching a regex	multiple invalid matches is invalid	ts go rs	patternProperties
+patternProperties.json	multiple simultaneous patternProperties are validated	an invalid due to one is invalid	ts go rs	patternProperties
+patternProperties.json	multiple simultaneous patternProperties are validated	an invalid due to the other is invalid	ts go rs	patternProperties
+patternProperties.json	multiple simultaneous patternProperties are validated	an invalid due to both is invalid	ts go rs	patternProperties
+patternProperties.json	regexes are not anchored by default and are case sensitive	recognized members are accounted for	ts go rs	patternProperties
+patternProperties.json	regexes are not anchored by default and are case sensitive	regexes are case sensitive, 2	ts go rs	patternProperties
+patternProperties.json	patternProperties with boolean schemas	object with property matching schema false is invalid	ts go rs	patternProperties
+patternProperties.json	patternProperties with boolean schemas	object with both properties is invalid	ts go rs	patternProperties
+patternProperties.json	patternProperties with boolean schemas	object with a property matching both true and false is invalid	ts go rs	patternProperties
+patternProperties.json	patternProperties with Unicode property escape	Unicode letter property name matches but value type is incorrect	ts go rs	patternProperties
+properties.json	properties, patternProperties, additionalProperties interaction	patternProperty invalidates property	ts go rs	patternProperties
+properties.json	properties, patternProperties, additionalProperties interaction	patternProperty validates nonproperty	ts go rs	patternProperties
+propertyNames.json	propertyNames validation	some property names invalid	ts go rs	propertyNames
+propertyNames.json	propertyNames validation with pattern	non-matching property name is invalid	ts go rs	propertyNames
+propertyNames.json	propertyNames with boolean schema false	object with any properties is invalid	ts go rs	propertyNames
+propertyNames.json	propertyNames with const	object with any other property is invalid	ts go rs	propertyNames
+propertyNames.json	propertyNames with enum	object with any other property is invalid	ts go rs	propertyNames
+ref.json	relative pointer ref to object	*	ts go rs	$ref
+ref.json	relative pointer ref to array	*	ts go rs	$ref
+ref.json	escaped pointer ref	*	ts go rs	$ref
+ref.json	remote ref, containing refs itself	*	ts go rs	$ref
+ref.json	Recursive references between schemas	*	ts go rs	$id $ref
+ref.json	ref creates new scope when adjacent to keywords	*	ts go rs	unevaluatedProperties
+ref.json	naive replacement of $ref with its destination is not correct	match the enum exactly	ts	enum
+ref.json	refs with relative uris and defs	*	ts go rs	$id $ref
+ref.json	relative refs with absolute uris and defs	*	ts go rs	$id $ref
+ref.json	$id must be resolved against nearest parent, not just immediate parent	*	ts go rs	$id $ref
+ref.json	order of evaluation: $id and $ref	*	ts go rs	$id $ref
+ref.json	order of evaluation: $id and $anchor and $ref	*	ts go rs	$anchor $id $ref
+ref.json	order of evaluation: $id and $ref on nested schema	*	ts go rs	$id $ref
+ref.json	simple URN base URI with $ref via the URN	*	ts go rs	$id $ref
+ref.json	URN base URI with URN and JSON pointer ref	*	ts go rs	$id $ref
+ref.json	URN base URI with URN and anchor ref	*	ts go rs	$anchor $id $ref
+ref.json	URN ref with nested pointer ref	*	ts go rs	$id $ref
+ref.json	ref to if	*	ts go rs	$id $ref if
+ref.json	ref to then	*	ts go rs	$id $ref
+ref.json	ref to else	*	ts go rs	$id $ref
+ref.json	ref with absolute-path-reference	*	ts go rs	$id $ref
+ref.json	empty tokens in $ref json-pointer	*	ts go rs	$ref
+refRemote.json	remote ref	*	ts go rs	$ref
+refRemote.json	fragment within remote ref	*	ts go rs	$ref
+refRemote.json	anchor within remote ref	*	ts go rs	$ref
+refRemote.json	ref within remote ref	*	ts go rs	$ref
+refRemote.json	base URI change	*	ts go rs	$id $ref
+refRemote.json	base URI change - change folder	*	ts go rs	$id $ref
+refRemote.json	base URI change - change folder in subschema	*	ts go rs	$id $ref
+refRemote.json	root ref in remote ref	*	ts go rs	$id $ref
+refRemote.json	remote ref with ref to defs	*	ts go rs	$id $ref
+refRemote.json	Location-independent identifier in remote ref	*	ts go rs	$ref
+refRemote.json	retrieved nested refs resolve relative to their URI not $id	*	ts go rs	$id $ref
+refRemote.json	remote HTTP ref with different $id	*	ts go rs	$ref
+refRemote.json	remote HTTP ref with different URN $id	*	ts go rs	$ref
+refRemote.json	remote HTTP ref with nested absolute ref	*	ts go rs	$ref
+refRemote.json	$ref to $ref finds detached $anchor	*	ts go rs	$ref
+unevaluatedItems.json	unevaluatedItems false	with unevaluated items	ts go rs	unevaluatedItems
+unevaluatedItems.json	unevaluatedItems as schema	with invalid unevaluated items	ts go rs	unevaluatedItems
+unevaluatedItems.json	unevaluatedItems with tuple	with unevaluated items	ts go rs	unevaluatedItems
+unevaluatedItems.json	unevaluatedItems with nested tuple	with unevaluated items	ts go rs	unevaluatedItems
+unevaluatedItems.json	unevaluatedItems with nested items	with invalid additional item	ts go rs	unevaluatedItems
+unevaluatedItems.json	unevaluatedItems with anyOf	when one schema matches and has unevaluated items	ts go rs	unevaluatedItems
+unevaluatedItems.json	unevaluatedItems with anyOf	when two schemas match and has unevaluated items	ts go rs	unevaluatedItems
+unevaluatedItems.json	unevaluatedItems with oneOf	with unevaluated items	ts go rs	unevaluatedItems
+unevaluatedItems.json	unevaluatedItems with not	*	ts go rs	unevaluatedItems
+unevaluatedItems.json	unevaluatedItems with if/then/else	when if matches and it has unevaluated items	ts go rs	if unevaluatedItems
+unevaluatedItems.json	unevaluatedItems with if/then/else	when if doesn't match and it has unevaluated items	ts go rs	if unevaluatedItems
+unevaluatedItems.json	unevaluatedItems with boolean schemas	with unevaluated items	ts go rs	unevaluatedItems
+unevaluatedItems.json	unevaluatedItems with $ref	with unevaluated items	ts go rs	unevaluatedItems
+unevaluatedItems.json	unevaluatedItems before $ref	with unevaluated items	ts go rs	unevaluatedItems
+unevaluatedItems.json	unevaluatedItems with $dynamicRef	*	ts go rs	$dynamicAnchor $dynamicRef $id $ref unevaluatedItems
+unevaluatedItems.json	unevaluatedItems can't see inside cousins	*	ts go rs	unevaluatedItems
+unevaluatedItems.json	item is evaluated in an uncle schema to unevaluatedItems	uncle keyword evaluation is not significant	ts go rs	unevaluatedItems
+unevaluatedItems.json	unevaluatedItems depends on adjacent contains	contains fails, second item is not evaluated	ts go rs	contains unevaluatedItems
+unevaluatedItems.json	unevaluatedItems depends on adjacent contains	contains passes, second item is not evaluated	ts go rs	contains unevaluatedItems
+unevaluatedItems.json	unevaluatedItems depends on multiple nested contains	7 not evaluated, fails unevaluatedItems	ts go rs	contains multipleOf unevaluatedItems
+unevaluatedItems.json	unevaluatedItems and contains interact to control item dependency relationship	only b's are invalid	ts go rs	contains if unevaluatedItems
+unevaluatedItems.json	unevaluatedItems and contains interact to control item dependency relationship	only c's are invalid	ts go rs	contains if unevaluatedItems
+unevaluatedItems.json	unevaluatedItems and contains interact to control item dependency relationship	only b's and c's are invalid	ts go rs	contains if unevaluatedItems
+unevaluatedItems.json	unevaluatedItems and contains interact to control item dependency relationship	only a's and c's are invalid	ts go rs	contains if unevaluatedItems
+unevaluatedItems.json	unevaluatedItems with minContains = 0	no items evaluated by contains	ts go rs	contains unevaluatedItems
+unevaluatedItems.json	unevaluatedItems with minContains = 0	some but not all items evaluated by contains	ts go rs	contains unevaluatedItems
+unevaluatedItems.json	unevaluatedItems can see annotations from if without then and else	invalid in case if is evaluated	ts go rs	if unevaluatedItems
+unevaluatedItems.json	Evaluated items collection needs to consider instance location	*	ts go rs	unevaluatedItems
+unevaluatedProperties.json	unevaluatedProperties schema	with invalid unevaluated properties	ts go rs	unevaluatedProperties
+unevaluatedProperties.json	unevaluatedProperties false	with unevaluated properties	ts go rs	unevaluatedProperties
+unevaluatedProperties.json	unevaluatedProperties with adjacent properties	with unevaluated properties	ts go rs	unevaluatedProperties
+unevaluatedProperties.json	unevaluatedProperties with adjacent patternProperties	with unevaluated properties	ts go rs	patternProperties unevaluatedProperties
+unevaluatedProperties.json	unevaluatedProperties with nested properties	with additional properties	ts go rs	unevaluatedProperties
+unevaluatedProperties.json	unevaluatedProperties with nested patternProperties	with additional properties	ts go rs	patternProperties unevaluatedProperties
+unevaluatedProperties.json	unevaluatedProperties with anyOf	when one matches and has unevaluated properties	ts go rs	unevaluatedProperties
+unevaluatedProperties.json	unevaluatedProperties with anyOf	when two match and has unevaluated properties	ts go rs	unevaluatedProperties
+unevaluatedProperties.json	unevaluatedProperties with oneOf	with unevaluated properties	ts go rs	unevaluatedProperties
+unevaluatedProperties.json	unevaluatedProperties with not	*	ts go rs	unevaluatedProperties
+unevaluatedProperties.json	unevaluatedProperties with if/then/else	when if is true and has unevaluated properties	ts go rs	if unevaluatedProperties
+unevaluatedProperties.json	unevaluatedProperties with if/then/else	when if is false and has unevaluated properties	ts go rs	if unevaluatedProperties
+unevaluatedProperties.json	unevaluatedProperties with if/then/else, then not defined	when if is true and has unevaluated properties	ts go rs	if unevaluatedProperties
+unevaluatedProperties.json	unevaluatedProperties with if/then/else, then not defined	when if is false and has unevaluated properties	ts go rs	if unevaluatedProperties
+unevaluatedProperties.json	unevaluatedProperties with if/then/else, else not defined	when if is true and has unevaluated properties	ts go rs	if unevaluatedProperties
+unevaluatedProperties.json	unevaluatedProperties with if/then/else, else not defined	when if is false and has no unevaluated properties	ts go rs	if unevaluatedProperties
+unevaluatedProperties.json	unevaluatedProperties with if/then/else, else not defined	when if is false and has unevaluated properties	ts go rs	if unevaluatedProperties
+unevaluatedProperties.json	unevaluatedProperties with dependentSchemas	with unevaluated properties	ts go rs	dependentSchemas unevaluatedProperties
+unevaluatedProperties.json	unevaluatedProperties with boolean schemas	with unevaluated properties	ts go rs	unevaluatedProperties
+unevaluatedProperties.json	unevaluatedProperties with $ref	with unevaluated properties	ts go rs	unevaluatedProperties
+unevaluatedProperties.json	unevaluatedProperties before $ref	with unevaluated properties	ts go rs	unevaluatedProperties
+unevaluatedProperties.json	unevaluatedProperties with $dynamicRef	*	ts go rs	$dynamicAnchor $dynamicRef $id $ref unevaluatedProperties
+unevaluatedProperties.json	unevaluatedProperties can't see inside cousins	*	ts go rs	unevaluatedProperties
+unevaluatedProperties.json	unevaluatedProperties can't see inside cousins (reverse order)	*	ts go rs	unevaluatedProperties
+unevaluatedProperties.json	nested unevaluatedProperties, outer true, inner false, properties outside	*	ts go rs	unevaluatedProperties
+unevaluatedProperties.json	nested unevaluatedProperties, outer true, inner false, properties inside	with nested unevaluated properties	ts go rs	unevaluatedProperties
+unevaluatedProperties.json	cousin unevaluatedProperties, true and false, true with properties	*	ts go rs	unevaluatedProperties
+unevaluatedProperties.json	cousin unevaluatedProperties, true and false, false with properties	with nested unevaluated properties	ts go rs	unevaluatedProperties
+unevaluatedProperties.json	property is evaluated in an uncle schema to unevaluatedProperties	uncle keyword evaluation is not significant	ts go rs	unevaluatedProperties
+unevaluatedProperties.json	in-place applicator siblings, allOf has unevaluated	base case: both properties present	ts go rs	unevaluatedProperties
+unevaluatedProperties.json	in-place applicator siblings, allOf has unevaluated	in place applicator siblings, foo is missing	ts go rs	unevaluatedProperties
+unevaluatedProperties.json	in-place applicator siblings, anyOf has unevaluated	base case: both properties present	ts go rs	unevaluatedProperties
+unevaluatedProperties.json	in-place applicator siblings, anyOf has unevaluated	in place applicator siblings, bar is missing	ts go rs	unevaluatedProperties
+unevaluatedProperties.json	unevaluatedProperties + single cyclic ref	Unevaluated on 1st level is invalid	ts go rs	unevaluatedProperties
+unevaluatedProperties.json	unevaluatedProperties + single cyclic ref	Unevaluated on 2nd level is invalid	ts go rs	unevaluatedProperties
+unevaluatedProperties.json	unevaluatedProperties + single cyclic ref	Unevaluated on 3rd level is invalid	ts go rs	unevaluatedProperties
+unevaluatedProperties.json	dynamic evaluation inside nested refs	xx + foo is invalid	ts go rs	patternProperties unevaluatedProperties
+unevaluatedProperties.json	unevaluatedProperties not affected by propertyNames	string property is invalid	ts go rs	propertyNames unevaluatedProperties
+unevaluatedProperties.json	unevaluatedProperties can see annotations from if without then and else	invalid in case if is evaluated	ts go rs	if patternProperties unevaluatedProperties
+unevaluatedProperties.json	dependentSchemas with unevaluatedProperties	unevaluatedProperties doesn't consider dependentSchemas	ts go rs	dependentSchemas unevaluatedProperties
+unevaluatedProperties.json	dependentSchemas with unevaluatedProperties	unevaluatedProperties doesn't see bar when foo2 is absent	ts go rs	dependentSchemas unevaluatedProperties
+unevaluatedProperties.json	Evaluated properties collection needs to consider instance location	*	ts go rs	unevaluatedProperties
+unevaluatedProperties.json	Evaluated properties collection needs to consider instance location with patternProperties	with an unevaluated property that exists at another location	ts go rs	patternProperties unevaluatedProperties
+unevaluatedProperties.json	Evaluated properties collection needs to consider instance location with additionalProperties	with an unevaluated property that exists at another location	ts go rs	unevaluatedProperties
+uniqueItems.json	uniqueItems validation	non-unique array of integers is invalid	ts go rs	uniqueItems
+uniqueItems.json	uniqueItems validation	non-unique array of more than two integers is invalid	ts go rs	uniqueItems
+uniqueItems.json	uniqueItems validation	numbers are unique if mathematically unequal	ts go rs	uniqueItems
+uniqueItems.json	uniqueItems validation	non-unique array of strings is invalid	ts go rs	uniqueItems
+uniqueItems.json	uniqueItems validation	non-unique array of objects is invalid	ts go rs	uniqueItems
+uniqueItems.json	uniqueItems validation	property order of array of objects is ignored	ts go rs	uniqueItems
+uniqueItems.json	uniqueItems validation	non-unique array of nested objects is invalid	ts go rs	uniqueItems
+uniqueItems.json	uniqueItems validation	non-unique array of arrays is invalid	ts go rs	uniqueItems
+uniqueItems.json	uniqueItems validation	non-unique array of more than two arrays is invalid	ts go rs	uniqueItems
+uniqueItems.json	uniqueItems validation	non-unique heterogeneous types are invalid	ts go rs	uniqueItems
+uniqueItems.json	uniqueItems validation	objects are non-unique despite key order	ts go rs	uniqueItems
+uniqueItems.json	uniqueItems with an array of items	[false, false] from items array is not valid	ts go rs	uniqueItems
+uniqueItems.json	uniqueItems with an array of items	[true, true] from items array is not valid	ts go rs	uniqueItems
+uniqueItems.json	uniqueItems with an array of items	non-unique array extended from [false, true] is not valid	ts go rs	uniqueItems
+uniqueItems.json	uniqueItems with an array of items	non-unique array extended from [true, false] is not valid	ts go rs	uniqueItems
+uniqueItems.json	uniqueItems with an array of items and additionalItems=false	[false, false] from items array is not valid	ts go rs	uniqueItems
+uniqueItems.json	uniqueItems with an array of items and additionalItems=false	[true, true] from items array is not valid	ts go rs	uniqueItems
+vocabulary.json	schema that uses custom metaschema with with no validation vocabulary	no validation: invalid number, but it still validates	ts go rs	$id

@@ -14,7 +14,7 @@ behavioural parity**:
 | `go/`     | Go port (`go/*.go`) + tests. |
 | `rs/`     | Rust port (`rs/src/*.rs`) + tests. |
 | `docs/`   | [Diátaxis](https://diataxis.fr) documentation (tutorials / how-to / reference / explanation), plus `adr/` decision records, `design/` plans, and `STYLE-GUIDE.md`. |
-| `test/`   | Shared, language-neutral conformance corpus (`*.tsv`) run by all three languages. |
+| `test/`   | Shared, language-neutral conformance corpus (`*.tsv`) run by all three languages, and the vendored JSON Schema Test Suite (`json-schema-suite/`). |
 | `bench/`  | Benchmarks against other validators (`bench/ts`, `bench/go`, `bench/rs`) and the immutable recorded runs (`bench/results/`). See `bench/README.md`. |
 | `site/`   | Static site generator (`site/build.js`) for the docs and the performance report, deployed by the Pages workflow. |
 | `Makefile`| Top-level build/test/publish orchestration. |
@@ -99,6 +99,18 @@ Run it after any behaviour change; CI runs it too, in the `parity` job.
 Anything it finds should also become a corpus row in `test/gen-compat.js`, so
 the committed gate keeps it closed. See
 [`test/differential/README.md`](test/differential/README.md).
+
+## The JSON Schema Test Suite (a ratchet)
+
+The required tests of the official suite for draft 2020-12 and draft 7 are
+vendored in `test/json-schema-suite/`, and each language's tests import every
+schema and validate every instance (`ts/test/jsonschema-suite.test.ts`,
+`go/jsonschema_suite_test.go`, `rs/tests/jsonschema_suite.rs`). The tests the
+import cannot honour yet are rows of `skips-draft2020-12.tsv` and
+`skips-draft7.tsv`, each naming the ports that fail it. A failing test with no
+row fails the run, and so does a listed test that passes: a change that fixes
+suite tests deletes their rows and lowers the `# bound:` line to the new row
+count. See [`test/json-schema-suite/README.md`](test/json-schema-suite/README.md).
 
 ## Coverage bar
 
@@ -217,6 +229,8 @@ correct. See `bench/README.md`.
    if needed.
 4. `make test` — all three languages green, including the corpus.
 5. `make diff` — both ports agree with TypeScript on every generated case.
+   If the change moves a JSON Schema Test Suite verdict, update the skip
+   ledgers in `test/json-schema-suite/`.
 6. Keep coverage at the bar; run `go vet` and `make lint-rs cover-rs`.
 7. Update `docs/` (and the parity page if relevant), to
    `docs/STYLE-GUIDE.md`; run `make lint-docs` and `npm test`.
