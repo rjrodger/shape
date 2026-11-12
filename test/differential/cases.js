@@ -391,6 +391,26 @@ function build() {
   add('expr-fault-nof-fraction', E('Nof(1.5,String)'), SCALARS)
   add('c-all-ignore', E('All(Ignore(Min(2,Number)),Number)'), SCALARS)
 
+  // When: the condition picks the shape, whose errors are the errors.
+  add('c-when', E('When(String,Min(2),Max(3))'), SCALARS)
+  add('c-when-then-only', E('When(Number,Min(1))'), SCALARS)
+  add('c-when-obj', { a: E('When(Number,Min(1))') }, OBJS)
+  add('c-when-open', CALL('When', { $open: { a: E('Required') } }, { $open: { b: { $required: N } } }), OBJS)
+  add('c-when-else', CALL('When', { $open: { a: N } }, { $open: { a: E('Min(1)') } }, { $open: { b: T } }), OBJS)
+  add('c-when-in-nof', E('Nof(1,When(String,Min(2)),Number)'), SCALARS)
+  // Contains and Unique: counts and equality over an array's items.
+  const DUPS = ARRS.concat([[1, 1], ['x', 'x'], [[1], [1]], [{ a: 1 }, { a: 1 }], [null, null],
+    [true, false, true], [1, '1'], [[1], { a: 1 }], [{ a: 1, b: 2 }, { a: 1, b: 3 }]])
+  add('c-contains', E('Contains(Min(1),Number)'), ARRS)
+  add('c-contains-exact', E('Contains(1,Number)'), ARRS)
+  add('c-contains-range', E('Contains(Min(1).Max(2),Number)'), ARRS)
+  add('c-contains-zero', E('Contains(0,String)'), ARRS)
+  add('c-contains-obj', { a: E('Contains(Min(1),Integer)') }, OBJS)
+  add('c-contains-in-nof', E('Nof(1,Contains(Min(1),Number),String)'), SCALARS)
+  add('c-unique', E('Unique'), DUPS)
+  add('c-unique-strings', CALL('Unique', [T]), DUPS)
+  add('c-contains-unique', E('Contains(Min(2),Number).Unique'), DUPS)
+
   // A bare type token in the DSL is Type(token): Object is closed there.
   for (const t of ['String', 'Number', 'Boolean', 'Object', 'Array', 'Any', 'Integer']) {
     add('dsl-bare-' + t, E(t), SCALARS)
@@ -538,6 +558,14 @@ function build() {
   add('js-ref-siblings', JS({ $defs: { n: { type: 'number' } }, $ref: '#/$defs/n', minimum: 2 }), SCALARS)
   add('js-document-true', JS(true), SCALARS)
   add('js-document-false', JS(false), SCALARS)
+  // if, then and else; the dependent keywords; contains and uniqueItems.
+  add('js-if', JS({ if: { type: 'number' }, then: { minimum: 1 }, else: { minLength: 2 } }), SCALARS)
+  add('js-if-else-only', JS({ if: { minimum: 0 }, else: { type: 'string' } }), SCALARS)
+  add('js-dependent-required', JS({ dependentRequired: { a: ['b'] } }), OBJS)
+  add('js-dependent-schemas', JS({ dependentSchemas: { a: { properties: { b: { type: 'number' } }, required: ['b'] } } }), OBJS)
+  add('js-dependencies', JS({ dependencies: { a: ['b'], b: { minProperties: 3 } } }), OBJS)
+  add('js-contains', JS({ contains: { type: 'number' }, minContains: 1, maxContains: 2 }), ARRS.concat(SCALARS))
+  add('js-unique', JS({ uniqueItems: true, items: { type: 'number' } }), ARRS.concat([[1, 1], [1, 2, 1]]))
 
   // Deep nesting.
   add('deep-1', { a: { b: { c: N } } },

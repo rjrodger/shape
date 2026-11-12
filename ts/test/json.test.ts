@@ -151,6 +151,19 @@ describe('json', () => {
       { a: { k: 'x', a: 1 } }, { a: { k: 'y', b: 1 } }, { a: { k: 'z' } })
     roundTrip(Discriminated('k', { x: { k: Min(1, 'x') } }),
       { $$: 'Discriminated("k",$$0)', $$0: { x: { 'k: Min(1)': 'x' } } }, { k: 'x' })
+ 
+    // When is a list head too; Contains and Unique are checks of an array.
+    const { When, Contains, Unique } = ShapeModule
+    roundTrip(When(String, Min(2)), 'When(String,Any.Min(2),Any)', 'a', 'abc', 5)
+    roundTrip({ a: When(Open({ k: Required() }), Open({ b: Required(Number) })) },
+      { a: { $$: 'When($$0,$$1,Any)', $$0: { k: 'Required', $$: 'Open' }, $$1: { 'b: Number': 0, $$: 'Open' } } },
+      { a: { k: 1 } }, { a: { k: 1, b: 2 } }, { a: {} })
+    roundTrip(Contains(Min(1), Number), { $$: 'Contains(Any.Min(1),Number,$$0)', $$0: [] }, [1], ['a'])
+    roundTrip({ a: Contains(2, String) }, { 'a: Contains(2,String)': [] }, { a: ['x', 'y'] }, { a: ['x'] })
+    roundTrip(Contains(Max(1), Exact(1), [Number]),
+      { $$: 'Contains(Any.Max(1),Required.Exact(1),$$0)', $$0: ['Number'] }, [1, 2], [1, 1], ['a'])
+    roundTrip({ u: Unique([String]), v: Skip(Unique()) }, { 'u: Unique': ['String'], 'v: Skip.Unique': [] },
+      { u: ['a', 'b'] }, { u: ['a', 'a'] }, { u: [], v: [1, 1] })
   })
 
 

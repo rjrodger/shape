@@ -512,6 +512,159 @@ describe('builder', () => {
   })
 
 
+  test('builder-when', () => {
+    const { When, Ignore } = Shape as any
+
+    // The condition picks the shape; its errors are the errors.
+    const w = Shape(When(Open({ kind: Exact('a') }), Open({ x: Required(Number) }), Open({ y: Required(String) })))
+    deepEqual(w({ kind: 'a', x: 1 }), { kind: 'a', x: 1 })
+    throws(() => w({ kind: 'a' }), 'Validation failed for property "x" because the property is missing.')
+    throws(() => w({ kind: 'b' }), 'Validation failed for property "y" because the property is missing.')
+    deepEqual(w({ kind: 'b', y: 'q' }), { kind: 'b', y: 'q' })
+
+    // A shape not given passes, and the picked shape makes the result.
+    const then = Shape(When(String, Min(2)))
+    deepEqual(then('ab'), 'ab')
+    deepEqual(then(5), 5)
+    throws(() => then('a'), 'Value "a" for property "" must be a minimum length of 2 (was 1).')
+    deepEqual(Shape(When(Open({}), Open({ b: 2 })))({ a: 1 }), { a: 1, b: 2 })
+    deepEqual(Shape(When(Number, Ignore(Min(5))))(3), 3)
+
+    // The condition only checks, on a copy.
+    const input = { a: 1 }
+    deepEqual(Shape(When(Open({ b: 2 }), Any()))(input), { a: 1 })
+    deepEqual(input, { a: 1 })
+
+    // Errors name the path; an absent value is not tried.
+    throws(() => Shape({ a: { b: When(String, Min(2)) } })({ a: { b: 'x' } }),
+      'Value "x" for property "a.b" must be a minimum length of 2 (was 1).')
+    throws(() => Shape({ a: When(String, Min(2)) })({}),
+      'Validation failed for property "a" because the property is missing.')
+    deepEqual(Shape({ a: Optional(When(String, Min(2))) })({}), {})
+    deepEqual(Shape({ a: Default('xy', When(String, Min(2))) })({}), { a: 'xy' })
+
+    // A condition is needed; the string form, and how it renders.
+    throws(() => (When as any)(), 'Shape: When needs a shape for its condition')
+    deepEqual(Shape(Shape.expr('When(String,Min(2))'))('ab'), 'ab')
+    deepEqual(Shape({ 'a: When(String,Min(2))': 'xy' })({}), { a: 'xy' })
+    deepEqual(Shape(When(Number, Min(1), Max(-1))).stringify(), 'When(Number,Min(1),Max(-1))')
+    deepEqual(Shape(When(String, Min(2))).stringify(), 'When(String,Min(2),Any)')
+    deepEqual(ShapeModule.GWhen, When)
+  })
+
+
+  test('builder-contains', () => {
+    const { Contains, Above, Below } = Shape as any
+
+    // At least one, exactly some, at most some.
+    const one = Shape(Contains(Min(1), Number))
+    deepEqual(one(['a', 2]), ['a', 2])
+    throws(() => one(['a', 'b']),
+      'Value "[a,b]" for property "" has 0 of its items satisfying Number; the count must be Min(1).')
+    throws(() => one([]), 'Value "[]" for property "" has 0 of its items satisfying Number; the count must be Min(1).')
+    throws(() => Shape(Contains(2, Number))([1, 'a', 2, 3]),
+      'Value "[1,a,2,3]" for property "" has 3 of its items satisfying Number; the count must be 2.')
+    deepEqual(Shape(Contains(0, Number))(['a']), ['a'])
+
+    // An item is tried only while the untried could change the verdict.
+    throws(() => Shape(Contains(Max(1), Number))([1, 2, 3]),
+      'Value "[1,2,3]" for property "" has 2 to 3 of its items satisfying Number; the count must be Max(1).')
+    let tried = 0
+    const lazy = Shape(Contains(Min(1), Check(() => (tried++, true))))
+    deepEqual(lazy([1, 2, 3]), [1, 2, 3])
+    deepEqual(tried, 1)
+
+    // Not an array: the node's type speaks. With a spec, its shape holds too.
+    throws(() => one('x'), 'Validation failed for string "x" because the string is not of type array.')
+    deepEqual(Shape(Contains(Min(1), Number, Any()))('x'), 'x')
+    throws(() => Shape(Contains(1, Number, [Min(1)]))([1, 0]),
+      'Value "[1,0]" for property "" has 2 of its items satisfying Number; the count must be 1.')
+    deepEqual(Shape(Min(1).Contains(1, String))(['a']), ['a'])
+    deepEqual(Shape({ a: Contains(Below(3, Above(0)), Number) })({ a: [1, 'x'] }), { a: [1, 'x'] })
+    // The items are left as they were given.
+    deepEqual(Shape(Contains(Min(1), Open({ b: 2 })))([{ a: 1 }]), [{ a: 1 }])
+
+    // The count is a whole number or a shape; the items need a shape.
+    const fault = 'Shape: Contains needs a whole number of zero or more, or a shape for the count'
+    throws(() => Contains(-1, String), fault)
+    throws(() => Contains(1.5, String), fault)
+    throws(() => Contains(), fault)
+    throws(() => Contains(1), 'Shape: Contains needs a shape for the items it counts')
+
+    // The string form, and the key expression.
+    deepEqual(Shape(Shape.expr('Contains(1,Number)'))([1, 'a']), [1, 'a'])
+    deepEqual(Shape({ 'a: Contains(1,Number)': [] })({ a: [1] }), { a: [1] })
+    deepEqual(ShapeModule.GContains, Contains)
+  })
+
+
+  test('builder-unique', () => {
+    const { Unique } = Shape as any
+
+    // Items compare as JSON values: by value, in any key order.
+    const u = Shape(Unique())
+    deepEqual(u([1, '1', true, null, [1], { a: 1 }]), [1, '1', true, null, [1], { a: 1 }])
+    throws(() => u([1, 2, 2, 1]), 'Value "[1,2,2,1]" for property "" must have unique items (items 1 and 2 are equal).')
+    throws(() => u([{ a: 1, b: 2 }, { b: 2, a: 1 }]),
+      'Value "[{a:1,b:2},{b:2,a:1}]" for property "" must have unique items (items 0 and 1 are equal).')
+    deepEqual(u([[1], { 0: 1 }]).length, 2)
+    deepEqual(u([{ a: 1 }, { b: 1 }, { a: 1, b: 1 }]).length, 3)
+    throws(() => u([[NaN], [NaN]]), 'must have unique items (items 0 and 1 are equal).')
+    const bare = Object.create(null)
+    bare.x = 1
+    throws(() => u([bare, { x: 1 }]), 'must have unique items (items 0 and 1 are equal).')
+    // Anything else is equal to itself alone.
+    deepEqual(u([new Date(1), new Date(1)]).length, 2)
+
+    // Not an array: the node's type speaks. With a spec, its shape holds too.
+    throws(() => u('x'), 'Validation failed for string "x" because the string is not of type array.')
+    deepEqual(Shape(Unique(Any()))('x'), 'x')
+    throws(() => Shape(Unique([String]))(['a', 'a']), 'must have unique items (items 0 and 1 are equal).')
+    throws(() => Shape(Max(2).Unique())([1, 1]), 'must have unique items (items 0 and 1 are equal).')
+    deepEqual(Shape({ u: Unique })({ u: [1, 2] }), { u: [1, 2] })
+    deepEqual(Shape(Shape.expr('Unique'))([1, 2]), [1, 2])
+    deepEqual(ShapeModule.GUnique, Unique)
+  })
+
+
+  test('builder-trials', () => {
+    const { Contains, Discriminated } = Shape as any
+
+    // Every trial takes one from the validation's budget; past it the
+    // validation fails, with that error alone.
+    const spent = 'Value "[1,2]" for property "" needs more trials than the budget of 1.'
+    throws(() => Shape(Contains(2, Number), { trials: 1 })([1, 2]), spent)
+    deepEqual(Shape(Contains(2, Number), { trials: 2 })([1, 2]), [1, 2])
+    const ctx: any = { err: [] }
+    Shape(Contains(2, Number), { trials: 1 })([1, 2], ctx)
+    deepEqual(ctx.err.map((e: any) => [e.text, e.path, e.why]), [[spent, '', 'trial']])
+
+    // A trial the budget refused could have decided anything, even a not.
+    const not = Shape(Nof(0, Contains(3, Number)), { trials: 2 })
+    throws(() => not([1, 2, 3]), 'Value "[1,2,3]" for property "" needs more trials than the budget of 2.')
+    deepEqual(not.valid([1, 2, 3]), false)
+    deepEqual(not.match([1, 2, 3]), false)
+
+    // Validations within it share the budget, and the error names where it
+    // ran out.
+    throws(() => Shape(All(Contains(1, Number), Contains(1, String)), { trials: 3 })([1, 'a']),
+      'needs more trials than the budget of 3.')
+    throws(() => Shape(Discriminated('k', { a: { k: String, x: Contains(Min(1), Number) } }), { trials: 1 })(
+      { k: 'a', x: ['q', 1] }), 'Value "[q,1]" for property "x" needs more trials than the budget of 1.')
+    throws(() => Shape({ a: [Nof(1, Contains(Min(1), Number), String)] }, { trials: 2 })({ a: [[1], ['x', 1]] }),
+      'Value "[x,1]" for property "a.1" needs more trials than the budget of 2.')
+
+    // Each call has a budget of its own; a budget that is not a whole
+    // number above zero is the default.
+    const twice = Shape(Contains(Min(1), Number), { trials: 2 })
+    const reused = {}
+    deepEqual(twice(['a', 1], reused), ['a', 1])
+    deepEqual(twice(['a', 1], reused), ['a', 1])
+    deepEqual(Shape(Contains(Min(1), Number), { trials: 1.5 })([1]), [1])
+    deepEqual(Shape(Contains(Min(1), Number), { trials: 0 })([1]), [1])
+  })
+
+
   test('builder-all', () => {
 
     let g0 = Shape(All(Open({ x: 1 }), Open({ y: 'a' })))

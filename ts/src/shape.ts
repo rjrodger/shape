@@ -142,6 +142,11 @@ type ShapeOptions = {
     active?: boolean // If true, recognize keyspec in object. Default: false.
     keymark?: string // Special key to mark parent object expr. Default: meta.suffix.
   }
+
+  // The trials one validation may run (see trial): each shape a Nof tries,
+  // each When condition and each item a Contains counts takes one. A whole
+  // number above zero; anything else is the default, 100000.
+  trials?: number
 }
 
 
@@ -379,6 +384,10 @@ const S = {
   Min: 'Min',
   Never: 'Never',
   Nof: 'Nof',
+  When: 'When',
+  Contains: 'Contains',
+  Unique: 'Unique',
+  trial: 'trial',
   Nullable: 'Nullable',
   Catch: 'Catch',
   Coerce: 'Coerce',
@@ -515,6 +524,10 @@ class State {
 
   check: Function | undefined = undefined
   checkargs?: Record<string, any>
+
+  // The trial budget of the validation (see trial), which every validation
+  // within it shares.
+  trials: any = undefined
 
   // The last parent object seen and whether it was frozen (see next).
   lastParent: any = undefined
@@ -1104,6 +1117,13 @@ function shapify<const S>(intop?: S, inopts?: ShapeOptions) {
 
     const s = new State(root, top, ctx, match, terse)
 
+    // A validation counts its trials against a budget of its own; one
+    // within another, such as a composition's branch, counts against its
+    // parent's.
+    const ownTrials = undefined === s.ctx.trial$
+    s.trials = ownTrials ? { left: trialBudget(opts.trials), budget: trialBudget(opts.trials), spent: undefined } :
+      s.ctx.trial$
+
     // A log callback is called for every node, so nothing is skipped for it.
     const fastOk = !s.ctx.log
 
@@ -1636,6 +1656,12 @@ function shapify<const S>(intop?: S, inopts?: ShapeOptions) {
       }
     }
 
+    // A spent budget leaves no verdict standing, as a trial it refused may
+    // have decided any of them: its error is the only one.
+    if (ownTrials && undefined !== s.trials.spent) {
+      s.err = [s.trials.spent]
+    }
+
     // s.err = s.err.filter(e => null != e)
     if (0 < s.err.length) {
       if (isarr(s.ctx.err)) {
@@ -1973,12 +1999,13 @@ function expr(
 }
 
 
-// The index of the outermost All or Nof call open at tokens[tI], the first
+// The index of the outermost All, Nof or When call open at tokens[tI], the first
 // closing parenthesis, so every call opened before it is still open; -1
 // when none is.
 function compositionCallAt(tokens: string[], tI: number): number {
   for (let i = 1; i < tI; i++) {
-    if ('(' === tokens[i] && (S.All === tokens[i - 1] || S.Nof === tokens[i - 1])) {
+    if ('(' === tokens[i] &&
+      (S.All === tokens[i - 1] || S.Nof === tokens[i - 1] || S.When === tokens[i - 1])) {
       return i - 1
     }
   }
@@ -2931,7 +2958,7 @@ function probeNode(state: State, inner: Inner, val: any): { out: any, errs: ErrD
 
   const errs: ErrDesc[] = []
   const ref = state.ctx.ref = state.ctx.ref || {}
-  const out = ps.exec(val, { err: errs, ref, log: state.ctx.log, path$: patharr(state) })
+  const out = ps.exec(val, { err: errs, ref, log: state.ctx.log, path$: patharr(state), trial$: state.trials })
   return { out, errs }
 }
 
@@ -3068,7 +3095,7 @@ const Discriminated = function <T extends string, B extends Record<string, any>>
 
     const errs: ErrDesc[] = []
     const ref = state.ctx.ref = state.ctx.ref || {}
-    const out = shape(val, { err: errs, ref, log: state.ctx.log, path$: patharr(state) })
+    const out = shape(val, { err: errs, ref, log: state.ctx.log, path$: patharr(state), trial$: state.trials })
     if (0 < errs.length) {
       update.err = errs
       return false
@@ -3471,7 +3498,7 @@ const All = function <const S extends readonly any[]>(this: any, ...inshapes: S)
     const path$ = patharr(state)
     let out = clone(val)
     for (let shape of shapes) {
-      let subctx = { ...state.ctx, err: [] as ErrDesc[], path$ }
+      let subctx = { ...state.ctx, err: [] as ErrDesc[], path$, trial$: state.trials }
       const res = shape(out, subctx)
       if (0 < subctx.err.length) {
         pass = false
@@ -3563,7 +3590,8 @@ const Nof = function Nof(this: any, count: any, ...inshapes: any[]): Node<any> {
     const kI = undefined === kinds ? -1 : kinds.indexOf(kindOf(val) as string)
     if (-1 < kI) {
       const err: ErrDesc[] = []
-      const out = shapes[kI](clone(val), { ...state.ctx, err, path$: patharr(state), own$: true })
+      const out = shapes[kI](clone(val),
+        { ...state.ctx, err, path$: patharr(state), own$: true, trial$: state.trials })
       if (0 < err.length) {
         update.err = err
         return false
@@ -3575,8 +3603,9 @@ const Nof = function Nof(this: any, count: any, ...inshapes: any[]): Node<any> {
     let k = 0
     let tried = 0
     let matched = 0
+    const path$ = patharr(state)
     while (NOF_SOME === nofSpan(ok, k, shapes.length - tried)) {
-      if (shapes[tried].match(clone(val), { ...state.ctx, err: [] })) {
+      if (trial(shapes[tried], val, state, path$)) {
         k++
         matched = tried
       }
@@ -3597,7 +3626,7 @@ const Nof = function Nof(this: any, count: any, ...inshapes: any[]): Node<any> {
 
     // Exactly one: the shape the value satisfies produces from a copy.
     if (one) {
-      update.val = shapes[matched](clone(val), { ...state.ctx, err: [] })
+      update.val = shapes[matched](clone(val), { ...state.ctx, err: [], trial$: state.trials })
     }
 
     return true
@@ -3630,8 +3659,8 @@ function kindOf(val: any): string | undefined {
 // The checks that leave a shape's kind as it was: a shape with no others
 // takes a value of its own kind only.
 const KIND_KEEPING: any = {
-  Above: 1, Below: 1, Check: 1, DateTime: 1, Define: 1, Email: 1, Exact: 1, Ip: 1, Ipv4: 1,
-  Ipv6: 1, Len: 1, Max: 1, Min: 1, Url: 1, Uuid: 1,
+  Above: 1, Below: 1, Check: 1, Contains: 1, DateTime: 1, Define: 1, Email: 1, Exact: 1, Ip: 1,
+  Ipv4: 1, Ipv6: 1, Len: 1, Max: 1, Min: 1, Unique: 1, Url: 1, Uuid: 1,
 }
 
 // The kinds of a Nof's shapes, where its count admits exactly one and each
@@ -3665,6 +3694,244 @@ function nofSpan(ok: boolean[], k: number, open: number): number {
     yes += ok[c] ? 1 : 0
   }
   return 0 === yes ? NOF_NONE : open + 1 === yes ? 2 : NOF_SOME
+}
+
+
+// The trials one validation may run, unless its options say otherwise.
+const TRIALS = 100000
+
+function trialBudget(n: any): number {
+  return Number.isInteger(n) && 0 < n ? n : TRIALS
+}
+
+
+// Try a shape on a copy of a value: a verdict, which changes nothing. Each
+// trial takes one from the budget of the validation it is part of. Past the
+// budget a trial refuses, and the validation fails with the error made here,
+// at the first place a trial was refused (see exec).
+function trial(shape: any, val: any, state: State, path$: (string | number)[]): boolean {
+  const t = state.trials
+  if (t.left <= 0) {
+    if (undefined === t.spent) {
+      t.spent = makeErr(state,
+        TEXT_PREFIX + ' needs more trials than the budget of ' + t.budget + '.', S.trial)
+    }
+    return false
+  }
+  t.left--
+  return shape.match(clone(val), { ...state.ctx, err: [], path$, trial$: t })
+}
+
+
+// Pass if the value satisfies the shape its condition picks: then, where the
+// value satisfies cond, and otherwise where it does not. The condition is
+// tried on a copy and only checks (see trial); the shape it picks validates
+// the value and makes the result, and its errors are the errors. A shape
+// not given passes. An absent value is not tried, so whether it may be
+// absent is the node's required or optional.
+const When = function When(this: any, cond: any, then?: any, otherwise?: any): Node<any> {
+  if (undefined === cond) {
+    throw new Error('Shape: When needs a shape for its condition')
+  }
+
+  const node = buildize(this)
+  node.t = (S.list as ValType)
+  node.r = true
+
+  const inshapes = [cond, undefined === then ? Any() : then,
+    undefined === otherwise ? Any() : otherwise]
+  const shapes = inshapes.map(s => Shape(s))
+  node.u.list = shapes.map(g => g.node())
+  node.u.when = true
+
+  const validator = function When(val: any, update: Update, state: State) {
+    if (undefined === val) {
+      return true
+    }
+
+    const path$ = patharr(state)
+    const picked = trial(shapes[0], val, state, path$) ? shapes[1] : shapes[2]
+    const err: ErrDesc[] = []
+    const out = picked(clone(val), { ...state.ctx, err, path$, trial$: state.trials })
+    if (0 < err.length) {
+      update.why = S.When
+      update.err = err
+      return false
+    }
+
+    // A shape that drops its value (Ignore) leaves the value as it was.
+    if (undefined !== out) {
+      update.val = out
+    }
+    return true
+  }
+
+  validator.n = S.When
+  validator.a = inshapes
+
+  attach(node.b, validator)
+
+  return node
+}
+
+
+// Pass if the number of an array's items that satisfy the shape is one the
+// count admits. The count is a whole number, for exactly that many, or a
+// shape the number must satisfy: Contains(Min(1), s) is at least one,
+// Contains(0, s) none. Each item is tried on a copy (see trial), and only
+// while the items left untried could still change the verdict; the array is
+// left as it was given. A value that is not an array is not counted, so
+// whether it is one is the node's type check. Without a spec of its own the
+// node is an array of anything.
+const Contains = function Contains(this: any, count: any, inshape: any, spec?: any): Node<any> {
+  const exact = S.number === typeof count
+  if (undefined === count || (exact && !(Number.isInteger(count) && 0 <= count))) {
+    throw new Error('Shape: Contains needs a whole number of zero or more, or a shape for the count')
+  }
+  if (undefined === inshape) {
+    throw new Error('Shape: Contains needs a shape for the items it counts')
+  }
+
+  const node = buildize(this, undefined === spec && !this?.$?.shape$ ? [] : spec)
+  const shape = Shape(inshape)
+  const countShape = exact ? undefined : Shape(count)
+
+  // Whether the count admits c, kept for the next array to ask.
+  const okc: boolean[] = []
+  const admits = (c: number) => undefined === okc[c] ?
+    (okc[c] = exact ? c === count : (countShape as any).match(c)) : okc[c]
+
+  const validator = function Contains(val: any, update: Update, state: State) {
+    if (!isarr(val)) {
+      return true
+    }
+
+    // The counts from k to k + open are all, some or none admitted, read
+    // off the running total of admitted counts.
+    const n = val.length
+    const yes = [0]
+    for (let c = 0; c <= n; c++) {
+      yes.push(yes[c] + (admits(c) ? 1 : 0))
+    }
+    const span = (k: number, open: number) => {
+      const y = yes[k + open + 1] - yes[k]
+      return 0 === y ? NOF_NONE : open + 1 === y ? 2 : NOF_SOME
+    }
+
+    const path$ = patharr(state)
+    let k = 0
+    let tried = 0
+    while (NOF_SOME === span(k, n - tried)) {
+      if (trial(shape, val[tried], state, path$.concat(tried))) {
+        k++
+      }
+      tried++
+    }
+
+    if (NOF_NONE === span(k, n - tried)) {
+      update.err = makeErr(state,
+        TEXT_PREFIX + ' has ' + k + (tried < n ? ' to ' + (k + n - tried) : '') +
+        ' of its items satisfying ' + stringify(inshape, true) +
+        '; the count must be ' + stringify(count, true) + '.')
+      return false
+    }
+
+    return true
+  }
+
+  validator.n = S.Contains
+  validator.a = [count, inshape]
+  validator.u = { count: exact ? count : (countShape as any).node(), shape: shape.node() }
+  validator.s = () => S.Contains + '(' + stringify(count, true) + ',' + stringify(inshape, true) + ')'
+
+  attach(node.b, validator)
+
+  return node
+}
+
+
+// Pass if no two of an array's items are equal as JSON values: a number by
+// its value, an array by its items in order, an object by its keys and
+// their values, in any order. The error names the first item equal to one
+// before it, and the first of those. A value that is not an array is not
+// checked. Without a spec of its own the node is an array of anything.
+const Unique = function Unique(this: any, spec?: any): Node<any> {
+  const node = buildize(this, undefined === spec && !this?.$?.shape$ ? [] : spec)
+
+  const validator = function Unique(val: any, update: Update, state: State) {
+    if (!isarr(val)) {
+      return true
+    }
+
+    const [i, j] = repeated(val)
+    if (-1 === j) {
+      return true
+    }
+
+    update.err = makeErr(state,
+      TEXT_PREFIX + ' must have unique items (items ' + i + ' and ' + j + ' are equal).')
+    return false
+  }
+
+  validator.n = S.Unique
+  validator.a = [] as any[]
+  validator.s = () => S.Unique + '()'
+
+  attach(node.b, validator)
+
+  return node
+}
+
+
+// The first item equal to an item before it, and the first of those; -1 for
+// both where no two are equal. A scalar is looked up by its value, and an
+// array or plain object compared with the containers before it.
+function repeated(items: any[]): [number, number] {
+  const seen = new Map<any, number>()
+  const containers: number[] = []
+  for (let j = 0; j < items.length; j++) {
+    const v = items[j]
+    if (isContainer(v)) {
+      for (const i of containers) {
+        if (sameJson(items[i], v)) {
+          return [i, j]
+        }
+      }
+      containers.push(j)
+    }
+    else {
+      const i = seen.get(v)
+      if (undefined !== i) {
+        return [i, j]
+      }
+      seen.set(v, j)
+    }
+  }
+  return [-1, -1]
+}
+
+
+// An array, or an object made by a literal or JSON.parse.
+function isContainer(v: any): boolean {
+  if (isarr(v)) {
+    return true
+  }
+  const proto = null !== v && S.object === typeof v ? Object.getPrototypeOf(v) : undefined
+  return Object.prototype === proto || null === proto
+}
+
+
+// Equal as JSON values (see Unique); a value that is neither container nor
+// JSON scalar is equal to itself alone.
+function sameJson(x: any, y: any): boolean {
+  if (x === y || (x !== x && y !== y)) {
+    return true
+  }
+  if (!isContainer(x) || !isContainer(y) || isarr(x) !== isarr(y)) {
+    return false
+  }
+  const xk = keys(x)
+  return xk.length === keys(y).length && xk.every((k: string) => hasOwn(y, k) && sameJson(x[k], y[k]))
 }
 
 
@@ -4360,6 +4627,7 @@ function buildize<V = any>(self?: any, shape?: any): Node<V> {
       Child,
       Closed,
       Coerce,
+      Contains,
       DateTime,
       Default,
       Define,
@@ -4392,6 +4660,7 @@ function buildize<V = any>(self?: any, shape?: any): Node<V> {
       Skip,
       Transform,
       Type,
+      Unique,
       Url,
       Uuid,
 
@@ -4842,7 +5111,16 @@ function jsonValidatorCall(v: any, calls: JsonCall[]) {
   else if (S.Exact === name) {
     calls.push({ n: name, a: args.map((a: any) => ({ x: jsonLiteral(a, 'the Exact value') })) })
   }
-  else if (S.All === name || S.Nof === name || S.Discriminated === name) {
+  else if (S.Contains === name) {
+    calls.push({
+      n: name, a: [S.number === typeof v.u.count ? { x: '' + v.u.count } : jsonArg(v.u.count),
+        jsonArg(v.u.shape)]
+    })
+  }
+  else if (S.Unique === name) {
+    calls.push({ n: name, a: [] })
+  }
+  else if (S.All === name || S.Nof === name || S.When === name || S.Discriminated === name) {
     // The list itself is the head of the expression.
   }
   else {
@@ -5218,7 +5496,7 @@ function nodeJson(n: Node<any>): any {
         ]
       } :
       {
-        n: n.b.find((v: any) => S.All === v.n || S.Nof === v.n)?.n as string,
+        n: n.b.find((v: any) => S.All === v.n || S.Nof === v.n || S.When === v.n)?.n as string,
         // A Nof's count leads its shapes: a number inline, a shape as its value.
         a: (undefined === n.u.nof ? [] :
           [S.number === typeof n.u.nof.count ? { x: '' + n.u.nof.count } : jsonArg(n.u.nof.count)])
@@ -5559,7 +5837,7 @@ function nodeSchema(raw: any, defs: any): any {
     listSchema(n, s, defs)
   }
 
-  checkSchema(n, s)
+  checkSchema(n, s, defs)
 
   if (n.u.nullable && undefined !== s.type) {
     s.type = (isarr(s.type) ? s.type : [s.type]).concat('null')
@@ -5677,6 +5955,16 @@ function listSchema(n: Node<any>, s: any, defs: any) {
       nofSchema(n.u.nof.ok, branches, s)
     }
   }
+  else if (n.u.when) {
+    // A shape that passes everything says nothing.
+    s.if = branches[0]
+    if (0 < keys(branches[1]).length) {
+      s.then = branches[1]
+    }
+    if (0 < keys(branches[2]).length) {
+      s.else = branches[2]
+    }
+  }
   else {
     s.allOf = branches
   }
@@ -5759,7 +6047,7 @@ const SIZE_MAX: any = {
 }
 
 
-function checkSchema(n: Node<any>, s: any) {
+function checkSchema(n: Node<any>, s: any, defs: any) {
   const families = SIZE_FAMILIES[n.t] || keys(SIZE_MAX)
   const vs: any[] = n.b.concat(n.a)
 
@@ -5809,6 +6097,52 @@ function checkSchema(n: Node<any>, s: any) {
     else if (S.Check === name && undefined !== v.a && v.a[0] instanceof RegExp) {
       s.pattern = v.a[0].source
     }
+    else if (S.Contains === name) {
+      containsSchema(v, s, defs)
+    }
+    else if (S.Unique === name) {
+      s.uniqueItems = true
+    }
+  }
+}
+
+
+// A count of an array's items, as contains and the bounds on it. A count
+// shape gives the bounds of its Min, Max, Above, Below and Len; its other
+// checks have no keyword, so the schema admits more than the shape does.
+function containsSchema(v: any, s: any, defs: any) {
+  s.contains = nodeSchema(v.u.shape, defs)
+  let lo = 0
+  let hi = Infinity
+  if (S.number === typeof v.u.count) {
+    lo = hi = v.u.count
+  }
+  else {
+    for (const cv of v.u.count.b) {
+      const b = +cv.a?.[0]
+      if (S.Min === cv.n) {
+        lo = Math.max(lo, Math.ceil(b))
+      }
+      else if (S.Max === cv.n) {
+        hi = Math.min(hi, Math.floor(b))
+      }
+      else if (S.Above === cv.n) {
+        lo = Math.max(lo, Math.floor(b) + 1)
+      }
+      else if (S.Below === cv.n) {
+        hi = Math.min(hi, Math.ceil(b) - 1)
+      }
+      else if (S.Len === cv.n) {
+        lo = Math.max(lo, b)
+        hi = Math.min(hi, b)
+      }
+    }
+  }
+  if (1 !== lo) {
+    s.minContains = lo
+  }
+  if (Infinity !== hi) {
+    s.maxContains = hi
   }
 }
 
@@ -5831,6 +6165,7 @@ const BuilderMap = {
   Child,
   Closed,
   Coerce,
+  Contains,
   DateTime,
   Default,
   Define,
@@ -5866,8 +6201,10 @@ const BuilderMap = {
   Transform,
   Rest,
   Type,
+  Unique,
   Url,
   Uuid,
+  When,
 }
 
 
@@ -5875,7 +6212,7 @@ const BuilderMap = {
 // in a spec (`{ a: Any }`) is read as a call. See nodize.
 const NULLARY_BUILDERS =
   [Any, Closed, Coerce, DateTime, Email, Empty, Func, Ignore, Integer, Ip, Ipv4, Ipv6,
-    Key, Never, Nullable, Open, Optional, Required, Skip, Url, Uuid]
+    Key, Never, Nullable, Open, Optional, Required, Skip, Unique, Url, Uuid]
 
 for (let builder of NULLARY_BUILDERS) {
   defprop(builder, 'nullary$', { value: true })
@@ -5927,9 +6264,8 @@ const JSON_SCHEMA_REF_ALONE = /^https?:\/\/json-schema\.org\/draft-0[3-7]\/schem
 // Keywords the import recognises but does not enforce. It passes over them,
 // as it does a keyword it does not know, unless it is strict.
 const JSON_SCHEMA_UNSUPPORTED = [
-  '$dynamicRef', '$recursiveRef', 'contains', 'dependencies', 'dependentRequired',
-  'dependentSchemas', 'if', 'multipleOf', 'patternProperties', 'propertyNames',
-  'unevaluatedItems', 'unevaluatedProperties', 'uniqueItems',
+  '$dynamicRef', '$recursiveRef', 'multipleOf', 'patternProperties', 'propertyNames',
+  'unevaluatedItems', 'unevaluatedProperties',
 ]
 
 
@@ -6033,7 +6369,7 @@ function importRef(ref: string, ctx: any, path: string): any {
 function importKeywords(s: any, ctx: any, path: string, kind?: string): any {
   if (ctx.strict) {
     for (const k of JSON_SCHEMA_UNSUPPORTED) {
-      if (undefined !== s[k] && !('uniqueItems' === k && false === s[k])) {
+      if (undefined !== s[k]) {
         throw jsonSchemaFault('unsupported keyword "' + k + '"', path)
       }
     }
@@ -6055,6 +6391,14 @@ function importKeywords(s: any, ctx: any, path: string, kind?: string): any {
     if (undefined !== s.not) {
       parts.push(Nof(0, importSchema(s.not, ctx, path + '/not', inner)))
     }
+    // A condition sees the value as given, before a part fills it in. An if
+    // with neither then nor else asserts nothing.
+    if (undefined !== s.if && (undefined !== s.then || undefined !== s.else)) {
+      const arm = (k: string) =>
+        undefined === s[k] ? undefined : importSchema(s[k], ctx, path + '/' + k, inner)
+      parts.push(When(arm('if'), arm('then'), arm('else')))
+    }
+    parts.push(...importDependents(s, ctx, path))
     if (S.string === typeof s.$ref) {
       parts.push(importRef(s.$ref, ctx, path))
     }
@@ -6083,6 +6427,49 @@ function importKeywords(s: any, ctx: any, path: string, kind?: string): any {
     spec = Default(s.default, spec)
   }
   return spec
+}
+
+
+// Each entry of a dependent keyword is a When on its key being present: the
+// object must then hold the names dependentRequired lists, or satisfy the
+// schema dependentSchemas gives, which can only meet an object. Draft 7's
+// dependencies holds either form, and is read where neither of the two
+// that replaced it is written.
+function importDependents(s: any, ctx: any, path: string): any[] {
+  const out: any[] = []
+  const holds = (names: string[]) =>
+    Open(names.reduce((o: any, k: string) => (ownprop(o, k, Required()), o), {}))
+  const names = (v: any, at: string): string[] => {
+    if (!Array.isArray(v) || v.some((n: any) => S.string !== typeof n)) {
+      throw jsonSchemaFault('a dependency must be an array of property names', at)
+    }
+    return v
+  }
+  const required = (k: string, v: any, at: string) => {
+    const list = names(v, at)
+    if (0 < list.length) {
+      out.push(When(holds([k]), holds(list)))
+    }
+  }
+  const schema = (k: string, v: any, at: string) =>
+    out.push(When(holds([k]), importSchema(v, ctx, at, 'object')))
+
+  const legacy = undefined === s.dependentRequired && undefined === s.dependentSchemas
+  for (const [kw, each] of [['dependentRequired', required], ['dependentSchemas', schema],
+    ['dependencies', null]] as any[]) {
+    const v = s[kw]
+    if (undefined === v || ('dependencies' === kw && !legacy)) {
+      continue
+    }
+    if (!isPlainObject(v)) {
+      throw jsonSchemaFault(kw + ' must be an object', path + '/' + kw)
+    }
+    for (const k of keys(v)) {
+      const at = path + '/' + kw + '/' + k
+      ;(each || (Array.isArray(v[k]) ? required : schema))(k, v[k], at)
+    }
+  }
+  return out
 }
 
 
@@ -6224,7 +6611,7 @@ const JSON_SCHEMA_KIND_KEYWORDS: any = {
   number: ['minimum', 'maximum', 'exclusiveMinimum', 'exclusiveMaximum'],
   string: ['minLength', 'maxLength', 'pattern', 'format'],
   object: ['properties', 'required', 'additionalProperties', 'minProperties', 'maxProperties'],
-  array: ['items', 'prefixItems', 'minItems', 'maxItems'],
+  array: ['items', 'prefixItems', 'minItems', 'maxItems', 'contains', 'uniqueItems'],
 }
 
 
@@ -6406,6 +6793,20 @@ function importArray(s: any, ctx: any, path: string): any {
   if (S.number === typeof s.maxItems) {
     spec = Max(s.maxItems, spec)
   }
+
+  // contains counts the items its schema admits, at least one unless
+  // minContains says otherwise; a count of at least none asserts nothing.
+  if (undefined !== s.contains) {
+    const lo = S.number === typeof s.minContains ? s.minContains : 1
+    const hi = S.number === typeof s.maxContains ? s.maxContains : undefined
+    if (0 < lo || undefined !== hi) {
+      const count = lo === hi ? lo : undefined === hi ? Min(lo) : 0 === lo ? Max(hi) : Max(hi, Min(lo))
+      spec = Contains(count, importSchema(s.contains, ctx, path + '/contains'), spec)
+    }
+  }
+  if (true === s.uniqueItems) {
+    spec = Unique(spec)
+  }
   return spec
 }
 
@@ -6563,6 +6964,9 @@ const GMax = Max
 const GMin = Min
 const GNever = Never
 const GNof = Nof
+const GWhen = When
+const GContains = Contains
+const GUnique = Unique
 const GOpen = Open
 const GOptional = Optional
 const GRefer = Refer
@@ -6781,6 +7185,9 @@ export {
   Rest,
   Url,
   Uuid,
+  When,
+  Contains,
+  Unique,
 
   GAbove,
   GAfter,
@@ -6830,5 +7237,8 @@ export {
   GSkip,
   GType,
   GRest,
+  GWhen,
+  GContains,
+  GUnique,
 }
 

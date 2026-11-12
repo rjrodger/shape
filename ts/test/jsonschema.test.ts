@@ -203,6 +203,39 @@ describe('jsonschema', () => {
   })
 
 
+  test('when-contains-unique', () => {
+    const { When, Contains, Unique, Any } = Shape as any
+    const js = (spec: any) => {
+      const s = Shape(spec).jsonSchema()
+      delete s.$schema
+      return s
+    }
+    const num = { type: 'number' }
+
+    // When is if, with then and else where they say something.
+    deepEqual(js(When(Number, Min(1), Max(-1))), { if: num, then: { minimum: 1, minLength: 1, minItems: 1,
+      minProperties: 1 }, else: { maximum: -1, maxLength: -1, maxItems: -1, maxProperties: -1 } })
+    deepEqual(js(When(Number, Any(), Any())), { if: num })
+
+    // Contains is contains, its count the bounds on it: an exact count, at
+    // least one (the default), and the bounds of a count shape. A count
+    // check with no keyword is left out, and the schema admits more.
+    deepEqual(js(Contains(Min(1), Number)), { type: 'array', contains: num })
+    deepEqual(js(Contains(1, Number)), { type: 'array', contains: num, maxContains: 1 })
+    deepEqual(js(Contains(0, Number)), { type: 'array', contains: num, minContains: 0, maxContains: 0 })
+    deepEqual(js(Contains(Max(3, Min(2)), Number)), { type: 'array', contains: num, minContains: 2, maxContains: 3 })
+    deepEqual(js(Contains(Below(3, Above(0)), Number)), { type: 'array', contains: num, maxContains: 2 })
+    deepEqual(js(Contains(Max(2.5, Min(1.5)), Number)), { type: 'array', contains: num, minContains: 2, maxContains: 2 })
+    deepEqual(js(Contains(Len(2), Number)), { type: 'array', contains: num, minContains: 2, maxContains: 2 })
+    deepEqual(js(Contains(Check((n: number) => 0 === n % 2), Number)), { type: 'array', contains: num, minContains: 0 })
+
+    // Unique is uniqueItems.
+    deepEqual(js(Unique([String])), { type: 'array', items: { type: 'string', minLength: 1 }, uniqueItems: true })
+    deepEqual(js({ a: Unique() }), { type: 'object', properties: { a: { type: 'array', uniqueItems: true } },
+      additionalProperties: false })
+  })
+
+
   test('modifiers-and-isolation', () => {
     const s = Shape({
       a: Nullable(Number), b: Nullable(), c: Describe('desc', Catch(0, Min(2, Number))),

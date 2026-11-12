@@ -71,3 +71,48 @@ nof-kinds-nullable-branch	{"a":{"$expr":"Nof(1,Nullable(Min(2,String)),Number)"}
 nof-kinds-coerce-branch	{"a":{"$expr":"Nof(1,Coerce(Number),String)"}}	{"a":"3"}		"Value \"3\" for property \"a\" satisfies 2 of: Number, String; the count must be 1."
 nof-kinds-same-kind	{"a":{"$expr":"Nof(1,Min(1,String),Max(3,String))"}}	{"a":"ab"}		"Value \"ab\" for property \"a\" satisfies 2 of: String.Min(1), String.Max(3); the count must be 1."
 nof-kinds-in-array	{"a":[{"$expr":"Nof(1,Integer,String)"}]}	{"a":[1.5]}		"Validation failed for index \"a.0\" with number \"1.5\" because the number is not of type integer."
+when-then-ok	{"a":{"$expr":"When(String,Min(2))"}}	{"a":"ab"}	{"a":"ab"}	
+when-then-fail	{"a":{"$expr":"When(String,Min(2))"}}	{"a":"x"}		"Value \"x\" for property \"a\" must be a minimum length of 2 (was 1)."
+when-else-absent	{"a":{"$expr":"When(String,Min(2))"}}	{"a":5}	{"a":5}	
+when-else-fail	{"a":{"$expr":"When(String,Min(2),Max(3))"}}	{"a":5}		"Value \"5\" for property \"a\" must be a maximum of 3 (was 5)."
+when-else-ok	{"a":{"$expr":"When(String,Min(2),Max(3))"}}	{"a":2}	{"a":2}	
+when-absent-required	{"a":{"$expr":"When(String,Min(2))"}}	{}		"Validation failed for property \"a\" because the property is missing."
+when-absent-optional	{"a":{"$expr":"Optional(When(String,Min(2)))"}}	{}	{}	
+when-absent-default	{"a":{"$expr":"Default(\"xy\",When(String,Min(2)))"}}	{}	{"a":"xy"}	
+when-key-expr	{"a: When(String,Min(2))":"xy"}	{}	{"a":"xy"}	
+when-produces	{"$call":["When",{"$open":{}},{"$open":{"b":2}}]}	{"a":1}	{"a":1,"b":2}	
+when-condition-copy	{"$call":["When",{"$open":{"b":2}},{"$expr":"Any"}]}	{"a":1}	{"a":1}	
+when-object-missing	{"$call":["When",{"$open":{"k":{"$expr":"Required"}}},{"$open":{"b":{"$required":{"$type":"Number"}}}}]}	{"k":1}		"Validation failed for property \"b\" because the property is missing."
+when-object-path	{"a":{"$call":["When",{"$open":{"k":{"$expr":"Required"}}},{"$open":{"b":{"$required":{"$type":"Number"}}}}]}}	{"a":{"k":1}}		"Validation failed for property \"a.b\" because the property is missing."
+when-object-skipped	{"a":{"$call":["When",{"$open":{"k":{"$expr":"Required"}}},{"$open":{"b":{"$required":{"$type":"Number"}}}}]}}	{"a":{"j":1}}	{"a":{"j":1}}	
+when-in-nof	{"a":{"$expr":"Nof(1,When(String,Min(2)),Number)"}}	{"a":"x"}		"Value \"x\" for property \"a\" satisfies 0 of: When(String,Min(2),Any), Number; the count must be 1."
+when-ignore-branch	{"a":{"$expr":"When(Number,Ignore(Min(5)))"}}	{"a":3}	{"a":3}	
+contains-min-ok	{"a":{"$expr":"Contains(Min(1),Number)"}}	{"a":["x",1]}	{"a":["x",1]}	
+contains-min-fail	{"a":{"$expr":"Contains(Min(1),Number)"}}	{"a":["x"]}		"Value \"[x]\" for property \"a\" has 0 of its items satisfying Number; the count must be Min(1)."
+contains-empty	{"a":{"$expr":"Contains(Min(1),Number)"}}	{"a":[]}		"Value \"[]\" for property \"a\" has 0 of its items satisfying Number; the count must be Min(1)."
+contains-exact-fail	{"a":{"$expr":"Contains(2,Number)"}}	{"a":[1,"x",2,3]}		"Value \"[1,x,2,3]\" for property \"a\" has 3 of its items satisfying Number; the count must be 2."
+contains-exact-ok	{"a":{"$expr":"Contains(2,Number)"}}	{"a":[1,"x",2]}	{"a":[1,"x",2]}	
+contains-early	{"a":{"$expr":"Contains(Max(1),Number)"}}	{"a":[1,2,3]}		"Value \"[1,2,3]\" for property \"a\" has 2 to 3 of its items satisfying Number; the count must be Max(1)."
+contains-range	{"a":{"$expr":"Contains(Min(2).Max(3),Number)"}}	{"a":[1,2,3,4]}		"Value \"[1,2,3,4]\" for property \"a\" has 4 of its items satisfying Number; the count must be Min(2).Max(3)."
+contains-zero-ok	{"a":{"$expr":"Contains(0,Number)"}}	{"a":["x"]}	{"a":["x"]}	
+contains-not-array	{"a":{"$expr":"Contains(Min(1),Number)"}}	{"a":"x"}		"Validation failed for property \"a\" with string \"x\" because the string is not of type array."
+contains-any-spec	{"a":{"$call":["Contains",{"$expr":"Min(1)"},{"$type":"Number"},{"$expr":"Any"}]}}	{"a":"x"}	{"a":"x"}	
+contains-with-spec	{"a":{"$call":["Contains",1,{"$type":"Number"},[{"$expr":"Min(1)"}]]}}	{"a":[1,0]}		"Value \"[1,0]\" for property \"a\" has 2 of its items satisfying Number; the count must be 1."
+contains-object-items	{"a":{"$call":["Contains",1,{"x":{"$type":"Number"}}]}}	{"a":[{"x":1},2]}	{"a":[{"x":1},2]}	
+contains-items-unchanged	{"a":{"$call":["Contains",{"$expr":"Min(1)"},{"$open":{"b":2}}]}}	{"a":[{"c":1}]}	{"a":[{"c":1}]}	
+contains-key-expr	{"a: Contains(1,Number)":[]}	{"a":[1]}	{"a":[1]}	
+contains-key-expr-absent	{"a: Contains(1,Number)":[]}	{}	{"a":[]}	
+contains-chained	{"a":{"$expr":"Min(1).Contains(1,String)"}}	{"a":[]}		"Value \"[]\" for property \"a\" must be a minimum length of 1 (was 0).\nValue \"[]\" for property \"a\" has 0 of its items satisfying String; the count must be 1."
+contains-in-nof-kinds	{"a":{"$expr":"Nof(1,Contains(Min(1),Number),String)"}}	{"a":["x"]}		"Value \"[x]\" for property \"a\" has 0 of its items satisfying Number; the count must be Min(1)."
+unique-ok	{"a":{"$expr":"Unique"}}	{"a":[1,"1",true,null,[1],{"a":1}]}	{"a":[1,"1",true,null,[1],{"a":1}]}	
+unique-scalar-dup	{"a":{"$expr":"Unique"}}	{"a":[1,2,2,1]}		"Value \"[1,2,2,1]\" for property \"a\" must have unique items (items 1 and 2 are equal)."
+unique-object-dup	{"a":{"$expr":"Unique"}}	{"a":[{"a":1,"b":2},0,{"a":1,"b":2}]}		"Value \"[{a:1,b:2},0,{a:1,b:2}]\" for property \"a\" must have unique items (items 0 and 2 are equal)."
+unique-nested-dup	{"a":{"$expr":"Unique"}}	{"a":[[1,[2]],[1,[2]]]}		"Value \"[[1,[2]],[1,[2]]]\" for property \"a\" must have unique items (items 0 and 1 are equal)."
+unique-key-order	{"a":{"$expr":"Ignore(Unique)"}}	{"a":[{"b":2,"a":1},{"a":1,"b":2}]}	{}	
+unique-array-object	{"a":{"$expr":"Unique"}}	{"a":[[1],{"0":1}]}	{"a":[[1],{"0":1}]}	
+unique-key-sets	{"a":{"$expr":"Unique"}}	{"a":[{"a":1},{"b":1},{"a":1,"b":1}]}	{"a":[{"a":1},{"b":1},{"a":1,"b":1}]}	
+unique-null-dup	{"a":{"$expr":"Unique"}}	{"a":[null,"null",null]}		"Value \"[null,null,null]\" for property \"a\" must have unique items (items 0 and 2 are equal)."
+unique-not-array	{"a":{"$expr":"Unique"}}	{"a":"x"}		"Validation failed for property \"a\" with string \"x\" because the string is not of type array."
+unique-with-spec	{"a":{"$call":["Unique",[{"$type":"String"}]]}}	{"a":["x","x"]}		"Value \"[x,x]\" for property \"a\" must have unique items (items 0 and 1 are equal)."
+unique-chained	{"a":{"$expr":"Max(2).Unique"}}	{"a":[1,1]}		"Value \"[1,1]\" for property \"a\" must have unique items (items 0 and 1 are equal)."
+unique-key-expr	{"a: Unique":[]}	{}	{"a":[]}	
