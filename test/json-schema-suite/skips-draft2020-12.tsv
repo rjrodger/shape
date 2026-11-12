@@ -3,7 +3,7 @@
 # waits on. A * in test covers a whole group, and in group and test a whole file. Each
 # runner fails on a failing test no row covers, on a covered test that passes, and on a
 # ledger longer than its bound. Columns: file, group, test, ports, waits on.
-# bound: 265
+# bound: 196
 additionalProperties.json	additionalProperties being false does not allow other properties	patternProperties are not additional properties	ts go rs	patternProperties
 additionalProperties.json	non-ASCII pattern with additionalProperties	matching the pattern is valid	ts go rs	patternProperties
 allOf.json	allOf combined with anyOf, oneOf	allOf: false, anyOf: false, oneOf: false	ts go rs	multipleOf
@@ -24,33 +24,10 @@ const.json	const with [false] does not match [0]	[false] is valid	ts	const
 const.json	const with [true] does not match [1]	[true] is valid	ts	const
 const.json	const with {"a": false} does not match {"a": 0}	{"a": false} is valid	ts	const
 const.json	const with {"a": true} does not match {"a": 1}	{"a": true} is valid	ts	const
-contains.json	contains keyword validation	array without items matching schema is invalid	ts go rs	contains
-contains.json	contains keyword validation	empty array is invalid	ts go rs	contains
-contains.json	contains keyword with const keyword	array without item 5 is invalid	ts go rs	contains
-contains.json	contains keyword with boolean schema true	empty array is invalid	ts go rs	contains
-contains.json	contains keyword with boolean schema false	any non-empty array is invalid	ts go rs	contains
-contains.json	contains keyword with boolean schema false	empty array is invalid	ts go rs	contains
 contains.json	items + contains	matches items, does not match contains	ts go rs	contains multipleOf
 contains.json	items + contains	does not match items, matches contains	ts go rs	contains multipleOf
 contains.json	items + contains	matches neither items nor contains	ts go rs	contains multipleOf
-contains.json	contains with false if subschema	empty array is invalid	ts go rs	contains if
 defs.json	*	*	ts go rs	$ref
-dependentRequired.json	single dependency	missing dependency	ts go rs	dependentRequired
-dependentRequired.json	multiple dependents required	missing dependency	ts go rs	dependentRequired
-dependentRequired.json	multiple dependents required	missing other dependency	ts go rs	dependentRequired
-dependentRequired.json	multiple dependents required	missing both dependencies	ts go rs	dependentRequired
-dependentRequired.json	dependencies with escaped characters	CRLF missing dependent	ts go rs	dependentRequired
-dependentRequired.json	dependencies with escaped characters	quoted quotes missing dependent	ts go rs	dependentRequired
-dependentSchemas.json	single dependency	wrong type	ts go rs	dependentSchemas
-dependentSchemas.json	single dependency	wrong type other	ts go rs	dependentSchemas
-dependentSchemas.json	single dependency	wrong type both	ts go rs	dependentSchemas
-dependentSchemas.json	boolean subschemas	object with property having schema false is invalid	ts go rs	dependentSchemas
-dependentSchemas.json	boolean subschemas	object with both properties is invalid	ts go rs	dependentSchemas
-dependentSchemas.json	dependencies with escaped characters	quoted quote	ts go rs	dependentSchemas
-dependentSchemas.json	dependencies with escaped characters	quoted tab invalid under dependent schema	ts go rs	dependentSchemas
-dependentSchemas.json	dependencies with escaped characters	quoted quote invalid under dependent schema	ts go rs	dependentSchemas
-dependentSchemas.json	dependent subschema incompatible with root	matches root	ts go rs	dependentSchemas
-dependentSchemas.json	dependent subschema incompatible with root	matches both	ts go rs	dependentSchemas
 dynamicRef.json	A $dynamicRef to a $dynamicAnchor in the same schema resource behaves like a normal $ref to an $anchor	An array containing non-strings is invalid	ts go rs	$dynamicAnchor $dynamicRef $id
 dynamicRef.json	A $dynamicRef to an $anchor in the same schema resource behaves like a normal $ref to an $anchor	An array containing non-strings is invalid	ts go rs	$anchor $dynamicRef $id
 dynamicRef.json	A $ref to a $dynamicAnchor in the same schema resource behaves like a normal $ref to an $anchor	*	ts go rs	$dynamicAnchor $id $ref
@@ -62,10 +39,8 @@ dynamicRef.json	A $dynamicRef without a matching $dynamicAnchor in the same sche
 dynamicRef.json	A $dynamicRef with a non-matching $dynamicAnchor in the same schema resource behaves like a normal $ref to $anchor	*	ts go rs	$anchor $dynamicAnchor $dynamicRef $id $ref
 dynamicRef.json	A $dynamicRef that initially resolves to a schema with a matching $dynamicAnchor resolves to the first $dynamicAnchor in the dynamic scope	*	ts go rs	$dynamicAnchor $dynamicRef $id $ref
 dynamicRef.json	A $dynamicRef that initially resolves to a schema without a matching $dynamicAnchor behaves like a normal $ref to $anchor	*	ts go rs	$anchor $dynamicAnchor $dynamicRef $id $ref
-dynamicRef.json	multiple dynamic paths to the $dynamicRef keyword	number list with string values	ts go rs	$dynamicAnchor $dynamicRef $id $ref if
-dynamicRef.json	multiple dynamic paths to the $dynamicRef keyword	string list with number values	ts go rs	$dynamicAnchor $dynamicRef $id $ref if
-dynamicRef.json	after leaving a dynamic scope, it is not used by a $dynamicRef	string matches /$defs/thingy, but the $dynamicRef does not stop here	ts go rs	$dynamicAnchor $dynamicRef $id $ref if
-dynamicRef.json	after leaving a dynamic scope, it is not used by a $dynamicRef	first_scope is not in dynamic scope for the $dynamicRef	ts go rs	$dynamicAnchor $dynamicRef $id $ref if
+dynamicRef.json	multiple dynamic paths to the $dynamicRef keyword	*	ts go rs	$dynamicAnchor $dynamicRef $id $ref if
+dynamicRef.json	after leaving a dynamic scope, it is not used by a $dynamicRef	*	ts go rs	$dynamicAnchor $dynamicRef $id $ref if
 dynamicRef.json	strict-tree schema, guards against misspelled properties	*	ts go rs	$dynamicAnchor $id $ref unevaluatedProperties
 dynamicRef.json	tests for implementation dynamic anchor and reference link	*	ts go rs	$dynamicAnchor $id $ref
 dynamicRef.json	$ref and $dynamicAnchor are independent of order - $defs first	*	ts go rs	$dynamicAnchor $id $ref
@@ -88,35 +63,9 @@ format.json	ipv6 format	invalid ipv6 string is only an annotation by default	ts 
 format.json	date-time format	invalid date-time string is only an annotation by default	ts go rs	format
 format.json	uri format	invalid uri string is only an annotation by default	ts go rs	format
 format.json	uuid format	invalid uuid string is only an annotation by default	ts go rs	format
-if-then-else.json	if and then without else	invalid through then	ts go rs	if
 if-then-else.json	if and else without then	invalid through else	ts go rs	if multipleOf
-if-then-else.json	validate against correct branch, then vs else	invalid through then	ts go rs	if multipleOf
 if-then-else.json	validate against correct branch, then vs else	invalid through else	ts go rs	if multipleOf
-if-then-else.json	if with boolean schema true	boolean schema true in if always chooses the then path (invalid)	ts go rs	if
-if-then-else.json	if with boolean schema false	boolean schema false in if always chooses the else path (invalid)	ts go rs	if
-if-then-else.json	if appears at the end when serialized (keyword processing sequence)	no redirects to then and fails	ts go rs	if
-if-then-else.json	if appears at the end when serialized (keyword processing sequence)	invalid redirects to else and fails	ts go rs	if
-if-then-else.json	then: false fails when condition matches	matches if → then=false → invalid	ts go rs	if
-if-then-else.json	else: false fails when condition does not match	does not match if → else executes → invalid	ts go rs	if
-maxContains.json	maxContains with contains	empty data	ts go rs	contains
-maxContains.json	maxContains with contains	all elements match, invalid maxContains	ts go rs	contains
-maxContains.json	maxContains with contains	some elements match, invalid maxContains	ts go rs	contains
-maxContains.json	maxContains with contains, value with a decimal	too many elements match, invalid maxContains	ts go rs	contains
-maxContains.json	minContains < maxContains	actual < minContains < maxContains	ts go rs	contains
-maxContains.json	minContains < maxContains	minContains < maxContains < actual	ts go rs	contains
-maxContains.json	maxContains = 0 with minContains = 0	one matching item	ts go rs	contains
 maxLength.json	maxLength validation	two graphemes is long enough	ts go rs	maxLength
-minContains.json	minContains=1 with contains	empty data	ts go rs	contains
-minContains.json	minContains=1 with contains	no elements match	ts go rs	contains
-minContains.json	minContains=2 with contains	empty data	ts go rs	contains
-minContains.json	minContains=2 with contains	all elements match, invalid minContains	ts go rs	contains
-minContains.json	minContains=2 with contains	some elements match, invalid minContains	ts go rs	contains
-minContains.json	minContains=2 with contains with a decimal value	one element matches, invalid minContains	ts go rs	contains
-minContains.json	maxContains = minContains	empty data	ts go rs	contains
-minContains.json	maxContains = minContains	all elements match, invalid minContains	ts go rs	contains
-minContains.json	maxContains = minContains	all elements match, invalid maxContains	ts go rs	contains
-minContains.json	maxContains < minContains	*	ts go rs	contains
-minContains.json	minContains = 0 with maxContains	too many	ts go rs	contains
 minLength.json	minLength validation	one grapheme is not long enough	ts go rs	minLength
 multipleOf.json	by int	int by int fail	ts go rs	multipleOf
 multipleOf.json	by number	35 is not multiple of 1.5	ts go rs	multipleOf
@@ -196,7 +145,6 @@ unevaluatedItems.json	unevaluatedItems before $ref	with unevaluated items	ts go 
 unevaluatedItems.json	unevaluatedItems with $dynamicRef	*	ts go rs	$dynamicAnchor $dynamicRef $id $ref unevaluatedItems
 unevaluatedItems.json	unevaluatedItems can't see inside cousins	*	ts go rs	unevaluatedItems
 unevaluatedItems.json	item is evaluated in an uncle schema to unevaluatedItems	uncle keyword evaluation is not significant	ts go rs	unevaluatedItems
-unevaluatedItems.json	unevaluatedItems depends on adjacent contains	contains fails, second item is not evaluated	ts go rs	contains unevaluatedItems
 unevaluatedItems.json	unevaluatedItems depends on adjacent contains	contains passes, second item is not evaluated	ts go rs	contains unevaluatedItems
 unevaluatedItems.json	unevaluatedItems depends on multiple nested contains	7 not evaluated, fails unevaluatedItems	ts go rs	contains multipleOf unevaluatedItems
 unevaluatedItems.json	unevaluatedItems and contains interact to control item dependency relationship	only b's are invalid	ts go rs	contains if unevaluatedItems
@@ -251,21 +199,4 @@ unevaluatedProperties.json	dependentSchemas with unevaluatedProperties	unevaluat
 unevaluatedProperties.json	Evaluated properties collection needs to consider instance location	*	ts go rs	unevaluatedProperties
 unevaluatedProperties.json	Evaluated properties collection needs to consider instance location with patternProperties	with an unevaluated property that exists at another location	ts go rs	patternProperties unevaluatedProperties
 unevaluatedProperties.json	Evaluated properties collection needs to consider instance location with additionalProperties	with an unevaluated property that exists at another location	ts go rs	unevaluatedProperties
-uniqueItems.json	uniqueItems validation	non-unique array of integers is invalid	ts go rs	uniqueItems
-uniqueItems.json	uniqueItems validation	non-unique array of more than two integers is invalid	ts go rs	uniqueItems
-uniqueItems.json	uniqueItems validation	numbers are unique if mathematically unequal	ts go rs	uniqueItems
-uniqueItems.json	uniqueItems validation	non-unique array of strings is invalid	ts go rs	uniqueItems
-uniqueItems.json	uniqueItems validation	non-unique array of objects is invalid	ts go rs	uniqueItems
-uniqueItems.json	uniqueItems validation	property order of array of objects is ignored	ts go rs	uniqueItems
-uniqueItems.json	uniqueItems validation	non-unique array of nested objects is invalid	ts go rs	uniqueItems
-uniqueItems.json	uniqueItems validation	non-unique array of arrays is invalid	ts go rs	uniqueItems
-uniqueItems.json	uniqueItems validation	non-unique array of more than two arrays is invalid	ts go rs	uniqueItems
-uniqueItems.json	uniqueItems validation	non-unique heterogeneous types are invalid	ts go rs	uniqueItems
-uniqueItems.json	uniqueItems validation	objects are non-unique despite key order	ts go rs	uniqueItems
-uniqueItems.json	uniqueItems with an array of items	[false, false] from items array is not valid	ts go rs	uniqueItems
-uniqueItems.json	uniqueItems with an array of items	[true, true] from items array is not valid	ts go rs	uniqueItems
-uniqueItems.json	uniqueItems with an array of items	non-unique array extended from [false, true] is not valid	ts go rs	uniqueItems
-uniqueItems.json	uniqueItems with an array of items	non-unique array extended from [true, false] is not valid	ts go rs	uniqueItems
-uniqueItems.json	uniqueItems with an array of items and additionalItems=false	[false, false] from items array is not valid	ts go rs	uniqueItems
-uniqueItems.json	uniqueItems with an array of items and additionalItems=false	[true, true] from items array is not valid	ts go rs	uniqueItems
 vocabulary.json	schema that uses custom metaschema with with no validation vocabulary	no validation: invalid number, but it still validates	ts go rs	$id
