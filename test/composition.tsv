@@ -87,6 +87,9 @@ when-object-path	{"a":{"$call":["When",{"$open":{"k":{"$expr":"Required"}}},{"$o
 when-object-skipped	{"a":{"$call":["When",{"$open":{"k":{"$expr":"Required"}}},{"$open":{"b":{"$required":{"$type":"Number"}}}}]}}	{"a":{"j":1}}	{"a":{"j":1}}	
 when-in-nof	{"a":{"$expr":"Nof(1,When(String,Min(2)),Number)"}}	{"a":"x"}		"Value \"x\" for property \"a\" satisfies 0 of: When(String,Min(2),Any), Number; the count must be 1."
 when-ignore-branch	{"a":{"$expr":"When(Number,Ignore(Min(5)))"}}	{"a":3}	{"a":3}	
+all-after-array-sibling	{"a":[{"$type":"Number"}],"c":{"$expr":"All(Min(5))"}}	{"a":[1],"c":3}		"Value \"3\" for property \"c\" must be a minimum of 5 (was 3)."
+when-after-array-sibling	{"a":[{"$type":"Number"}],"c":{"$expr":"When(Number,Min(5))"}}	{"a":[1],"c":3}		"Value \"3\" for property \"c\" must be a minimum of 5 (was 3)."
+all-after-nested-array	{"a":[[{"$type":"Number"}]],"b":{"c":{"$expr":"All(Min(5))"}}}	{"a":[[1]],"b":{"c":3}}		"Value \"3\" for property \"b.c\" must be a minimum of 5 (was 3)."
 contains-min-ok	{"a":{"$expr":"Contains(Min(1),Number)"}}	{"a":["x",1]}	{"a":["x",1]}	
 contains-min-fail	{"a":{"$expr":"Contains(Min(1),Number)"}}	{"a":["x"]}		"Value \"[x]\" for property \"a\" has 0 of its items satisfying Number; the count must be Min(1)."
 contains-empty	{"a":{"$expr":"Contains(Min(1),Number)"}}	{"a":[]}		"Value \"[]\" for property \"a\" has 0 of its items satisfying Number; the count must be Min(1)."

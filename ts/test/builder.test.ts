@@ -535,9 +535,15 @@ describe('builder', () => {
     deepEqual(Shape(When(Open({ b: 2 }), Any()))(input), { a: 1 })
     deepEqual(input, { a: 1 })
 
-    // Errors name the path; an absent value is not tried.
+    // Errors name the path, after an array sibling too; an absent value is
+    // not tried.
     throws(() => Shape({ a: { b: When(String, Min(2)) } })({ a: { b: 'x' } }),
       'Value "x" for property "a.b" must be a minimum length of 2 (was 1).')
+    throws(() => Shape({ a: [Number], c: When(Number, Min(5)) })({ a: [1], c: 3 }),
+      'Value "3" for property "c" must be a minimum of 5 (was 3).')
+    const after: any = { err: [] }
+    Shape({ a: [Number], c: Number })({ a: [1], c: 'x' }, after)
+    deepEqual(after.err.map((e: any) => e.pathArr), [['c']])
     throws(() => Shape({ a: When(String, Min(2)) })({}),
       'Validation failed for property "a" because the property is missing.')
     deepEqual(Shape({ a: Optional(When(String, Min(2))) })({}), {})
@@ -565,6 +571,9 @@ describe('builder', () => {
     throws(() => Shape(Contains(2, Number))([1, 'a', 2, 3]),
       'Value "[1,a,2,3]" for property "" has 3 of its items satisfying Number; the count must be 2.')
     deepEqual(Shape(Contains(0, Number))(['a']), ['a'])
+    // A count no number satisfies decides before any item is tried.
+    throws(() => Shape(Contains(Max(1, Min(2)), Number))([1, 2, 3]),
+      'Value "[1,2,3]" for property "" has 0 to 3 of its items satisfying Number; the count must be Min(2).Max(1).')
     // A count that is not an interval of whole numbers is read count by count.
     const evens = Shape(Contains(Exact(0, 2), Number))
     deepEqual(evens(['a', 1, 2]), ['a', 1, 2])

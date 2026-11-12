@@ -567,9 +567,6 @@ class State {
     // zero or the end of the stack stops the walk below).
     let nextNode = this.nodes[this.pI]
 
-    // See note for path below.
-    this.ancestors[this.dI] = this.node
-
     while (S.number === typeof nextNode && 0 !== nextNode) {
       this.dI--
 
@@ -615,7 +612,7 @@ class State {
 
     // NOTE: this is always correct for the current node, up to dI, because
     // previous values at dI get overwritten. Avoids need to duplicate on each descent.
-    // ancestors uses same approach.
+    // ancestors[dI] is set where the walk descends to dI (see exec).
     this.path[this.dI] = this.key
 
     this.oval = this.val
@@ -1436,6 +1433,9 @@ function shapify<const S>(intop?: S, inopts?: ShapeOptions) {
 
               if (hasKeys) {
                 s.dI++
+                // The parent of every child at this depth, until a node at
+                // the depth above descends again.
+                s.ancestors[s.dI] = n
                 s.nodes[s.nI] = s.sI
                 s.parents[s.nI] = val
                 s.nextSibling = false
@@ -1537,6 +1537,7 @@ function shapify<const S>(intop?: S, inopts?: ShapeOptions) {
 
               if (!s.ignoreVal && s.pI < s.nI) {
                 s.dI++
+                s.ancestors[s.dI] = n
                 s.nodes[s.nI] = s.sI
                 s.parents[s.nI] = s.val
                 s.nextSibling = false
@@ -3837,7 +3838,7 @@ const Contains = function Contains(this: any, count: any, inshape: any, spec?: a
     // of admitted counts.
     const n = val.length
     let span = (k: number, open: number) =>
-      bounds.hi < k || k + open < bounds.lo ? NOF_NONE :
+      Math.min(bounds.hi, k + open) < Math.max(bounds.lo, k) ? NOF_NONE :
         bounds.lo <= k && k + open <= bounds.hi ? 2 : NOF_SOME
     if (!bounds.exact) {
       const yes = [0]

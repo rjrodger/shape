@@ -375,6 +375,10 @@ const files = {
       { a: { j: 1 } }],
     ['when-in-nof', { a: { $expr: 'Nof(1,When(String,Min(2)),Number)' } }, { a: 'x' }],
     ['when-ignore-branch', { a: { $expr: 'When(Number,Ignore(Min(5)))' } }, { a: 3 }],
+    // A composition after an array sibling names its own property.
+    ['all-after-array-sibling', { a: [N], c: { $expr: 'All(Min(5))' } }, { a: [1], c: 3 }],
+    ['when-after-array-sibling', { a: [N], c: { $expr: 'When(Number,Min(5))' } }, { a: [1], c: 3 }],
+    ['all-after-nested-array', { a: [[N]], b: { c: { $expr: 'All(Min(5))' } } }, { a: [[1]], b: { c: 3 } }],
     // Contains: the number of items its shape admits, as the count asks.
     ['contains-min-ok', { a: { $expr: 'Contains(Min(1),Number)' } }, { a: ['x', 1] }],
     ['contains-min-fail', { a: { $expr: 'Contains(Min(1),Number)' } }, { a: ['x'] }],
