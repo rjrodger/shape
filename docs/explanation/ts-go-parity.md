@@ -101,7 +101,9 @@ Some differences are inherent to Go and are unlikely ever to close.
   defaults fill, mirroring TS `Shape(x)()`. To mean a value that is present and
   null—a type error against a typed shape—pass the exported `Null`
   sentinel. Inside a map or slice a plain `nil` already reads as present-null,
-  because the key or index exists.
+  because the key or index exists. A builder argument is read the same way:
+  `When(nil, …)` and `Contains(nil, …)` are faults in Go, so pass `Null` for
+  a condition or count that is null.
 
 - **No Symbol.** TypeScript has a `Symbol` type token and a `.Symbol()` chain
   shortcut. Go has no equivalent concept.
@@ -136,8 +138,9 @@ Some differences are inherent to Go and are unlikely ever to close.
 
 - **Composite messages render object and array branches differently.** The
   `satisfies 2 of` list of `Nof` names each branch, and names its count
-  when the count is a shape. (`All` names none: it reports the errors of the
-  branches that fail.) TypeScript renders a node branch in its spec form
+  when the count is a shape; a `When` among the branches names its own
+  three, and a `Contains` names its item shape. (`All` and `When` name none
+  of their own: each reports the errors of the shapes that fail.) TypeScript renders a node branch in its spec form
   (`{a:1,$$:Open}`, `[String,Number]`, `Exact(1,x)`, and `[Number]` for a
   rest tuple) and a
   plain object or array literal as JSON (`{"b":"String","c":["Number"]}`);
@@ -152,8 +155,14 @@ Some differences are inherent to Go and are unlikely ever to close.
   alike. The same holds for an imported `enum` or `const` whose value is an
   object or an array.
 
+- **`Unique` and values JSON does not have.** All three compare JSON values
+  alike. Beyond them, TypeScript takes a value that is neither a plain
+  object, an array nor a scalar, such as a `Date`, as equal to itself alone;
+  Go compares a `time.Time` by value, never takes two functions as equal,
+  and reads a typed slice, map or struct as the validator reads it.
+
 - **A check around a composition.** Go and Rust run a node's own checks
-  before its `All` or `Nof`, and one that fails ends them, so
+  before its `All`, `Nof` or `When`, and one that fails ends them, so
   `Min(2, Nof(1, Boolean, Integer))` given `1.5` reports the bound alone;
   TypeScript reports the `Nof`'s error as well.
 

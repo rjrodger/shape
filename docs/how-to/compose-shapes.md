@@ -1,7 +1,8 @@
 # How to compose shapes
 
 **Goal:** accept a value that matches one of several shapes, all of them, a
-counted number of them, or a fixed set of literal values.
+counted number of them, the shape a condition picks, or a fixed set of literal
+values.
 
 ## Which to use
 
@@ -12,6 +13,7 @@ counted number of them, or a fixed set of literal values.
 | none of them: "not this" | `Nof(0, …)` |
 | any other count: at least two, at most one, … | `Nof(count, …)` |
 | every one, each building on the last | `All(…)` |
+| one shape where a condition holds, another where it does not | `When(cond, then, else)` |
 | one of a few literal values | `Exact(…)` |
 | one of several objects told apart by one property | `Discriminated(tag, { … })` |
 
@@ -107,6 +109,30 @@ s := shape.MustShape(map[string]any{"v": shape.Nof(1, shape.Number, shape.Intege
 The last failure counts "0 to 1" because `Nof` stopped after two branches:
 one branch left could not have reached two.
 
+## The shape a condition picks: `When`
+
+`When(cond, then, else)` validates the value with `then` where it matches
+`cond`, and with `else` where it does not. The condition is tried on a copy,
+so it fills nothing in. The shape it picks validates the value, and its
+errors are the errors. An arm not given passes.
+
+```js
+const { Shape, When, Open, Required, Exact } = require('shape')
+
+const order = Shape(When(
+  Open({ ship: Exact(true) }),
+  Open({ address: Required(String) }),
+))
+
+order({ ship: false })          // OK: nothing to ship, no address needed
+order({ ship: true })           // throws: property "address" ... is missing
+```
+
+The condition is often an object that holds a property, as the
+`dependentRequired` keyword of JSON Schema reads: `When(Open({ card: Required() }),
+Open({ expiry: Required() }))` asks for an `expiry` wherever there is a
+`card`.
+
 ## One of a set of literal values: `Exact`
 
 `Exact` compares by equality against the listed literals.
@@ -165,6 +191,9 @@ pet := shape.MustShape(shape.Discriminated("kind", map[string]any{
 - `Nof` tries a branch only while the branches left untried could still
   change the verdict, so `Nof(Min(1), …)` stops at the first match and
   `Nof(1, …)` at the second.
+- Each branch `Nof` tries, and each `When` condition, is a trial, and one
+  validation may run 100,000 of them (see
+  [Trials](../reference/builders.md#trials)).
 - No branch changes the value it was given: each is tried on a copy.
   `Nof(1, …)` produces from the one branch that matched
   (`Nof(1, Open({b:2}), Number)` on `{a:1}` gives `{a:1,b:2}`). Any other
@@ -176,5 +205,5 @@ pet := shape.MustShape(shape.Discriminated("kind", map[string]any{
   of the listed literals.
 - These builders are not chainable methods—call them as top-level builders.
 - An absent optional composition (`Optional(Nof(1, String, Number))`) is simply
-  absent; it is not put to its branches. `Nof` never puts an absent value to
-  its branches, so a required one reports the value missing.
+  absent; it is not put to its branches. `Nof` and `When` never put an absent
+  value to their shapes, so a required one reports the value missing.

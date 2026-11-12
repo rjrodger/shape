@@ -12,7 +12,8 @@ three implementations:
 Each runner imports every schema, validates every instance, and compares the
 verdict with the suite's. The tests the import cannot honour yet are listed
 in a skip ledger, one per draft. The ledgers make the suite a ratchet: Shape
-can come to pass more of it, and cannot quietly pass less.
+can come to pass more of it, and cannot pass less without a change to a
+ledger.
 
 ## Provenance
 
@@ -50,7 +51,7 @@ A `# bound: N` line caps the number of rows. Every runner fails the run when:
 
 A change that makes tests pass deletes their rows and lowers the bound to the
 new count. A change that makes a test fail has to add a row and raise the
-bound, which a reviewer sees.
+bound, both plain in its diff.
 
 TypeScript fails the rows marked `ts` alone because its `Exact` compares an
 object or an array by identity, where Go and Rust compare by value; see

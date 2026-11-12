@@ -13,3 +13,4 @@ These are not user documentation—for that, start at the
 | [0002](0002-nof-replaces-one-and-some.md) | `Nof` replaces `One` and `Some` | Accepted |
 | [0003](0003-rust-builders-keep-their-canonical-names.md) | Rust builders keep their canonical names | Accepted |
 | [0004](0004-json-schema-keywords-apply-together-by-kind.md) | JSON Schema keywords apply together, by kind | Accepted |
+| [0005](0005-trials-share-one-budget.md) | Trials share one budget per validation | Accepted |

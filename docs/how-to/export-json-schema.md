@@ -76,6 +76,9 @@ alongside the validation results.
 | a bare `/re/`, `Check(/re/)` | `pattern` |
 | `All` | `allOf` |
 | `Nof` | a count of none, exactly one or every branch: `not` (of an `anyOf` when there are several), `oneOf`, `allOf`; at least one is `anyOf`, and not every one is `not` of an `allOf`. Exactly one of a shape for every kind of JSON value is a schema with no `type`: each kind's keywords side by side |
+| `When` | `if`, with `then` and `else` where the arm says something |
+| `Contains` | `contains`, with the count as `minContains` and `maxContains`: an exact count is both, and a count shape the bounds of its `Min`, `Max`, `Above`, `Below` and `Len`. `minContains: 1` is the default, and is left out |
+| `Unique` | `uniqueItems: true` |
 | `Discriminated` | `oneOf`, each branch with the tag as a `const` and required |
 | `Nullable` | `type: [t, "null"]` |
 | `Define(name)` / `Refer(name)` | the definition under `$defs`; `{ "$ref": "#/$defs/name" }` |
@@ -86,7 +89,9 @@ alongside the validation results.
 JSON Schema has no keyword for any other count, so a `Nof` such as
 `Nof(Min(2), a, b, c)` exports the bound it implies: `anyOf` when the count
 never admits none, `not` of an `allOf` when it never admits every branch.
-The schema then accepts more than the shape does.
+The schema then accepts more than the shape does. The same holds for a
+`Contains` count shape with a check that has no bound, such as a function
+`Check`: the export leaves the check out.
 
 `Catch`, `Transform` and `Ignore` are transparent: the schema describes the
 shape inside them. `Coerce`, `Rename` and `Key` change what comes *out*, not
@@ -171,8 +176,10 @@ email('nope')  // throws: Value "nope" for property "" is not a valid email addr
 Such a schema reads as `Nof(1, …)` of a shape for each kind of JSON value,
 and the value's kind chooses among them (see
 [`Nof`](../reference/builders.md#composition)), so the error is that kind's
-own. Within a schema that has one `type`, the schemas under `not`, `allOf`,
-`anyOf` and `oneOf` are read for that kind alone.
+own. Within a schema that has one `type`, the schemas under `not`, `if`,
+`then`, `else`, `allOf`, `anyOf` and `oneOf` are read for that kind alone, and
+a `dependentSchemas` schema, which only an object with its property meets, is
+read for objects alone.
 
 A `$ref` is one keyword among the others, as it is from draft 2019-09: the
 keywords beside it apply too. A document whose `$schema` names draft 7 or
@@ -194,12 +201,17 @@ ignored.
 | `enum`, `const` | `Exact(...)` of the values the other keywords allow; none is `Never`, as is an empty `enum` |
 | `anyOf`, `oneOf`, `allOf` | `Nof(Min(1), …)`, `Nof(1, …)`, `All`; a `oneOf` of objects that each require a distinct string `const` on one property is `Discriminated` on it |
 | `not` | `Nof(0, s)`, ahead of the other keywords, so it applies to the value as given, before a default fills it; `not: {}` is `Never`, whatever else the schema says |
+| `if`, `then`, `else` | `When(if, then, else)`, next after `not` and for the same reason; an `if` with neither `then` nor `else` says nothing |
+| `dependentRequired`, `dependentSchemas` | for each entry, a `When` on the object holding that property: `When(Open({ k: Required() }), …)` of the names listed, each `Required`, or of the schema given. Draft 7's `dependencies` is either, where neither of the two is written |
+| `contains`, `minContains`, `maxContains` | `Contains(count, shape)` on the array, at least one unless `minContains` says otherwise; a count of at least none says nothing |
+| `uniqueItems` | `true`: `Unique` on the array |
 | `true`, `false` | `Any`; `Never`. The whole document may be either |
 | `default`, `description` | `Default`, `Describe` |
 | `$ref: "#/$defs/name"` (or `definitions`), `$ref: "#"` | the definition, inlined where it is referenced; a definition that refers to itself is `Define`d at its outermost use and `Refer`red within, so recursion validates |
 
-Keywords with no counterpart (`patternProperties`, `uniqueItems`,
-`dependentRequired`, `if`/`then`, `$ref` to another document…) are ignored.
+Keywords with no counterpart (`patternProperties`, `propertyNames`,
+`multipleOf`, `unevaluatedProperties`, `$ref` to another document…) are
+ignored.
 A wrong type, an unknown reference, a bad pattern, or a keyword of the wrong
 shape (`items: null`) is an error naming the location, such as
 `JSON Schema: unknown type "strng" at /properties/a`.
@@ -210,17 +222,15 @@ An ignored keyword lets through a value the schema forbids. To be told
 instead, import strictly:
 
 ```js
-fromJsonSchema({ type: 'array', uniqueItems: true }, { strict: true })
-// throws: JSON Schema: unsupported keyword "uniqueItems" at /
+fromJsonSchema({ type: 'number', multipleOf: 2 }, { strict: true })
+// throws: JSON Schema: unsupported keyword "multipleOf" at /
 ```
 
 `FromJSONSchemaWith(schema, shape.JSONSchemaImportOptions{Strict: true})` in
 Go and `from_json_schema_with(&schema, &JsonSchemaImportOptions { strict: true })`
-in Rust do the same. A strict import refuses `if`, `contains`,
-`dependentRequired`, `dependentSchemas`, `dependencies`, `multipleOf`,
-`patternProperties`, `propertyNames`, `uniqueItems` (unless `false`),
-`unevaluatedItems`, `unevaluatedProperties`, `$dynamicRef` and
-`$recursiveRef`.
+in Rust do the same. A strict import refuses `multipleOf`,
+`patternProperties`, `propertyNames`, `unevaluatedItems`,
+`unevaluatedProperties`, `$dynamicRef` and `$recursiveRef`.
 
 ### Round trips
 

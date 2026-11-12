@@ -115,17 +115,23 @@ compiles to, where a chain starts; pass `Any()` for the bare form.
 | `Required(spec)`, `Optional(spec)`, `Default(value, spec)`, `DefaultOf(value)` | `.Required()`, `.Optional()`, `.Default(value)` |
 | `Skip(spec)`, `Ignore(spec)`, `Empty(spec)`, `Nullable(spec)`, `Fault(msg, spec)`, `Never(spec)` | `.Skip()`, `.Ignore()`, `.Empty()`, `.Nullable()`, `.Fault(msg)`, `.Never()` |
 | `Open(spec)`, `Closed(spec)`, `Child(child, spec)`, `Rest(child, spec)` | `.Open()`, `.Closed()`, `.Child(c)`, `.Rest(c)` |
+| `Contains(count, shape, spec)` (the count a whole number, or a spec for it), `Unique(spec)` | `.Contains(count, shape)`, `.Unique()` |
 | `Type(kind, spec)`, `Func(spec)` | `.Type(kind)`, `.String()`, `.Number()`, `.Boolean()`, `.Object()`, `.Array()`, `.Function()`, `.Integer()`, `.Date()`, `.Any()`, `.Func()` |
 | `Exact(values)` | `.Exact(values)` |
 | `Min(bound, spec)`, `Max(..)`, `Above(..)`, `Below(..)`, `Len(length, spec)` | `.Min(b)`, `.Max(b)`, `.Above(b)`, `.Below(b)`, `.Len(n)` |
 | `Check(f, spec)`, `CheckRe(regex, spec)`, `Before(f, spec)`, `After(f, spec)` | `.Check(f)`, `.CheckRe(re)`, `.Before(f)`, `.After(f)` |
-| `All(shapes)`, `Nof(count, shapes)` (the count a whole number, or a spec for it), `Discriminated(tag, branches)` (the branches `(name, spec)` pairs) | n/a |
+| `All(shapes)`, `Nof(count, shapes)` (the count a whole number, or a spec for it), `When(cond, then, otherwise)`, `Discriminated(tag, branches)` (the branches `(name, spec)` pairs) | n/a |
 | `Define(name, spec)`, `Refer(name, spec)`, `ReferWith(name, ReferOptions, spec)` | `.Define(name)`, `.Refer(name)`, `.ReferWith(name, opts)` |
 | `Rename(name, spec)`, `RenameWith(name, RenameOptions, spec)` | `.Rename(name)`, `.RenameWith(name, opts)` |
 | `Key()`, `KeyDepth(depth)`, `KeyJoin(depth, sep)`, `KeyArgs(&[Value])` | n/a |
 | `Catch(fallback, spec)`, `Transform(f, spec)`, `Describe(text, spec)` | `.Catch(v)`, `.Transform(f)`, `.Describe(text)` |
 | `Coerce(spec)`, `Email(spec)`, `Url(spec)`, `Uuid(spec)`, `DateTime(spec)`, `Ip(spec)`, `Ipv4(spec)`, `Ipv6(spec)` | `.Coerce()`, `.Email()`, `.Url()`, `.Uuid()`, `.DateTime()`, `.Ip()`, `.Ipv4()`, `.Ipv6()` |
 | `Pick(names, spec)`, `Omit(names, spec)`, `Partial(spec)`, `Extend(extra, spec)` | `.Pick(names)`, `.Omit(names)`, `.Partial()`, `.Extend(extra)` |
+
+`When` takes both arms: pass `Any()` for an arm that lets every value
+through, as TypeScript's `When(cond, then)` does for the arm it is not
+given. The bare forms of `Contains` and `Unique`, an array of anything, take
+`arr::<Spec>([])` as their spec.
 
 The chain method `.Default(value)` leaves `Default::default` alone, since
 Rust names are case-sensitive, and `Type` needs no escape, not being a
@@ -170,11 +176,12 @@ The `Context` carries `custom`, a typed map of the caller's own state
 
 ## Options
 
-`Options` has three switches, as the canonical `ShapeOptions` does:
-`key_expr` (on: `"a: Min(1)"` keys are key expressions), `meta` with
-`meta_suffix` (off: `"a$$"` keys are metadata for `"a"`) and `val_expr` with
+`Options` has three switches and a budget, as the canonical `ShapeOptions`
+does: `key_expr` (on: `"a: Min(1)"` keys are key expressions), `meta` with
+`meta_suffix` (off: `"a$$"` keys are metadata for `"a"`), `val_expr` with
 `val_expr_mark` (off: the string under the mark key is an expression applied
-to the object).
+to the object), and `trials`, the trials one validation may run, where `0`
+means the default of 100,000 (see [Trials](builders.md#trials)).
 
 ## Errors
 

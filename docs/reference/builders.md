@@ -149,6 +149,7 @@ A bound outside the isolation still applies to what comes out:
 | ------- | ------ |
 | `All(shapes…)` | Passes only if every branch matches; the value is threaded through each, so later branches see what earlier ones produced (`All(Open({a:1}), Open({b:2}))` on `{}` gives `{a:1,b:2}`). A failure reports the errors of the branches that fail, each once. |
 | `Nof(count, shapes…)` | Passes if the number of branches the value matches is one the count admits. The count is a whole number, for exactly that many (`Nof(1, …)` is exactly one, `Nof(0, s)` is not `s`), or a shape the number must satisfy (`Nof(Min(1), …)` is at least one). A count of exactly one produces: the branch that matched makes the result. Any other count leaves the value as it was given. |
+| `When(cond, then?, else?)` | Validates the value with `then` where it matches `cond`, and with `else` where it does not. The shape it picks produces the result, and its errors are the errors. An arm not given passes: `When(String, Min(2))` lets a number through. |
 | `Discriminated(tag, { name: shape, … })` | A tagged union: the branch is chosen by the string value of the `tag` property and the value validated against that branch **alone**, so the errors are its own rather than a list of every alternative. |
 
 Neither changes the value it was given: each branch matches and produces
@@ -196,9 +197,43 @@ Value "{bark:true}" for property "p" is not an object with a "kind" property.
 Value "{kind:cat}" for property "p" has unknown "kind" "cat", expected one of: dog, fish.
 ```
 
+`When` checks a copy of the value against its condition, so the condition
+never fills a default in. The arm it picks validates the value itself:
+`When(Open({}), Open({b:2}))` on `{a:1}` gives `{a:1,b:2}`. A failure is the
+arm's own error:
+
+```
+Value "x" for property "v" must be a minimum length of 2 (was 1).
+```
+
+That is `When(String, Min(2))` given `"x"`. `When` without a condition throws
+`Shape: When needs a shape for its condition` in TypeScript, and in Go and
+Rust makes a node that reports it.
+
 An absent optional composition (`Optional(Nof(1, String, Number))`) is simply
-absent; it is not put to its branches. `Nof` never puts an absent value to
-its branches: a required `Nof` given nothing reports the value missing.
+absent; it is not put to its branches. `Nof` and `When` never put an absent
+value to their shapes: a required one given nothing reports the value
+missing.
+
+### Trials
+
+`Nof`, `When` and `Contains` try shapes on a copy of a value, and each try
+is a trial: a branch `Nof` counts, a `When` condition, an item `Contains`
+counts. One validation may run 100,000 trials. A validation within another,
+such as a composition's branch, counts against the same budget. Past it, the
+validation fails with one error, at the value of the `Nof`, `When` or
+`Contains` whose trial was refused:
+
+```
+Value "[1,2]" for property "v" needs more trials than the budget of 1.
+```
+
+It is the validation's only error. A trial the budget refused could have
+decided any verdict, `Nof(0, …)` included, so no other error is reliable.
+The `trials` option sets the budget: `Shape(spec, { trials: 1000000 })` in
+TypeScript, `ShapeOptions{Trials: 1000000}` in Go, and
+`Options { trials: 1_000_000, ..Default::default() }` in Rust. Anything other
+than a whole number of one or more is the default.
 
 ## Objects / arrays
 
@@ -208,6 +243,29 @@ its branches: a required `Nof` given nothing reports the value missing.
 | `Closed(spec?)` | Forbid unknown properties; makes a single-shape array a fixed tuple-of-one. |
 | `Child(child, spec?)` | Default shape for every unknown object value (or array element). |
 | `Rest(child, spec?)` | Tail shape for array elements past the fixed tuple positions: `Rest(Number, [String, Boolean])`. A single-shape array is an element shape, not a tuple, so a one-element prefix is `Rest(Number, Closed([String]))`, and `Rest(Number, [String])` is an array of numbers—the rest replaces a plain element shape. Bare `Rest(Number)` is the same as `[Number]`. |
+| `Contains(count, shape, spec?)` | The number of the array's items that match `shape` must be one the count admits: a whole number, for exactly that many, or a shape the number must satisfy (`Contains(Min(1), Number)` is at least one number). Bare, it is an array of anything; the items are left as they were. |
+| `Unique(spec?)` | No two of the array's items may be equal as JSON values: a number by its value, an array by its items in order, an object by its keys and their values in any order. Bare, it is an array of anything. |
+
+`Contains` tries the items in order, each on a copy, and stops once the
+items left cannot change the verdict (see [Trials](#trials)):
+
+```
+Value "[a,b]" for property "v" has 0 of its items satisfying Number; the count must be Min(1).
+Value "[1,2,3]" for property "v" has 2 to 3 of its items satisfying Number; the count must be Max(1).
+```
+
+`Unique` names the first item that repeats an earlier one, and the first of
+those:
+
+```
+Value "[1,2,2,1]" for property "v" must have unique items (items 1 and 2 are equal).
+```
+
+A value that is not an array is left to the node's type: bare `Contains` and
+`Unique` refuse it, and `Unique(Any())` lets it through. `Contains` with a
+count that is neither a whole number of zero or more nor a shape, or with no
+shape for its items, throws in TypeScript and makes a node that reports it
+in Go and Rust.
 
 ## Object algebra
 

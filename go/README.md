@@ -256,9 +256,10 @@ A `*regexp.Regexp` anywhere in a spec is a string that must match it.
 | -------------------------------- | ------------------------------------------------------------------ |
 | `All(shapes...)`                 | every shape must match                                             |
 | `Nof(count, shapes...)`          | the number of shapes that match must be one the count admits: a whole number, or a shape for it |
+| `When(cond, then?, else?)`       | the value must match `then` where it matches `cond`, and `else` where it does not; an arm not given passes |
 | `Discriminated(tag, branches)`   | a tagged union: `branches` is a `map[string]any` keyed by tag value |
 
-All three are top-level only.
+All four are top-level only.
 
 ### Objects / arrays
 
@@ -267,6 +268,8 @@ All three are top-level only.
 | `Open(spec?)` / `Closed(spec?)`  | allow / forbid unknown object properties                           |
 | `Child(child, spec?)`            | default child shape for an `Open` object or for an array           |
 | `Rest(child, spec?)`             | tail-shape for arrays past tuple positions                         |
+| `Contains(count, shape, spec?)`  | the number of items that match `shape` must be one the count admits |
+| `Unique(spec?)`                  | no two items may be equal as JSON values                           |
 | `Rename(name, spec?)`, `RenameWith(name, opts, spec?)` | rename an object property after validation     |
 
 ### Object algebra
