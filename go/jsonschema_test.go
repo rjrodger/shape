@@ -160,3 +160,52 @@ func TestNofKindsExportNarrowed(t *testing.T) {
 		t.Fatalf("untyped = %v", plain)
 	}
 }
+
+// When is if, Contains is contains, Unique is uniqueItems
+// (ts/test/jsonschema.test.ts when-contains-unique).
+func TestJSONSchemaWhenContainsUnique(t *testing.T) {
+	A := func(v ...any) []any { return v }
+	num := `{"type":"number"}`
+
+	// When is if, with then and else where they say something.
+	schemaWant(t, "when", MustShape(When(Number, Min(1), Max(-1))).JSONSchema(), `{`+draft+`,"if":`+num+`,
+		"then":{"minimum":1,"minLength":1,"minItems":1,"minProperties":1},
+		"else":{"maximum":-1,"maxLength":-1,"maxItems":-1,"maxProperties":-1}}`)
+	schemaWant(t, "when any", MustShape(When(Number, Any, Any)).JSONSchema(), `{`+draft+`,"if":`+num+`}`)
+
+	// Contains is contains, its count the bounds on it: an exact count, at
+	// least one (the default), and the bounds of a count shape. A count
+	// check with no keyword is left out, and the schema admits more.
+	for name, c := range map[string]struct {
+		spec *Node
+		want string
+	}{
+		"min":    {Contains(Min(1), Number), ``},
+		"one":    {Contains(1, Number), `,"maxContains":1`},
+		"none":   {Contains(0, Number), `,"minContains":0,"maxContains":0`},
+		"range":  {Contains(Max(3, Min(2)), Number), `,"minContains":2,"maxContains":3`},
+		"strict": {Contains(Below(3, Above(0)), Number), `,"maxContains":2`},
+		"frac":   {Contains(Max(2.5, Min(1.5)), Number), `,"minContains":2,"maxContains":2`},
+		"len":    {Contains(Len(2), Number), `,"minContains":2,"maxContains":2`},
+		"check":  {Contains(Check(func(v any, _ *Update, _ *State) bool { return true }), Number), `,"minContains":0`},
+		"above":  {Contains(Above(1.5), Number), `,"minContains":2`},
+		"below":  {Contains(Below(2.5), Number), `,"minContains":0,"maxContains":2`},
+	} {
+		schemaWant(t, name, MustShape(c.spec).JSONSchema(), `{`+draft+`,"type":"array","contains":`+num+c.want+`}`)
+	}
+	// On a node that names no kind, the keywords stand alone.
+	schemaWant(t, "any", MustShape(Contains(1, Number, Any)).JSONSchema(), `{`+draft+`,"contains":`+num+`,"maxContains":1}`)
+
+	// Unique is uniqueItems.
+	schemaWant(t, "unique", MustShape(Unique(A(String))).JSONSchema(),
+		`{`+draft+`,"type":"array","items":{"type":"string","minLength":1},"uniqueItems":true}`)
+	schemaWant(t, "unique prop", MustShape(map[string]any{"a": Unique()}).JSONSchema(),
+		`{`+draft+`,"type":"object","properties":{"a":{"type":"array","uniqueItems":true}},"additionalProperties":false}`)
+	// A key expression's empty example is no default of the array.
+	schemaWant(t, "key form", MustShape(map[string]any{"a: Contains(2,String)": A()}).JSONSchema(),
+		`{`+draft+`,"type":"object","properties":{"a":{"type":"array","contains":{"type":"string","minLength":1},
+		"minContains":2,"maxContains":2}},"additionalProperties":false}`)
+	schemaWant(t, "rest key form", MustShape(map[string]any{"a: Rest(Number)": A(), "b: Open": map[string]any{}}).JSONSchema(),
+		`{`+draft+`,"type":"object","properties":{"a":{"type":"array","items":{"type":"number"}},"b":{"type":"object"}},
+		"additionalProperties":false}`)
+}

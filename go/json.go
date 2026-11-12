@@ -185,6 +185,17 @@ func jsonValidatorCall(v *validator, calls []jsonCall) []jsonCall {
 		return append(calls, jsonCall{n: name, a: args})
 	case name == "Check":
 		jsonFault("a check function")
+	case name == "Contains":
+		// The count leads: a whole number inline, a shape as its value.
+		var count jsonArg
+		if cn, isShape := v.args[0].(*node); isShape {
+			count = jsonArgOf(cn)
+		} else {
+			count = jx(fmtFloat(v.args[0].(float64)))
+		}
+		return append(calls, jsonCall{n: name, a: []jsonArg{count, jsonArgOf(v.nodes[0])}})
+	case name == "Unique":
+		return append(calls, jsonCall{n: name})
 	case name == "All" || name == "Discriminated":
 		// The list itself is the head of the expression.
 	default:
@@ -636,6 +647,9 @@ func nodeJSON(n *node) any {
 				} else {
 					head.a = append(head.a, jsonArgOf(n.nofCount))
 				}
+			case listWhen:
+				// Every shape is written, a defaulted one as Any.
+				mode = "When"
 			}
 			head.n = mode
 			for _, b := range n.list {

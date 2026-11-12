@@ -550,8 +550,8 @@ func TestJSONSchemaImportDocumentsTuplesStrict(t *testing.T) {
 	jsvOK(t, bools, []any{1.0}, []any{1.0})
 	mustErr(t, importShape(t, bools), []any{1.0, 2.0}, "no value is allowed")
 
-	for _, k := range []string{"$dynamicRef", "$recursiveRef", "contains", "dependencies", "dependentRequired", "dependentSchemas",
-		"if", "multipleOf", "patternProperties", "propertyNames", "unevaluatedItems", "unevaluatedProperties", "uniqueItems"} {
+	for _, k := range []string{"$dynamicRef", "$recursiveRef", "multipleOf", "patternProperties", "propertyNames",
+		"unevaluatedItems", "unevaluatedProperties"} {
 		schema := map[string]any{"type": "object", "properties": map[string]any{"a": map[string]any{k: true}}}
 		mustOK(t, MustShape(MustFromJSONSchema(schema)), map[string]any{"a": 1.0})
 		_, err := FromJSONSchemaWith(schema, JSONSchemaImportOptions{Strict: true})
@@ -559,12 +559,16 @@ func TestJSONSchemaImportDocumentsTuplesStrict(t *testing.T) {
 			t.Fatalf("strict %s: got %v", k, err)
 		}
 	}
-	strict, err := FromJSONSchemaWith(map[string]any{"uniqueItems": false}, JSONSchemaImportOptions{Strict: true})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if out := mustOK(t, MustShape(strict), []any{1.0, 1.0}); len(out.([]any)) != 2 {
-		t.Fatalf("got %#v", out)
+	// What the import reads, strict reads too.
+	for _, src := range []string{`{"if":false,"then":false}`, `{"contains":true}`, `{"uniqueItems":true}`,
+		`{"uniqueItems":false}`, `{"dependentRequired":{}}`, `{"dependentSchemas":{}}`, `{"dependencies":{}}`} {
+		strict, err := FromJSONSchemaWith(js(t, src), JSONSchemaImportOptions{Strict: true})
+		if err != nil {
+			t.Fatalf("%s: %v", src, err)
+		}
+		if !MustShape(strict).Valid(5.0) {
+			t.Fatalf("%s: 5 should be valid", src)
+		}
 	}
 	plain, err := FromJSONSchemaWith(map[string]any{"type": "number"}, JSONSchemaImportOptions{})
 	if err != nil {
@@ -615,5 +619,155 @@ func TestJSONEqual(t *testing.T) {
 		if got := jsonEqual(c.x, c.y); got != c.want {
 			t.Fatalf("jsonEqual(%#v, %#v) = %v", c.x, c.y, got)
 		}
+	}
+}
+
+// if, then and else; the dependent keywords; contains and uniqueItems
+// (ts/test/jsonschema-import.test.ts conditionals-and-array-checks).
+func TestJSONSchemaImportConditionalsAndArrayChecks(t *testing.T) {
+	M := func(kv ...any) map[string]any {
+		m := map[string]any{}
+		for i := 0; i < len(kv); i += 2 {
+			m[kv[i].(string)] = kv[i+1]
+		}
+		return m
+	}
+	A := func(v ...any) []any { return v }
+	ok := func(doc string, in any) bool {
+		t.Helper()
+		return importShape(t, doc).Valid(in)
+	}
+
+	// if picks then or else; an if with neither asserts nothing.
+	cond := `{"if":{"type":"number"},"then":{"minimum":1},"else":{"type":"string"}}`
+	jsvOK(t, cond, 2.0, 2.0)
+	mustErr(t, importShape(t, cond), 0.0, "must be a minimum of 1 (was 0)")
+	jsvOK(t, cond, "a", "a")
+	mustErr(t, importShape(t, cond), true, "not of type string")
+	if !ok(`{"if":false}`, 1.0) || ok(`{"if":{"type":"number"},"else":false}`, "x") || !ok(`{"if":{"type":"number"},"else":false}`, 1.0) {
+		t.Fatal("if alone, else alone")
+	}
+	// Under one type, the condition and its arms meet that kind alone.
+	if ok(`{"type":"string","if":{"minLength":2},"then":{"maxLength":3}}`, "abcd") ||
+		!ok(`{"type":"string","if":{"minLength":2},"then":{"maxLength":3}}`, "a") {
+		t.Fatal("narrowed")
+	}
+	// The condition sees the value as given, before a default fills it in.
+	jsvOK(t, `{"properties":{"a":{"default":1}},"if":{"required":["a"]},"then":false}`, M(), M("a", 1.0))
+
+	// A dependent keyword holds where its key is present.
+	dr := `{"dependentRequired":{"a":["b","c"],"d":[]}}`
+	jsvOK(t, dr, M("a", 1.0, "b", 2.0, "c", 3.0), M("a", 1.0, "b", 2.0, "c", 3.0))
+	mustErr(t, importShape(t, dr), M("a", 1.0, "b", 2.0), `property "c" because the property is missing`)
+	jsvOK(t, dr, M("b", 1.0, "d", 1.0), M("b", 1.0, "d", 1.0))
+	jsvOK(t, dr, "a", "a")
+	ds := `{"dependentSchemas":{"a":{"properties":{"b":{"type":"number"}},"required":["b"]}}}`
+	mustErr(t, importShape(t, ds), M("a", 1.0, "b", "x"), `property "b" with string "x"`)
+	jsvOK(t, ds, M("b", "x"), M("b", "x"))
+	if ok(`{"dependentSchemas":{"a":false}}`, M("a", 1.0)) || !ok(`{"dependentSchemas":{"a":false}}`, A("a")) {
+		t.Fatal("dependentSchemas false")
+	}
+	// Draft 7's dependencies is either form, where neither of the others is.
+	if ok(`{"dependencies":{"a":["b"]}}`, M("a", 1.0)) || ok(`{"dependencies":{"a":{"minProperties":2}}}`, M("a", 1.0)) ||
+		!ok(`{"dependencies":{"a":["b"]},"dependentSchemas":{}}`, M("a", 1.0)) ||
+		!ok(`{"dependencies":{"a":["b"]},"dependentRequired":{}}`, M("a", 1.0)) {
+		t.Fatal("dependencies")
+	}
+	// A key the object does not hold, whatever its name, is not present.
+	if !ok(`{"dependentRequired":{"toString":["x"]}}`, M()) {
+		t.Fatal("prototype key")
+	}
+	// The entries are read in key order.
+	jsvErr(t, `{"dependentRequired":{"b":["x"],"a":["y"]}}`, M("a", 1.0, "b", 1.0),
+		"Validation failed for property \"y\" because the property is missing.\nValidation failed for property \"x\" because the property is missing.")
+
+	// contains counts the items its schema admits.
+	c := func(extra string) *Schema {
+		return importShape(t, `{"type":"array","contains":{"type":"number"}`+extra+`}`)
+	}
+	if !c(``).Valid(A("a", 1.0)) {
+		t.Fatal("contains")
+	}
+	jsvErr(t, `{"type":"array","contains":{"type":"number"}}`, A("a"),
+		`Value "[a]" for property "" has 0 of its items satisfying Number; the count must be Min(1).`)
+	for extra, want := range map[string]map[bool][]any{
+		`,"minContains":0`:                   {true: A()},
+		`,"minContains":2`:                   {false: A(1.0)},
+		`,"maxContains":1`:                   {false: A(1.0, 2.0)},
+		`,"minContains":0,"maxContains":1`:   {true: A()},
+		`,"minContains":2,"maxContains":2`:   {true: A(1.0, 2.0, "a")},
+		`,"minContains":1,"maxContains":3`:   {false: A(1.0, 2.0, 3.0, 4.0)},
+		`,"minContains":1.5`:                 {false: A(1.0)},
+		`,"minContains":0,"maxContains":2.5`: {true: A(1.0, 2.0)},
+	} {
+		for verdict, in := range want {
+			if c(extra).Valid(in) != verdict {
+				t.Fatalf("contains%s with %v: want %v", extra, in, verdict)
+			}
+		}
+	}
+	if c(`,"maxContains":1`).Valid(A()) {
+		t.Fatal("maxContains alone still asks for one")
+	}
+	// A count of at least none asserts nothing; so does a bound alone.
+	if _, has := importShape(t, `{"type":"array","minContains":0,"contains":false}`).JSONSchema()["contains"]; has {
+		t.Fatal("at least none")
+	}
+	if !ok(`{"type":"array","minContains":-1,"contains":false}`, A()) || !ok(`{"type":"array","minContains":3}`, A(1.0)) {
+		t.Fatal("asserts nothing")
+	}
+	// Untyped, contains and uniqueItems say nothing of other kinds.
+	if !ok(`{"contains":{"type":"number"}}`, "x") || ok(`{"contains":{"type":"number"}}`, A("x")) || !ok(`{"uniqueItems":true}`, M("a", 1.0)) {
+		t.Fatal("untyped")
+	}
+
+	// uniqueItems compares items as JSON values.
+	u := importShape(t, `{"type":"array","uniqueItems":true}`)
+	if !u.Valid(A(1.0, "1", true, nil, A(1.0), M("a", 1.0), M("a", 2.0))) {
+		t.Fatal("unique")
+	}
+	// Go renders an object's keys sorted (see the parity page).
+	jsvErr(t, `{"type":"array","uniqueItems":true}`, A(M("a", 1.0, "b", A(2.0)), 0.0, M("b", A(2.0), "a", 1.0)),
+		`Value "[{a:1,b:[2]},0,{a:1,b:[2]}]" for property "" must have unique items (items 0 and 2 are equal).`)
+	jsvOK(t, `{"type":"array","uniqueItems":false}`, A(1.0, 1.0), A(1.0, 1.0))
+
+	// They export as they were read.
+	schemaWant(t, "cond", importShape(t, cond).JSONSchema(),
+		`{`+draft+`,"if":{"type":"number"},"then":{"minimum":1},"else":{"type":"string"}}`)
+	schemaWant(t, "array", importShape(t, `{"type":"array","contains":{"type":"number"},"minContains":2,"maxContains":3,
+		"uniqueItems":true}`).JSONSchema(),
+		`{`+draft+`,"type":"array","contains":{"type":"number"},"minContains":2,"maxContains":3,"uniqueItems":true}`)
+	schemaWant(t, "range", importShape(t, `{"type":"array","contains":{"type":"number"},"minContains":0,"maxContains":2}`).JSONSchema(),
+		`{`+draft+`,"type":"array","contains":{"type":"number"},"minContains":0,"maxContains":2}`)
+	schemaWant(t, "dependent", importShape(t, `{"dependentRequired":{"a":["b"]}}`).JSONSchema(),
+		`{`+draft+`,"if":{"type":"object","properties":{"a":{}},"required":["a"]},
+		"then":{"type":"object","properties":{"b":{}},"required":["b"]}}`)
+	schemaWant(t, "narrowed", importShape(t, `{"type":"string","if":{"minLength":2},"then":{"maxLength":3}}`).JSONSchema(),
+		`{`+draft+`,"allOf":[{"if":{"type":"string","minLength":2},"then":{"type":"string","maxLength":3}},{"type":"string"}]}`)
+}
+
+// The faults of the conditional and dependent keywords
+// (ts/test/jsonschema-import.test.ts conditional-faults).
+func TestJSONSchemaImportConditionalFaults(t *testing.T) {
+	for doc, msg := range map[string]string{
+		`{"dependentRequired":[]}`:           "dependentRequired must be an object at /dependentRequired",
+		`{"dependentSchemas":1}`:             "dependentSchemas must be an object at /dependentSchemas",
+		`{"dependencies":"a"}`:               "dependencies must be an object at /dependencies",
+		`{"dependentRequired":{"a":"b"}}`:    "a dependency must be an array of property names at /dependentRequired/a",
+		`{"dependencies":{"a":[1]}}`:         "a dependency must be an array of property names at /dependencies/a",
+		`{"dependentSchemas":{"a":1}}`:       "a schema must be an object or boolean at /dependentSchemas/a",
+		`{"if":true,"then":1}`:               "a schema must be an object or boolean at /then",
+		`{"if":1,"then":true}`:               "a schema must be an object or boolean at /if",
+		`{"if":true,"else":1}`:               "a schema must be an object or boolean at /else",
+		`{"if":true,"then":null}`:            "a schema must be an object or boolean at /then",
+		`{"type":"array","contains":1}`:      "a schema must be an object or boolean at /contains",
+		`{"items":{"dependencies":{"a":1}}}`: "a schema must be an object or boolean at /items/dependencies/a",
+	} {
+		importErr(t, doc, "JSON Schema: "+msg)
+	}
+	// An exact count that is not a whole number refuses, as the builder does.
+	for _, doc := range []string{`{"type":"array","contains":{},"minContains":1.5,"maxContains":1.5}`,
+		`{"type":"array","contains":{},"minContains":-1,"maxContains":-1}`} {
+		importErr(t, doc, "Shape: Contains needs a whole number of zero or more, or a shape for the count")
 	}
 }

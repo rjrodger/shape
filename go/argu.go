@@ -87,8 +87,7 @@ func (a Argu) run(args []any, whence string, keys []string, nodes []*node) (map[
 			validated := make([]any, len(rem))
 			for i, v := range rem {
 				sub := &ValidationError{}
-				ctx := newContext(nil)
-				validated[i] = validateNode(child, v, []string{key}, []any{key}, key, out, ctx, false, sub)
+				validated[i] = argCall(child, v, []string{key}, []any{key}, key, out, false, sub)
 				if sub.hasAny() {
 					return nil, fmt.Errorf("%s: %s", prefix, sub.Error())
 				}
@@ -161,21 +160,29 @@ func isRestNode(n *node) bool {
 
 func tryMatch(n *node, val any) (bool, []FieldError) {
 	verr := &ValidationError{}
-	ctx := newContext(nil)
-	prepare(n, ctx.Refs)
-	validateNode(n, val, []string{}, []any{}, "", nil, ctx, true, verr)
+	prepare(n, nil)
+	argCall(n, val, []string{}, []any{}, "", nil, true, verr)
 	return !verr.hasAny(), verr.Issues
 }
 
 func requireMatch(n *node, val any, key, prefix string) (any, error) {
 	verr := &ValidationError{}
-	ctx := newContext(nil)
-	prepare(n, ctx.Refs)
-	out := validateNode(n, val, []string{key}, []any{key}, key, nil, ctx, false, verr)
+	prepare(n, nil)
+	out := argCall(n, val, []string{key}, []any{key}, key, nil, false, verr)
 	if verr.hasAny() {
 		return nil, fmt.Errorf("%s: %s", prefix, verr.Error())
 	}
 	return out, nil
+}
+
+// argCall validates one argument as a call of its own, with a context and
+// a trial budget of its own (see Context.endCall).
+func argCall(n *node, val any, path []string, pathArr []any, key string, parent any, match bool, verr *ValidationError) any {
+	ctx := newContext(nil)
+	was := ctx.startCall(defaultTrials)
+	out := validateNode(n, val, path, pathArr, key, parent, ctx, match, verr)
+	ctx.endCall(was, verr)
+	return out
 }
 
 // orderedKeys returns the keys of m in deterministic insertion order. Go maps

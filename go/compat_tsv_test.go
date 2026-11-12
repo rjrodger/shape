@@ -327,6 +327,12 @@ func callBuilder(name string, args []any) any {
 		return All(args...)
 	case "Nof":
 		return Nof(args[0], args[1:]...)
+	case "When":
+		return When(args[0], args[1:]...)
+	case "Contains":
+		return Contains(args[0], args[1], args[2:]...)
+	case "Unique":
+		return Unique(args...)
 	case "Refer":
 		// A name, or an options object as the TS form takes it.
 		if name, ok := args[0].(string); ok {

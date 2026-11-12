@@ -263,6 +263,11 @@ func validateStructure(n *node, state *State, absent bool, path []string, pathAr
 	// required/optional below, since a nil that is absent is not yet in play
 	// here — the absent sentinel was translated above.
 	if state.Value == nil && !absent && n.nullable {
+		// The composition still runs, as TS runs its check, so the trials
+		// it takes count.
+		if n.kind == KindList && n.listMode != listNone {
+			evaluateList(n, state, &ValidationError{})
+		}
 		return state.Value
 	}
 
@@ -271,7 +276,7 @@ func validateStructure(n *node, state *State, absent bool, path []string, pathAr
 	// raise, so Optional(All(...)) given nothing is simply absent.
 	if n.kind == KindList && n.listMode != listNone && !(absent && !n.required) {
 		before := verr.count()
-		out := evaluateList(n, state.Value, path, pathArr, key, parent, ctx, match, verr, absent)
+		out := evaluateList(n, state, verr)
 		// A required composition that passed but left an absent subject
 		// absent (All produces nothing from it) reports the missing value,
 		// as TypeScript's required check does after the validators.
@@ -921,7 +926,11 @@ func addRequired(state *State, n *node, verr *ValidationError) {
 	}
 }
 
-func evaluateList(n *node, in any, path []string, pathArr []any, key string, parent any, ctx *Context, match bool, verr *ValidationError, absent bool) any {
+// evaluateList puts the value of a composition node's state to its branches.
+func evaluateList(n *node, state *State, verr *ValidationError) any {
+	in, path, pathArr, key, parent := state.Value, state.Path, state.PathArr, state.Key, state.Parent
+	ctx, match, absent := state.Ctx, state.Match, state.absent
+
 	// Branches must see the value as the parent saw it: an absent value stays
 	// absent, so a branch that does not require one can still match and supply
 	// its default. Passing a bare nil instead made every branch see a present
@@ -997,12 +1006,11 @@ func evaluateList(n *node, in any, path []string, pathArr []any, key string, par
 		// A branch is tried only while the untried could change the verdict.
 		k, tried, total, matched := 0, 0, len(n.list), 0
 		var matchedOut any
+		deep := false
 		for nofSpan(n.nofOK, k, total-tried) == nofSome {
-			sub := &ValidationError{}
-			out := validateNode(n.list[tried], branchIn, path, pathArr, key, parent, ctx, true, sub)
-			if !sub.hasAny() {
+			if ok, out, within := trial(n.list[tried], branchIn, path, pathArr, key, state); ok {
 				k++
-				matched, matchedOut = tried, out
+				matched, matchedOut, deep = tried, out, within
 			}
 			tried++
 		}
@@ -1022,16 +1030,78 @@ func evaluateList(n *node, in any, path []string, pathArr []any, key string, par
 			}
 			return in
 		}
-		// Exactly one: the branch the value satisfies produces it.
+		// Exactly one: the branch the value satisfies produces it, run again
+		// as TS runs it, so the trials within it count again. A verdict
+		// alone needs it only for those.
 		if n.nofOne {
-			if !match {
-				return validateNode(n.list[matched], branchIn, path, pathArr, key, parent, ctx, false, &ValidationError{})
+			if match && !deep {
+				return matchedOut
 			}
-			return matchedOut
+			return validateNode(n.list[matched], branchIn, path, pathArr, key, parent, ctx, match, &ValidationError{})
 		}
 		return in
+	case listWhen:
+		// An absent value is not tried: the required check speaks for it.
+		if absent {
+			return in
+		}
+		// The condition is tried on the value; the shape it picks validates
+		// it as a call of its own, and its errors are the errors.
+		pick := n.list[2]
+		if ok, _, _ := trial(n.list[0], in, path, pathArr, key, state); ok {
+			pick = n.list[1]
+		}
+		// A shape that drops its value (Ignore) leaves the value as it was.
+		if isIgnore(pick) {
+			if res, kept := validateIgnored(pick, in, path, pathArr, key, nil, ctx, match); kept {
+				return res
+			}
+			return in
+		}
+		sub := &ValidationError{}
+		res := branchNode(pick, in, path, pathArr, key, ctx, match, sub)
+		if sub.hasAny() {
+			if !n.silent {
+				for _, e := range sub.Issues {
+					verr.add(e)
+				}
+			}
+			return in
+		}
+		return res
 	}
 	return in
+}
+
+// trial tries a shape on a value for a verdict alone, as a call of its own
+// at the path given: nothing it finds is reported. Each trial takes one
+// from the budget of the call it is part of; past the budget a trial
+// refuses, and the first refusal records the error the call then fails
+// with alone, at the state of the composition that asked (see endCall).
+// It reports the verdict, what the shape made, and whether trials ran
+// within it.
+func trial(sn *node, val any, path []string, pathArr []any, key string, at *State) (bool, any, bool) {
+	if at.Ctx == nil {
+		at.Ctx = newContext(nil)
+	}
+	ctx := at.Ctx
+	t := &ctx.trials
+	if t.budget == 0 {
+		t.left, t.budget = defaultTrials, defaultTrials
+	}
+	if t.left <= 0 {
+		if t.spent == nil {
+			spent := makeErr(at, WhyTrial, 0, "Value \"$VALUE\" for property \"$PATH\" needs more trials than the budget of "+
+				strconv.Itoa(t.budget)+".")
+			t.spent = &spent
+		}
+		return false, nil, false
+	}
+	t.left--
+	left := t.left
+	sub := &ValidationError{terse: true}
+	out := validateNode(sn, val, path, pathArr, key, nil, ctx, true, sub)
+	return !sub.hasAny(), out, t.left < left
 }
 
 // branchNode validates one branch of a composition as TypeScript runs it, a
@@ -1211,13 +1281,7 @@ func applyUpdate(state *State, update *Update) {
 // object property and the root do: a value that does not validate is dropped
 // along with the errors it would raise.
 func validateElem(cn *node, v any, path []string, pathArr []any, i int, parent any, ctx *Context, match bool, verr *ValidationError) any {
-	var key string
-	var boxed any
-	if i < indexKeys {
-		key, boxed = indexKey[i], indexAny[i]
-	} else {
-		key, boxed = strconv.Itoa(i), i
-	}
+	key, boxed := indexOf(i)
 	epath, epathArr := path, pathArr
 	if !skipPath(ctx) {
 		epath = append(path, key)
@@ -1233,6 +1297,14 @@ func validateElem(cn *node, v any, path []string, pathArr []any, i int, parent a
 	}
 
 	return validateNode(cn, v, epath, epathArr, key, parent, ctx, match, verr)
+}
+
+// indexOf is an index as a key, and boxed for the path.
+func indexOf(i int) (string, any) {
+	if i < indexKeys {
+		return indexKey[i], indexAny[i]
+	}
+	return strconv.Itoa(i), i
 }
 
 // isIgnore reports whether a node was built by Ignore: optional, no default

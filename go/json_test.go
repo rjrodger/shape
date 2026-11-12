@@ -438,3 +438,41 @@ func TestJSONCorpus(t *testing.T) {
 		t.Fatalf("count %d cannot %d", count, cannotCount)
 	}
 }
+
+// When is a list head too; Contains and Unique are checks of an array
+// (ts/test/json.test.ts).
+func TestJSONWhenContainsUnique(t *testing.T) {
+	M := func(kv ...any) map[string]any {
+		m := map[string]any{}
+		for i := 0; i < len(kv); i += 2 {
+			m[kv[i].(string)] = kv[i+1]
+		}
+		return m
+	}
+	A := func(v ...any) []any { return v }
+	roundTrip(t, When(String, Min(2)), `"When(String,Any.Min(2),Any)"`, "a", "abc", 5.0)
+	roundTrip(t, M("a", When(Open(M("k", Required())), Open(M("b", Required(Number))))),
+		`{"a":{"$$":"When($$0,$$1,Any)","$$0":{"k":"Required","$$":"Open"},"$$1":{"b: Number":0,"$$":"Open"}}}`,
+		M("a", M("k", 1.0)), M("a", M("k", 1.0, "b", 2.0)), M("a", M()))
+	roundTrip(t, Contains(Min(1), Number), `{"$$":"Contains(Any.Min(1),Number,$$0)","$$0":[]}`, A(1.0), A("a"))
+	roundTrip(t, M("a", Contains(2, String)), `{"a: Contains(2,String)":[]}`, M("a", A("x", "y")), M("a", A("x")))
+	roundTrip(t, Contains(Max(1), Exact(1.0), A(Number)),
+		`{"$$":"Contains(Any.Max(1),Required.Exact(1),$$0)","$$0":["Number"]}`, A(1.0, 2.0), A(1.0, 1.0), A("a"))
+	roundTrip(t, M("u", Unique(A(String)), "v", Skip(Unique())), `{"u: Unique":["String"],"v: Skip.Unique":[]}`,
+		M("u", A("a", "b")), M("u", A("a", "a")), M("u", A(), "v", A(1.0, 1.0)))
+	// A count shape in key form: the example is the spec, after the count
+	// and the shape of the items.
+	roundTrip(t, M("a", Contains(Min(1), Number)), `{"a: Contains(Any.Min(1),Number)":[]}`, M("a", A(1.0)), M("a", A("x")), M())
+	roundTrip(t, M("a", Contains(1, Nof(1, String, Number))), `{"a: Contains(1,Nof(1,String,Number))":[]}`,
+		M("a", A("x", true)), M("a", A(true)))
+	// On another kind each is a call of the chain; an object item shape
+	// rides in a sidecar.
+	roundTrip(t, Min(1).Contains(1, String), `"Any.Min(1).Contains(1,String)"`, A("a"), A(), "x")
+	roundTrip(t, Contains(1, M("x", Number)), `{"$$":"Contains(1,$$1,$$0)","$$0":[],"$$1":{"x: Number":0}}`,
+		A(M("x", 1.0), 2.0), A(2.0))
+	roundTrip(t, Contains(Min(2), Number).Unique(), `{"$$":"Contains(Any.Min(2),Number,$$0).Unique","$$0":[]}`,
+		A(1.0, 2.0), A(1.0, 1.0))
+	roundTrip(t, M("a", Default("xy", When(String, Min(2))), "b", Optional(When(String, Min(2)))),
+		`{"a":"Default(\"xy\",When(String,Any.Min(2),Any))","b":"When(String,Any.Min(2),Any).Optional"}`, M(), M("a", "x"))
+	roundTrip(t, M("a", Unique()), `{"a: Unique":[]}`, M("a", A(1.0, 1.0)), M())
+}

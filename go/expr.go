@@ -15,7 +15,8 @@ import (
 // Supported tokens:
 //   - Builder names: Required, Optional, Min, Max, Above, Below, Len, Check,
 //     Open, Closed, Skip, Ignore, Empty, Default, Fault, Never, Type, Exact,
-//     All, Nof, Child, Rest, Define, Refer, Rename, Func, Key.
+//     All, Nof, When, Contains, Unique, Child, Rest, Define, Refer, Rename,
+//     Func, Key.
 //   - Type tokens: String, Number, Boolean, Object, Array, Function, Any.
 //   - Literals: JSON values (numbers, strings, true, false, null) and undefined/NaN.
 //   - Regexp: /pattern/.
@@ -141,7 +142,7 @@ func buildMark(src string, carrier map[string]any) (any, error) {
 
 // The builders that read every argument for themselves.
 var exprComposition = map[string]bool{
-	"All": true, "Nof": true, "Exact": true, "Discriminated": true,
+	"All": true, "Nof": true, "When": true, "Exact": true, "Discriminated": true,
 }
 
 // Tokenization --------------------------------------------------------
@@ -399,8 +400,17 @@ func exampleApply(src string, example any) (*Node, error) {
 		spliced = tokens
 	}
 	for i := 1; i < first; i++ {
-		if tokens[i] == "(" && (tokens[i-1] == "All" || tokens[i-1] == "Nof") {
+		if tokens[i] == "(" && exampleTaker[tokens[i-1]] {
 			end := closingParen(tokens, i)
+			if tokens[i-1] == "Contains" {
+				// A Contains reads its first two arguments as its count and
+				// the shape of its items, so the example is its spec, after
+				// them.
+				spliced = append([]string{}, tokens[:end]...)
+				spliced = append(spliced, exampleRef)
+				spliced = append(spliced, tokens[end:]...)
+				break
+			}
 			spliced = append([]string{}, tokens[:i-1]...)
 			spliced = append(spliced, "Default", "(", exampleRef)
 			spliced = append(spliced, tokens[i-1:end+1]...)
@@ -412,6 +422,10 @@ func exampleApply(src string, example any) (*Node, error) {
 	p := &exprParser{tokens: spliced, src: src, refs: map[string]any{exampleRef: example}}
 	return p.parseFull()
 }
+
+// The calls that read their leading arguments as shapes of their own, so
+// that none of them can be a key expression's example (see exampleApply).
+var exampleTaker = map[string]bool{"All": true, "Nof": true, "When": true, "Contains": true}
 
 // exactLists reports whether the call the parenthesis at tokens[close] ends
 // is an Exact already listing the example, a scalar: an object or array is
@@ -744,6 +758,22 @@ func buildExprBuilders() map[string]exprBuilderFn {
 			}
 			return Nof(exprShape(args[0]), exprShapes(args[1:])...), nil
 		},
+		"When": func(args []builderArg) (*Node, error) {
+			if len(args) < 1 {
+				return nil, fmt.Errorf(whenFault)
+			}
+			return When(exprShape(args[0]), exprShapes(args[1:])...), nil
+		},
+		"Contains": func(args []builderArg) (*Node, error) {
+			if len(args) < 1 {
+				return nil, fmt.Errorf(containsFault)
+			}
+			if len(args) < 2 {
+				return nil, fmt.Errorf(containsShapeFault)
+			}
+			return Contains(exprShape(args[0]), exprShape(args[1]), exprShapes(args[2:])...), nil
+		},
+		"Unique": variadicNode(Unique),
 	"Child": func(args []builderArg) (*Node, error) {
 		if len(args) < 1 {
 			return nil, fmt.Errorf("Child: missing child shape")
