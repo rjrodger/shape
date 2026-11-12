@@ -3819,27 +3819,34 @@ const Contains = function Contains(this: any, count: any, inshape: any, spec?: a
   const node = buildize(this, undefined === spec && !this?.$?.shape$ ? [] : spec)
   const shape = Shape(inshape)
   const countShape = exact ? undefined : Shape(count)
+  const bounds = exact ? { lo: count, hi: count, exact: true } : countBounds((countShape as any).node())
 
   // Whether the count admits c, kept for the next array to ask.
   const okc: boolean[] = []
   const admits = (c: number) => undefined === okc[c] ?
-    (okc[c] = exact ? c === count : (countShape as any).match(c)) : okc[c]
+    (okc[c] = (countShape as any).match(c)) : okc[c]
 
   const validator = function Contains(val: any, update: Update, state: State) {
     if (!isarr(val)) {
       return true
     }
 
-    // The counts from k to k + open are all, some or none admitted, read
-    // off the running total of admitted counts.
+    // The counts from k to k + open are all, some or none admitted: at once
+    // for a count that is an interval, and otherwise off the running total
+    // of admitted counts.
     const n = val.length
-    const yes = [0]
-    for (let c = 0; c <= n; c++) {
-      yes.push(yes[c] + (admits(c) ? 1 : 0))
-    }
-    const span = (k: number, open: number) => {
-      const y = yes[k + open + 1] - yes[k]
-      return 0 === y ? NOF_NONE : open + 1 === y ? 2 : NOF_SOME
+    let span = (k: number, open: number) =>
+      bounds.hi < k || k + open < bounds.lo ? NOF_NONE :
+        bounds.lo <= k && k + open <= bounds.hi ? 2 : NOF_SOME
+    if (!bounds.exact) {
+      const yes = [0]
+      for (let c = 0; c <= n; c++) {
+        yes.push(yes[c] + (admits(c) ? 1 : 0))
+      }
+      span = (k: number, open: number) => {
+        const y = yes[k + open + 1] - yes[k]
+        return 0 === y ? NOF_NONE : open + 1 === y ? 2 : NOF_SOME
+      }
     }
 
     const path$ = patharr(state)
@@ -3867,7 +3874,8 @@ const Contains = function Contains(this: any, count: any, inshape: any, spec?: a
 
   validator.n = S.Contains
   validator.a = [count, inshape]
-  validator.u = { count: exact ? count : (countShape as any).node(), shape: shape.node() }
+  validator.u = { bounds, shape: shape.node() }
+  validator.c = exact ? count : (countShape as any).node()
   validator.s = () => S.Contains + '(' + stringify(count, true) + ',' + stringify(inshape, true) + ')'
 
   attach(node.b, validator)
@@ -5139,8 +5147,7 @@ function jsonValidatorCall(v: any, calls: JsonCall[]) {
   }
   else if (S.Contains === name) {
     calls.push({
-      n: name, a: [S.number === typeof v.u.count ? { x: '' + v.u.count } : jsonArg(v.u.count),
-        jsonArg(v.u.shape)]
+      n: name, a: [S.number === typeof v.c ? { x: '' + v.c } : jsonArg(v.c), jsonArg(v.u.shape)]
     })
   }
   else if (S.Unique === name) {
@@ -6134,42 +6141,50 @@ function checkSchema(n: Node<any>, s: any, defs: any) {
 
 
 // A count of an array's items, as contains and the bounds on it. A count
-// shape gives the bounds of its Min, Max, Above, Below and Len; its other
-// checks have no keyword, so the schema admits more than the shape does.
+// shape with a check that is not a bound has no keyword for that check, so
+// the schema admits more than the shape does.
 function containsSchema(v: any, s: any, defs: any) {
   s.contains = nodeSchema(v.u.shape, defs)
-  let lo = 0
-  let hi = Infinity
-  if (S.number === typeof v.u.count) {
-    lo = hi = v.u.count
-  }
-  else {
-    for (const cv of v.u.count.b) {
-      const b = +cv.a?.[0]
-      if (S.Min === cv.n) {
-        lo = Math.max(lo, Math.ceil(b))
-      }
-      else if (S.Max === cv.n) {
-        hi = Math.min(hi, Math.floor(b))
-      }
-      else if (S.Above === cv.n) {
-        lo = Math.max(lo, Math.floor(b) + 1)
-      }
-      else if (S.Below === cv.n) {
-        hi = Math.min(hi, Math.ceil(b) - 1)
-      }
-      else if (S.Len === cv.n) {
-        lo = Math.max(lo, b)
-        hi = Math.min(hi, b)
-      }
-    }
-  }
+  const { lo, hi } = v.u.bounds
   if (1 !== lo) {
     s.minContains = lo
   }
   if (Infinity !== hi) {
     s.maxContains = hi
   }
+}
+
+
+// The counts a count shape admits from its Min, Max, Above, Below and Len,
+// as the whole numbers lo to hi; exact where the shape has nothing else to
+// say of a whole number.
+function countBounds(n: Node<any>): { lo: number, hi: number, exact: boolean } {
+  let lo = 0
+  let hi = Infinity
+  let exact = (S.any === n.t || S.number === n.t || S.integer === n.t) && 0 === n.a.length
+  for (const cv of n.b) {
+    const b = +cv.a?.[0]
+    if (S.Min === cv.n) {
+      lo = Math.max(lo, Math.ceil(b))
+    }
+    else if (S.Max === cv.n) {
+      hi = Math.min(hi, Math.floor(b))
+    }
+    else if (S.Above === cv.n) {
+      lo = Math.max(lo, Math.floor(b) + 1)
+    }
+    else if (S.Below === cv.n) {
+      hi = Math.min(hi, Math.ceil(b) - 1)
+    }
+    else if (S.Len === cv.n) {
+      lo = Math.max(lo, b)
+      hi = Math.min(hi, b)
+    }
+    else {
+      exact = false
+    }
+  }
+  return { lo, hi, exact }
 }
 
 

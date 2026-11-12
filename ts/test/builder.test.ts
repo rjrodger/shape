@@ -565,6 +565,11 @@ describe('builder', () => {
     throws(() => Shape(Contains(2, Number))([1, 'a', 2, 3]),
       'Value "[1,a,2,3]" for property "" has 3 of its items satisfying Number; the count must be 2.')
     deepEqual(Shape(Contains(0, Number))(['a']), ['a'])
+    // A count that is not an interval of whole numbers is read count by count.
+    const evens = Shape(Contains(Exact(0, 2), Number))
+    deepEqual(evens(['a', 1, 2]), ['a', 1, 2])
+    throws(() => evens([1, 'a']),
+      'Value "[1,a]" for property "" has 1 of its items satisfying Number; the count must be Exact(0,2).')
 
     // An item is tried only while the untried could change the verdict.
     throws(() => Shape(Contains(Max(1), Number))([1, 2, 3]),
