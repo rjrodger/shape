@@ -146,6 +146,10 @@ pub enum ListMode {
     All,
     /// A count of the branches the value satisfies.
     Nof,
+    /// A condition, then the shape it picks: the list is the condition,
+    /// the shape where the value satisfies it, and the shape where it
+    /// does not.
+    When,
 }
 
 /// The function of a custom validator: the current state and an update to
@@ -162,6 +166,57 @@ pub struct Validator {
     pub suffix: Option<String>,
     /// The checks a Catch or Transform took inside.
     pub inner: Option<Arc<crate::isolate::Inner>>,
+    /// What a Contains counts, which the export and the declarative JSON
+    /// read.
+    pub counted: Option<Arc<Counted>>,
+}
+
+/// The count of a Contains and the shape of the items it counts.
+#[derive(Debug)]
+pub struct Counted {
+    /// A shape the number of items must satisfy, compiled on its own; none
+    /// where the count is a whole number, `lo` and `hi` both.
+    pub count: Option<crate::Schema>,
+    /// The whole numbers from `lo` to `hi` that the count's bounds admit:
+    /// those of its Min, Max, Above, Below and Len, its other checks left
+    /// out.
+    pub lo: f64,
+    pub hi: f64,
+    /// The bounds are all the count says of a whole number (it is one, or
+    /// a shape of bounds alone), so a span is read off them at once.
+    pub interval: bool,
+    /// The shape of the items it counts, prepared as a schema's tree is.
+    pub shape: Node,
+    /// Whether the count admits each number met so far, where it is no
+    /// interval, kept for the next array to ask, as TypeScript keeps it.
+    pub(crate) admitted: std::sync::Mutex<Vec<Option<bool>>>,
+}
+
+impl Counted {
+    /// Whether the count shape admits `c` items.
+    pub(crate) fn admits(&self, count: &crate::Schema, c: usize) -> bool {
+        let known = self
+            .admitted
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .get(c)
+            .copied()
+            .flatten();
+        if let Some(ok) = known {
+            return ok;
+        }
+        // Asked with no lock held: the count's own checks run here.
+        let ok = count.valid(&Value::Num(c as f64));
+        let mut seen = self
+            .admitted
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if seen.len() <= c {
+            seen.resize(c + 1, None);
+        }
+        seen[c] = Some(ok);
+        ok
+    }
 }
 
 impl fmt::Debug for Validator {
@@ -349,6 +404,7 @@ mod tests {
             args: vec![],
             suffix: None,
             inner: None,
+            counted: None,
         };
         assert_eq!(format!("{:?}", v), "Validator(x)");
         assert_eq!(Node::zero_for(Kind::String), Value::Str(String::new()));

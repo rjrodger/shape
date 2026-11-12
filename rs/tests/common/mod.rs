@@ -96,6 +96,33 @@ pub fn decode_spec(v: &serde_json::Value) -> Result<Spec, Unsupported> {
                                     .collect::<Result<Vec<_>, _>>()?;
                                 Ok(Spec::from(shape::Nof(decode_spec(&arr[1])?, branches)))
                             }
+                            // An arm not given passes, as in TypeScript.
+                            "When" => {
+                                let arm = |i: usize| match arr.get(i) {
+                                    Some(a) => decode_spec(a),
+                                    None => Ok(Spec::from(shape::Any())),
+                                };
+                                Ok(Spec::from(shape::When(arm(1)?, arm(2)?, arm(3)?)))
+                            }
+                            // Without a spec, an array of anything.
+                            "Contains" => {
+                                let spec = match arr.get(3) {
+                                    Some(a) => decode_spec(a)?,
+                                    None => Spec::Arr(Vec::new()),
+                                };
+                                Ok(Spec::from(shape::Contains(
+                                    decode_spec(&arr[1])?,
+                                    decode_spec(&arr[2])?,
+                                    spec,
+                                )))
+                            }
+                            "Unique" => {
+                                let spec = match arr.get(1) {
+                                    Some(a) => decode_spec(a)?,
+                                    None => Spec::Arr(Vec::new()),
+                                };
+                                Ok(Spec::from(shape::Unique(spec)))
+                            }
                             "Pick" | "Omit" => {
                                 let names =
                                     shape::Names::from_value(&Value::from(arr[1].clone()), name)

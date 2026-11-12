@@ -97,6 +97,7 @@ pub(crate) fn catch_node(mut n: Node, fallback: Value) -> Node {
         args: vec![fallback],
         suffix: Some(suffix),
         inner: Some(inner),
+        counted: None,
     }];
     n
 }
@@ -126,6 +127,7 @@ pub(crate) fn transform_node(mut n: Node, f: Arc<TransformFn>) -> Node {
         args: Vec::new(),
         suffix: Some(suffix),
         inner: Some(inner),
+        counted: None,
     }];
     n
 }

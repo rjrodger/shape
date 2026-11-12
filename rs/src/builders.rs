@@ -13,7 +13,7 @@ use crate::format::{
     with_format, FMT_DATE_TIME, FMT_EMAIL, FMT_IP, FMT_IPV4, FMT_IPV6, FMT_URL, FMT_UUID,
 };
 use crate::isolate::{catch_node, transform_node, TransformFn};
-use crate::node::{Kind, ListMode, Node, Token, Validator};
+use crate::node::{Counted, Kind, ListMode, Node, Token, Validator};
 use crate::normalize::{normalize, type_token_node};
 use crate::spec::Spec;
 use crate::value::{is_integer, js_date_string, js_number, json_render, json_text, Value};
@@ -55,6 +55,7 @@ fn validator(
         args,
         suffix,
         inner: None,
+        counted: None,
     }
 }
 
@@ -304,9 +305,9 @@ where
 /// The checks that leave a shape's kind as it was, by validator name: a
 /// shape with no others takes a value of its own kind only. A check by
 /// regexp is named by its pattern; a check by function is no such check.
-const KIND_KEEPING: [&str; 14] = [
-    "Above", "Below", "DateTime", "Define", "Email", "Exact", "Ip", "Ipv4", "Ipv6", "Len", "Max",
-    "Min", "Url", "Uuid",
+const KIND_KEEPING: [&str; 16] = [
+    "Above", "Below", "Contains", "DateTime", "Define", "Email", "Exact", "Ip", "Ipv4", "Ipv6",
+    "Len", "Max", "Min", "Unique", "Url", "Uuid",
 ];
 
 /// Whether a shape takes values of its own kind only: it is not Nullable,
@@ -346,6 +347,161 @@ where
     n.required_set = true;
     n.list_mode = mode;
     n.list = shapes.into_iter().map(|s| normalize(s.into())).collect();
+    n
+}
+
+/// The message of a `When` with no condition.
+pub(crate) const WHEN_FAULT: &str = "Shape: When needs a shape for its condition";
+
+/// The value must satisfy the shape its condition picks: `then` where the
+/// value satisfies `cond`, and `otherwise` where it does not. The condition
+/// is tried on the value and only checks; the shape it picks validates the
+/// value and makes the result, and its errors are the errors. Pass `Any()`
+/// for a shape that passes everything. An absent value is not tried, so
+/// whether it may be absent is the node's required or optional.
+pub fn When(cond: impl Into<Spec>, then: impl Into<Spec>, otherwise: impl Into<Spec>) -> Node {
+    let cond = cond.into();
+    if matches!(cond, Spec::Value(Value::Undefined)) {
+        return fault_node(WHEN_FAULT);
+    }
+    let n = list_node(ListMode::When, [cond, then.into(), otherwise.into()]);
+    // A shape that is a builder's fault is the fault: it would have thrown
+    // in TypeScript, and a condition that passes nothing would hide it.
+    match n.list.iter().find(|b| is_fault(b)) {
+        Some(f) => f.clone(),
+        None => n,
+    }
+}
+
+/// The message of a `Contains` whose count is neither a whole number of
+/// zero or more nor a shape.
+pub(crate) const CONTAINS_FAULT: &str =
+    "Shape: Contains needs a whole number of zero or more, or a shape for the count";
+
+/// The message of a `Contains` with no shape for its items.
+pub(crate) const CONTAINS_ITEMS_FAULT: &str =
+    "Shape: Contains needs a shape for the items it counts";
+
+/// The number of an array's items that satisfy the shape must be one the
+/// count admits. The count is a whole number, for exactly that many, or a
+/// shape the number must satisfy: `Contains(Min(1, Any()), s, ..)` is at
+/// least one, `Contains(0, s, ..)` none. Each item is tried on its own,
+/// and only while the items left untried could still change the verdict;
+/// the array is left as it was given. A value that is not an array is not
+/// counted, so whether it is one is the node's type check. Pass
+/// `arr::<Spec>([])` for the bare form, an array of anything.
+pub fn Contains(count: impl Into<Spec>, shape: impl Into<Spec>, spec: impl Into<Spec>) -> Node {
+    buildize(spec).Contains(count, shape)
+}
+
+/// No two of an array's items may be equal as JSON values: a number by its
+/// value, an array by its items in order, an object by its keys and their
+/// values, in any order. The error names the first item equal to one
+/// before it, and the first of those. A value that is not an array is not
+/// checked. Pass `arr::<Spec>([])` for the bare form, an array of anything.
+pub fn Unique(spec: impl Into<Spec>) -> Node {
+    buildize(spec).Unique()
+}
+
+/// The whole numbers a count shape's bounds admit, `lo` to `hi`, from its
+/// Min, Max, Above, Below and Len, and whether they are all it admits: it
+/// takes any number, and has no other check.
+fn count_bounds(n: &Node) -> (f64, f64, bool) {
+    let (mut lo, mut hi) = (0.0, f64::INFINITY);
+    let mut interval = matches!(n.kind, Kind::Any | Kind::Number | Kind::Integer)
+        && n.afters.is_empty()
+        && !n.silent
+        && n.rename_to.is_none();
+    for v in &n.befores {
+        match (v.name.as_str(), v.args.first().and_then(bound_arg)) {
+            ("Min", Some(b)) => lo = above_of(lo, b.ceil()),
+            ("Max", Some(b)) => hi = below_of(hi, b.floor()),
+            ("Above", Some(b)) => lo = above_of(lo, b.floor() + 1.0),
+            ("Below", Some(b)) => hi = below_of(hi, b.ceil() - 1.0),
+            ("Len", Some(b)) => (lo, hi) = (above_of(lo, b), below_of(hi, b)),
+            _ => interval = false,
+        }
+    }
+    (lo, hi, interval)
+}
+
+/// The larger bound, as `Math.max` takes it: a zero of either sign is no
+/// larger than the other.
+fn above_of(lo: f64, b: f64) -> f64 {
+    if b > lo {
+        b
+    } else {
+        lo
+    }
+}
+
+/// The smaller bound, as `Math.min` takes it.
+fn below_of(hi: f64, b: f64) -> f64 {
+    if b < hi {
+        b
+    } else {
+        hi
+    }
+}
+
+/// The check of a Contains, on a node of its own for `adopt`, or the fault
+/// of a wrong argument. The count is read before the item shape, as
+/// TypeScript evaluates the arguments.
+fn contains_node(count: Spec, shape: Spec) -> Node {
+    let (count, (lo, hi, interval)) = match count {
+        Spec::Value(Value::Num(f)) => {
+            if f != f.trunc() || f < 0.0 || f.is_infinite() {
+                return fault_node(CONTAINS_FAULT);
+            }
+            (None, (f, f, true))
+        }
+        Spec::Value(Value::Undefined) => return fault_node(CONTAINS_FAULT),
+        spec => {
+            let counter = crate::Schema::new(spec);
+            // A count that is itself a builder's fault is the fault.
+            if is_fault(counter.node()) {
+                return counter.node().clone();
+            }
+            let bounds = count_bounds(counter.node());
+            (Some(counter), bounds)
+        }
+    };
+    if matches!(shape, Spec::Value(Value::Undefined)) {
+        return fault_node(CONTAINS_ITEMS_FAULT);
+    }
+    let mut item = normalize(shape);
+    if is_fault(&item) {
+        return item;
+    }
+    // The items are tried apart from the schema's walk, so the shape is
+    // prepared here, as the schema's own tree is.
+    crate::prepare_node(&mut item);
+    let count_text = match &count {
+        Some(c) => crate::stringify::stringify_node(c.node(), true),
+        None => js_number(lo),
+    };
+    let shape_text = crate::stringify::stringify_node(&item, true);
+    let counted = Arc::new(Counted {
+        count,
+        lo,
+        hi,
+        interval,
+        shape: item,
+        admitted: std::sync::Mutex::new(Vec::new()),
+    });
+    let run = Arc::clone(&counted);
+    let suffix = format!("Contains({},{})", count_text, shape_text);
+    let mut n = Any();
+    n.befores.push(Validator {
+        name: "Contains".to_string(),
+        func: Arc::new(move |state: &mut State<'_>, update: &mut Update| {
+            crate::validate::count_items(&run, &shape_text, &count_text, state, update)
+        }),
+        args: Vec::new(),
+        suffix: Some(suffix),
+        inner: None,
+        counted: Some(counted),
+    });
     n
 }
 
@@ -1070,6 +1226,37 @@ impl Node {
 
     pub fn Len(self, length: impl Into<Value>) -> Node {
         self.adopt(len_node(length.into()))
+    }
+
+    /// A count of the array's items that satisfy a shape: see `Contains`.
+    pub fn Contains(self, count: impl Into<Spec>, shape: impl Into<Spec>) -> Node {
+        self.adopt(contains_node(count.into(), shape.into()))
+    }
+
+    /// No two of the array's items equal as JSON values: see `Unique`.
+    pub fn Unique(mut self) -> Node {
+        self.befores.push(validator(
+            "Unique",
+            Some("Unique()".to_string()),
+            Vec::new(),
+            |state, update| {
+                let Value::Arr(items) = state.value else {
+                    return true;
+                };
+                let Some((i, j)) = crate::value::repeated(items) else {
+                    return true;
+                };
+                // A verdict-only call counts the failure and reads no message.
+                if !state.ctx.terse {
+                    update.err = Some(UpdateErr::Text(format!(
+                        "Value \"$VALUE\" for property \"$PATH\" must have unique items (items {} and {} are equal).",
+                        i, j
+                    )));
+                }
+                false
+            },
+        ));
+        self
     }
 
     pub fn Check<F>(mut self, f: F) -> Node
@@ -2383,5 +2570,546 @@ mod tests {
         }
         let d = Default(2, Describe("two", Any()));
         assert_eq!(d.meta.get("description"), Some(&Value::from("two")));
+    }
+
+    /// The bare form of Contains and Unique: an array of anything.
+    fn bare() -> Spec {
+        arr::<Spec>([])
+    }
+
+    /// A schema with a trial budget of `n`.
+    fn budget(n: usize, spec: impl Into<Spec>) -> Schema {
+        Schema::with_options(
+            spec,
+            &crate::Options {
+                trials: n,
+                ..Default::default()
+            },
+        )
+    }
+
+    // ts/test/builder.test.ts, builder-when.
+    #[test]
+    fn when_picks_the_shape_its_condition_admits() {
+        // The condition picks the shape; its errors are the errors.
+        let w = Schema::new(When(
+            Open(obj([("kind", Exact(["a"]))])),
+            Open(obj([("x", Required(Token::Number))])),
+            Open(obj([("y", Required(Token::String))])),
+        ));
+        assert_eq!(run(&w, r#"{"kind":"a","x":1}"#), r#"{"kind":"a","x":1}"#);
+        assert_eq!(
+            run(&w, r#"{"kind":"a"}"#),
+            "ERR Validation failed for property \"x\" because the property is missing."
+        );
+        assert_eq!(
+            run(&w, r#"{"kind":"b"}"#),
+            "ERR Validation failed for property \"y\" because the property is missing."
+        );
+        assert_eq!(
+            run(&w, r#"{"kind":"b","y":"q"}"#),
+            r#"{"kind":"b","y":"q"}"#
+        );
+
+        // An arm of Any passes, and the picked shape makes the result.
+        let then = || When(Token::String, Min(2, Any()), Any());
+        assert_eq!(run(&Schema::new(then()), "\"ab\""), "\"ab\"");
+        assert_eq!(run(&Schema::new(then()), "5"), "5");
+        assert_eq!(
+            run(&Schema::new(then()), "\"a\""),
+            "ERR Value \"a\" for property \"\" must be a minimum length of 2 (was 1)."
+        );
+        let filled = When(Open(obj::<&str, Spec>([])), Open(obj([("b", 2)])), Any());
+        assert_eq!(run(&Schema::new(filled), r#"{"a":1}"#), r#"{"a":1,"b":2}"#);
+        let ignored = When(Token::Number, Ignore(Min(5, Any())), Any());
+        assert_eq!(run(&Schema::new(ignored), "3"), "3");
+
+        // The condition only checks, on a copy.
+        let copy = When(Open(obj([("b", 2)])), Any(), Any());
+        assert_eq!(run(&Schema::new(copy), r#"{"a":1}"#), r#"{"a":1}"#);
+
+        // Errors name the path; an absent value is not tried.
+        assert_eq!(
+            run(
+                &Schema::new(obj([("a", obj([("b", then())]))])),
+                r#"{"a":{"b":"x"}}"#
+            ),
+            "ERR Value \"x\" for property \"a.b\" must be a minimum length of 2 (was 1)."
+        );
+        // After an array sibling too.
+        let sibling = Schema::new(obj([
+            ("a", arr([Token::Number])),
+            ("c", Spec::from(When(Token::Number, Min(5, Any()), Any()))),
+        ]));
+        assert_eq!(
+            run(&sibling, r#"{"a":[1],"c":3}"#),
+            "ERR Value \"3\" for property \"c\" must be a minimum of 5 (was 3)."
+        );
+        let plain = Schema::new(obj([
+            ("a", arr([Token::Number])),
+            ("c", Spec::from(Token::Number)),
+        ]));
+        let paths: Vec<Vec<crate::context::PathPart>> = plain
+            .error(&j(r#"{"a":[1],"c":"x"}"#))
+            .into_iter()
+            .map(|e| e.path_arr)
+            .collect();
+        assert_eq!(paths, vec![vec![crate::context::PathPart::Key("c".into())]]);
+        assert_eq!(
+            run(&at_a(then()), "{}"),
+            "ERR Validation failed for property \"a\" because the property is missing."
+        );
+        assert_eq!(run(&at_a(Optional(then())), "{}"), "{}");
+        assert_eq!(run(&at_a(Default("xy", then())), "{}"), r#"{"a":"xy"}"#);
+        // A silent When raises nothing; a verdict reads it alike.
+        let mut quiet = then();
+        quiet.silent = true;
+        assert_eq!(run(&at_a(quiet), &a("\"x\"")), a("\"x\""));
+        assert!(!at_a(then()).valid(&j(&a("\"x\""))));
+
+        // A condition is needed, and a shape that is a builder's fault is
+        // the fault; the string form, and how it renders.
+        assert_eq!(
+            run(&Schema::new(When(Value::Undefined, Any(), Any())), "1"),
+            format!("ERR {}", WHEN_FAULT)
+        );
+        assert_eq!(
+            run(&Schema::new(When(Min("x", Any()), Any(), Any())), "1"),
+            "ERR Shape: Min needs a number"
+        );
+        assert_eq!(crate::expr::expr("When()").unwrap_err().0, WHEN_FAULT);
+        assert_eq!(
+            run(&Schema::parse("When(String,Min(2))").unwrap(), "\"ab\""),
+            "\"ab\""
+        );
+        // An argument past the third is passed over.
+        assert_eq!(
+            stringify_node(
+                &crate::expr::expr("When(String,Min(2),Max(3),Number)").unwrap(),
+                false
+            ),
+            "When(String,Min(2),Max(3))"
+        );
+        assert_eq!(
+            run(&Schema::new(obj([("a: When(String,Min(2))", "xy")])), "{}"),
+            r#"{"a":"xy"}"#
+        );
+        assert_eq!(
+            stringify_node(&When(Token::Number, Min(1, Any()), Max(-1, Any())), false),
+            "When(Number,Min(1),Max(-1))"
+        );
+        assert_eq!(stringify_node(&then(), false), "When(String,Min(2),Any)");
+    }
+
+    // ts/test/builder.test.ts, builder-contains.
+    #[test]
+    fn contains_counts_the_items_its_shape_admits() {
+        // At least one, exactly some, at most some.
+        let one = Schema::new(Contains(Min(1, Any()), Token::Number, bare()));
+        assert_eq!(run(&one, r#"["a",2]"#), r#"["a",2]"#);
+        assert_eq!(
+            run(&one, r#"["a","b"]"#),
+            "ERR Value \"[a,b]\" for property \"\" has 0 of its items satisfying Number; the count must be Min(1)."
+        );
+        assert_eq!(
+            run(&one, "[]"),
+            "ERR Value \"[]\" for property \"\" has 0 of its items satisfying Number; the count must be Min(1)."
+        );
+        assert_eq!(
+            run(&Schema::new(Contains(2, Token::Number, bare())), r#"[1,"a",2,3]"#),
+            "ERR Value \"[1,a,2,3]\" for property \"\" has 3 of its items satisfying Number; the count must be 2."
+        );
+        assert_eq!(
+            run(&Schema::new(Contains(0, Token::Number, bare())), r#"["a"]"#),
+            r#"["a"]"#
+        );
+        // A count that is not an interval of whole numbers is read count by
+        // count, here twice from what the first array asked; the port names
+        // it in its own rendering.
+        let evens = Schema::new(Contains(Exact([0, 2]), Token::Number, bare()));
+        assert_eq!(run(&evens, r#"["a",1,2]"#), r#"["a",1,2]"#);
+        assert_eq!(
+            run(&evens, r#"[1,"a"]"#),
+            "ERR Value \"[1,a]\" for property \"\" has 1 of its items satisfying Number; the count must be Exact(0, 2)."
+        );
+        // An interval is read at once: a count no number satisfies decides
+        // before any item is tried, and so tries none of the budget.
+        let empty = || Contains(Max(1, Min(2, Any())), Token::Number, bare());
+        assert_eq!(
+            run(&Schema::new(empty()), "[1,2,3]"),
+            "ERR Value \"[1,2,3]\" for property \"\" has 0 to 3 of its items satisfying Number; the count must be Min(2).Max(1)."
+        );
+        assert_eq!(
+            run(&Schema::new(empty()), r#"["a","b"]"#),
+            "ERR Value \"[a,b]\" for property \"\" has 0 to 2 of its items satisfying Number; the count must be Min(2).Max(1)."
+        );
+        assert_eq!(
+            run(&budget(1, empty()), "[1,2,3]"),
+            "ERR Value \"[1,2,3]\" for property \"\" has 0 to 3 of its items satisfying Number; the count must be Min(2).Max(1)."
+        );
+        assert_eq!(
+            run(&Schema::new(Contains(Max(3, Min(2, Any())), Token::Number, bare())), r#"[1,"a",2,3,4]"#),
+            "ERR Value \"[1,a,2,3,4]\" for property \"\" has 4 of its items satisfying Number; the count must be Min(2).Max(3)."
+        );
+        assert_eq!(
+            run(&Schema::new(Contains(Below(0, Any()), Token::Number, bare())), "[1,2]"),
+            "ERR Value \"[1,2]\" for property \"\" has 0 to 2 of its items satisfying Number; the count must be Below(0)."
+        );
+        assert_eq!(
+            run(&Schema::new(Contains(Len(2, Any()), Token::Number, bare())), "[1,2,3]"),
+            "ERR Value \"[1,2,3]\" for property \"\" has 3 of its items satisfying Number; the count must be Len(2)."
+        );
+        // Ignore around a count is a check, not a bound: it admits any.
+        let ignored = Contains(Ignore(Min(1, Any())), Token::Number, bare());
+        assert_eq!(run(&Schema::new(ignored), r#"["a"]"#), r#"["a"]"#);
+
+        // An item is tried only while the untried could change the verdict.
+        assert_eq!(
+            run(&Schema::new(Contains(Max(1, Any()), Token::Number, bare())), "[1,2,3]"),
+            "ERR Value \"[1,2,3]\" for property \"\" has 2 to 3 of its items satisfying Number; the count must be Max(1)."
+        );
+        let tried = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let counter = Arc::clone(&tried);
+        let lazy = Schema::new(Contains(
+            Min(1, Any()),
+            Check(
+                move |_, _| {
+                    counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                    true
+                },
+                Any(),
+            ),
+            bare(),
+        ));
+        assert_eq!(run(&lazy, "[1,2,3]"), "[1,2,3]");
+        assert_eq!(tried.load(std::sync::atomic::Ordering::SeqCst), 1);
+
+        // Not an array: the node's type speaks. With a spec, its shape holds too.
+        assert_eq!(
+            run(&one, "\"x\""),
+            "ERR Validation failed for string \"x\" because the string is not of type array."
+        );
+        assert_eq!(
+            run(
+                &Schema::new(Contains(Min(1, Any()), Token::Number, Any())),
+                "\"x\""
+            ),
+            "\"x\""
+        );
+        assert_eq!(
+            run(&Schema::new(Contains(1, Token::Number, arr([Min(1, Any())]))), "[1,0]"),
+            "ERR Value \"[1,0]\" for property \"\" has 2 of its items satisfying Number; the count must be 1."
+        );
+        assert_eq!(
+            run(
+                &Schema::new(Min(1, Any()).Contains(1, Token::String)),
+                r#"["a"]"#
+            ),
+            r#"["a"]"#
+        );
+        let between = Contains(Below(3, Above(0, Any())), Token::Number, bare());
+        assert_eq!(run(&at_a(between), &a(r#"[1,"x"]"#)), a(r#"[1,"x"]"#));
+        // The items are left as they were given.
+        let filled = Contains(Min(1, Any()), Open(obj([("b", 2)])), bare());
+        assert_eq!(run(&Schema::new(filled), r#"[{"a":1}]"#), r#"[{"a":1}]"#);
+        // A verdict reads it alike, and a count shape is asked once per
+        // number.
+        assert!(one.valid(&j("[1]")) && !one.valid(&j("[\"a\"]")));
+        assert!(one.valid(&j("[\"a\",1]")));
+
+        // The count is a whole number or a shape; the items need a shape. A
+        // count or an item shape that is a builder's fault is the fault.
+        for count in [
+            Spec::from(-1),
+            Spec::from(1.5),
+            Spec::from(f64::INFINITY),
+            Spec::from(f64::NAN),
+            Spec::Value(Value::Undefined),
+        ] {
+            assert_eq!(
+                run(&Schema::new(Contains(count, Token::String, bare())), "[]"),
+                format!("ERR {}", CONTAINS_FAULT)
+            );
+        }
+        assert_eq!(
+            run(&Schema::new(Contains(1, Value::Undefined, bare())), "[]"),
+            format!("ERR {}", CONTAINS_ITEMS_FAULT)
+        );
+        assert_eq!(
+            run(
+                &Schema::new(Contains(Min("x", Any()), Token::String, bare())),
+                "[]"
+            ),
+            "ERR Shape: Min needs a number"
+        );
+        assert_eq!(
+            run(&Schema::new(Contains(1, Min("x", Any()), bare())), "[]"),
+            "ERR Shape: Min needs a number"
+        );
+        for (src, want) in [
+            ("Contains()", CONTAINS_FAULT),
+            ("Contains(1)", CONTAINS_ITEMS_FAULT),
+            ("Contains(-1,String)", CONTAINS_FAULT),
+            ("Contains(1.5,String)", CONTAINS_FAULT),
+        ] {
+            assert_eq!(crate::expr::expr(src).unwrap_err().0, want, "{}", src);
+        }
+
+        // The string form, and the key expression, whose example is the spec
+        // whatever the count is.
+        assert_eq!(
+            run(&Schema::parse("Contains(1,Number)").unwrap(), r#"[1,"a"]"#),
+            r#"[1,"a"]"#
+        );
+        let keyed = |key: &str, input: &str| run(&Schema::new(obj([(key, bare())])), input);
+        assert_eq!(
+            keyed("a: Contains(1,Number)", r#"{"a":[1]}"#),
+            r#"{"a":[1]}"#
+        );
+        assert_eq!(
+            keyed("a: Contains(Min(1),Number)", r#"{"a":["x"]}"#),
+            "ERR Value \"[x]\" for property \"a\" has 0 of its items satisfying Number; the count must be Min(1)."
+        );
+        assert_eq!(
+            keyed("a: Contains(1,Nof(1,String,Number))", r#"{"a":["x",true]}"#),
+            r#"{"a":["x",true]}"#
+        );
+        // An array renders as its spec; any other node shows the check.
+        assert_eq!(
+            stringify_node(&Contains(1, Token::String, bare()), false),
+            "[]"
+        );
+        assert_eq!(
+            stringify_node(&Min(1, Any()).Contains(1, Token::String), false),
+            "Min(1).Contains(1,String)"
+        );
+    }
+
+    // ts/test/builder.test.ts, builder-unique.
+    #[test]
+    fn unique_compares_items_as_json_values() {
+        // Items compare as JSON values: by value, in any key order.
+        let u = Schema::new(Unique(bare()));
+        let distinct = r#"[1,"1",true,null,[1],{"a":1}]"#;
+        assert_eq!(run(&u, distinct), distinct);
+        assert_eq!(
+            run(&u, "[1,2,2,1]"),
+            "ERR Value \"[1,2,2,1]\" for property \"\" must have unique items (items 1 and 2 are equal)."
+        );
+        assert_eq!(
+            run(&u, r#"[{"a":1,"b":2},{"b":2,"a":1}]"#),
+            "ERR Value \"[{a:1,b:2},{b:2,a:1}]\" for property \"\" must have unique items (items 0 and 1 are equal)."
+        );
+        assert!(u.valid(&j(r#"[[1],{"0":1}]"#)));
+        assert!(u.valid(&j(r#"[{"a":1},{"b":1},{"a":1,"b":1}]"#)));
+        assert!(u.valid(&j(r#"[[1,2],[1,3],[1]]"#)));
+        assert!(!u.valid(&j(r#"[[1,[2]],[1,[2]]]"#)));
+        // NaN is NaN, a zero is a zero whatever its sign, a bigint is its
+        // value and a function itself; a date is equal to itself alone.
+        let items = |vs: Vec<Value>| Value::Arr(vs);
+        let nan = || Value::Num(f64::NAN);
+        assert!(!u.valid(&items(vec![items(vec![nan()]), items(vec![nan()])])));
+        assert!(!u.valid(&items(vec![nan(), nan()])));
+        assert!(!u.valid(&items(vec![Value::Num(0.0), Value::Num(-0.0)])));
+        let big = || Value::BigInt(num_bigint::BigInt::from(1));
+        assert!(!u.valid(&items(vec![big(), big()])));
+        assert!(u.valid(&items(vec![big(), Value::from(1)])));
+        assert!(!u.valid(&items(vec![Value::Func(1), Value::Func(1)])));
+        assert!(u.valid(&items(vec![Value::Func(1), Value::Func(2)])));
+        assert!(!u.valid(&items(vec![Value::Undefined, Value::Undefined])));
+        assert!(u.valid(&items(vec![Value::Date(1), Value::Date(1)])));
+        assert!(u.valid(&items(vec![
+            items(vec![Value::Date(1)]),
+            items(vec![Value::Date(1)])
+        ])));
+
+        // Not an array: the node's type speaks. With a spec, its shape holds too.
+        assert_eq!(
+            run(&u, "\"x\""),
+            "ERR Validation failed for string \"x\" because the string is not of type array."
+        );
+        assert_eq!(run(&Schema::new(Unique(Any())), "\"x\""), "\"x\"");
+        assert_eq!(
+            run(&Schema::new(Unique(arr([Token::String]))), r#"["a","a"]"#),
+            "ERR Value \"[a,a]\" for property \"\" must have unique items (items 0 and 1 are equal)."
+        );
+        assert_eq!(
+            run(&Schema::new(Max(2, Any()).Unique()), "[1,1]"),
+            "ERR Value \"[1,1]\" for property \"\" must have unique items (items 0 and 1 are equal)."
+        );
+        assert_eq!(
+            run(&Schema::new(obj([("u", Unique(bare()))])), r#"{"u":[1,2]}"#),
+            r#"{"u":[1,2]}"#
+        );
+        assert_eq!(run(&Schema::parse("Unique").unwrap(), "[1,2]"), "[1,2]");
+        // An array renders as its spec; any other node shows the check.
+        assert_eq!(stringify_node(&Unique(bare()), false), "[]");
+        assert_eq!(
+            stringify_node(&Max(2, Any()).Unique(), false),
+            "Max(2).Unique()"
+        );
+    }
+
+    // ts/test/builder.test.ts, builder-trials.
+    #[test]
+    fn trials_share_one_budget_per_validation() {
+        // Every trial takes one from the validation's budget; past it the
+        // validation fails, with that error alone.
+        let spent = "Value \"[1,2]\" for property \"\" needs more trials than the budget of 1.";
+        let two = || Contains(2, Token::Number, bare());
+        assert_eq!(run(&budget(1, two()), "[1,2]"), format!("ERR {}", spent));
+        assert_eq!(run(&budget(2, two()), "[1,2]"), "[1,2]");
+        let mut ctx = Context::new();
+        assert!(budget(1, two()).validate_ctx(j("[1,2]"), &mut ctx).is_err());
+        let got: Vec<(&str, &str, &str)> = ctx
+            .err
+            .iter()
+            .map(|e| (e.text.as_str(), e.path.as_str(), e.why.as_str()))
+            .collect();
+        assert_eq!(got, vec![(spent, "", "trial")]);
+        assert_eq!(budget(1, two()).error(&j("[1,2]"))[0].text, spent);
+        // A trial refused once is refused again, and the first refusal is
+        // the one named.
+        assert_eq!(
+            run(&budget(1, Contains(3, Token::Number, bare())), "[1,2,3,4]"),
+            "ERR Value \"[1,2,3,4]\" for property \"\" needs more trials than the budget of 1."
+        );
+
+        // A trial the budget refused could have decided anything, even a not.
+        let not = budget(2, Nof(0, [Contains(3, Token::Number, bare())]));
+        assert_eq!(
+            run(&not, "[1,2,3]"),
+            "ERR Value \"[1,2,3]\" for property \"\" needs more trials than the budget of 2."
+        );
+        assert!(!not.valid(&j("[1,2,3]")));
+        assert!(!not.matches(&j("[1,2,3]")));
+        assert_eq!(not.error(&j("[1,2,3]")).len(), 1);
+
+        // Validations within it share the budget, and the error names where
+        // it ran out.
+        let all = All([
+            Contains(1, Token::Number, bare()),
+            Contains(1, Token::String, bare()),
+        ]);
+        assert_eq!(
+            run(&budget(3, all), r#"[1,"a"]"#),
+            "ERR Value \"[1,a]\" for property \"\" needs more trials than the budget of 3."
+        );
+        let disc = crate::discriminated::Discriminated(
+            "k",
+            [(
+                "a",
+                obj([
+                    ("k", Spec::from(Token::String)),
+                    (
+                        "x",
+                        Spec::from(Contains(Min(1, Any()), Token::Number, bare())),
+                    ),
+                ]),
+            )],
+        );
+        assert_eq!(
+            run(&budget(1, disc), r#"{"k":"a","x":["q",1]}"#),
+            "ERR Value \"[q,1]\" for property \"x\" needs more trials than the budget of 1."
+        );
+        let kinds = Nof(
+            1,
+            [
+                Spec::from(Contains(Min(1, Any()), Token::Number, bare())),
+                Spec::from(Token::String),
+            ],
+        );
+        assert_eq!(
+            run(
+                &budget(2, obj([("a", arr([kinds]))])),
+                r#"{"a":[[1],["x",1]]}"#
+            ),
+            "ERR Value \"[x,1]\" for property \"a.1\" needs more trials than the budget of 2."
+        );
+        // A When's condition is a trial too, and so is a Nof's shape.
+        let when = || When(Token::Number, Any(), Any());
+        assert_eq!(
+            run(&budget(1, All([when(), Min(1, when())])), "5"),
+            "ERR Value \"5\" for property \"\" needs more trials than the budget of 1."
+        );
+        assert_eq!(
+            run(
+                &budget(1, at_a_spec(Nof(1, [Token::String, Token::Boolean]))),
+                r#"{"a":1}"#
+            ),
+            "ERR Value \"1\" for property \"a\" needs more trials than the budget of 1."
+        );
+
+        // So does the shape Nof(1) produces from, which runs its trials
+        // again, at the Nof's own path.
+        let produced = || {
+            obj([(
+                "a",
+                Nof(
+                    1,
+                    [
+                        Contains(1, Token::Number, bare()),
+                        Contains(1, Token::String, bare()),
+                    ],
+                ),
+            )])
+        };
+        assert_eq!(
+            run(&budget(3, produced()), r#"{"a":[1]}"#),
+            "ERR Value \"[1]\" for property \"a\" needs more trials than the budget of 3."
+        );
+        assert_eq!(
+            run(&budget(4, produced()), r#"{"a":[1]}"#),
+            "ERR Value \"[1]\" for property \"a\" needs more trials than the budget of 4."
+        );
+        assert_eq!(run(&budget(5, produced()), r#"{"a":[1]}"#), r#"{"a":[1]}"#);
+        let nested = obj([(
+            "a",
+            Nof(
+                1,
+                [
+                    Spec::from(Nof(1, [Min(0, Token::Number), Max(5, Token::Number)])),
+                    Spec::from(Token::Boolean),
+                ],
+            ),
+        )]);
+        assert_eq!(
+            run(&budget(4, nested), r#"{"a":7}"#),
+            "ERR Value \"7\" for property \"a\" needs more trials than the budget of 4."
+        );
+
+        // Each call has a budget of its own, and a call within another
+        // leaves the other's as it was; zero is the default.
+        let twice = budget(2, Contains(Min(1, Any()), Token::Number, bare()));
+        let mut reused = Context::new();
+        assert!(twice.validate_ctx(j(r#"["a",1]"#), &mut reused).is_ok());
+        assert!(twice.validate_ctx(j(r#"["a",1]"#), &mut reused).is_ok());
+        assert_eq!(
+            run(
+                &budget(0, Contains(Min(1, Any()), Token::Number, bare())),
+                "[1]"
+            ),
+            "[1]"
+        );
+        // The inner call spends its budget of one; the outer still has its
+        // two for the items after it.
+        let inner = Arc::new(budget(1, two()));
+        let nested = Arc::clone(&inner);
+        let outer = budget(
+            2,
+            Contains(
+                2,
+                Token::Number,
+                Check(
+                    move |state, _| nested.validate_ctx(j("[1,2]"), state.ctx).is_err(),
+                    bare(),
+                ),
+            ),
+        );
+        assert_eq!(run(&outer, "[1,2]"), "[1,2]");
+    }
+
+    fn at_a_spec(n: impl Into<Spec>) -> Spec {
+        obj([("a", n.into())])
     }
 }

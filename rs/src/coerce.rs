@@ -176,6 +176,7 @@ pub(crate) fn coerce_validator() -> Validator {
         args: Vec::new(),
         suffix: None,
         inner: None,
+        counted: None,
     }
 }
 

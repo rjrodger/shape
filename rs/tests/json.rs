@@ -447,6 +447,82 @@ fn lists() {
         r#"{"$$":"Discriminated(\"k\",$$0)","$$0":{"x":{"k: Min(1)":"x"}}}"#,
         &[v(r#"{"k":"x"}"#)],
     );
+
+    // When is a list head too; Contains and Unique are checks of an array.
+    let bare = || arr::<Spec>([]);
+    round_trip(
+        When(Token::String, Min(2, Any()), Any()),
+        r#""When(String,Any.Min(2),Any)""#,
+        &[v("\"a\""), v("\"abc\""), v("5")],
+    );
+    round_trip(
+        obj([(
+            "a",
+            When(
+                Open(obj([("k", Required(Any()))])),
+                Open(obj([("b", Required(Token::Number))])),
+                Any(),
+            ),
+        )]),
+        r#"{"a":{"$$":"When($$0,$$1,Any)","$$0":{"k":"Required","$$":"Open"},"$$1":{"b: Number":0,"$$":"Open"}}}"#,
+        &[
+            v(r#"{"a":{"k":1}}"#),
+            v(r#"{"a":{"k":1,"b":2}}"#),
+            v(r#"{"a":{}}"#),
+        ],
+    );
+    round_trip(
+        Contains(Min(1, Any()), Token::Number, bare()),
+        r#"{"$$":"Contains(Any.Min(1),Number,$$0)","$$0":[]}"#,
+        &[v("[1]"), v(r#"["a"]"#)],
+    );
+    round_trip(
+        obj([("a", Contains(2, Token::String, bare()))]),
+        r#"{"a: Contains(2,String)":[]}"#,
+        &[v(r#"{"a":["x","y"]}"#), v(r#"{"a":["x"]}"#)],
+    );
+    round_trip(
+        obj([("a", Contains(Min(1, Any()), Token::Number, bare()))]),
+        r#"{"a: Contains(Any.Min(1),Number)":[]}"#,
+        &[v(r#"{"a":[1]}"#), v(r#"{"a":["x"]}"#), v("{}")],
+    );
+    round_trip(
+        Contains(Max(1, Any()), Exact([1]), arr([Token::Number])),
+        r#"{"$$":"Contains(Any.Max(1),Required.Exact(1),$$0)","$$0":["Number"]}"#,
+        &[v("[1,2]"), v("[1,1]"), v(r#"["a"]"#)],
+    );
+    round_trip(
+        obj([
+            ("u", Unique(arr([Token::String]))),
+            ("v", Skip(Unique(bare()))),
+        ]),
+        r#"{"u: Unique":["String"],"v: Skip.Unique":[]}"#,
+        &[
+            v(r#"{"u":["a","b"]}"#),
+            v(r#"{"u":["a","a"]}"#),
+            v(r#"{"u":[],"v":[1,1]}"#),
+        ],
+    );
+    // An item shape in a sidecar, beside the array's own; a check the
+    // string form cannot say cannot be written in a Contains either.
+    round_trip(
+        Contains(1, obj([("x", Token::Number)]), bare()),
+        r#"{"$$":"Contains(1,$$1,$$0)","$$0":[],"$$1":{"x: Number":0}}"#,
+        &[v(r#"[{"x":1},2]"#), v("[2]")],
+    );
+    round_trip(
+        Unique(bare()),
+        r#"{"$$":"Unique($$0)","$$0":[]}"#,
+        &[v("[1,2]"), v("[1,1]")],
+    );
+    cannot(
+        Contains(1, Check(|_, _| true, Any()), bare()),
+        "a check function",
+    );
+    cannot(
+        Contains(Check(|_, _| true, Any()), Token::Number, bare()),
+        "a check function",
+    );
 }
 
 #[test]

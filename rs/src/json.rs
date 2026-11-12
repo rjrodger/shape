@@ -172,6 +172,20 @@ fn validator_call(v: &Validator, calls: &mut Vec<Call>) -> R<()> {
             });
         }
         "Check" => return cannot("a check function"),
+        // A count leads the shape of the items: a number inline, a shape as
+        // its value.
+        "Contains" => {
+            let c = v.counted.as_ref().expect("Contains carries its count");
+            let count = match &c.count {
+                Some(count) => arg_of(count.node())?,
+                None => Arg::Text(js_number(c.lo)),
+            };
+            calls.push(Call {
+                name: name.to_string(),
+                args: vec![count, arg_of(&c.shape)?],
+            });
+        }
+        "Unique" => calls.push(call(name)),
         // The list itself is the head of the expression.
         "All" | "Discriminated" => {}
         _ if is_format(name) => calls.push(call(name)),
@@ -691,6 +705,8 @@ pub fn node_json(n: &Node) -> R<Value> {
                             });
                             "Nof"
                         }
+                        // Every arm is written, a defaulted one as Any.
+                        ListMode::When => "When",
                         _ => "All",
                     };
                     for b in &n.list {

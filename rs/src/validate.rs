@@ -2,7 +2,7 @@
 
 use crate::context::{Context, PathPart, State, Update, UpdateErr};
 use crate::error::*;
-use crate::node::{Kind, ListMode, Node, Validator};
+use crate::node::{Counted, Kind, ListMode, Node, Validator};
 use crate::stringify::{nof_count_text, stringify_node};
 use crate::value::{is_integer, Map, Value};
 use std::collections::HashMap;
@@ -1051,8 +1051,48 @@ pub(crate) fn validate_ignored(
     !sub.has_any() && kept
 }
 
+/// Take one trial from the validation's budget for the composition at the
+/// walk's path (TypeScript's trial): each shape a Nof tries, each When
+/// condition and each item a Contains counts takes one. Past the budget the
+/// trial refuses, and the first refusal records the error the validation
+/// then fails with alone, at the composition that asked, in full whoever
+/// asked.
+pub(crate) fn take_trial(
+    w: &mut Walk<'_>,
+    key: &str,
+    n: &Node,
+    value: &Value,
+    parent_is_array: bool,
+    check: &str,
+) -> bool {
+    let t = &mut w.ctx.trials;
+    if t.left > 0 {
+        t.left -= 1;
+        return true;
+    }
+    if t.spent.is_none() {
+        let at = At {
+            path: &w.path,
+            key,
+            kind: n.kind,
+            value,
+            parent_arr: parent_is_array,
+            absent: false,
+            check,
+            regexp_src: None,
+            terse: false,
+        };
+        let text = format!(
+            "Value \"$VALUE\" for property \"$PATH\" needs more trials than the budget of {}.",
+            t.budget
+        );
+        t.spent = Some(make_err(&at, "trial", MARK_CUSTOM_CHECK_TEXT, &text));
+    }
+    false
+}
+
 /// Whether a branch accepts the value, without producing or rendering.
-fn branch_passes(
+pub(crate) fn branch_passes(
     sn: &Node,
     value: &Value,
     key: &str,
@@ -1113,6 +1153,11 @@ enum Admits {
 /// The counts from `k` to `k + open`, against the counts a `Nof` admits.
 fn nof_span(ok: &[bool], k: usize, open: usize) -> Admits {
     let yes = ok[k..=k + open].iter().filter(|v| **v).count();
+    span_of(yes, open)
+}
+
+/// How many of the `open + 1` counts in a span are admitted, as a span.
+fn span_of(yes: usize, open: usize) -> Admits {
     if yes == 0 {
         Admits::No
     } else if yes == open + 1 {
@@ -1122,7 +1167,101 @@ fn nof_span(ok: &[bool], k: usize, open: usize) -> Admits {
     }
 }
 
-/// All and Nof. The branches see the value as the parent saw it:
+/// The counts from `k` to `k + open` against the whole numbers `lo` to
+/// `hi`: none where the two share no number (so an empty interval refuses
+/// at once, as reading count by count does), all where the counts lie
+/// wholly in it, and otherwise some.
+fn interval_span(lo: f64, hi: f64, k: usize, open: usize) -> Admits {
+    let (from, to) = (k as f64, (k + open) as f64);
+    if hi.min(to) < lo.max(from) {
+        Admits::No
+    } else if lo <= from && to <= hi {
+        Admits::All
+    } else {
+        Admits::Some
+    }
+}
+
+/// A Contains (see `builders::Contains`): the items of an array are tried
+/// in order, each on its own, while the untried could still change the
+/// verdict, as a Nof tries its shapes. A value that is not an array is not
+/// counted.
+pub(crate) fn count_items(
+    c: &Counted,
+    shape_text: &str,
+    count_text: &str,
+    state: &mut State<'_>,
+    update: &mut Update,
+) -> bool {
+    let Value::Arr(items) = state.value else {
+        return true;
+    };
+    // The counts from k to k + open are all, some or none admitted: at once
+    // for a count that is an interval, and otherwise off the running total
+    // of admitted counts.
+    let n = items.len();
+    let totals = c.count.as_ref().filter(|_| !c.interval).map(|count| {
+        let mut yes = Vec::with_capacity(n + 2);
+        yes.push(0usize);
+        for x in 0..=n {
+            yes.push(yes[x] + usize::from(c.admits(count, x)));
+        }
+        yes
+    });
+    let span = |k: usize, open: usize| match &totals {
+        Some(yes) => span_of(yes[k + open + 1] - yes[k], open),
+        None => interval_span(c.lo, c.hi, k, open),
+    };
+
+    // The items are tried apart from the walk that met the array, sharing
+    // its context, and so its budget; a refused trial is the array's.
+    let mut w = Walk {
+        ctx: state.ctx,
+        defs: state.defs,
+        is_match: state.is_match,
+        path: state.path_arr.to_vec(),
+        paths: true,
+        own: false,
+    };
+    let mut buf = [0u8; 20];
+    let (mut k, mut tried) = (0, 0);
+    while span(k, n - tried) == Admits::Some {
+        if take_trial(
+            &mut w,
+            state.key,
+            state.node,
+            state.value,
+            state.parent_is_array,
+            "Contains",
+        ) {
+            w.path.push(PathPart::Index(tried));
+            let key = index_key(tried, &mut buf);
+            if branch_passes(&c.shape, &items[tried], key, true, &mut w) {
+                k += 1;
+            }
+            w.path.pop();
+        }
+        tried += 1;
+    }
+    if span(k, n - tried) == Admits::No {
+        // A verdict-only call counts the failure and reads no message.
+        if !w.ctx.terse {
+            let more = if tried < n {
+                format!(" to {}", k + n - tried)
+            } else {
+                String::new()
+            };
+            update.err = Some(UpdateErr::Text(format!(
+                "Value \"$VALUE\" for property \"$PATH\" has {}{} of its items satisfying {}; the count must be {}.",
+                k, more, shape_text, count_text
+            )));
+        }
+        return false;
+    }
+    true
+}
+
+/// All, Nof and When. The branches see the value as the parent saw it:
 /// an absent value stays absent, so a branch that does not require one can
 /// still match and supply its default.
 #[allow(clippy::too_many_arguments)]
@@ -1180,7 +1319,10 @@ fn evaluate_list(
             let total = n.list.len();
             let (mut k, mut tried, mut matched) = (0, 0, 0);
             while nof_span(&n.nof_ok, k, total - tried) == Admits::Some {
-                if branch_passes(&n.list[tried], cur.get(), key, parent_is_array, w) {
+                let value = cur.get();
+                if take_trial(w, key, n, value, parent_is_array, "Nof")
+                    && branch_passes(&n.list[tried], value, key, parent_is_array, w)
+                {
                     k += 1;
                     matched = tried;
                 }
@@ -1226,7 +1368,40 @@ fn evaluate_list(
             }
             true
         }
-        _ => {
+        ListMode::When => {
+            // An absent value is not tried: the required check speaks for
+            // it. The condition is tried on the value, and the shape it
+            // picks validates a copy, as the root of a validation of its
+            // own, as TypeScript runs it: its errors are the errors, and
+            // what it produces is the value.
+            if absent {
+                return true;
+            }
+            let value = cur.get();
+            let cond = take_trial(w, key, n, value, parent_is_array, "When")
+                && branch_passes(&n.list[0], value, key, parent_is_array, w);
+            let picked = &n.list[if cond { 1 } else { 2 }];
+            let mut out = value.clone();
+            let mut sub = ValidationError::default();
+            let kept = if picked.is_ignore() {
+                validate_ignored(picked, Cur::Mut(&mut out), key, false, w, &mut sub)
+            } else {
+                validate_node(picked, Cur::Mut(&mut out), key, false, w, &mut sub)
+            };
+            if sub.has_any() {
+                if !silent {
+                    sub.issues.into_iter().for_each(|e| verr.add(e));
+                }
+                return true;
+            }
+            // A shape that drops its value (Ignore) leaves the value as it
+            // was.
+            if kept {
+                cur.set(out);
+            }
+            true
+        }
+        ListMode::All | ListMode::None => {
             // All threads the value through its branches, each producing
             // from what the one before it made, on a copy: the subject
             // itself is never changed, so a failing composition leaves it
@@ -1305,6 +1480,7 @@ mod tests {
             args: vec![],
             suffix: None,
             inner: None,
+            counted: None,
         }
     }
 

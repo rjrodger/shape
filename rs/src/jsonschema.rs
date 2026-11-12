@@ -6,7 +6,7 @@
 //! shape, and the differential harness compares the two.
 
 use crate::builders::bound_arg;
-use crate::node::{Kind, ListMode, Node, Validator};
+use crate::node::{Counted, Kind, ListMode, Node, Validator};
 use crate::value::{Map, Value};
 
 pub const JSON_SCHEMA_DRAFT: &str = "https://json-schema.org/draft/2020-12/schema";
@@ -87,7 +87,7 @@ fn node_schema(n: &Node, defs: &mut Map) -> Map {
         _ => {}
     }
 
-    check_schema(n, &mut s);
+    check_schema(n, &mut s, defs);
 
     if n.nullable {
         if let Some(t) = s.get("type").cloned() {
@@ -252,6 +252,14 @@ fn list_schema(n: &Node, s: &mut Map, defs: &mut Map) {
                 nof_schema(&n.nof_ok, branches, s)
             }
         }
+        ListMode::When => {
+            // An arm that passes everything says nothing.
+            for (k, b) in ["if", "then", "else"].into_iter().zip(branches) {
+                if k == "if" || b.as_obj().is_some_and(|m| !m.is_empty()) {
+                    s.insert(k.to_string(), b);
+                }
+            }
+        }
         _ => {
             s.insert("allOf".to_string(), Value::Arr(branches));
         }
@@ -288,7 +296,14 @@ pub(crate) fn kind_keywords(kind: &str) -> &'static [&'static str] {
             "minProperties",
             "maxProperties",
         ],
-        "array" => &["items", "prefixItems", "minItems", "maxItems"],
+        "array" => &[
+            "items",
+            "prefixItems",
+            "minItems",
+            "maxItems",
+            "contains",
+            "uniqueItems",
+        ],
         _ => &[],
     }
 }
@@ -383,7 +398,7 @@ fn size_max(lo: &str) -> &'static str {
     }
 }
 
-fn check_schema(n: &Node, s: &mut Map) {
+fn check_schema(n: &Node, s: &mut Map, defs: &mut Map) {
     let families = size_families(n.kind);
     let mut vs: Vec<&Validator> = n.befores.iter().chain(n.afters.iter()).collect();
     let mut i = 0;
@@ -443,6 +458,13 @@ fn check_schema(n: &Node, s: &mut Map) {
                     }
                 }
             }
+            "Contains" => {
+                let c = v.counted.as_ref().expect("Contains carries its count");
+                contains_schema(c, s, defs);
+            }
+            "Unique" => {
+                s.insert("uniqueItems".to_string(), Value::Bool(true));
+            }
             name => {
                 if let Some(f) = format_name(name) {
                     s.insert("format".to_string(), Value::from(f));
@@ -451,6 +473,22 @@ fn check_schema(n: &Node, s: &mut Map) {
                 }
             }
         }
+    }
+}
+
+/// A count of an array's items, as contains and the bounds on it. A count
+/// shape with a check that is not a bound has no keyword for that check,
+/// so the schema admits more than the shape does.
+fn contains_schema(c: &Counted, s: &mut Map, defs: &mut Map) {
+    s.insert(
+        "contains".to_string(),
+        Value::Obj(node_schema(&c.shape, defs)),
+    );
+    if c.lo != 1.0 {
+        s.insert("minContains".to_string(), Value::Num(c.lo));
+    }
+    if c.hi != f64::INFINITY {
+        s.insert("maxContains".to_string(), Value::Num(c.hi));
     }
 }
 
@@ -514,6 +552,85 @@ mod tests {
         );
         assert_eq!(js(Nof(0, Vec::<Spec>::new())), json!({}));
         assert_eq!(js(Nof(1, Vec::<Spec>::new())), json!({"not": {}}));
+    }
+
+    // ts/test/jsonschema.test.ts, when-contains-unique.
+    #[test]
+    fn renders_when_contains_and_unique() {
+        let num = json!({"type": "number"});
+        let bare = || arr::<Spec>([]);
+
+        // When is if, with then and else where they say something.
+        assert_eq!(
+            js(When(Token::Number, Min(1, Any()), Max(-1, Any()))),
+            json!({"if": num, "then": {"minimum": 1, "minLength": 1, "minItems": 1, "minProperties": 1},
+                "else": {"maximum": -1, "maxLength": -1, "maxItems": -1, "maxProperties": -1}})
+        );
+        assert_eq!(js(When(Token::Number, Any(), Any())), json!({"if": num}));
+
+        // Contains is contains, its count the bounds on it: an exact count,
+        // at least one (the default), and the bounds of a count shape. A
+        // count check with no keyword is left out, and the schema admits
+        // more.
+        let contains = |count: Spec| js(Contains(count, Token::Number, bare()));
+        assert_eq!(
+            contains(Spec::from(Min(1, Any()))),
+            json!({"type": "array", "contains": num})
+        );
+        assert_eq!(
+            contains(Spec::from(1)),
+            json!({"type": "array", "contains": num, "maxContains": 1})
+        );
+        assert_eq!(
+            contains(Spec::from(0)),
+            json!({"type": "array", "contains": num, "minContains": 0, "maxContains": 0})
+        );
+        assert_eq!(
+            contains(Spec::from(Max(3, Min(2, Any())))),
+            json!({"type": "array", "contains": num, "minContains": 2, "maxContains": 3})
+        );
+        assert_eq!(
+            contains(Spec::from(Below(3, Above(0, Any())))),
+            json!({"type": "array", "contains": num, "maxContains": 2})
+        );
+        assert_eq!(
+            contains(Spec::from(Max(2.5, Min(1.5, Any())))),
+            json!({"type": "array", "contains": num, "minContains": 2, "maxContains": 2})
+        );
+        assert_eq!(
+            contains(Spec::from(Len(2, Any()))),
+            json!({"type": "array", "contains": num, "minContains": 2, "maxContains": 2})
+        );
+        assert_eq!(
+            contains(Spec::from(Check(|_, _| true, Any()))),
+            json!({"type": "array", "contains": num, "minContains": 0})
+        );
+        // A lower bound below none is none; a zero of either sign is one;
+        // of two bounds the tighter stands.
+        assert_eq!(
+            contains(Spec::from(Min(-0.5, Max(-0.5, Any())))),
+            json!({"type": "array", "contains": num, "minContains": 0, "maxContains": -1})
+        );
+        assert_eq!(
+            contains(Spec::from(Max(5, Max(3, Min(1, Min(2, Any())))))),
+            json!({"type": "array", "contains": num, "minContains": 2, "maxContains": 3})
+        );
+        // The shape of the items may define what the schema refers to.
+        assert_eq!(
+            js(Contains(1, Define("n", Token::Number), bare())),
+            json!({"type": "array", "contains": num, "maxContains": 1, "$defs": {"n": num}})
+        );
+
+        // Unique is uniqueItems.
+        assert_eq!(
+            js(Unique(arr([Token::String]))),
+            json!({"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true})
+        );
+        assert_eq!(
+            js(obj([("a", Unique(bare()))])),
+            json!({"type": "object", "properties": {"a": {"type": "array", "uniqueItems": true}},
+                "additionalProperties": false})
+        );
     }
 
     #[test]
