@@ -591,9 +591,13 @@ describe('builder', () => {
     throws(() => Contains(), fault)
     throws(() => Contains(1), 'Shape: Contains needs a shape for the items it counts')
 
-    // The string form, and the key expression.
+    // The string form, and the key expression, whose example is the spec
+    // whatever the count is.
     deepEqual(Shape(Shape.expr('Contains(1,Number)'))([1, 'a']), [1, 'a'])
     deepEqual(Shape({ 'a: Contains(1,Number)': [] })({ a: [1] }), { a: [1] })
+    throws(() => Shape({ 'a: Contains(Min(1),Number)': [] })({ a: ['x'] }),
+      'Value "[x]" for property "a" has 0 of its items satisfying Number; the count must be Min(1).')
+    deepEqual(Shape({ 'a: Contains(1,Nof(1,String,Number))': [] })({ a: ['x', true] }), { a: ['x', true] })
     deepEqual(ShapeModule.GContains, Contains)
   })
 

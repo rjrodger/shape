@@ -102,6 +102,8 @@ contains-object-items	{"a":{"$call":["Contains",1,{"x":{"$type":"Number"}}]}}	{"
 contains-items-unchanged	{"a":{"$call":["Contains",{"$expr":"Min(1)"},{"$open":{"b":2}}]}}	{"a":[{"c":1}]}	{"a":[{"c":1}]}	
 contains-key-expr	{"a: Contains(1,Number)":[]}	{"a":[1]}	{"a":[1]}	
 contains-key-expr-absent	{"a: Contains(1,Number)":[]}	{}	{"a":[]}	
+contains-key-expr-count-shape	{"a: Contains(Min(1),Number)":[]}	{"a":["x"]}		"Value \"[x]\" for property \"a\" has 0 of its items satisfying Number; the count must be Min(1)."
+contains-key-expr-nof-items	{"a: Contains(1,Nof(1,String,Number))":[]}	{"a":["x",true]}	{"a":["x",true]}	
 contains-chained	{"a":{"$expr":"Min(1).Contains(1,String)"}}	{"a":[]}		"Value \"[]\" for property \"a\" must be a minimum length of 1 (was 0).\nValue \"[]\" for property \"a\" has 0 of its items satisfying String; the count must be 1."
 contains-in-nof-kinds	{"a":{"$expr":"Nof(1,Contains(Min(1),Number),String)"}}	{"a":["x"]}		"Value \"[x]\" for property \"a\" has 0 of its items satisfying Number; the count must be Min(1)."
 unique-ok	{"a":{"$expr":"Unique"}}	{"a":[1,"1",true,null,[1],{"a":1}]}	{"a":[1,"1",true,null,[1],{"a":1}]}	

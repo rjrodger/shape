@@ -1115,7 +1115,8 @@ function shapify<const S>(intop?: S, inopts?: ShapeOptions) {
     const skipa = Array.isArray(ctx?.skip?.depth) ? new Set(ctx.skip.depth) : null
     const skipk = Array.isArray(ctx?.skip?.keys) ? new Set(ctx.skip.keys) : null
 
-    const s = new State(root, top, ctx, match, terse)
+    // A trial's errors are thrown away, so it records them without text.
+    const s = new State(root, top, ctx, match, terse || true === ctx?.terse$)
 
     // A validation counts its trials against a budget of its own; one
     // within another, such as a composition's branch, counts against its
@@ -1880,8 +1881,13 @@ function expr(
           // composition or sits inside one, the outermost such composition
           // takes it as its default instead, and Nof(1,String,Number) with
           // 5 reads as Default(5,Nof(1,String,Number)).
+          // A Contains reads its first two arguments as its count and the
+          // shape of its items, so the example is its spec, after them.
           const cI = paren ? compositionCallAt(spec.tokens, tI) : -1
-          if (-1 < cI) {
+          if (-1 < cI && S.Contains === spec.tokens[cI]) {
+            spec.tokens.splice(closingParen(spec.tokens, cI + 1), 0, spec.keymark + refname)
+          }
+          else if (-1 < cI) {
             spec.tokens.splice(closingParen(spec.tokens, cI + 1) + 1, 0, ')')
             spec.tokens.splice(cI, 0, S.Default, '(', spec.keymark + refname)
           }
@@ -1999,13 +2005,14 @@ function expr(
 }
 
 
-// The index of the outermost All, Nof or When call open at tokens[tI], the first
-// closing parenthesis, so every call opened before it is still open; -1
-// when none is.
+// The index of the outermost All, Nof, When or Contains call open at
+// tokens[tI], the first closing parenthesis, so every call opened before it
+// is still open; -1 when none is. Each reads its leading arguments as
+// shapes of its own, so none of them can be the example.
 function compositionCallAt(tokens: string[], tI: number): number {
   for (let i = 1; i < tI; i++) {
-    if ('(' === tokens[i] &&
-      (S.All === tokens[i - 1] || S.Nof === tokens[i - 1] || S.When === tokens[i - 1])) {
+    if ('(' === tokens[i] && (S.All === tokens[i - 1] || S.Nof === tokens[i - 1] ||
+      S.When === tokens[i - 1] || S.Contains === tokens[i - 1])) {
       return i - 1
     }
   }
@@ -3603,9 +3610,9 @@ const Nof = function Nof(this: any, count: any, ...inshapes: any[]): Node<any> {
     let k = 0
     let tried = 0
     let matched = 0
-    const path$ = patharr(state)
+    const tctx = trialCtx(state, patharr(state))
     while (NOF_SOME === nofSpan(ok, k, shapes.length - tried)) {
-      if (trial(shapes[tried], val, state, path$)) {
+      if (trial(shapes[tried], val, state, tctx)) {
         k++
         matched = tried
       }
@@ -3705,21 +3712,38 @@ function trialBudget(n: any): number {
 }
 
 
+// The context a composition's trials run in, made once for all of them: a
+// trial's errors are thrown away, so they are recorded without text, and
+// the path is there for the error of a spent budget (see trial).
+function trialCtx(state: State, path$: (string | number)[]): any {
+  return { ...state.ctx, err: [], path$, trial$: state.trials, terse$: true }
+}
+
+
 // Try a shape on a copy of a value: a verdict, which changes nothing. Each
 // trial takes one from the budget of the validation it is part of. Past the
 // budget a trial refuses, and the validation fails with the error made here,
 // at the first place a trial was refused (see exec).
-function trial(shape: any, val: any, state: State, path$: (string | number)[]): boolean {
+function trial(shape: any, val: any, state: State, tctx: any): boolean {
   const t = state.trials
   if (t.left <= 0) {
     if (undefined === t.spent) {
+      // Whoever asked, a trial or not, this error is read in full.
+      const terse = state.terse
+      state.terse = false
       t.spent = makeErr(state,
         TEXT_PREFIX + ' needs more trials than the budget of ' + t.budget + '.', S.trial)
+      state.terse = terse
     }
     return false
   }
   t.left--
-  return shape.match(clone(val), { ...state.ctx, err: [], path$, trial$: t })
+  // Each trial starts as a fresh copy of the context would: what a trial
+  // writes there (its errors, definitions and renames) stays its own.
+  tctx.err = []
+  tctx.ref = state.ctx.ref
+  tctx.Rename = state.ctx.Rename
+  return shape.match(clone(val), tctx)
 }
 
 
@@ -3750,7 +3774,7 @@ const When = function When(this: any, cond: any, then?: any, otherwise?: any): N
     }
 
     const path$ = patharr(state)
-    const picked = trial(shapes[0], val, state, path$) ? shapes[1] : shapes[2]
+    const picked = trial(shapes[0], val, state, trialCtx(state, path$)) ? shapes[1] : shapes[2]
     const err: ErrDesc[] = []
     const out = picked(clone(val), { ...state.ctx, err, path$, trial$: state.trials })
     if (0 < err.length) {
@@ -3819,10 +3843,12 @@ const Contains = function Contains(this: any, count: any, inshape: any, spec?: a
     }
 
     const path$ = patharr(state)
+    const tctx = trialCtx(state, path$)
     let k = 0
     let tried = 0
     while (NOF_SOME === span(k, n - tried)) {
-      if (trial(shape, val[tried], state, path$.concat(tried))) {
+      tctx.path$ = path$.concat(tried)
+      if (trial(shape, val[tried], state, tctx)) {
         k++
       }
       tried++

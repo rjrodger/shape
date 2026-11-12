@@ -391,6 +391,8 @@ const files = {
     ['contains-items-unchanged', { a: CALL('Contains', { $expr: 'Min(1)' }, { $open: { b: 2 } }) }, { a: [{ c: 1 }] }],
     ['contains-key-expr', { 'a: Contains(1,Number)': [] }, { a: [1] }],
     ['contains-key-expr-absent', { 'a: Contains(1,Number)': [] }, {}],
+    ['contains-key-expr-count-shape', { 'a: Contains(Min(1),Number)': [] }, { a: ['x'] }],
+    ['contains-key-expr-nof-items', { 'a: Contains(1,Nof(1,String,Number))': [] }, { a: ['x', true] }],
     ['contains-chained', { a: { $expr: 'Min(1).Contains(1,String)' } }, { a: [] }],
     ['contains-in-nof-kinds', { a: { $expr: 'Nof(1,Contains(Min(1),Number),String)' } }, { a: ['x'] }],
     // Unique: no two items equal as JSON values.
