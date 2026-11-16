@@ -118,6 +118,12 @@ contains-object-carrier	{"a":{"$call":["Contains",1,{"x":1},{}]}}	{"a":{"b":1}}	
 contains-required-object-carrier	{"a":{"$required":{"$call":["Contains",1,{"x":1},{}]}}}	{"a":"x"}		"Validation failed for property \"a\" with string \"x\" because the string is not of type object."
 child-required-carrier	{"a":{"$required":{"$call":["Child",{"x":{"$type":"Number"}},{}]}}}	{"a":{"k":{"x":"q"}}}		"Validation failed for property \"a.k.x\" with string \"q\" because the string is not of type number."
 required-any-default	{"a":{"$required":{"$expr":"Any(5)"}}}	{"a":"x"}	{"a":"x"}	
+nof-chained-min	{"a":{"$expr":"Nof(1,String,Number).Min(1)"}}	{"a":[]}		"Value \"[]\" for property \"a\" satisfies 0 of: String, Number; the count must be 1.\nValue \"[]\" for property \"a\" must be a minimum length of 1 (was 0)."
+all-chained-min	{"a":{"$expr":"All(Min(1)).Min(2)"}}	{"a":[]}		"Value \"[]\" for property \"a\" must be a minimum length of 1 (was 0).\nValue \"[]\" for property \"a\" must be a minimum length of 2 (was 0)."
+nof-chained-contains	{"a":{"$expr":"Nof(1,String,Number).Contains(1,Number)"}}	{"a":[]}		"Value \"[]\" for property \"a\" satisfies 0 of: String, Number; the count must be 1.\nValue \"[]\" for property \"a\" has 0 of its items satisfying Number; the count must be 1."
+all-chained-unique	{"a":{"$expr":"All(Max(1)).Unique"}}	{"a":[1,1]}		"Value \"[1,1]\" for property \"a\" must be a maximum length of 1 (was 2).\nValue \"[1,1]\" for property \"a\" must have unique items (items 0 and 1 are equal)."
+when-chained-max	{"a":{"$expr":"When(String,Min(5)).Max(3)"}}	{"a":"abcd"}		"Value \"abcd\" for property \"a\" must be a minimum length of 5 (was 4).\nValue \"abcd\" for property \"a\" must be a maximum length of 3 (was 4)."
+nof-produces-for-min	{"a":{"$call":["Min",1,{"$call":["Nof",1,{"x":1},{"$type":"String"}]}]}}	{"a":{}}	{"a":{"x":1}}	
 contains-two-counts-ok	{"a":{"$expr":"Contains(0,Number).Contains(Min(1),String)"}}	{"a":["a"]}	{"a":["a"]}	
 contains-two-counts-fail	{"a":{"$expr":"Contains(0,Number).Contains(Min(1),String)"}}	{"a":["a",1]}		"Value \"[a,1]\" for property \"a\" has 1 of its items satisfying Number; the count must be 0."
 unique-ok	{"a":{"$expr":"Unique"}}	{"a":[1,"1",true,null,[1],{"a":1}]}	{"a":[1,"1",true,null,[1],{"a":1}]}	

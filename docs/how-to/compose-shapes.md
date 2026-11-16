@@ -204,6 +204,10 @@ pet := shape.MustShape(shape.Discriminated("kind", map[string]any{
 - `Exact` also matches when the value is absent but the node's default equals one
   of the listed literals.
 - These builders are not chainable methods—call them as top-level builders.
+- A check chained after a composition runs after it, on the value the
+  composition produced, and each reports what it finds:
+  `Nof(1, String, Number).Min(1)` on `[]` fails with the `Nof` error and the
+  `Min` error.
 - An absent optional composition (`Optional(Nof(1, String, Number))`) is simply
   absent; it is not put to its branches. `Nof` and `When` never put an absent
   value to their shapes, so a required one reports the value missing.

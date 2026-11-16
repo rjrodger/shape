@@ -412,6 +412,14 @@ const files = {
     ['child-required-carrier', { a: { $required: CALL('Child', { x: N }, {}) } }, { a: { k: { x: 'q' } } }],
     // A required value never takes its default, so the export writes none.
     ['required-any-default', { a: { $required: { $expr: 'Any(5)' } } }, { a: 'x' }],
+    // A composition is its node's first check: a check chained after it sees
+    // what it produced, and each reports what it finds.
+    ['nof-chained-min', { a: { $expr: 'Nof(1,String,Number).Min(1)' } }, { a: [] }],
+    ['all-chained-min', { a: { $expr: 'All(Min(1)).Min(2)' } }, { a: [] }],
+    ['nof-chained-contains', { a: { $expr: 'Nof(1,String,Number).Contains(1,Number)' } }, { a: [] }],
+    ['all-chained-unique', { a: { $expr: 'All(Max(1)).Unique' } }, { a: [1, 1] }],
+    ['when-chained-max', { a: { $expr: 'When(String,Min(5)).Max(3)' } }, { a: 'abcd' }],
+    ['nof-produces-for-min', { a: CALL('Min', 1, CALL('Nof', 1, { x: 1 }, T)) }, { a: {} }],
     // Two counts on one array are two constraints.
     ['contains-two-counts-ok', { a: { $expr: 'Contains(0,Number).Contains(Min(1),String)' } }, { a: ['a'] }],
     ['contains-two-counts-fail', { a: { $expr: 'Contains(0,Number).Contains(Min(1),String)' } }, { a: ['a', 1] }],

@@ -323,6 +323,8 @@ func callBuilder(name string, args []any) any {
 		return Rest(args[0], args[1:]...)
 	case "Child":
 		return Child(args[0], args[1:]...)
+	case "Min":
+		return Min(args[0], args[1:]...)
 	case "All":
 		return All(args...)
 	case "Nof":
