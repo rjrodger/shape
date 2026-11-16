@@ -117,6 +117,34 @@ describe('builder', () => {
     deepEqual(Shape({ 'a: Min()': 3 })({ a: 4 }), { a: 4 })
   })
 
+  test('builder-this', () => {
+    // Called as a method of Shape, of the module or of any other object, a
+    // builder chains onto nothing: only a node is a `this` to chain onto.
+    const mod = require('../dist/shape')
+    const holder = { Min, Never }
+    const json = (s: any) => JSON.stringify(Shape({ p: s }).json())
+    for (const [label, spec] of [
+      ['Shape', Shape.Min(1, String)],
+      ['module', mod.Min(1, String)],
+      ['object', holder.Min(1, String)],
+    ] as [string, any][]) {
+      deepEqual([label, json(spec)], [label, json(Min(1, String))])
+      // A required string stays required.
+      throws(() => Shape(spec)(), /Validation failed for value "undefined" because the value is required/)
+    }
+    deepEqual(json(Shape.Min(1, Never())), json(Min(1, Never())))
+    deepEqual(json(mod.Contains(1, { x: 1 }, mod.Never())), json(Shape.Contains(1, { x: 1 }, Never())))
+    deepEqual(json(mod.Required()), '{"p":"Required"}')
+    deepEqual(json(holder.Never()), '{"p":"Never"}')
+    // On a node, a builder chains: the node keeps what it was.
+    deepEqual(json(Never().Min(1)), '{"p":"Never.Min(1)"}')
+    // Shape itself is no shape: it gives nothing, which is Any.
+    deepEqual(json(Shape), '{"p":"Any"}')
+    deepEqual(json(buildize(Shape)), '{"p":"Any"}')
+    deepEqual(json(buildize([String, Number]).Rest(Number)), '{"p: Rest(Number)":["String","Number"]}')
+  })
+
+
   test('builder-required', () => {
     let g0 = Shape({ a: Required({ x: 1 }) })
     deepEqual(g0({ a: { x: 1 } }), { a: { x: 1 } })
