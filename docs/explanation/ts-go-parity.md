@@ -103,7 +103,10 @@ Some differences are inherent to Go and are unlikely ever to close.
   sentinel. Inside a map or slice a plain `nil` already reads as present-null,
   because the key or index exists. A builder argument is read the same way:
   `When(nil, …)` and `Contains(nil, …)` are faults in Go, so pass `Null` for
-  a condition or count that is null.
+  a condition or count that is null. A value argument is the other way
+  round: `Default` and `Exact` take a JSON null as `nil`, and `Null` there is
+  the sentinel itself, so `Default(Null, …)` fills it in and `Exact(Null)`
+  matches no value.
 
 - **No Symbol.** TypeScript has a `Symbol` type token and a `.Symbol()` chain
   shortcut. Go has no equivalent concept.

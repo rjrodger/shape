@@ -26,7 +26,10 @@ function decodeSpec(v, Shape) {
       if ('$jsonschema' === k) return Shape.fromJsonSchema(v.$jsonschema)
       if ('$call' === k) {
         const [name, ...args] = v.$call
-        return Shape[name](...args.map(a => decodeSpec(a, Shape)))
+        // A plain call: called as a method of Shape, a builder would take
+        // Shape for the node it chains onto.
+        const fn = Shape[name]
+        return fn(...args.map(a => decodeSpec(a, Shape)))
       }
       if ('$discriminated' === k) {
         const [tag, branches] = v.$discriminated

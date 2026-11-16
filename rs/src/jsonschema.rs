@@ -459,8 +459,21 @@ fn check_schema(n: &Node, s: &mut Map, defs: &mut Map) {
                 }
             }
             "Contains" => {
+                // Each count is a constraint of its own: a second one on the
+                // node joins the first through allOf.
                 let c = v.counted.as_ref().expect("Contains carries its count");
-                contains_schema(c, s, defs);
+                let count = contains_schema(c, defs);
+                if s.contains_key("contains") {
+                    let mut all = s
+                        .get("allOf")
+                        .and_then(Value::as_arr)
+                        .cloned()
+                        .unwrap_or_default();
+                    all.push(Value::Obj(count));
+                    s.insert("allOf".to_string(), Value::Arr(all));
+                } else {
+                    s.extend(count);
+                }
             }
             "Unique" => {
                 s.insert("uniqueItems".to_string(), Value::Bool(true));
@@ -479,7 +492,8 @@ fn check_schema(n: &Node, s: &mut Map, defs: &mut Map) {
 /// A count of an array's items, as contains and the bounds on it. A count
 /// shape with a check that is not a bound has no keyword for that check,
 /// so the schema admits more than the shape does.
-fn contains_schema(c: &Counted, s: &mut Map, defs: &mut Map) {
+fn contains_schema(c: &Counted, defs: &mut Map) -> Map {
+    let mut s = Map::new();
     s.insert(
         "contains".to_string(),
         Value::Obj(node_schema(&c.shape, defs)),
@@ -490,6 +504,7 @@ fn contains_schema(c: &Counted, s: &mut Map, defs: &mut Map) {
     if c.hi != f64::INFINITY {
         s.insert("maxContains".to_string(), Value::Num(c.hi));
     }
+    s
 }
 
 #[cfg(test)]
@@ -614,6 +629,19 @@ mod tests {
         assert_eq!(
             contains(Spec::from(Max(5, Max(3, Min(1, Min(2, Any())))))),
             json!({"type": "array", "contains": num, "minContains": 2, "maxContains": 3})
+        );
+        // A second count is a constraint of its own, as is each after it.
+        let two = || Contains(0, Token::Number, bare()).Contains(Min(1, Any()), Token::String);
+        let string = json!({"contains": {"type": "string", "minLength": 1}});
+        assert_eq!(
+            js(two()),
+            json!({"type": "array", "contains": num, "minContains": 0, "maxContains": 0,
+                "allOf": [string]})
+        );
+        assert_eq!(
+            js(two().Contains(Max(2, Any()), Token::Boolean)),
+            json!({"type": "array", "contains": num, "minContains": 0, "maxContains": 0,
+                "allOf": [string, {"contains": {"type": "boolean"}, "minContains": 0, "maxContains": 2}]})
         );
         // The shape of the items may define what the schema refers to.
         assert_eq!(

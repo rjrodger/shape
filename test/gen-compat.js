@@ -402,6 +402,16 @@ const files = {
     // A Contains on a node that is not an array keeps its item shape in json().
     ['contains-any-carrier', { a: CALL('Contains', 1, { x: N }, { $expr: 'Any' }) }, { a: [{ x: 1 }] }],
     ['contains-string-carrier', { a: CALL('Contains', 1, [N], T) }, { a: 'x' }],
+    // A carrier with sidecars and no properties is the node its head names,
+    // or the empty object its first call takes; a required Any names its kind.
+    ['contains-required-any-carrier', { a: CALL('Contains', 1, { x: 1 }, { $expr: 'Required' }) }, { a: 'x' }],
+    ['contains-never-carrier', { a: CALL('Contains', 1, { x: 1 }, { $expr: 'Never' }) }, { a: 1 }],
+    ['contains-optional-date-carrier', { a: CALL('Contains', 1, { x: 1 }, { $optional: D }) }, {}],
+    ['contains-object-carrier', { a: CALL('Contains', 1, { x: 1 }, {}) }, { a: { b: 1 } }],
+    ['contains-required-object-carrier', { a: { $required: CALL('Contains', 1, { x: 1 }, {}) } }, { a: 'x' }],
+    ['child-required-carrier', { a: { $required: CALL('Child', { x: N }, {}) } }, { a: { k: { x: 'q' } } }],
+    // A required value never takes its default, so the export writes none.
+    ['required-any-default', { a: { $required: { $expr: 'Any(5)' } } }, { a: 'x' }],
     // Two counts on one array are two constraints.
     ['contains-two-counts-ok', { a: { $expr: 'Contains(0,Number).Contains(Min(1),String)' } }, { a: ['a'] }],
     ['contains-two-counts-fail', { a: { $expr: 'Contains(0,Number).Contains(Min(1),String)' } }, { a: ['a', 1] }],

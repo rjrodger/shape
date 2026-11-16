@@ -326,6 +326,15 @@ func jsonWrapText(calls []jsonCall, shape string, refs map[string]any) string {
 	return out
 }
 
+// jsonCarried is the text alone where it needs no sidecars, and a carrier
+// where it does (a shape argument of Contains, say).
+func jsonCarried(text string, refs map[string]any) any {
+	if len(refs) == 0 {
+		return text
+	}
+	return jsonCarrier(text, refs)
+}
+
 // jsonCarrier is a carrier object: the expression under "$$", the sidecars
 // beside it.
 func jsonCarrier(text string, refs map[string]any) map[string]any {
@@ -439,7 +448,13 @@ func jsonKeyForm(n *node) (chain string, example any, ok bool) {
 				head = "Required"
 			}
 		}
-		return jsonChainText(head, sc.calls, map[string]any{}), sc.example, true
+		// A call that needs a sidecar has no place in a key.
+		refs := map[string]any{}
+		chain := jsonChainText(head, sc.calls, refs)
+		if len(refs) > 0 {
+			return "", nil, false
+		}
+		return chain, sc.example, true
 	}
 	if n.kind == KindObject {
 		children, chain, refs := jsonObject(n)
@@ -573,7 +588,8 @@ func jsonHeaded(n *node, hv *validator, kind string) any {
 	calls := append(jsonRequiredCalls(n, false), jsonFlagCalls(n, false)...)
 	calls = append(calls, jsonValidatorCalls(n, hv)...)
 	calls = append(calls, jsonTailCalls(n)...)
-	return jsonChainText(head, calls, map[string]any{})
+	refs := map[string]any{}
+	return jsonCarried(jsonChainText(head, calls, refs), refs)
 }
 
 // nodeJSON is the value form of a node: the JSON that reads back as it.
@@ -588,7 +604,8 @@ func nodeJSON(n *node) any {
 			}
 			return sc.example
 		}
-		return jsonChainText(sc.head, sc.calls, map[string]any{})
+		refs := map[string]any{}
+		return jsonCarried(jsonChainText(sc.head, sc.calls, refs), refs)
 	}
 
 	hv := jsonHeadValidator(n)
@@ -685,7 +702,8 @@ func nodeJSON(n *node) any {
 		if len(calls) == 0 {
 			return re
 		}
-		return jsonWrapText(calls, re, map[string]any{})
+		refs := map[string]any{}
+		return jsonCarried(jsonWrapText(calls, re, refs), refs)
 
 	case KindNaN:
 		calls := append(jsonFlagCalls(n, true), jsonValidatorCalls(n, nil)...)
@@ -693,10 +711,13 @@ func nodeJSON(n *node) any {
 		if len(calls) == 0 && !n.required && !n.skippable {
 			return "NaN"
 		}
-		return jsonChainText(jsonLiteralHead(n, "NaN"), calls, map[string]any{})
+		refs := map[string]any{}
+		return jsonCarried(jsonChainText(jsonLiteralHead(n, "NaN"), calls, refs), refs)
 	}
 
-	// The rest are a call that names the kind, then the chain.
+	// The rest are a call that names the kind, then the chain, with the
+	// sidecars of any call that takes a shape.
+	refs := map[string]any{}
 	var head string
 	headRequired := true
 	headSkipped := false
@@ -707,7 +728,9 @@ func nodeJSON(n *node) any {
 			head = "Required"
 		}
 		headRequired = n.required
-		if n.hasDefault && (n.defaultValue != nil || n.defaultNull) {
+		// A required value never takes its default, so a required Any has
+		// none to write, and Required(5) would read as a required number.
+		if n.hasDefault && (n.defaultValue != nil || n.defaultNull) && !n.required {
 			head += "(" + jsonLiteral(n.defaultValue, "the default") + ")"
 		}
 		if n.open && (n.objRest == nil || jsonIsOpen(n.objRest)) {
@@ -752,7 +775,7 @@ func nodeJSON(n *node) any {
 		calls := append(jsonRequiredCalls(n, true), jsonFlagCalls(n, false)...)
 		calls = append(calls, jsonValidatorCalls(n, first)...)
 		calls = append(calls, jsonTailCalls(n)...)
-		return jsonChainText(head, calls, map[string]any{})
+		return jsonCarried(jsonChainText(head, calls, refs), refs)
 	default:
 		jsonFault("a " + string(n.kind) + " value")
 	}
@@ -766,9 +789,17 @@ func nodeJSON(n *node) any {
 	if headRequired && len(rp) > 0 && n.kind != KindAny {
 		// Optional(Date), Skip(Never): the call holds the token.
 		head = rp[0].n + "(" + head + ")"
-		return jsonChainText(head, calls, map[string]any{})
+		return jsonCarried(jsonChainText(head, calls, refs), refs)
 	}
-	return jsonChainText(head, append(rp, calls...), map[string]any{})
+	text := jsonChainText(head, append(rp, calls...), refs)
+	if n.kind == KindAny && n.required && len(refs) > 0 {
+		// A carrier that starts with a bare Required is a required object, as
+		// Required.Child($$0) is, so a required Any names its kind first.
+		anyRefs := map[string]any{}
+		return jsonCarried(jsonChainText("Any"+strings.TrimPrefix(head, "Required"),
+			append([]jsonCall{{n: "Required"}}, calls...), anyRefs), anyRefs)
+	}
+	return jsonCarried(text, refs)
 }
 
 // jsonBranches is the branches of a Discriminated union by tag value. A

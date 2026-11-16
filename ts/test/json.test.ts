@@ -171,6 +171,29 @@ describe('json', () => {
     roundTrip({ p: Contains(Min(1), { a: 1 }, String) },
       { p: { $$: 'String.Contains(Any.Min(1),$$0)', $$0: { a: 1 } } }, { p: 'x' })
     roundTrip(Contains(1, { a: 1 }, Date), { $$: 'Date.Contains(1,$$0)', $$0: { a: 1 } }, new Date(0).toISOString())
+    // A required Any names its kind first, as a bare Required there is a
+    // required object.
+    roundTrip(Contains(1, { a: 1 }, Required()), { $$: 'Any.Required.Contains(1,$$0)', $$0: { a: 1 } },
+      [{ a: 1 }], [], 'x', undefined)
+    roundTrip(Contains(1, { a: 1 }, Exact(1)), { $$: 'Any.Required.Exact(1).Contains(1,$$0)', $$0: { a: 1 } },
+      1, 2)
+    // Its default, which it never takes, is not written: Required(5) would
+    // read as a required number.
+    roundTrip(Contains(1, { a: 1 }, Required(Any(5))), { $$: 'Any.Required.Contains(1,$$0)', $$0: { a: 1 } },
+      'x', undefined)
+    roundTrip({ a: Required(Any(5)) }, { a: 'Required' }, { a: 'x' }, {})
+    // An object with no properties is the empty object its first call
+    // takes, whether the call has parentheses or not.
+    roundTrip(Contains(1, { a: 1 }, {}), { $$: 'Contains(1,$$0)', $$0: { a: 1 } }, {}, { b: 1 }, [], 'x')
+    roundTrip(Contains(1, { a: 1 }, Closed({})), { $$: 'Contains(1,$$0).Closed', $$0: { a: 1 } }, {}, { b: 1 })
+    roundTrip({ p: Required(Contains(1, { a: 1 }, {})) }, { p: { $$: 'Required.Contains(1,$$0)', $$0: { a: 1 } } },
+      { p: {} }, {}, { p: 'x' })
+    roundTrip({ p: Required(Child({ a: 1 })) }, { p: { $$: 'Required.Child($$0)', $$0: { a: 1 } } },
+      { p: { x: {} } }, { p: { x: 1 } }, {})
+    // A head that names no node of its own takes it too.
+    roundTrip(Contains(1, { a: 1 }, Never()), { $$: 'Never.Contains(1,$$0)', $$0: { a: 1 } }, [], {}, 1)
+    roundTrip(Contains(1, { a: 1 }, Optional(Date)), { $$: 'Optional(Date).Contains(1,$$0)', $$0: { a: 1 } },
+      undefined, 'x')
   })
 
 
@@ -346,7 +369,9 @@ function corpusSpec(v: any): any {
         case '$jsonschema': return fromJsonSchema(v.$jsonschema)
         case '$call': {
           const [name, ...args] = v.$call
-          return (ShapeModule as any)[name](...args.map(corpusSpec))
+          // A plain call, as the corpus decoders make it.
+          const fn = (ShapeModule as any)[name]
+          return fn(...args.map(corpusSpec))
         }
         case '$discriminated': {
           const [tag, branches] = v.$discriminated

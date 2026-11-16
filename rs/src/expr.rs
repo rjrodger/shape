@@ -963,7 +963,8 @@ fn build_value(v: &Value, example: bool) -> Result<Spec, ExprError> {
 /// The expression under the mark applies to the object that holds it. The
 /// sidecars are its arguments; the object's own keys are the shape a chained
 /// builder takes, but a composition has no slot for a carrier and is read on
-/// its own, the node it becomes being the whole shape.
+/// its own, the node it becomes being the whole shape, as is a head that
+/// names a node in a carrier with sidecars and no keys of its own.
 fn build_mark(src: &str, pairs: Vec<(String, Spec)>) -> Result<Spec, ExprError> {
     let mut refs = std::collections::HashMap::new();
     let mut rest = Vec::with_capacity(pairs.len());
@@ -977,7 +978,16 @@ fn build_mark(src: &str, pairs: Vec<(String, Spec)>) -> Result<Spec, ExprError> 
     let tokens = tokenize(src)?;
     let mut p = Parser::new(tokens, src);
     p.refs = refs;
-    if COMPOSITION.contains(&p.peek()) {
+    // A carrier with sidecars and no keys of its own whose head names a node
+    // (a type token, a literal, Check or Key) is that expression alone,
+    // `String.Contains(1,$$0)`; any other head takes the empty object as its
+    // last argument below, so `Required.Child($$0)` is
+    // `Required({}).Child($$0)`, as TypeScript's carrierApplies reads it. A
+    // sidecar head is the sidecar either way, and is read below.
+    let head = p.peek();
+    let names =
+        (!is_builder(head) && !p.refs.contains_key(head)) || head == "Check" || head == "Key";
+    if COMPOSITION.contains(&head) || (rest.is_empty() && !p.refs.is_empty() && names) {
         return p.parse_full().map(Spec::from);
     }
     let mut val = Spec::Obj(rest);

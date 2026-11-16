@@ -111,6 +111,13 @@ contains-chained	{"a":{"$expr":"Min(1).Contains(1,String)"}}	{"a":[]}		"Value \"
 contains-in-nof-kinds	{"a":{"$expr":"Nof(1,Contains(Min(1),Number),String)"}}	{"a":["x"]}		"Value \"[x]\" for property \"a\" has 0 of its items satisfying Number; the count must be Min(1)."
 contains-any-carrier	{"a":{"$call":["Contains",1,{"x":{"$type":"Number"}},{"$expr":"Any"}]}}	{"a":[{"x":1}]}	{"a":[{"x":1}]}	
 contains-string-carrier	{"a":{"$call":["Contains",1,[{"$type":"Number"}],{"$type":"String"}]}}	{"a":"x"}	{"a":"x"}	
+contains-required-any-carrier	{"a":{"$call":["Contains",1,{"x":1},{"$expr":"Required"}]}}	{"a":"x"}	{"a":"x"}	
+contains-never-carrier	{"a":{"$call":["Contains",1,{"x":1},{"$expr":"Never"}]}}	{"a":1}		"Validation failed for property \"a\" with number \"1\" because no value is allowed."
+contains-optional-date-carrier	{"a":{"$call":["Contains",1,{"x":1},{"$optional":{"$type":"Date"}}]}}	{}	{}	
+contains-object-carrier	{"a":{"$call":["Contains",1,{"x":1},{}]}}	{"a":{"b":1}}	{"a":{"b":1}}	
+contains-required-object-carrier	{"a":{"$required":{"$call":["Contains",1,{"x":1},{}]}}}	{"a":"x"}		"Validation failed for property \"a\" with string \"x\" because the string is not of type object."
+child-required-carrier	{"a":{"$required":{"$call":["Child",{"x":{"$type":"Number"}},{}]}}}	{"a":{"k":{"x":"q"}}}		"Validation failed for property \"a.k.x\" with string \"q\" because the string is not of type number."
+required-any-default	{"a":{"$required":{"$expr":"Any(5)"}}}	{"a":"x"}	{"a":"x"}	
 contains-two-counts-ok	{"a":{"$expr":"Contains(0,Number).Contains(Min(1),String)"}}	{"a":["a"]}	{"a":["a"]}	
 contains-two-counts-fail	{"a":{"$expr":"Contains(0,Number).Contains(Min(1),String)"}}	{"a":["a",1]}		"Value \"[a,1]\" for property \"a\" has 1 of its items satisfying Number; the count must be 0."
 unique-ok	{"a":{"$expr":"Unique"}}	{"a":[1,"1",true,null,[1],{"a":1}]}	{"a":[1,"1",true,null,[1],{"a":1}]}	

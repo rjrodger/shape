@@ -28,43 +28,48 @@ func MakeArgu(name string) Argu {
 
 // Validate runs the positional-arg matcher.
 func (a Argu) Validate(args []any, whence string, spec map[string]any) (map[string]any, error) {
-	keys, nodes, err := a.compileSpec(spec)
+	keys, nodes, defs, err := a.compileSpec(spec)
 	if err != nil {
 		return nil, err
 	}
-	return a.run(args, whence, keys, nodes)
+	return a.run(args, whence, keys, nodes, defs)
 }
 
 // Partial returns a closure that can be invoked with arg lists. Useful for
 // building reusable signature validators.
 func (a Argu) Partial(whence string, spec map[string]any) func([]any) (map[string]any, error) {
-	keys, nodes, err := a.compileSpec(spec)
+	keys, nodes, defs, err := a.compileSpec(spec)
 	if err != nil {
 		// Defer the error to invocation time.
 		return func([]any) (map[string]any, error) { return nil, err }
 	}
 	return func(args []any) (map[string]any, error) {
-		return a.run(args, whence, keys, nodes)
+		return a.run(args, whence, keys, nodes, defs)
 	}
 }
 
-func (a Argu) compileSpec(spec map[string]any) ([]string, []*node, error) {
+// compileSpec builds the arguments' shapes, and prepares them together, as
+// one schema's tree is (see prepare), so that a Refer in one argument finds
+// a Define in another, as it does in the single shape TypeScript makes.
+func (a Argu) compileSpec(spec map[string]any) ([]string, []*node, map[string]*node, error) {
 	if len(spec) == 0 {
-		return nil, nil, fmt.Errorf("%s: empty argument spec", a.name)
+		return nil, nil, nil, fmt.Errorf("%s: empty argument spec", a.name)
 	}
 	keys := orderedKeys(spec)
 	nodes := make([]*node, len(keys))
+	defs := map[string]*node{}
 	for i, k := range keys {
 		n, err := normalize(spec[k])
 		if err != nil {
-			return nil, nil, fmt.Errorf("%s: arg %q: %w", a.name, k, err)
+			return nil, nil, nil, fmt.Errorf("%s: arg %q: %w", a.name, k, err)
 		}
 		nodes[i] = n
+		prepare(n, defs)
 	}
-	return keys, nodes, nil
+	return keys, nodes, defs, nil
 }
 
-func (a Argu) run(args []any, whence string, keys []string, nodes []*node) (map[string]any, error) {
+func (a Argu) run(args []any, whence string, keys []string, nodes []*node, defs map[string]*node) (map[string]any, error) {
 	prefix := a.name
 	if whence != "" {
 		prefix += " (" + whence + ")"
@@ -87,7 +92,7 @@ func (a Argu) run(args []any, whence string, keys []string, nodes []*node) (map[
 			validated := make([]any, len(rem))
 			for i, v := range rem {
 				sub := &ValidationError{}
-				validated[i] = argCall(child, v, []string{key}, []any{key}, key, out, false, sub)
+				validated[i] = argCall(child, v, []string{key}, []any{key}, key, out, false, sub, defs)
 				if sub.hasAny() {
 					return nil, fmt.Errorf("%s: %s", prefix, sub.Error())
 				}
@@ -103,9 +108,9 @@ func (a Argu) run(args []any, whence string, keys []string, nodes []*node) (map[
 			tester := *n
 			tester.skippable = false
 			tester.silent = false
-			ok, _ := tryMatch(&tester, args[argIdx])
+			ok, _ := tryMatch(&tester, args[argIdx], defs)
 			if ok {
-				val, err := requireMatch(&tester, args[argIdx], key, prefix)
+				val, err := requireMatch(&tester, args[argIdx], key, prefix, defs)
 				if err != nil {
 					return nil, err
 				}
@@ -116,14 +121,14 @@ func (a Argu) run(args []any, whence string, keys []string, nodes []*node) (map[
 			}
 		default:
 			if argIdx >= len(args) {
-				val, err := requireMatch(n, nil, key, prefix)
+				val, err := requireMatch(n, nil, key, prefix, defs)
 				if err != nil {
 					return nil, err
 				}
 				out[key] = val
 				continue
 			}
-			val, err := requireMatch(n, args[argIdx], key, prefix)
+			val, err := requireMatch(n, args[argIdx], key, prefix, defs)
 			if err != nil {
 				return nil, err
 			}
@@ -158,17 +163,15 @@ func isRestNode(n *node) bool {
 	return false
 }
 
-func tryMatch(n *node, val any) (bool, []FieldError) {
+func tryMatch(n *node, val any, defs map[string]*node) (bool, []FieldError) {
 	verr := &ValidationError{}
-	prepare(n, nil)
-	argCall(n, val, []string{}, []any{}, "", nil, true, verr)
+	argCall(n, val, []string{}, []any{}, "", nil, true, verr, defs)
 	return !verr.hasAny(), verr.Issues
 }
 
-func requireMatch(n *node, val any, key, prefix string) (any, error) {
+func requireMatch(n *node, val any, key, prefix string, defs map[string]*node) (any, error) {
 	verr := &ValidationError{}
-	prepare(n, nil)
-	out := argCall(n, val, []string{key}, []any{key}, key, nil, false, verr)
+	out := argCall(n, val, []string{key}, []any{key}, key, nil, false, verr, defs)
 	if verr.hasAny() {
 		return nil, fmt.Errorf("%s: %s", prefix, verr.Error())
 	}
@@ -176,9 +179,11 @@ func requireMatch(n *node, val any, key, prefix string) (any, error) {
 }
 
 // argCall validates one argument as a call of its own, with a context and
-// a trial budget of its own (see Context.endCall).
-func argCall(n *node, val any, path []string, pathArr []any, key string, parent any, match bool, verr *ValidationError) any {
+// a trial budget of its own (see Context.endCall), and the definitions of
+// all the arguments.
+func argCall(n *node, val any, path []string, pathArr []any, key string, parent any, match bool, verr *ValidationError, defs map[string]*node) any {
 	ctx := newContext(nil)
+	ctx.defs = defs
 	was := ctx.startCall(defaultTrials)
 	out := validateNode(n, val, path, pathArr, key, parent, ctx, match, verr)
 	ctx.endCall(was, verr)

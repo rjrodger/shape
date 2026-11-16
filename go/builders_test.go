@@ -581,3 +581,32 @@ func TestNofKindsRechained(t *testing.T) {
 		t.Fatal("abc should match both branches once both are strings")
 	}
 }
+
+// Null as a shape is the null literal, as nil is: a value present and null,
+// not a shape left out. TS: When(null, Any(), Number), Contains(1, null),
+// Nof(1, null, Number).
+func TestNullShapes(t *testing.T) {
+	verdicts := func(s *Schema, want map[any]bool) {
+		t.Helper()
+		for in, ok := range want {
+			if s.Valid(in) != ok {
+				t.Fatalf("%s with %#v: want %v", s, in, ok)
+			}
+		}
+	}
+	verdicts(MustShape(When(Null, Any, Number)), map[any]bool{Null: true, 1.0: true, "x": false})
+	verdicts(MustShape(Nof(1, Null, Number)), map[any]bool{Null: true, 1.0: true, "x": false})
+	verdicts(MustShape(All(Null)), map[any]bool{Null: true, 1.0: false})
+	if !MustShape(Contains(1, Null)).Valid([]any{nil}) || MustShape(Contains(1, Null)).Valid([]any{1.0}) {
+		t.Fatal("a null item shape")
+	}
+	mustInvalid(t, MustShape(Contains(Null, Number)), []any{},
+		`Value "[]" for property "" has 0 of its items satisfying Number; the count must be null.`)
+	if !MustShape(map[string]any{"a": Null}).Valid(map[string]any{"a": nil}) ||
+		MustShape(map[string]any{"a": Null}).Valid(map[string]any{"a": 1.0}) {
+		t.Fatal("a null property shape")
+	}
+	if got := MustShape(When(Null, Any, Number)).String(); got != "When(null,Any,Number)" {
+		t.Fatalf("render: %s", got)
+	}
+}

@@ -393,7 +393,17 @@ func checkSchema(n *node, s map[string]any, defs map[string]any) {
 		case "Ip":
 			s["anyOf"] = []any{map[string]any{"format": "ipv4"}, map[string]any{"format": "ipv6"}}
 		case "Contains":
-			containsSchema(v, s, defs)
+			// Each count is a constraint of its own: a second one on the
+			// node joins the first through allOf.
+			c := containsSchema(v, defs)
+			if _, has := s["contains"]; !has {
+				for k, cv := range c {
+					s[k] = cv
+				}
+			} else {
+				allOf, _ := s["allOf"].([]any)
+				s["allOf"] = append(allOf, c)
+			}
 		case "Unique":
 			s["uniqueItems"] = true
 		case "Min", "Max", "Above", "Below", "Len":
@@ -435,8 +445,8 @@ func checkSchema(n *node, s map[string]any, defs map[string]any) {
 // on it (see countBounds). A count shape with a check that is not a bound
 // has no keyword for that check, so the schema admits more than the shape
 // does.
-func containsSchema(v validator, s map[string]any, defs map[string]any) {
-	s["contains"] = nodeSchema(v.nodes[0], defs)
+func containsSchema(v validator, defs map[string]any) map[string]any {
+	s := map[string]any{"contains": nodeSchema(v.nodes[0], defs)}
 	lo, hi := v.args[1].(float64), v.args[2].(float64)
 	if lo != 1 {
 		s["minContains"] = lo
@@ -444,4 +454,5 @@ func containsSchema(v validator, s map[string]any, defs map[string]any) {
 	if !math.IsInf(hi, 1) {
 		s["maxContains"] = hi
 	}
+	return s
 }

@@ -196,6 +196,18 @@ func TestJSONSchemaWhenContainsUnique(t *testing.T) {
 	// On a node that names no kind, the keywords stand alone.
 	schemaWant(t, "any", MustShape(Contains(1, Number, Any)).JSONSchema(), `{`+draft+`,"contains":`+num+`,"maxContains":1}`)
 
+	// A second count is a constraint of its own, under allOf, beside the
+	// branches of an All the node is.
+	schemaWant(t, "two counts", MustShape(Contains(0, Number).Contains(Min(1), String)).JSONSchema(),
+		`{`+draft+`,"type":"array","contains":`+num+`,"minContains":0,"maxContains":0,
+		"allOf":[{"contains":{"type":"string","minLength":1}}]}`)
+	schemaWant(t, "three counts", MustShape(Contains(0, Number).Contains(Min(1), String).Contains(2, Boolean)).JSONSchema(),
+		`{`+draft+`,"type":"array","contains":`+num+`,"minContains":0,"maxContains":0,
+		"allOf":[{"contains":{"type":"string","minLength":1}},{"contains":{"type":"boolean"},"minContains":2,"maxContains":2}]}`)
+	schemaWant(t, "counts on all", MustShape(Contains(1, Number, All(A(Number), Min(1))).Contains(Min(2), String)).JSONSchema(),
+		`{`+draft+`,"contains":`+num+`,"maxContains":1,"allOf":[{"type":"array","items":`+num+`},
+		{"minimum":1,"minLength":1,"minItems":1,"minProperties":1},{"contains":{"type":"string","minLength":1},"minContains":2}]}`)
+
 	// Unique is uniqueItems.
 	schemaWant(t, "unique", MustShape(Unique(A(String))).JSONSchema(),
 		`{`+draft+`,"type":"array","items":{"type":"string","minLength":1},"uniqueItems":true}`)

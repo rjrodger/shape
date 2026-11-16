@@ -476,3 +476,60 @@ func TestJSONWhenContainsUnique(t *testing.T) {
 		`{"a":"Default(\"xy\",When(String,Any.Min(2),Any))","b":"When(String,Any.Min(2),Any).Optional"}`, M(), M("a", "x"))
 	roundTrip(t, M("a", Unique()), `{"a: Unique":[]}`, M("a", A(1.0, 1.0)), M())
 }
+
+// On a node that is not an array, a call's sidecar rides beside the
+// expression whatever the head, and the node has no key form
+// (ts/test/json.test.ts).
+func TestJSONCarriers(t *testing.T) {
+	M := func(kv ...any) map[string]any {
+		m := map[string]any{}
+		for i := 0; i < len(kv); i += 2 {
+			m[kv[i].(string)] = kv[i+1]
+		}
+		return m
+	}
+	A := func(v ...any) []any { return v }
+	item := M("a", Number)
+	side := `"$$0":{"a: Number":0}`
+	roundTrip(t, Contains(1, item, Any), `{"$$":"Any.Contains(1,$$0)",`+side+`}`, A(M("a", 1.0)), "x")
+	roundTrip(t, M("p", Contains(Min(1), M("a", 1.0), String)),
+		`{"p":{"$$":"String.Contains(Any.Min(1),$$0)","$$0":{"a":1}}}`, M("p", "x"), M("p", A(M("a", 1.0))))
+	roundTrip(t, Contains(1, M("a", 1.0), Date), `{"$$":"Date.Contains(1,$$0)","$$0":{"a":1}}`, "1970-01-01T00:00:00.000Z")
+	// A head that makes the node is read without the carrier around it.
+	for want, spec := range map[string]*Node{
+		`"Check(/^b/).Contains(1,$$0)"`:     Contains(1, item, Check(regexp.MustCompile("^b"))),
+		`"Key(1).Contains(1,$$0)"`:          Contains(1, item, Key(1)),
+		`"null.Contains(1,$$0)"`:            Contains(1, item, Null),
+		`"Number.Contains(1,$$0)"`:          Contains(1, item, Number),
+		`"Optional(NaN).Contains(1,$$0)"`:   Contains(1, item, math.NaN()),
+		`"Required(null).Contains(1,$$0)"`:  Contains(1, item, Required(nil)),
+		`"Optional(\"x\").Contains(1,$$0)"`: Contains(1, item, "x"),
+		`"Any.Min(1).Contains(1,$$0)"`:      Min(1).Contains(1, item),
+	} {
+		roundTrip(t, spec, `{"$$":`+want+`,`+side+`}`, "b", "x", 1.0, nil, A(M("a", 1.0)))
+	}
+	roundTrip(t, M("a", Contains(1, item, Key())), `{"a":{"$$":"Key.Contains(1,$$0)",`+side+`}}`, M("a", "x"))
+	// Any other head takes the empty object as its last argument: these
+	// read as Contains(1,$$0,/^a/,{}) and Optional(Date,{}), and the
+	// carrier of an object with no properties is that object.
+	for want, spec := range map[string]*Node{
+		`"Contains(1,$$0,/^a/)"`:           Contains(1, item, regexp.MustCompile("^a")),
+		`"Optional(Date).Contains(1,$$0)"`: Contains(1, item, Optional(Date)),
+		`"Never.Contains(1,$$0)"`:          Contains(1, item, Never()),
+		`"Contains(1,$$0)"`:                Contains(1, item, M()),
+		`"Contains(1,$$0).Closed"`:         Contains(1, item, Closed(M())),
+		`"Required.Contains(1,$$0)"`:       Required(Contains(1, item, M())),
+	} {
+		roundTrip(t, spec, `{"$$":`+want+`,`+side+`}`, "ab", 1.0, nil, M(), M("b", 1.0), A(M("a", 1.0)))
+	}
+	roundTrip(t, M("p", Required(Child(M("a", 1.0)))), `{"p":{"$$":"Required.Child($$0)","$$0":{"a":1}}}`,
+		M("p", M("x", M())), M("p", M("x", 1.0)), M())
+	// A required Any names its kind, as a bare Required is a required
+	// object; its default, which it never takes, is not written.
+	roundTrip(t, Contains(1, item, Required()), `{"$$":"Any.Required.Contains(1,$$0)",`+side+`}`,
+		A(M("a", 1.0)), A(), "x", nil)
+	roundTrip(t, Contains(1, item, Required(Type(Any, 5.0))), `{"$$":"Any.Required.Contains(1,$$0)",`+side+`}`,
+		"x", nil)
+	roundTrip(t, Contains(1, item, Exact(1.0)), `{"$$":"Any.Required.Exact(1).Contains(1,$$0)",`+side+`}`, 1.0, 2.0)
+	roundTrip(t, M("a", Required(Type(Any, 5.0))), `{"a":"Required"}`, M("a", "x"), M())
+}

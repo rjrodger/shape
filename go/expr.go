@@ -108,7 +108,10 @@ func buildValue(spec any, example bool) (any, error) {
 // it. The sidecars are its arguments; the object's own keys are the shape a
 // chained builder takes, but a composition (Nof, Exact, ...) has no slot for
 // a carrier and is read on its own, as it is in TypeScript, where the
-// carrier is the node the composition becomes.
+// carrier is the node the composition becomes. So is a carrier with sidecars
+// and no keys of its own whose head names a node: a type token, a literal,
+// or one of exprMakers. String.Contains(1,$$0) is no object, while
+// Required.Child($$0) is Required({}).Child($$0), as in TypeScript.
 func buildMark(src string, carrier map[string]any) (any, error) {
 	refs := map[string]any{}
 	for k, sv := range carrier {
@@ -123,7 +126,11 @@ func buildMark(src string, carrier map[string]any) (any, error) {
 	}
 	p := &exprParser{tokens: tokens, src: src, refs: refs}
 	var val any
-	if exprComposition[tokens[0]] {
+	// A sidecar head is the sidecar either way, and is read below.
+	_, builder := getExprBuilders()[tokens[0]]
+	_, ref := refs[tokens[0]]
+	if exprComposition[tokens[0]] ||
+		(len(carrier) == 0 && len(refs) > 0 && ((!builder && !ref) || exprMakers[tokens[0]])) {
 		return p.parseFull()
 	}
 	val = carrier
@@ -144,6 +151,10 @@ func buildMark(src string, carrier map[string]any) (any, error) {
 var exprComposition = map[string]bool{
 	"All": true, "Nof": true, "When": true, "Exact": true, "Discriminated": true,
 }
+
+// The builders that name a node by themselves, as a type token does, so that
+// a carrier with no keys of its own is that node (TS carrierApplies).
+var exprMakers = map[string]bool{"Check": true, "Key": true}
 
 // Tokenization --------------------------------------------------------
 

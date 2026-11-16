@@ -2757,6 +2757,24 @@ mod tests {
             run(&Schema::new(Contains(Len(2, Any()), Token::Number, bare())), "[1,2,3]"),
             "ERR Value \"[1,2,3]\" for property \"\" has 3 of its items satisfying Number; the count must be Len(2)."
         );
+        // A null literal is a shape of its own as an item, a branch or an
+        // arm, in the string form too.
+        for (spec, src, input) in [
+            (Contains(1, null(), bare()), "Contains(1,null)", "[null]"),
+            (
+                Nof(1, [null(), Spec::from(Token::Number)]),
+                "Nof(1,null,Number)",
+                "null",
+            ),
+            (
+                When(null(), Any(), Token::Number),
+                "When(null,Any,Number)",
+                "null",
+            ),
+        ] {
+            assert_eq!(run(&Schema::new(spec), input), input, "{}", src);
+            assert_eq!(run(&Schema::parse(src).unwrap(), input), input, "{}", src);
+        }
         // Ignore around a count is a check, not a bound: it admits any.
         let ignored = Contains(Ignore(Min(1, Any())), Token::Number, bare());
         assert_eq!(run(&Schema::new(ignored), r#"["a"]"#), r#"["a"]"#);

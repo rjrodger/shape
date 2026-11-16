@@ -1814,6 +1814,7 @@ function expr(
     tokens?: string[]
     i?: number
     refs?: any
+    carrier?: any
   } | string,
   current?: any
 ) {
@@ -1856,6 +1857,22 @@ function expr(
     let t = null
     while (t = tre.exec(spec.src)) {
       spec.tokens.push(t[1])
+    }
+
+    // The object of a carrier with no properties of its own (see build): a
+    // head that names a node is that node, and any other call takes the
+    // empty object as its last argument, so Required.Child($$0) is
+    // Required({}).Child($$0).
+    if (undefined !== spec.carrier && carrierApplies(spec.tokens[0])) {
+      const refname = 'token_carrier'
+      spec.refs = (spec.refs || {})
+      spec.refs[refname] = spec.carrier
+      if ('(' === spec.tokens[1]) {
+        spec.tokens.splice(closingParen(spec.tokens, 1), 0, spec.keymark + refname)
+      }
+      else {
+        spec.tokens.splice(1, 0, '(', spec.keymark + refname, ')')
+      }
     }
 
     // Append current into leftmost deepest Builder args
@@ -2051,6 +2068,17 @@ function closingParen(tokens: string[], oI: number): number {
   }
   return i
 }
+
+
+// Whether the expression of a carrier with no properties applies to the
+// empty object, which its first call then takes: a builder does, unless it
+// names a node by itself, as a composition, Any, Integer, Check and Key do.
+// A type token, a literal and a sidecar name their node too.
+function carrierApplies(head: string): boolean {
+  return undefined !== (BuilderMap as any)[head] && !CARRIER_NODES.includes(head)
+}
+
+const CARRIER_NODES = [S.All, S.Nof, S.When, S.Exact, S.Discriminated, S.Any, S.Integer, S.Check, S.Key]
 
 
 // Whether a key is a key expression: a name, a colon, and an expression.
@@ -2438,6 +2466,14 @@ function build(v: any, opts: ShapeOptions = {}, top = true): any {
         if (k.startsWith(keymark)) {
           refs[k.substring(keymark.length)] = out[k]
         }
+      }
+      // A carrier that holds sidecars and nothing else is the node its
+      // expression names, String.Contains(1,$$0), or an empty object its
+      // first call takes, Required.Child($$0); see carrierApplies. One with
+      // no sidecars at all is an empty object ({"$$": "Closed"}).
+      if (0 < keys(refs).length && keys(out).length === keys(refs).length) {
+        const g = expr({ src: mark, refs, carrier: {} })
+        return top ? Shape(g, opts) : g
       }
       const node: any = nodize(out)
       const res: any = nodize(expr({ src: mark, node, refs }, node))
@@ -5592,7 +5628,9 @@ function nodeJson(n: Node<any>): any {
   if (S.any === t) {
     head = n.r ? S.Required : S.Any
     headRequired = n.r
-    if (undefined !== n.f) {
+    // A required value never takes its default, so a required Any has none
+    // to write, and Required(5) would read as a required number.
+    if (undefined !== n.f && !n.r) {
       head += '(' + jsonLiteral(n.f, 'the default') + ')'
     }
     if (undefined !== n.c && jsonIsOpen(n.c)) {
@@ -5645,7 +5683,15 @@ function nodeJson(n: Node<any>): any {
     head = rp[0].n + '(' + head + ')'
     return jsonCarried(jsonChainText(head, calls, refs) as string, refs)
   }
-  return jsonCarried(jsonChainText(head, rp.concat(calls), refs) as string, refs)
+  const text = jsonChainText(head, rp.concat(calls), refs) as string
+  if (S.any === t && n.r && 0 < keys(refs).length) {
+    // A carrier that starts with a bare Required is a required object, as
+    // Required.Child($$0) is, so a required Any names its kind first.
+    const anyRefs: any = {}
+    return jsonCarrier(jsonChainText(S.Any + head.substring(S.Required.length),
+      [{ n: S.Required, a: [] } as JsonCall].concat(calls), anyRefs) as string, anyRefs)
+  }
+  return jsonCarried(text, refs)
 }
 
 

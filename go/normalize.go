@@ -20,7 +20,9 @@ func normalize(spec any) (*node, error) {
 }
 
 func normalizeWith(spec any, opts ShapeOptions) (*node, error) {
-	if spec == nil {
+	// Null is the null literal, as nil is: it says a value present and null,
+	// not that no shape was given.
+	if spec == nil || isNull(spec) {
 		// A null literal is an optional null with null as its default, as any
 		// other literal is its own default (TS nodize(null): f = null).
 		return &node{kind: KindNull, hasDefault: true}, nil
