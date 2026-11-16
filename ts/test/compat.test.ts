@@ -123,7 +123,10 @@ function decodeSpec(v: any, Shape: any): any {
 
     if (1 === keys.length && '$call' === keys[0]) {
       const [name, ...args] = v.$call
-      return Shape[name](...args.map((a: any) => decodeSpec(a, Shape)))
+      // A plain call: called as a method of Shape, a builder would take
+      // Shape for the node it chains onto.
+      const fn = Shape[name]
+      return fn(...args.map((a: any) => decodeSpec(a, Shape)))
     }
 
     if (1 === keys.length && '$discriminated' === keys[0]) {

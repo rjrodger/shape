@@ -15,7 +15,8 @@ import (
 // Supported tokens:
 //   - Builder names: Required, Optional, Min, Max, Above, Below, Len, Check,
 //     Open, Closed, Skip, Ignore, Empty, Default, Fault, Never, Type, Exact,
-//     All, Nof, Child, Rest, Define, Refer, Rename, Func, Key.
+//     All, Nof, When, Contains, Unique, Child, Rest, Define, Refer, Rename,
+//     Func, Key.
 //   - Type tokens: String, Number, Boolean, Object, Array, Function, Any.
 //   - Literals: JSON values (numbers, strings, true, false, null) and undefined/NaN.
 //   - Regexp: /pattern/.
@@ -107,7 +108,10 @@ func buildValue(spec any, example bool) (any, error) {
 // it. The sidecars are its arguments; the object's own keys are the shape a
 // chained builder takes, but a composition (Nof, Exact, ...) has no slot for
 // a carrier and is read on its own, as it is in TypeScript, where the
-// carrier is the node the composition becomes.
+// carrier is the node the composition becomes. So is a carrier with sidecars
+// and no keys of its own whose head names a node: a type token, a literal,
+// or one of exprMakers. String.Contains(1,$$0) is no object, while
+// Required.Child($$0) is Required({}).Child($$0), as in TypeScript.
 func buildMark(src string, carrier map[string]any) (any, error) {
 	refs := map[string]any{}
 	for k, sv := range carrier {
@@ -122,7 +126,11 @@ func buildMark(src string, carrier map[string]any) (any, error) {
 	}
 	p := &exprParser{tokens: tokens, src: src, refs: refs}
 	var val any
-	if exprComposition[tokens[0]] {
+	// A sidecar head is the sidecar either way, and is read below.
+	_, builder := getExprBuilders()[tokens[0]]
+	_, ref := refs[tokens[0]]
+	if exprComposition[tokens[0]] ||
+		(len(carrier) == 0 && len(refs) > 0 && ((!builder && !ref) || exprMakers[tokens[0]])) {
 		return p.parseFull()
 	}
 	val = carrier
@@ -141,8 +149,12 @@ func buildMark(src string, carrier map[string]any) (any, error) {
 
 // The builders that read every argument for themselves.
 var exprComposition = map[string]bool{
-	"All": true, "Nof": true, "Exact": true, "Discriminated": true,
+	"All": true, "Nof": true, "When": true, "Exact": true, "Discriminated": true,
 }
+
+// The builders that name a node by themselves, as a type token does, so that
+// a carrier with no keys of its own is that node (TS carrierApplies).
+var exprMakers = map[string]bool{"Check": true, "Key": true}
 
 // Tokenization --------------------------------------------------------
 
@@ -399,8 +411,17 @@ func exampleApply(src string, example any) (*Node, error) {
 		spliced = tokens
 	}
 	for i := 1; i < first; i++ {
-		if tokens[i] == "(" && (tokens[i-1] == "All" || tokens[i-1] == "Nof") {
+		if tokens[i] == "(" && exampleTaker[tokens[i-1]] {
 			end := closingParen(tokens, i)
+			if tokens[i-1] == "Contains" {
+				// A Contains reads its first two arguments as its count and
+				// the shape of its items, so the example is its spec, after
+				// them.
+				spliced = append([]string{}, tokens[:end]...)
+				spliced = append(spliced, exampleRef)
+				spliced = append(spliced, tokens[end:]...)
+				break
+			}
 			spliced = append([]string{}, tokens[:i-1]...)
 			spliced = append(spliced, "Default", "(", exampleRef)
 			spliced = append(spliced, tokens[i-1:end+1]...)
@@ -412,6 +433,10 @@ func exampleApply(src string, example any) (*Node, error) {
 	p := &exprParser{tokens: spliced, src: src, refs: map[string]any{exampleRef: example}}
 	return p.parseFull()
 }
+
+// The calls that read their leading arguments as shapes of their own, so
+// that none of them can be a key expression's example (see exampleApply).
+var exampleTaker = map[string]bool{"All": true, "Nof": true, "When": true, "Contains": true}
 
 // exactLists reports whether the call the parenthesis at tokens[close] ends
 // is an Exact already listing the example, a scalar: an object or array is
@@ -744,6 +769,22 @@ func buildExprBuilders() map[string]exprBuilderFn {
 			}
 			return Nof(exprShape(args[0]), exprShapes(args[1:])...), nil
 		},
+		"When": func(args []builderArg) (*Node, error) {
+			if len(args) < 1 {
+				return nil, fmt.Errorf(whenFault)
+			}
+			return When(exprShape(args[0]), exprShapes(args[1:])...), nil
+		},
+		"Contains": func(args []builderArg) (*Node, error) {
+			if len(args) < 1 {
+				return nil, fmt.Errorf(containsFault)
+			}
+			if len(args) < 2 {
+				return nil, fmt.Errorf(containsShapeFault)
+			}
+			return Contains(exprShape(args[0]), exprShape(args[1]), exprShapes(args[2:])...), nil
+		},
+		"Unique": variadicNode(Unique),
 	"Child": func(args []builderArg) (*Node, error) {
 		if len(args) < 1 {
 			return nil, fmt.Errorf("Child: missing child shape")

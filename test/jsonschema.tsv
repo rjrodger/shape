@@ -101,3 +101,33 @@ js-tuple-wrong	{"$jsonschema":{"type":"array","prefixItems":[{"type":"string"},{
 js-tuple-default	{"$jsonschema":{"type":"array","prefixItems":[{"type":"string"},{"default":7},{}]}}	["a"]	["a",7]	
 js-tuple-default-missing	{"$jsonschema":{"type":"array","prefixItems":[{"type":"string"},{"default":7},{}]}}	[]		"Validation failed for index \"0\" because the element is missing."
 js-tuple-booleans	{"$jsonschema":{"type":"array","prefixItems":[true,false]}}	[1,2]		"Validation failed for index \"1\" with number \"2\" because no value is allowed."
+js-if-then-fail	{"$jsonschema":{"if":{"type":"number"},"then":{"minimum":1},"else":{"type":"string"}}}	0		"Value \"0\" for property \"\" must be a minimum of 1 (was 0)."
+js-if-then-ok	{"$jsonschema":{"if":{"type":"number"},"then":{"minimum":1},"else":{"type":"string"}}}	2	2	
+js-if-else-ok	{"$jsonschema":{"if":{"type":"number"},"then":{"minimum":1},"else":{"type":"string"}}}	"a"	"a"	
+js-if-else-fail	{"$jsonschema":{"if":{"type":"number"},"then":{"minimum":1},"else":{"type":"string"}}}	true		"Validation failed for boolean \"true\" because the boolean is not of type string."
+js-if-alone	{"$jsonschema":{"if":false}}	1	1	
+js-if-narrowed	{"$jsonschema":{"type":"string","if":{"minLength":2},"then":{"maxLength":3}}}	"abcd"		"Value \"abcd\" for property \"\" must be a maximum length of 3 (was 4)."
+js-if-sees-given	{"$jsonschema":{"properties":{"a":{"default":1}},"if":{"required":["a"]},"then":false}}	{}	{"a":1}	
+js-dependent-required-fail	{"$jsonschema":{"dependentRequired":{"a":["b","c"]}}}	{"a":1,"b":2}		"Validation failed for property \"c\" because the property is missing."
+js-dependent-required-both	{"$jsonschema":{"dependentRequired":{"a":["b","c"]}}}	{"a":1}		"Validation failed for property \"b\" because the property is missing.\nValidation failed for property \"c\" because the property is missing."
+js-dependent-required-absent	{"$jsonschema":{"dependentRequired":{"a":["b","c"]}}}	{"b":1}	{"b":1}	
+js-dependent-required-not-object	{"$jsonschema":{"dependentRequired":{"a":["b"]}}}	["a"]	["a"]	
+js-dependent-schemas-fail	{"$jsonschema":{"dependentSchemas":{"a":{"properties":{"b":{"type":"number"}},"required":["b"]}}}}	{"a":1,"b":"x"}		"Validation failed for property \"b\" with string \"x\" because the string is not of type number."
+js-dependent-schemas-ok	{"$jsonschema":{"dependentSchemas":{"a":{"properties":{"b":{"type":"number"}},"required":["b"]}}}}	{"b":"x"}	{"b":"x"}	
+js-dependent-schemas-false	{"$jsonschema":{"dependentSchemas":{"a":false}}}	{"a":1}		"Validation failed for object \"{a:1}\" because no value is allowed."
+js-dependencies-array	{"$jsonschema":{"dependencies":{"a":["b"]}}}	{"a":1}		"Validation failed for property \"b\" because the property is missing."
+js-dependencies-schema	{"$jsonschema":{"dependencies":{"a":{"minProperties":2}}}}	{"a":1}		"Value \"{a:1}\" for property \"\" must be a minimum length of 2 (was 1)."
+js-dependencies-beside-dependent	{"$jsonschema":{"dependencies":{"a":["b"]},"dependentRequired":{}}}	{"a":1}	{"a":1}	
+js-dependent-prototype-key	{"$jsonschema":{"dependentRequired":{"toString":["x"]}}}	{}	{}	
+js-contains-fail	{"$jsonschema":{"type":"array","contains":{"type":"number"}}}	["a"]		"Value \"[a]\" for property \"\" has 0 of its items satisfying Number; the count must be Min(1)."
+js-contains-ok	{"$jsonschema":{"type":"array","contains":{"type":"number"}}}	["a",1]	["a",1]	
+js-contains-bounds	{"$jsonschema":{"type":"array","contains":{"type":"number"},"minContains":2,"maxContains":3}}	[1,2,3,4]		"Value \"[1,2,3,4]\" for property \"\" has 4 of its items satisfying Number; the count must be Min(2).Max(3)."
+js-contains-max-empty	{"$jsonschema":{"type":"array","contains":{"type":"number"},"maxContains":1}}	[]		"Value \"[]\" for property \"\" has 0 of its items satisfying Number; the count must be 1."
+js-contains-min-zero	{"$jsonschema":{"type":"array","contains":{"type":"number"},"minContains":0}}	[]	[]	
+js-contains-exact	{"$jsonschema":{"type":"array","contains":{"type":"number"},"minContains":2,"maxContains":2}}	[1,"a"]		"Value \"[1,a]\" for property \"\" has 1 of its items satisfying Number; the count must be 2."
+js-contains-untyped-other	{"$jsonschema":{"contains":{"type":"number"}}}	"x"	"x"	
+js-contains-untyped-array	{"$jsonschema":{"contains":{"type":"number"}}}	["x"]		"Value \"[x]\" for property \"\" has 0 of its items satisfying Number; the count must be Min(1)."
+js-unique-fail	{"$jsonschema":{"type":"array","uniqueItems":true}}	[1,2,1]		"Value \"[1,2,1]\" for property \"\" must have unique items (items 0 and 2 are equal)."
+js-unique-ok	{"$jsonschema":{"type":"array","uniqueItems":true}}	[1,"1",[1]]	[1,"1",[1]]	
+js-unique-false	{"$jsonschema":{"type":"array","uniqueItems":false}}	[1,1]	[1,1]	
+js-unique-untyped-object	{"$jsonschema":{"uniqueItems":true}}	{"a":1}	{"a":1}	

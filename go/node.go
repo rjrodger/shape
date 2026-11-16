@@ -2,13 +2,16 @@ package shape
 
 import "regexp"
 
-// listMode controls how a composition node (All/Nof) evaluates its branches.
+// listMode controls how a composition node (All/Nof/When) evaluates its
+// branches.
 type listMode int
 
 const (
 	listNone listMode = iota
 	listAll
 	listNof
+	// When: the list is the condition, then the two shapes it picks from.
+	listWhen
 )
 
 // node is the internal validation tree node. Public *Node alias provides
@@ -150,4 +153,7 @@ type validator struct {
 	// inner holds the checks an isolating builder (Catch, Transform) took
 	// inside, so that an export can still see them.
 	inner *inner
+	// nodes are the shapes the check puts values to itself (Contains: the
+	// shape of the items it counts), walked as part of the tree.
+	nodes []*node
 }

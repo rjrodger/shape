@@ -378,6 +378,75 @@ impl fmt::Display for Value {
     }
 }
 
+/// A scalar as a key of the items Unique has seen: equal where JavaScript's
+/// `Map` finds the same key (SameValueZero), so NaN is one key and a zero
+/// one whatever its sign. A date is an object there, equal to itself
+/// alone, and so has no key.
+#[derive(PartialEq, Eq, Hash)]
+enum Seen<'v> {
+    Undefined,
+    Null,
+    Bool(bool),
+    Num(u64),
+    Str(&'v str),
+    BigInt(&'v BigInt),
+    Func(u64),
+}
+
+fn seen_key(v: &Value) -> Option<Seen<'_>> {
+    Some(match v {
+        Value::Undefined => Seen::Undefined,
+        Value::Null => Seen::Null,
+        Value::Bool(b) => Seen::Bool(*b),
+        Value::Num(n) if n.is_nan() => Seen::Num(f64::NAN.to_bits()),
+        Value::Num(n) => Seen::Num((n + 0.0).to_bits()),
+        Value::Str(s) => Seen::Str(s),
+        Value::BigInt(b) => Seen::BigInt(b),
+        Value::Func(id) => Seen::Func(*id),
+        Value::Date(_) | Value::Arr(_) | Value::Obj(_) => return None,
+    })
+}
+
+/// The first item equal to an item before it, and the first of those, as
+/// Unique names them; none where no two are equal. A scalar is looked up
+/// by its value, and an array or object compared with the containers
+/// before it.
+pub(crate) fn repeated(items: &[Value]) -> Option<(usize, usize)> {
+    let mut seen: std::collections::HashMap<Seen<'_>, usize> = std::collections::HashMap::new();
+    let mut containers: Vec<usize> = Vec::new();
+    for (j, v) in items.iter().enumerate() {
+        if matches!(v, Value::Arr(_) | Value::Obj(_)) {
+            if let Some(&i) = containers.iter().find(|&&i| same_json(&items[i], v)) {
+                return Some((i, j));
+            }
+            containers.push(j);
+        } else if let Some(key) = seen_key(v) {
+            if let Some(&i) = seen.get(&key) {
+                return Some((i, j));
+            }
+            seen.insert(key, j);
+        }
+    }
+    None
+}
+
+/// Equal as JSON values (see `repeated`): a number by its value, NaN to
+/// NaN, an array by its items in order, an object by its keys and their
+/// values in any order. A date is equal to no other value.
+pub(crate) fn same_json(x: &Value, y: &Value) -> bool {
+    match (x, y) {
+        (Value::Arr(a), Value::Arr(b)) => {
+            a.len() == b.len() && a.iter().zip(b).all(|(p, q)| same_json(p, q))
+        }
+        (Value::Obj(a), Value::Obj(b)) => {
+            a.len() == b.len()
+                && a.iter()
+                    .all(|(k, p)| b.get(k).is_some_and(|q| same_json(p, q)))
+        }
+        _ => seen_key(x).is_some_and(|k| seen_key(y) == Some(k)),
+    }
+}
+
 /// Whether a number is an integer as `Number.isInteger` judges it.
 pub fn is_integer(x: f64) -> bool {
     // Past 2^53 every finite double is whole; below it the i64 round trip

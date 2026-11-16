@@ -151,6 +151,49 @@ describe('json', () => {
       { a: { k: 'x', a: 1 } }, { a: { k: 'y', b: 1 } }, { a: { k: 'z' } })
     roundTrip(Discriminated('k', { x: { k: Min(1, 'x') } }),
       { $$: 'Discriminated("k",$$0)', $$0: { x: { 'k: Min(1)': 'x' } } }, { k: 'x' })
+ 
+    // When is a list head too; Contains and Unique are checks of an array.
+    const { When, Contains, Unique } = ShapeModule
+    roundTrip(When(String, Min(2)), 'When(String,Any.Min(2),Any)', 'a', 'abc', 5)
+    roundTrip({ a: When(Open({ k: Required() }), Open({ b: Required(Number) })) },
+      { a: { $$: 'When($$0,$$1,Any)', $$0: { k: 'Required', $$: 'Open' }, $$1: { 'b: Number': 0, $$: 'Open' } } },
+      { a: { k: 1 } }, { a: { k: 1, b: 2 } }, { a: {} })
+    roundTrip(Contains(Min(1), Number), { $$: 'Contains(Any.Min(1),Number,$$0)', $$0: [] }, [1], ['a'])
+    roundTrip({ a: Contains(2, String) }, { 'a: Contains(2,String)': [] }, { a: ['x', 'y'] }, { a: ['x'] })
+    roundTrip(Contains(Max(1), Exact(1), [Number]),
+      { $$: 'Contains(Any.Max(1),Required.Exact(1),$$0)', $$0: ['Number'] }, [1, 2], [1, 1], ['a'])
+    roundTrip({ u: Unique([String]), v: Skip(Unique()) }, { 'u: Unique': ['String'], 'v: Skip.Unique': [] },
+      { u: ['a', 'b'] }, { u: ['a', 'a'] }, { u: [], v: [1, 1] })
+    // On a node that is not an array, the item shape rides beside the
+    // expression, whatever the head.
+    roundTrip(Contains(1, { a: Number }, Any()), { $$: 'Any.Contains(1,$$0)', $$0: { 'a: Number': 0 } },
+      [{ a: 1 }], 'x')
+    roundTrip({ p: Contains(Min(1), { a: 1 }, String) },
+      { p: { $$: 'String.Contains(Any.Min(1),$$0)', $$0: { a: 1 } } }, { p: 'x' })
+    roundTrip(Contains(1, { a: 1 }, Date), { $$: 'Date.Contains(1,$$0)', $$0: { a: 1 } }, new Date(0).toISOString())
+    // A required Any names its kind first, as a bare Required there is a
+    // required object.
+    roundTrip(Contains(1, { a: 1 }, Required()), { $$: 'Any.Required.Contains(1,$$0)', $$0: { a: 1 } },
+      [{ a: 1 }], [], 'x', undefined)
+    roundTrip(Contains(1, { a: 1 }, Exact(1)), { $$: 'Any.Required.Exact(1).Contains(1,$$0)', $$0: { a: 1 } },
+      1, 2)
+    // Its default, which it never takes, is not written: Required(5) would
+    // read as a required number.
+    roundTrip(Contains(1, { a: 1 }, Required(Any(5))), { $$: 'Any.Required.Contains(1,$$0)', $$0: { a: 1 } },
+      'x', undefined)
+    roundTrip({ a: Required(Any(5)) }, { a: 'Required' }, { a: 'x' }, {})
+    // An object with no properties is the empty object its first call
+    // takes, whether the call has parentheses or not.
+    roundTrip(Contains(1, { a: 1 }, {}), { $$: 'Contains(1,$$0)', $$0: { a: 1 } }, {}, { b: 1 }, [], 'x')
+    roundTrip(Contains(1, { a: 1 }, Closed({})), { $$: 'Contains(1,$$0).Closed', $$0: { a: 1 } }, {}, { b: 1 })
+    roundTrip({ p: Required(Contains(1, { a: 1 }, {})) }, { p: { $$: 'Required.Contains(1,$$0)', $$0: { a: 1 } } },
+      { p: {} }, {}, { p: 'x' })
+    roundTrip({ p: Required(Child({ a: 1 })) }, { p: { $$: 'Required.Child($$0)', $$0: { a: 1 } } },
+      { p: { x: {} } }, { p: { x: 1 } }, {})
+    // A head that names no node of its own takes it too.
+    roundTrip(Contains(1, { a: 1 }, Never()), { $$: 'Never.Contains(1,$$0)', $$0: { a: 1 } }, [], {}, 1)
+    roundTrip(Contains(1, { a: 1 }, Optional(Date)), { $$: 'Optional(Date).Contains(1,$$0)', $$0: { a: 1 } },
+      undefined, 'x')
   })
 
 
@@ -326,7 +369,9 @@ function corpusSpec(v: any): any {
         case '$jsonschema': return fromJsonSchema(v.$jsonschema)
         case '$call': {
           const [name, ...args] = v.$call
-          return (ShapeModule as any)[name](...args.map(corpusSpec))
+          // A plain call, as the corpus decoders make it.
+          const fn = (ShapeModule as any)[name]
+          return fn(...args.map(corpusSpec))
         }
         case '$discriminated': {
           const [tag, branches] = v.$discriminated

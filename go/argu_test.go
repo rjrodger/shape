@@ -103,3 +103,38 @@ func TestArguRest(t *testing.T) {
 		t.Fatalf("expected d=[11], got %v", d)
 	}
 }
+
+// The arguments' shapes are prepared together, as one schema's are: a
+// Define is collected, a Refer in another argument finds it, and an object
+// element of a Rest is walked.
+func TestArguDefinitions(t *testing.T) {
+	a := MakeArgu("x")
+	ok := func(args []any, spec map[string]any, want map[string]any) {
+		t.Helper()
+		if out, err := a.Validate(args, "w", spec); err != nil || !reflect.DeepEqual(out, want) {
+			t.Fatalf("%v: %v %v", args, out, err)
+		}
+	}
+	bad := func(args []any, spec map[string]any, want string) {
+		t.Helper()
+		if _, err := a.Validate(args, "w", spec); err == nil || err.Error() != want {
+			t.Fatalf("%v: %v", args, err)
+		}
+	}
+	defined := map[string]any{"a": Define("n", Number)}
+	ok([]any{1.0}, defined, map[string]any{"a": 1.0})
+	bad([]any{"q"}, defined, `x (w): Validation failed for property "a" with string "q" because the string is not of type number.`)
+	referred := map[string]any{"a": Define("n", Number), "b": Refer("n")}
+	ok([]any{1.0, 2.0}, referred, map[string]any{"a": 1.0, "b": 2.0})
+	bad([]any{1.0, "q"}, referred, `x (w): Validation failed for property "b" with string "q" because the string is not of type number.`)
+	p := a.Partial("w", referred)
+	if _, err := p([]any{1.0, "q"}); err == nil {
+		t.Fatal("partial: the Refer should find the Define")
+	}
+	rest := map[string]any{"a": Rest(map[string]any{"b": Number})}
+	ok([]any{map[string]any{"b": 1.0}, map[string]any{"b": 2.0}}, rest,
+		map[string]any{"a": []any{map[string]any{"b": 1.0}, map[string]any{"b": 2.0}}})
+	bad([]any{map[string]any{"b": "q"}}, rest, `x (w): Validation failed for property "a.b" with string "q" because the string is not of type number.`)
+	// A skipped argument is tried, its definition and all.
+	ok([]any{1.0}, map[string]any{"a": Skip(Define("n", String)), "b": Number}, map[string]any{"a": nil, "b": 1.0})
+}

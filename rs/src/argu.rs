@@ -116,6 +116,7 @@ fn run(n: &Node, val: Value, key: &str, is_match: bool) -> (Value, ValidationErr
     };
     let mut val = val;
     let kept = validate_node(n, Cur::Mut(&mut val), key, false, &mut w, &mut verr);
+    ctx.trials.settle(&mut verr);
     if !kept {
         val = Value::Undefined;
     }
@@ -167,9 +168,7 @@ impl Signature {
             } else {
                 let v = args.get(idx).cloned().unwrap_or(Value::Undefined);
                 out.insert(key.clone(), require(n, v, key)?);
-                if idx < args.len() {
-                    idx += 1;
-                }
+                idx = (idx + 1).min(args.len());
             }
         }
         if idx < args.len() {

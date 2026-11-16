@@ -67,10 +67,13 @@ func stringifyNode(n *node, inline bool) string {
 		}
 		mode := "All"
 		parts := []string{}
-		if n.listMode == listNof {
+		switch n.listMode {
+		case listNof:
 			// A Nof's count leads its shapes.
 			mode = "Nof"
 			parts = append(parts, nofCountText(n))
+		case listWhen:
+			mode = "When"
 		}
 		for _, sn := range n.list {
 			parts = append(parts, stringifyNode(sn, true))
@@ -115,7 +118,9 @@ func suffix(base string, n *node) string {
 	// Skip / Ignore / Empty are not annotated: they change whether a value is
 	// demanded, not what shape it has, and TS leaves them out of the rendering.
 	for _, b := range n.befores {
-		if b.stringify != nil {
+		// An array's checks of its items read as the array itself, as TS
+		// renders them.
+		if b.stringify != nil && !(n.kind == KindArray && (b.name == "Contains" || b.name == "Unique")) {
 			out += "." + b.stringify()
 		}
 	}
@@ -198,7 +203,7 @@ func nodeSpec(n *node) any {
 		out["arrayRest"] = nodeSpec(n.arrRest)
 	}
 	if n.listMode != listNone {
-		out["listMode"] = []string{"none", "all", "nof"}[n.listMode]
+		out["listMode"] = []string{"none", "all", "nof", "when"}[n.listMode]
 		branches := make([]any, len(n.list))
 		for i, sn := range n.list {
 			branches[i] = nodeSpec(sn)

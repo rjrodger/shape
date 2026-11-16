@@ -1,6 +1,7 @@
 package shape
 
 import (
+	"math"
 	"sort"
 	"strings"
 )
@@ -95,7 +96,7 @@ func nodeSchema(n *node, defs map[string]any) map[string]any {
 		listSchema(n, s, defs)
 	}
 
-	checkSchema(n, s)
+	checkSchema(n, s, defs)
 
 	// Nullable adds null to the types, to the list where there is one.
 	if n.nullable {
@@ -233,11 +234,21 @@ func listSchema(n *node, s map[string]any, defs map[string]any) {
 		s["oneOf"] = branches
 		return
 	}
-	if n.listMode == listNof {
+	switch n.listMode {
+	case listNof:
 		if !kindsSchema(nofKindsNow(n), branches, s) {
 			nofSchema(n.nofOK, branches, s)
 		}
-	} else {
+	case listWhen:
+		// A shape that passes everything says nothing.
+		s["if"] = branches[0]
+		if len(branches[1].(map[string]any)) > 0 {
+			s["then"] = branches[1]
+		}
+		if len(branches[2].(map[string]any)) > 0 {
+			s["else"] = branches[2]
+		}
+	default:
 		s["allOf"] = branches
 	}
 }
@@ -250,7 +261,7 @@ var jsonSchemaKindKeywords = map[string][]string{
 	"number": {"minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum"},
 	"string": {"minLength", "maxLength", "pattern", "format"},
 	"object": {"properties", "required", "additionalProperties", "minProperties", "maxProperties"},
-	"array":  {"items", "prefixItems", "minItems", "maxItems"},
+	"array":  {"items", "prefixItems", "minItems", "maxItems", "contains", "uniqueItems"},
 }
 
 // The kind of value a schema's type names, as TS's KIND_OF_TYPE reads it (a
@@ -357,7 +368,7 @@ var sizeMax = map[string]string{
 	"minProperties": "maxProperties",
 }
 
-func checkSchema(n *node, s map[string]any) {
+func checkSchema(n *node, s map[string]any, defs map[string]any) {
 	families, ok := sizeFamilies[n.kind]
 	if !ok {
 		families = []string{"minimum", "minLength", "minItems", "minProperties"}
@@ -381,6 +392,20 @@ func checkSchema(n *node, s map[string]any) {
 			s["format"] = jsonSchemaFormat[v.name]
 		case "Ip":
 			s["anyOf"] = []any{map[string]any{"format": "ipv4"}, map[string]any{"format": "ipv6"}}
+		case "Contains":
+			// Each count is a constraint of its own: a second one on the
+			// node joins the first through allOf.
+			c := containsSchema(v, defs)
+			if _, has := s["contains"]; !has {
+				for k, cv := range c {
+					s[k] = cv
+				}
+			} else {
+				allOf, _ := s["allOf"].([]any)
+				s["allOf"] = append(allOf, c)
+			}
+		case "Unique":
+			s["uniqueItems"] = true
 		case "Min", "Max", "Above", "Below", "Len":
 			size := toFloat(v.args[0])
 			for _, lo := range families {
@@ -414,4 +439,20 @@ func checkSchema(n *node, s map[string]any) {
 			}
 		}
 	}
+}
+
+// containsSchema is a count of an array's items, as contains and the bounds
+// on it (see countBounds). A count shape with a check that is not a bound
+// has no keyword for that check, so the schema admits more than the shape
+// does.
+func containsSchema(v validator, defs map[string]any) map[string]any {
+	s := map[string]any{"contains": nodeSchema(v.nodes[0], defs)}
+	lo, hi := v.args[1].(float64), v.args[2].(float64)
+	if lo != 1 {
+		s["minContains"] = lo
+	}
+	if !math.IsInf(hi, 1) {
+		s["maxContains"] = hi
+	}
+	return s
 }

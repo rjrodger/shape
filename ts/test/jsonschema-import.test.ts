@@ -406,16 +406,113 @@ describe('jsonschema-import', () => {
     deepEqual(bools([1]), [1])
     throws(() => bools([1, 2]), /no value is allowed/)
 
-    for (const k of ['$dynamicRef', '$recursiveRef', 'contains', 'dependencies', 'dependentRequired', 'dependentSchemas',
-      'if', 'multipleOf', 'patternProperties', 'propertyNames', 'unevaluatedItems', 'unevaluatedProperties', 'uniqueItems']) {
-      const schema = { type: 'object', properties: { a: { [k]: 'x' === k ? 1 : true } } }
+    for (const k of ['$dynamicRef', '$recursiveRef', 'multipleOf', 'patternProperties', 'propertyNames',
+      'unevaluatedItems', 'unevaluatedProperties']) {
+      const schema = { type: 'object', properties: { a: { [k]: true } } }
       equal(Shape(fromJsonSchema(schema))({ a: 1 }).a, 1)
       throws(() => fromJsonSchema(schema, { strict: true }),
         (e: any) => 'JSON Schema: unsupported keyword "' + k + '" at /properties/a' === e.message)
     }
-    equal(Shape(fromJsonSchema({ uniqueItems: false }, { strict: true }))([1, 1]).length, 2)
+    // What the import reads, strict reads too.
+    for (const schema of [{ if: false, then: false }, { contains: true }, { uniqueItems: true }, { uniqueItems: false },
+      { dependentRequired: {} }, { dependentSchemas: {} }, { dependencies: {} }]) {
+      equal(Shape(fromJsonSchema(schema, { strict: true })).valid(5), true)
+    }
     equal(Shape(fromJsonSchema({ type: 'number' }, {}))(1), 1)
   })
+
+  // if, then and else; the dependent keywords; contains and uniqueItems.
+  test('conditionals-and-array-checks', () => {
+    const v = (schema: any, input: any) => Shape(fromJsonSchema(schema))(input)
+    const ok = (schema: any, input: any) => Shape(fromJsonSchema(schema)).valid(input)
+
+    // if picks then or else; an if with neither asserts nothing.
+    const cond = { if: { type: 'number' }, then: { minimum: 1 }, else: { type: 'string' } }
+    equal(v(cond, 2), 2)
+    throws(() => v(cond, 0), /must be a minimum of 1 \(was 0\)/)
+    equal(v(cond, 'a'), 'a')
+    throws(() => v(cond, true), /not of type string/)
+    equal(ok({ if: false }, 1), true)
+    equal(ok({ if: { type: 'number' }, else: false }, 'x'), false)
+    equal(ok({ if: { type: 'number' }, else: false }, 1), true)
+    // Under one type, the condition and its arms meet that kind alone.
+    equal(ok({ type: 'string', if: { minLength: 2 }, then: { maxLength: 3 } }, 'abcd'), false)
+    equal(ok({ type: 'string', if: { minLength: 2 }, then: { maxLength: 3 } }, 'a'), true)
+    // The condition sees the value as given, before a default fills it in.
+    deepEqual(v({ properties: { a: { default: 1 } }, if: { required: ['a'] }, then: false }, {}), { a: 1 })
+
+    // A dependent keyword holds where its key is present.
+    const dr = { dependentRequired: { a: ['b', 'c'], d: [] } }
+    deepEqual(v(dr, { a: 1, b: 2, c: 3 }), { a: 1, b: 2, c: 3 })
+    throws(() => v(dr, { a: 1, b: 2 }), /property "c" because the property is missing/)
+    deepEqual(v(dr, { b: 1, d: 1 }), { b: 1, d: 1 })
+    equal(v(dr, 'a'), 'a')
+    const ds = { dependentSchemas: { a: { properties: { b: { type: 'number' } }, required: ['b'] } } }
+    throws(() => v(ds, { a: 1, b: 'x' }), /property "b" with string "x"/)
+    deepEqual(v(ds, { b: 'x' }), { b: 'x' })
+    equal(ok({ dependentSchemas: { a: false } }, { a: 1 }), false)
+    equal(ok({ dependentSchemas: { a: false } }, ['a']), true)
+    // Draft 7's dependencies is either form, where neither of the others is.
+    equal(ok({ dependencies: { a: ['b'] } }, { a: 1 }), false)
+    equal(ok({ dependencies: { a: { minProperties: 2 } } }, { a: 1 }), false)
+    equal(ok({ dependencies: { a: ['b'] }, dependentSchemas: {} }, { a: 1 }), true)
+    equal(ok({ dependencies: { a: ['b'] }, dependentRequired: {} }, { a: 1 }), true)
+    // A key the object gets from its prototype is not one it holds.
+    equal(ok({ dependentRequired: { toString: ['x'] } }, {}), true)
+
+    // contains counts the items its schema admits.
+    const c = (extra: any) => Shape(fromJsonSchema({ type: 'array', contains: { type: 'number' }, ...extra }))
+    equal(c({}).valid(['a', 1]), true)
+    throws(() => c({})(['a']),
+      /^ShapeError: Value "\[a\]" for property "" has 0 of its items satisfying Number; the count must be Min\(1\)\.$/)
+    equal(c({ minContains: 0 }).valid([]), true)
+    equal(c({ minContains: 2 }).valid([1]), false)
+    equal(c({ maxContains: 1 }).valid([1, 2]), false)
+    equal(c({ maxContains: 1 }).valid([]), false)
+    equal(c({ minContains: 0, maxContains: 1 }).valid([]), true)
+    equal(c({ minContains: 2, maxContains: 2 }).valid([1, 2, 'a']), true)
+    equal(c({ minContains: 1, maxContains: 3 }).valid([1, 2, 3, 4]), false)
+    // A count of at least none asserts nothing; so does a bound alone.
+    equal(Shape(fromJsonSchema({ type: 'array', minContains: 0, contains: false })).jsonSchema().contains, undefined)
+    equal(ok({ type: 'array', minContains: 3 }, [1]), true)
+    // Untyped, contains and uniqueItems say nothing of other kinds.
+    equal(ok({ contains: { type: 'number' } }, 'x'), true)
+    equal(ok({ contains: { type: 'number' } }, ['x']), false)
+    equal(ok({ uniqueItems: true }, { a: 1 }), true)
+
+    // uniqueItems compares items as JSON values.
+    const u = Shape(fromJsonSchema({ type: 'array', uniqueItems: true }))
+    equal(u.valid([1, '1', true, null, [1], { a: 1 }, { a: 2 }]), true)
+    throws(() => u([{ a: 1, b: [2] }, 0, { b: [2], a: 1 }]),
+      /^ShapeError: Value "\[\{a:1,b:\[2\]\},0,\{b:\[2\],a:1\}\]" for property "" must have unique items \(items 0 and 2 are equal\)\.$/)
+    equal(Shape(fromJsonSchema({ type: 'array', uniqueItems: false }))([1, 1]).length, 2)
+
+    // They export as they were read.
+    deepEqual(Shape(fromJsonSchema(cond)).jsonSchema(), {
+      $schema: 'https://json-schema.org/draft/2020-12/schema',
+      if: { type: 'number' }, then: { minimum: 1 }, else: { type: 'string' },
+    })
+    deepEqual(Shape(fromJsonSchema({ type: 'array', contains: { type: 'number' }, minContains: 2, maxContains: 3,
+      uniqueItems: true })).jsonSchema(), {
+      $schema: 'https://json-schema.org/draft/2020-12/schema',
+      type: 'array', contains: { type: 'number' }, minContains: 2, maxContains: 3, uniqueItems: true,
+    })
+  })
+
+
+  test('conditional-faults', () => {
+    const fault = (schema: any, msg: string) =>
+      throws(() => fromJsonSchema(schema), (e: any) => 'JSON Schema: ' + msg === e.message)
+    fault({ dependentRequired: [] }, 'dependentRequired must be an object at /dependentRequired')
+    fault({ dependentSchemas: 1 }, 'dependentSchemas must be an object at /dependentSchemas')
+    fault({ dependencies: 'a' }, 'dependencies must be an object at /dependencies')
+    fault({ dependentRequired: { a: 'b' } },
+      'a dependency must be an array of property names at /dependentRequired/a')
+    fault({ dependencies: { a: [1] } }, 'a dependency must be an array of property names at /dependencies/a')
+    fault({ dependentSchemas: { a: 1 } }, 'a schema must be an object or boolean at /dependentSchemas/a')
+    fault({ if: true, then: 1 }, 'a schema must be an object or boolean at /then')
+  })
+
 
   test('references', () => {
     const defs = {

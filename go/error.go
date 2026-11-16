@@ -39,6 +39,9 @@ const (
 	WhyIpv4          = "Ipv4"
 	WhyIpv6          = "Ipv6"
 	WhyDiscriminated = "Discriminated"
+	// A validation that needed more trials than its budget (see When,
+	// Contains, Nof).
+	WhyTrial = "trial"
 )
 
 // FieldError captures rich information about a single validation failure.

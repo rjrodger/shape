@@ -77,3 +77,11 @@ make diff-full   # every mismatch
 
 Use it after any behaviour change, and promote anything it finds into a corpus
 row here.
+
+## The JSON Schema Test Suite
+
+[`json-schema-suite/`](json-schema-suite/) holds the official suite's
+required tests for draft 2020-12 and draft 7. All three implementations run
+them through the JSON Schema import, against a skip ledger per draft that
+lists the tests each one fails; a verdict that moves either way fails the
+run. See [`json-schema-suite/README.md`](json-schema-suite/README.md).

@@ -172,6 +172,20 @@ fn validator_call(v: &Validator, calls: &mut Vec<Call>) -> R<()> {
             });
         }
         "Check" => return cannot("a check function"),
+        // A count leads the shape of the items: a number inline, a shape as
+        // its value.
+        "Contains" => {
+            let c = v.counted.as_ref().expect("Contains carries its count");
+            let count = match &c.count {
+                Some(count) => arg_of(count.node())?,
+                None => Arg::Text(js_number(c.lo)),
+            };
+            calls.push(Call {
+                name: name.to_string(),
+                args: vec![count, arg_of(&c.shape)?],
+            });
+        }
+        "Unique" => calls.push(call(name)),
         // The list itself is the head of the expression.
         "All" | "Discriminated" => {}
         _ if is_format(name) => calls.push(call(name)),
@@ -320,6 +334,16 @@ fn carrier(text: String, refs: Vec<(String, Value)>) -> Value {
     Value::Obj(m)
 }
 
+/// The text alone where it needs no sidecars, a carrier where it does (a
+/// shape argument of Contains, say).
+fn carried(text: String, refs: Vec<(String, Value)>) -> Value {
+    if refs.is_empty() {
+        Value::Str(text)
+    } else {
+        carrier(text, refs)
+    }
+}
+
 /// A literal, held by the call that says whether it is required.
 fn literal_head(n: &Node, lit: &str) -> String {
     let name = if n.skippable {
@@ -414,10 +438,10 @@ fn key_form(n: &Node) -> R<Option<(String, Value)>> {
                 String::new()
             }
         });
-        return Ok(Some((
-            chain_text(&head, &sc.calls, &mut Vec::new()),
-            sc.example,
-        )));
+        // A call that needs a sidecar leaves the scalar no key form.
+        let mut refs = Vec::new();
+        let chain = chain_text(&head, &sc.calls, &mut refs);
+        return Ok(refs.is_empty().then_some((chain, sc.example)));
     }
     if n.kind == Kind::Object {
         let o = object(n)?;
@@ -601,12 +625,14 @@ fn headed(n: &Node, hv: usize, what: &str) -> R<Value> {
     }
     let mut kc = Vec::new();
     validator_call(&n.befores[hv], &mut kc)?;
-    let head = call_text(&kc[0], &mut Vec::new(), None);
+    let mut refs = Vec::new();
+    let head = call_text(&kc[0], &mut refs, None);
     let mut calls = required_calls(n, false);
     calls.extend(flag_calls(n, false)?);
     calls.extend(validator_calls(n, Some(hv))?);
     calls.extend(tail_calls(n));
-    Ok(Value::Str(chain_text(&head, &calls, &mut Vec::new())))
+    let text = chain_text(&head, &calls, &mut refs);
+    Ok(carried(text, refs))
 }
 
 /// The value form of a node: the JSON that reads back as it.
@@ -626,7 +652,9 @@ pub fn node_json(n: &Node) -> R<Value> {
                 other => other.clone(),
             });
         }
-        return Ok(Value::Str(chain_text(&sc.head, &sc.calls, &mut Vec::new())));
+        let mut refs = Vec::new();
+        let text = chain_text(&sc.head, &sc.calls, &mut refs);
+        return Ok(carried(text, refs));
     }
 
     let hv = head_validator(n);
@@ -691,6 +719,8 @@ pub fn node_json(n: &Node) -> R<Value> {
                             });
                             "Nof"
                         }
+                        // Every arm is written, a defaulted one as Any.
+                        ListMode::When => "When",
                         _ => "All",
                     };
                     for b in &n.list {
@@ -722,11 +752,7 @@ pub fn node_json(n: &Node) -> R<Value> {
                 );
             }
             let text = chain_text(&head_text, &calls, &mut refs);
-            Ok(if refs.is_empty() {
-                Value::Str(text)
-            } else {
-                carrier(text, refs)
-            })
+            Ok(carried(text, refs))
         }
 
         Kind::Regexp => {
@@ -737,24 +763,26 @@ pub fn node_json(n: &Node) -> R<Value> {
             calls.extend(validator_calls(n, None)?);
             calls.extend(tail_calls(n));
             let re = format!("/{}/", n.regexp_src);
-            Ok(Value::Str(if calls.is_empty() {
+            let mut refs = Vec::new();
+            let text = if calls.is_empty() {
                 re
             } else {
-                wrap_text(&calls, &re, &mut Vec::new())
-            }))
+                wrap_text(&calls, &re, &mut refs)
+            };
+            Ok(carried(text, refs))
         }
 
         Kind::NaN => {
             let mut calls = flag_calls(n, true)?;
             calls.extend(validator_calls(n, None)?);
             calls.extend(tail_calls(n));
-            Ok(Value::Str(
-                if calls.is_empty() && !n.required && !n.skippable {
-                    "NaN".to_string()
-                } else {
-                    chain_text(&literal_head(n, "NaN"), &calls, &mut Vec::new())
-                },
-            ))
+            let mut refs = Vec::new();
+            let text = if calls.is_empty() && !n.required && !n.skippable {
+                "NaN".to_string()
+            } else {
+                chain_text(&literal_head(n, "NaN"), &calls, &mut refs)
+            };
+            Ok(carried(text, refs))
         }
 
         // The rest are a call that names the kind, then the chain.
@@ -765,7 +793,10 @@ pub fn node_json(n: &Node) -> R<Value> {
                 Kind::Any => {
                     let mut head = if n.required { "Required" } else { "Any" }.to_string();
                     head_required = n.required;
-                    if n.has_default && !n.default.is_undefined() {
+                    // A required value never takes its default, so a required
+                    // Any has none to write, and Required(5) would read as a
+                    // required number.
+                    if n.has_default && !n.default.is_undefined() && !n.required {
                         head = format!("{}({})", head, literal(&n.default, "the default")?);
                     }
                     head
@@ -814,12 +845,14 @@ pub fn node_json(n: &Node) -> R<Value> {
                     };
                     let mut kc = Vec::new();
                     validator_call(first, &mut kc)?;
-                    let head = call_text(&kc[0], &mut Vec::new(), None);
+                    let mut refs = Vec::new();
+                    let head = call_text(&kc[0], &mut refs, None);
                     let mut calls = required_calls(n, true);
                     calls.extend(flag_calls(n, false)?);
                     calls.extend(validator_calls(n, Some(0))?);
                     calls.extend(tail_calls(n));
-                    return Ok(Value::Str(chain_text(&head, &calls, &mut Vec::new())));
+                    let text = chain_text(&head, &calls, &mut refs);
+                    return Ok(carried(text, refs));
                 }
                 other => return cannot(format!("a {} value", other)),
             };
@@ -832,14 +865,32 @@ pub fn node_json(n: &Node) -> R<Value> {
             let mut calls = flag_calls(n, false)?;
             calls.extend(validator_calls(n, None)?);
             calls.extend(tail_calls(n));
+            // The sidecars of any call that takes a shape.
+            let mut refs = Vec::new();
             if head_required && !rp.is_empty() && n.kind != Kind::Any {
                 // Optional(Date), Skip(Never): the call holds the token.
                 let held = format!("{}({})", rp[0].name, head);
-                return Ok(Value::Str(chain_text(&held, &calls, &mut Vec::new())));
+                let text = chain_text(&held, &calls, &mut refs);
+                return Ok(carried(text, refs));
+            }
+            if n.kind == Kind::Any && n.required {
+                // A carrier that starts with a bare Required is a required
+                // object, as Required.Child($$0) is, so a required Any that
+                // needs one names its kind first.
+                let mut probe = Vec::new();
+                let text = chain_text(&head, &calls, &mut probe);
+                if !probe.is_empty() {
+                    let mut all = vec![call("Required")];
+                    all.extend(calls);
+                    let any = format!("Any{}", &head["Required".len()..]);
+                    return Ok(carried(chain_text(&any, &all, &mut refs), refs));
+                }
+                return Ok(carried(text, probe));
             }
             let mut all = rp;
             all.extend(calls);
-            Ok(Value::Str(chain_text(&head, &all, &mut Vec::new())))
+            let text = chain_text(&head, &all, &mut refs);
+            Ok(carried(text, refs))
         }
     }
 }

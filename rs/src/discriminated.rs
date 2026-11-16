@@ -65,6 +65,7 @@ where
         args: vec![Value::Str(tag)],
         suffix: None,
         inner: None,
+        counted: None,
     });
     n
 }

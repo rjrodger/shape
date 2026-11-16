@@ -24,6 +24,10 @@ pub struct Options {
     pub val_expr: bool,
     /// The mark key of a value expression; the meta suffix when empty.
     pub val_expr_mark: String,
+    /// The trials one validation may run: each shape a Nof tries, each
+    /// When condition and each item a Contains counts takes one. Zero is
+    /// the default, 100000.
+    pub trials: usize,
 }
 
 impl Default for Options {
@@ -34,6 +38,7 @@ impl Default for Options {
             meta_suffix: "$$".to_string(),
             val_expr: false,
             val_expr_mark: String::new(),
+            trials: 0,
         }
     }
 }

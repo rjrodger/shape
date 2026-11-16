@@ -152,6 +152,9 @@ func Below(below any, spec ...any) *Node
 func Len(length int, spec ...any) *Node
 func All(shapes ...any) *Node
 func Nof(count any, shapes ...any) *Node   // count: a whole number, or a shape for it
+func When(cond any, shapes ...any) *Node   // then, else; an arm not given passes
+func Contains(count any, shape any, spec ...any) *Node
+func Unique(spec ...any) *Node
 func Open(spec ...any) *Node
 func Closed(spec ...any) *Node
 func Child(child any, spec ...any) *Node
@@ -249,6 +252,7 @@ type ShapeOptions struct {
 	KeyExpr KeyExprOptions // "x: Min(1)" key parsing
 	Meta    MetaOptions    // "x$$" sidecar metadata
 	ValExpr ValExprOptions // "$$" value expressions
+	Trials  int            // trials one validation may run; 0 is 100000
 }
 type KeyExprOptions struct{ Disable bool } // default: enabled
 type MetaOptions struct {                  // default: off, "$$"

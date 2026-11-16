@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -1007,6 +1008,391 @@ func Nof(count any, shapes ...any) *Node {
 	return nb
 }
 
+// whenFault is the message of a When with no condition.
+const whenFault = "Shape: When needs a shape for its condition"
+
+// When validates the value with the shape its condition picks: the first
+// of shapes where the value satisfies cond, and the second otherwise. The
+// condition is tried on the value and only checks (see trial); the shape
+// it picks validates the value and makes the result, and its errors are
+// the errors. A shape not given is Any, and shapes past the second are
+// ignored. An absent value is not tried, so whether it may be absent is
+// the node's required or optional.
+func When(cond any, shapes ...any) *Node {
+	if cond == nil {
+		return fault(whenFault)
+	}
+	// A condition that is itself a builder's fault is the fault: it is only
+	// tried, so its message would otherwise be lost.
+	if cn, ok := cond.(*Node); ok && cn.n.argFault {
+		return cn
+	}
+	arms := []any{cond, Any, Any}
+	copy(arms[1:], shapes)
+	return makeListBuilder(listWhen, arms)
+}
+
+// The messages of a Contains given a wrong count, or no shape for its items.
+const (
+	containsFault      = "Shape: Contains needs a whole number of zero or more, or a shape for the count"
+	containsShapeFault = "Shape: Contains needs a shape for the items it counts"
+)
+
+// Contains requires the number of an array's items that satisfy the shape
+// to be one the count admits. The count is a whole number, for exactly
+// that many, or a shape the number must satisfy: Contains(Min(1), s) is at
+// least one, Contains(0, s) none. Each item is tried on its own (see
+// trial), and only while the items left untried could still change the
+// verdict; the array is left as it was given. A value that is not an array
+// is not counted, so whether it is one is the node's type check. Without a
+// spec of its own the node is an array of anything.
+func Contains(count any, shape any, spec ...any) *Node {
+	v, f := containsCheck(count, shape)
+	if f != nil {
+		return f
+	}
+	nb := buildize(arraySpec(spec))
+	nb.n.befores = append(nb.n.befores, v)
+	bumpValidatorGen()
+	return nb
+}
+
+// Contains (chained): the node keeps its kind.
+func (n *Node) Contains(count any, shape any) *Node {
+	v, f := containsCheck(count, shape)
+	if f != nil {
+		return n.becomeFault(f)
+	}
+	n.n.befores = append(n.n.befores, v)
+	bumpValidatorGen()
+	return n
+}
+
+// arraySpec is the spec a check of an array's items applies to: the one
+// given, or an array of anything.
+func arraySpec(spec []any) any {
+	if len(spec) == 0 {
+		return []any{}
+	}
+	return spec[0]
+}
+
+// containsCheck is the check of a Contains, or the fault of a wrong
+// argument. The count is held as the whole number or the count shape's
+// node, then the bounds of the counts it admits; the shape of the items is
+// walked with the tree.
+func containsCheck(count any, shape any) (validator, *Node) {
+	exact, isNumber := toFloat64(count)
+	var counter *Schema
+	switch {
+	case count == nil:
+		return validator{}, fault(containsFault)
+	case isNumber:
+		if exact != math.Trunc(exact) || exact < 0 || math.IsInf(exact, 1) {
+			return validator{}, fault(containsFault)
+		}
+	default:
+		// A count or shape that is itself a builder's fault is the fault:
+		// neither is reported, so its message would otherwise be lost.
+		if cn, ok := count.(*Node); ok && cn.n.argFault {
+			return validator{}, cn
+		}
+		var err error
+		if counter, err = Shape(count); err != nil {
+			return validator{}, fault(err.Error())
+		}
+	}
+	if shape == nil {
+		return validator{}, fault(containsShapeFault)
+	}
+	if sn, ok := shape.(*Node); ok && sn.n.argFault {
+		return validator{}, sn
+	}
+	item, err := normalize(shape)
+	if err != nil {
+		return validator{}, fault(err.Error())
+	}
+
+	var held any = exact
+	countText := func() string { return fmtFloat(exact) }
+	lo, hi, interval := exact, exact, true
+	if counter != nil {
+		held = counter.root
+		countText = func() string { return stringifyNode(counter.root, true) }
+		lo, hi, interval = countBounds(counter.root)
+	}
+	verdicts := &countVerdicts{}
+	return validator{
+		name:  "Contains",
+		args:  []any{held, lo, hi},
+		nodes: []*node{item},
+		fn: func(val any, update *Update, state *State) bool {
+			items, ok := toAnySlice(val)
+			if !ok {
+				return true
+			}
+			// The counts from k to k + open are all, some or none admitted:
+			// at once for a count that is an interval, and otherwise off the
+			// running total of admitted counts.
+			n := len(items)
+			var yes []int
+			if !interval {
+				admitted := verdicts.upTo(counter, n)
+				yes = make([]int, n+2)
+				for c := 0; c <= n; c++ {
+					yes[c+1] = yes[c]
+					if admitted[c] {
+						yes[c+1]++
+					}
+				}
+			}
+			k, tried := 0, 0
+			for countSpan(lo, hi, yes, k, n-tried) == nofSome {
+				key, boxed := indexOf(tried)
+				if ok, _, _ := trial(item, items[tried], append(state.Path, key), append(state.PathArr, boxed), key, state); ok {
+					k++
+				}
+				tried++
+			}
+			if countSpan(lo, hi, yes, k, n-tried) == nofAll {
+				return true
+			}
+			if terseCall(state) {
+				return false
+			}
+			has := strconv.Itoa(k)
+			if tried < n {
+				has += " to " + strconv.Itoa(k+n-tried)
+			}
+			update.Err = makeErr(state, WhyCheck, 0, "Value \"$VALUE\" for property \"$PATH\" has "+has+
+				" of its items satisfying "+stringifyNode(item, true)+"; the count must be "+countText()+".")
+			return false
+		},
+		stringify: func() string { return "Contains(" + countText() + "," + stringifyNode(item, true) + ")" },
+	}, nil
+}
+
+// countSpan reports whether the counts from k to k+open are all admitted,
+// some or none: by the bounds of a count that is the whole numbers lo to
+// hi, or else from yes, the running totals of the admitted counts. A count
+// no number satisfies (lo above hi) admits none at once.
+func countSpan(lo, hi float64, yes []int, k, open int) int {
+	if yes == nil {
+		switch {
+		case math.Min(hi, float64(k+open)) < math.Max(lo, float64(k)):
+			return nofNone
+		case lo <= float64(k) && float64(k+open) <= hi:
+			return nofAll
+		}
+		return nofSome
+	}
+	switch yes[k+open+1] - yes[k] {
+	case 0:
+		return nofNone
+	case open + 1:
+		return nofAll
+	}
+	return nofSome
+}
+
+// countBounds is the counts a count shape admits by its Min, Max, Above,
+// Below and Len, as the whole numbers lo to hi; an interval where the shape
+// has nothing else to say of a whole number. Ignore and Rename are checks
+// of their own in TS, and so say more.
+func countBounds(n *node) (lo, hi float64, interval bool) {
+	lo, hi = 0, math.Inf(1)
+	interval = (n.kind == KindAny || n.kind == KindNumber || n.kind == KindInteger) &&
+		len(n.afters) == 0 && !n.silent && n.renameTo == ""
+	for _, cv := range n.befores {
+		switch cv.name {
+		case "Min":
+			lo = math.Max(lo, math.Ceil(toFloat(cv.args[0])))
+		case "Max":
+			hi = math.Min(hi, math.Floor(toFloat(cv.args[0])))
+		case "Above":
+			lo = math.Max(lo, math.Floor(toFloat(cv.args[0]))+1)
+		case "Below":
+			hi = math.Min(hi, math.Ceil(toFloat(cv.args[0]))-1)
+		case "Len":
+			b := toFloat(cv.args[0])
+			lo, hi = math.Max(lo, b), math.Min(hi, b)
+		default:
+			interval = false
+		}
+	}
+	return lo, hi, interval
+}
+
+// countVerdicts is whether a count shape admits each count from none up,
+// kept for the next array to ask, as each is the same verdict every time.
+type countVerdicts struct {
+	mu sync.Mutex
+	ok []bool
+}
+
+// upTo is the verdicts on the counts from none to n.
+func (cv *countVerdicts) upTo(counter *Schema, n int) []bool {
+	cv.mu.Lock()
+	defer cv.mu.Unlock()
+	for c := len(cv.ok); c <= n; c++ {
+		cv.ok = append(cv.ok, counter.Match(float64(c)))
+	}
+	return cv.ok[:n+1]
+}
+
+// Unique requires that no two of an array's items be equal as JSON values:
+// a number by its value, an array by its items in order, an object by its
+// keys and their values, in any order. The error names the first item
+// equal to one before it, and the first of those. A value that is not an
+// array is not checked. Without a spec of its own the node is an array of
+// anything.
+func Unique(spec ...any) *Node {
+	nb := buildize(arraySpec(spec))
+	nb.n.befores = append(nb.n.befores, uniqueCheck())
+	bumpValidatorGen()
+	return nb
+}
+
+// Unique (chained): the node keeps its kind.
+func (n *Node) Unique() *Node {
+	n.n.befores = append(n.n.befores, uniqueCheck())
+	bumpValidatorGen()
+	return n
+}
+
+func uniqueCheck() validator {
+	return validator{
+		name: "Unique",
+		fn: func(val any, update *Update, state *State) bool {
+			items, ok := toAnySlice(val)
+			if !ok {
+				return true
+			}
+			i, j := repeated(items)
+			if j < 0 {
+				return true
+			}
+			if terseCall(state) {
+				return false
+			}
+			update.Err = makeErr(state, WhyCheck, 0, "Value \"$VALUE\" for property \"$PATH\" must have unique items (items "+
+				strconv.Itoa(i)+" and "+strconv.Itoa(j)+" are equal).")
+			return false
+		},
+		stringify: func() string { return "Unique()" },
+	}
+}
+
+// repeated is the first item equal to an item before it, and the first of
+// those; -1 for both where no two are equal. A scalar is looked up by its
+// value, and an array or object compared with the containers before it.
+func repeated(items []any) (int, int) {
+	seen := map[any]int{}
+	var containers []int
+	for j, v := range items {
+		if kind, _, _ := itemKind(v); kind != itemScalar {
+			for _, i := range containers {
+				if sameJSON(items[i], v) {
+					return i, j
+				}
+			}
+			containers = append(containers, j)
+			continue
+		}
+		k, ok := scalarKey(v)
+		if !ok {
+			continue
+		}
+		if i, has := seen[k]; has {
+			return i, j
+		}
+		seen[k] = j
+	}
+	return -1, -1
+}
+
+// The kinds of item Unique compares.
+const (
+	itemScalar = iota
+	itemArray
+	itemObject
+)
+
+// itemKind reads an item as the walk does: an array, an object (a struct
+// or another map, see objectValue), or neither.
+func itemKind(v any) (int, []any, map[string]any) {
+	switch v.(type) {
+	case nil, nullT, string, bool, float64, int:
+		return itemScalar, nil, nil
+	}
+	if arr, ok := toAnySlice(v); ok {
+		return itemArray, arr, nil
+	}
+	if obj, ok := objectValue(v); ok {
+		return itemObject, nil, obj
+	}
+	return itemScalar, nil, nil
+}
+
+// nanKey stands for NaN among the scalars Unique looks up: NaN is not
+// equal to itself, but two are the same value, as JSON would have them.
+type nanKey struct{}
+
+// scalarKey is a scalar as Unique looks it up: a number by its value
+// whatever its type, Null as the nil it means, anything else as itself. A
+// value that cannot be a key is equal to nothing, and has none.
+func scalarKey(v any) (any, bool) {
+	if f, ok := toFloat64(v); ok {
+		if math.IsNaN(f) {
+			return nanKey{}, true
+		}
+		return f, true
+	}
+	if v == nil || isNull(v) {
+		return nil, true
+	}
+	if !reflect.TypeOf(v).Comparable() {
+		return nil, false
+	}
+	return v, true
+}
+
+// sameJSON reports whether two values are equal as JSON values (see
+// Unique); a value that is neither a container nor a JSON scalar is equal
+// to itself alone.
+func sameJSON(x, y any) bool {
+	xk, xa, xo := itemKind(x)
+	yk, ya, yo := itemKind(y)
+	if xk != yk {
+		return false
+	}
+	switch xk {
+	case itemArray:
+		if len(xa) != len(ya) {
+			return false
+		}
+		for i := range xa {
+			if !sameJSON(xa[i], ya[i]) {
+				return false
+			}
+		}
+		return true
+	case itemObject:
+		if len(xo) != len(yo) {
+			return false
+		}
+		for k, v := range xo {
+			if w, has := yo[k]; !has || !sameJSON(v, w) {
+				return false
+			}
+		}
+		return true
+	}
+	kx, okx := scalarKey(x)
+	ky, oky := scalarKey(y)
+	return okx && oky && kx == ky
+}
+
 // The kind of JSON value a node's type takes: number covers integer, and
 // string a regexp.
 var kindOfType = map[Kind]string{
@@ -1018,8 +1404,9 @@ var kindOfType = map[Kind]string{
 // takes a value of its own kind only. A function Check is the caller's and
 // may take anything; a Check of a regexp is named by its pattern.
 var kindKeeping = map[string]bool{
-	"Above": true, "Below": true, "DateTime": true, "Define": true, "Email": true, "Exact": true,
-	"Ip": true, "Ipv4": true, "Ipv6": true, "Len": true, "Max": true, "Min": true, "Url": true, "Uuid": true,
+	"Above": true, "Below": true, "Contains": true, "DateTime": true, "Define": true, "Email": true,
+	"Exact": true, "Ip": true, "Ipv4": true, "Ipv6": true, "Len": true, "Max": true, "Min": true,
+	"Unique": true, "Url": true, "Uuid": true,
 }
 
 // nofKinds is the kinds of the shapes, where each is of a different kind and
@@ -1766,3 +2153,8 @@ func GDiscriminated(tag string, branches map[string]any) *Node {
 func GTransform(fn func(val any, state *State) any, spec ...any) *Node {
 	return Transform(fn, spec...)
 }
+func GWhen(cond any, shapes ...any) *Node { return When(cond, shapes...) }
+func GContains(count any, shape any, spec ...any) *Node {
+	return Contains(count, shape, spec...)
+}
+func GUnique(spec ...any) *Node { return Unique(spec...) }

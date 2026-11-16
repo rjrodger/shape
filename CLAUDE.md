@@ -13,7 +13,9 @@ The full guide is **[AGENTS.md](AGENTS.md)** — read it. The essentials:
    to regenerate it, then `make test` — all three must pass. Then `make diff`,
    the differential harness, which runs thousands of generated cases through
    all three and compares exact error text; promote anything it finds into a
-   corpus row.
+   corpus row. The JSON Schema Test Suite in `test/json-schema-suite/` is a
+   ratchet: a change that fixes suite tests deletes their skip-ledger rows
+   and lowers the bound.
 3. **Rebuild before testing TS.** Edits to `ts/src` require `npm run build`
    (output in the git-ignored `ts/dist` / `ts/dist-test`).
 4. **Coverage bar is 100% lines** in every language. Go has no line-ignore

@@ -56,20 +56,14 @@ pub struct JsonSchemaImportOptions {
 
 /// Keywords the import recognises but does not enforce. It passes over
 /// them, as it does a keyword it does not know, unless it is strict.
-const UNSUPPORTED: [&str; 13] = [
+const UNSUPPORTED: [&str; 7] = [
     "$dynamicRef",
     "$recursiveRef",
-    "contains",
-    "dependencies",
-    "dependentRequired",
-    "dependentSchemas",
-    "if",
     "multipleOf",
     "patternProperties",
     "propertyNames",
     "unevaluatedItems",
     "unevaluatedProperties",
-    "uniqueItems",
 ];
 
 /// Build a spec from a JSON Schema document, an object or a boolean.
@@ -311,9 +305,7 @@ impl<'a> Import<'a> {
     /// the other parts allow, and so stays one Exact, with Exact's message.
     fn keywords(&mut self, m: &Map, path: &str, kind: Option<&'static str>) -> Res<Spec> {
         if self.strict {
-            let refused = UNSUPPORTED.iter().find(|k| {
-                present(m, k).is_some_and(|v| **k != "uniqueItems" || *v != Value::Bool(false))
-            });
+            let refused = UNSUPPORTED.iter().find(|k| present(m, k).is_some());
             if let Some(k) = refused {
                 return fault(format!("unsupported keyword \"{}\"", k), path);
             }
@@ -333,6 +325,17 @@ impl<'a> Import<'a> {
                 let none = self.schema(not, &format!("{}/not", path), inner)?;
                 parts.push(Spec::from(Nof(0, [none])));
             }
+            // A condition sees the value as given, before a part fills it
+            // in. An if with neither then nor else asserts nothing.
+            if let Some(cond) = present(m, "if") {
+                if present(m, "then").is_some() || present(m, "else").is_some() {
+                    let cond = self.schema(cond, &format!("{}/if", path), inner)?;
+                    let then = self.arm(m, "then", path, inner)?;
+                    let otherwise = self.arm(m, "else", path, inner)?;
+                    parts.push(Spec::from(When(cond, then, otherwise)));
+                }
+            }
+            parts.extend(self.dependents(m, path)?);
             if let Some(r) = as_str(m.get("$ref")) {
                 parts.push(self.reference(r, path)?);
             }
@@ -401,6 +404,54 @@ impl<'a> Import<'a> {
             vals.retain(|v| rest.matches(v));
         }
         Ok(exact_of(vals))
+    }
+
+    /// The then or else of an if; one not given passes.
+    fn arm(&mut self, m: &Map, k: &str, path: &str, kind: Option<&'static str>) -> Res<Spec> {
+        match present(m, k) {
+            Some(s) => self.schema(s, &format!("{}/{}", path, k), kind),
+            None => Ok(Spec::from(Any())),
+        }
+    }
+
+    /// Each entry of a dependent keyword is a When on its key being
+    /// present: the object must then hold the names dependentRequired
+    /// lists, or satisfy the schema dependentSchemas gives, which can only
+    /// meet an object. Draft 7's dependencies holds either form, and is
+    /// read where neither of the two that replaced it is written.
+    fn dependents(&mut self, m: &Map, path: &str) -> Res<Vec<Spec>> {
+        let legacy =
+            present(m, "dependentRequired").is_none() && present(m, "dependentSchemas").is_none();
+        let mut out = Vec::new();
+        for kw in ["dependentRequired", "dependentSchemas", "dependencies"] {
+            let Some(v) = present(m, kw).filter(|_| kw != "dependencies" || legacy) else {
+                continue;
+            };
+            let Value::Obj(entries) = v else {
+                return fault(
+                    format!("{} must be an object", kw),
+                    &format!("{}/{}", path, kw),
+                );
+            };
+            for (k, dv) in entries {
+                let at = format!("{}/{}/{}", path, kw, k);
+                let names = match kw {
+                    "dependentRequired" => true,
+                    "dependentSchemas" => false,
+                    _ => matches!(dv, Value::Arr(_)),
+                };
+                if names {
+                    let list = dependency_names(dv, &at)?;
+                    if !list.is_empty() {
+                        out.push(Spec::from(When(holds(&[k]), holds(&list), Any())));
+                    }
+                } else {
+                    let then = self.schema(dv, &at, Some("object"))?;
+                    out.push(Spec::from(When(holds(&[k]), then, Any())));
+                }
+            }
+        }
+        Ok(out)
     }
 
     fn branches(&mut self, v: &Value, path: &str, kind: Option<&'static str>) -> Res<Vec<Spec>> {
@@ -644,7 +695,35 @@ impl<'a> Import<'a> {
                 }
             }
         };
-        Ok(bounded(spec, m, "minItems", "maxItems"))
+        let mut spec = bounded(spec, m, "minItems", "maxItems");
+
+        // contains counts the items its schema admits, at least one unless
+        // minContains says otherwise; a count of at least none asserts
+        // nothing.
+        if let Some(contains) = present(m, "contains") {
+            let lo = as_f64(m.get("minContains")).unwrap_or(1.0);
+            let hi = as_f64(m.get("maxContains"));
+            if lo > 0.0 || hi.is_some() {
+                let count = match hi {
+                    Some(h) if h == lo => Spec::from(lo),
+                    None => Spec::from(Min(lo, Any())),
+                    Some(h) if lo == 0.0 => Spec::from(Max(h, Any())),
+                    Some(h) => Spec::from(Max(h, Min(lo, Any()))),
+                };
+                let items = self.schema(contains, &format!("{}/contains", path), None)?;
+                let counted = Contains(count, items, spec);
+                // A count that is no whole number throws in TypeScript, so
+                // the document does not import.
+                if is_fault(&counted) {
+                    return Err(JsonSchemaError(counted.fault_msg.unwrap_or_default()));
+                }
+                spec = Spec::from(counted);
+            }
+        }
+        if m.get("uniqueItems") == Some(&Value::Bool(true)) {
+            spec = Spec::from(Unique(spec));
+        }
+        Ok(spec)
     }
 
     /// A oneOf of objects that each require one property with a distinct
@@ -718,6 +797,34 @@ impl<'a> Import<'a> {
             out.push((tags[i].clone(), spec));
         }
         Ok(Some(Spec::from(Discriminated(tag, out))))
+    }
+}
+
+/// An open object that holds each of the names.
+fn holds(names: &[&String]) -> Node {
+    Open(Spec::Obj(
+        names
+            .iter()
+            .map(|k| (k.to_string(), Spec::from(Required(Any()))))
+            .collect(),
+    ))
+}
+
+/// The property names a dependency lists.
+fn dependency_names<'v>(v: &'v Value, at: &str) -> Res<Vec<&'v String>> {
+    let names: Option<Vec<&String>> = match v {
+        Value::Arr(list) => list
+            .iter()
+            .map(|n| match n {
+                Value::Str(s) => Some(s),
+                _ => None,
+            })
+            .collect(),
+        _ => None,
+    };
+    match names {
+        Some(names) => Ok(names),
+        None => fault("a dependency must be an array of property names", at),
     }
 }
 
@@ -1445,16 +1552,219 @@ mod tests {
                 )
             );
         }
+        // What the import reads, strict reads too.
         let strict = JsonSchemaImportOptions { strict: true };
-        let unique = from_json_schema_with(&Value::from(json!({"uniqueItems": false})), &strict);
-        assert_eq!(
-            Schema::new(unique.unwrap())
-                .validate(Value::from(json!([1, 1])))
-                .unwrap(),
-            Value::from(json!([1, 1]))
-        );
+        for schema in [
+            json!({"if": false, "then": false}),
+            json!({"contains": true}),
+            json!({"uniqueItems": true}),
+            json!({"uniqueItems": false}),
+            json!({"dependentRequired": {}}),
+            json!({"dependentSchemas": {}}),
+            json!({"dependencies": {}}),
+        ] {
+            let spec = from_json_schema_with(&Value::from(schema.clone()), &strict);
+            assert!(
+                Schema::new(spec.unwrap()).valid(&Value::from(5)),
+                "{}",
+                schema
+            );
+        }
         let lax =
             from_json_schema_with(&Value::from(json!({"type": "number"})), &Default::default());
         assert!(Schema::new(lax.unwrap()).valid(&Value::from(1)));
+    }
+
+    // ts/test/jsonschema-import.test.ts, conditionals-and-array-checks: if,
+    // then and else; the dependent keywords; contains and uniqueItems.
+    #[test]
+    fn conditionals_and_array_checks() {
+        let ok = |schema: serde_json::Value, input: serde_json::Value| {
+            Schema::new(imp(schema).unwrap()).valid(&Value::from(input))
+        };
+
+        // if picks then or else; an if with neither asserts nothing.
+        let cond =
+            json!({"if": {"type": "number"}, "then": {"minimum": 1}, "else": {"type": "string"}});
+        holds(&[
+            (cond.clone(), json!(2), "2"),
+            (cond.clone(), json!(0), "ERR Value \"0\" for property \"\" must be a minimum of 1 (was 0)."),
+            (cond.clone(), json!("a"), "\"a\""),
+            (cond.clone(), json!(true), "ERR Validation failed for boolean \"true\" because the boolean is not of type string."),
+        ]);
+        assert!(ok(json!({"if": false}), json!(1)));
+        assert!(!ok(
+            json!({"if": {"type": "number"}, "else": false}),
+            json!("x")
+        ));
+        assert!(ok(
+            json!({"if": {"type": "number"}, "else": false}),
+            json!(1)
+        ));
+        // Under one type, the condition and its arms meet that kind alone.
+        let narrowed = json!({"type": "string", "if": {"minLength": 2}, "then": {"maxLength": 3}});
+        assert!(!ok(narrowed.clone(), json!("abcd")));
+        assert!(ok(narrowed, json!("a")));
+        // The condition sees the value as given, before a default fills it in.
+        holds(&[(
+            json!({"properties": {"a": {"default": 1}}, "if": {"required": ["a"]}, "then": false}),
+            json!({}),
+            "{\"a\":1}",
+        )]);
+
+        // A dependent keyword holds where its key is present.
+        let dr = json!({"dependentRequired": {"a": ["b", "c"], "d": []}});
+        holds(&[
+            (
+                dr.clone(),
+                json!({"a": 1, "b": 2, "c": 3}),
+                "{\"a\":1,\"b\":2,\"c\":3}",
+            ),
+            (
+                dr.clone(),
+                json!({"a": 1, "b": 2}),
+                "ERR Validation failed for property \"c\" because the property is missing.",
+            ),
+            (dr.clone(), json!({"b": 1, "d": 1}), "{\"b\":1,\"d\":1}"),
+            (dr, json!("a"), "\"a\""),
+        ]);
+        let ds = json!({"dependentSchemas": {"a": {"properties": {"b": {"type": "number"}}, "required": ["b"]}}});
+        holds(&[
+            (ds.clone(), json!({"a": 1, "b": "x"}), "ERR Validation failed for property \"b\" with string \"x\" because the string is not of type number."),
+            (ds, json!({"b": "x"}), "{\"b\":\"x\"}"),
+        ]);
+        assert!(!ok(
+            json!({"dependentSchemas": {"a": false}}),
+            json!({"a": 1})
+        ));
+        assert!(ok(json!({"dependentSchemas": {"a": false}}), json!(["a"])));
+        // Draft 7's dependencies is either form, where neither of the others is.
+        assert!(!ok(json!({"dependencies": {"a": ["b"]}}), json!({"a": 1})));
+        assert!(!ok(
+            json!({"dependencies": {"a": {"minProperties": 2}}}),
+            json!({"a": 1})
+        ));
+        assert!(ok(
+            json!({"dependencies": {"a": ["b"]}, "dependentSchemas": {}}),
+            json!({"a": 1})
+        ));
+        assert!(ok(
+            json!({"dependencies": {"a": ["b"]}, "dependentRequired": {}}),
+            json!({"a": 1})
+        ));
+        // A key the object does not hold is not one it holds.
+        assert!(ok(
+            json!({"dependentRequired": {"toString": ["x"]}}),
+            json!({})
+        ));
+
+        // contains counts the items its schema admits.
+        let c = |extra: serde_json::Value| {
+            let mut schema = json!({"type": "array", "contains": {"type": "number"}});
+            schema
+                .as_object_mut()
+                .unwrap()
+                .extend(extra.as_object().unwrap().clone());
+            Schema::new(imp(schema).unwrap())
+        };
+        let a = |s: &str| Value::from(serde_json::from_str::<serde_json::Value>(s).unwrap());
+        assert!(c(json!({})).valid(&a(r#"["a",1]"#)));
+        assert_eq!(
+            c(json!({})).validate(a(r#"["a"]"#)).unwrap_err().to_string(),
+            "Value \"[a]\" for property \"\" has 0 of its items satisfying Number; the count must be Min(1)."
+        );
+        assert!(c(json!({"minContains": 0})).valid(&a("[]")));
+        assert!(!c(json!({"minContains": 2})).valid(&a("[1]")));
+        assert!(!c(json!({"maxContains": 1})).valid(&a("[1,2]")));
+        assert!(!c(json!({"maxContains": 1})).valid(&a("[]")));
+        assert!(c(json!({"minContains": 0, "maxContains": 1})).valid(&a("[]")));
+        assert!(c(json!({"minContains": 2, "maxContains": 2})).valid(&a(r#"[1,2,"a"]"#)));
+        assert!(!c(json!({"minContains": 1, "maxContains": 3})).valid(&a("[1,2,3,4]")));
+        // A count of at least none asserts nothing; so does a bound alone.
+        assert_eq!(
+            export(json!({"type": "array", "minContains": 0, "contains": false})),
+            json!({"type": "array"})
+        );
+        assert!(ok(json!({"type": "array", "minContains": 3}), json!([1])));
+        // Untyped, contains and uniqueItems say nothing of other kinds.
+        assert!(ok(json!({"contains": {"type": "number"}}), json!("x")));
+        assert!(!ok(json!({"contains": {"type": "number"}}), json!(["x"])));
+        assert!(ok(json!({"uniqueItems": true}), json!({"a": 1})));
+
+        // uniqueItems compares items as JSON values.
+        let u = Schema::new(imp(json!({"type": "array", "uniqueItems": true})).unwrap());
+        assert!(u.valid(&a(r#"[1,"1",true,null,[1],{"a":1},{"a":2}]"#)));
+        assert_eq!(
+            u.validate(a(r#"[{"a":1,"b":[2]},0,{"b":[2],"a":1}]"#)).unwrap_err().to_string(),
+            "Value \"[{a:1,b:[2]},0,{b:[2],a:1}]\" for property \"\" must have unique items (items 0 and 2 are equal)."
+        );
+        holds(&[(
+            json!({"type": "array", "uniqueItems": false}),
+            json!([1, 1]),
+            "[1,1]",
+        )]);
+
+        // They export as they were read.
+        assert_eq!(
+            export(cond),
+            json!({"if": {"type": "number"}, "then": {"minimum": 1}, "else": {"type": "string"}})
+        );
+        assert_eq!(
+            export(
+                json!({"type": "array", "contains": {"type": "number"}, "minContains": 2, "maxContains": 3, "uniqueItems": true})
+            ),
+            json!({"type": "array", "contains": {"type": "number"}, "minContains": 2, "maxContains": 3, "uniqueItems": true})
+        );
+    }
+
+    // ts/test/jsonschema-import.test.ts, conditional-faults.
+    #[test]
+    fn conditional_faults() {
+        for (schema, msg) in [
+            (
+                json!({"dependentRequired": []}),
+                "dependentRequired must be an object at /dependentRequired",
+            ),
+            (
+                json!({"dependentSchemas": 1}),
+                "dependentSchemas must be an object at /dependentSchemas",
+            ),
+            (
+                json!({"dependencies": "a"}),
+                "dependencies must be an object at /dependencies",
+            ),
+            (
+                json!({"dependentRequired": {"a": "b"}}),
+                "a dependency must be an array of property names at /dependentRequired/a",
+            ),
+            (
+                json!({"dependencies": {"a": [1]}}),
+                "a dependency must be an array of property names at /dependencies/a",
+            ),
+            (
+                json!({"dependentSchemas": {"a": 1}}),
+                "a schema must be an object or boolean at /dependentSchemas/a",
+            ),
+            (
+                json!({"if": true, "then": 1}),
+                "a schema must be an object or boolean at /then",
+            ),
+            (
+                json!({"if": 1, "then": true}),
+                "a schema must be an object or boolean at /if",
+            ),
+        ] {
+            assert_eq!(fails(schema), format!("JSON Schema: {}", msg));
+        }
+        // A count that is no whole number does not import, as the builder
+        // throws in TypeScript.
+        for (lo, hi) in [(1.5, 1.5), (-1.0, -1.0)] {
+            assert_eq!(
+                fails(
+                    json!({"type": "array", "contains": {}, "minContains": lo, "maxContains": hi})
+                ),
+                crate::builders::CONTAINS_FAULT
+            );
+        }
     }
 }

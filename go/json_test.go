@@ -438,3 +438,98 @@ func TestJSONCorpus(t *testing.T) {
 		t.Fatalf("count %d cannot %d", count, cannotCount)
 	}
 }
+
+// When is a list head too; Contains and Unique are checks of an array
+// (ts/test/json.test.ts).
+func TestJSONWhenContainsUnique(t *testing.T) {
+	M := func(kv ...any) map[string]any {
+		m := map[string]any{}
+		for i := 0; i < len(kv); i += 2 {
+			m[kv[i].(string)] = kv[i+1]
+		}
+		return m
+	}
+	A := func(v ...any) []any { return v }
+	roundTrip(t, When(String, Min(2)), `"When(String,Any.Min(2),Any)"`, "a", "abc", 5.0)
+	roundTrip(t, M("a", When(Open(M("k", Required())), Open(M("b", Required(Number))))),
+		`{"a":{"$$":"When($$0,$$1,Any)","$$0":{"k":"Required","$$":"Open"},"$$1":{"b: Number":0,"$$":"Open"}}}`,
+		M("a", M("k", 1.0)), M("a", M("k", 1.0, "b", 2.0)), M("a", M()))
+	roundTrip(t, Contains(Min(1), Number), `{"$$":"Contains(Any.Min(1),Number,$$0)","$$0":[]}`, A(1.0), A("a"))
+	roundTrip(t, M("a", Contains(2, String)), `{"a: Contains(2,String)":[]}`, M("a", A("x", "y")), M("a", A("x")))
+	roundTrip(t, Contains(Max(1), Exact(1.0), A(Number)),
+		`{"$$":"Contains(Any.Max(1),Required.Exact(1),$$0)","$$0":["Number"]}`, A(1.0, 2.0), A(1.0, 1.0), A("a"))
+	roundTrip(t, M("u", Unique(A(String)), "v", Skip(Unique())), `{"u: Unique":["String"],"v: Skip.Unique":[]}`,
+		M("u", A("a", "b")), M("u", A("a", "a")), M("u", A(), "v", A(1.0, 1.0)))
+	// A count shape in key form: the example is the spec, after the count
+	// and the shape of the items.
+	roundTrip(t, M("a", Contains(Min(1), Number)), `{"a: Contains(Any.Min(1),Number)":[]}`, M("a", A(1.0)), M("a", A("x")), M())
+	roundTrip(t, M("a", Contains(1, Nof(1, String, Number))), `{"a: Contains(1,Nof(1,String,Number))":[]}`,
+		M("a", A("x", true)), M("a", A(true)))
+	// On another kind each is a call of the chain; an object item shape
+	// rides in a sidecar.
+	roundTrip(t, Min(1).Contains(1, String), `"Any.Min(1).Contains(1,String)"`, A("a"), A(), "x")
+	roundTrip(t, Contains(1, M("x", Number)), `{"$$":"Contains(1,$$1,$$0)","$$0":[],"$$1":{"x: Number":0}}`,
+		A(M("x", 1.0), 2.0), A(2.0))
+	roundTrip(t, Contains(Min(2), Number).Unique(), `{"$$":"Contains(Any.Min(2),Number,$$0).Unique","$$0":[]}`,
+		A(1.0, 2.0), A(1.0, 1.0))
+	roundTrip(t, M("a", Default("xy", When(String, Min(2))), "b", Optional(When(String, Min(2)))),
+		`{"a":"Default(\"xy\",When(String,Any.Min(2),Any))","b":"When(String,Any.Min(2),Any).Optional"}`, M(), M("a", "x"))
+	roundTrip(t, M("a", Unique()), `{"a: Unique":[]}`, M("a", A(1.0, 1.0)), M())
+}
+
+// On a node that is not an array, a call's sidecar rides beside the
+// expression whatever the head, and the node has no key form
+// (ts/test/json.test.ts).
+func TestJSONCarriers(t *testing.T) {
+	M := func(kv ...any) map[string]any {
+		m := map[string]any{}
+		for i := 0; i < len(kv); i += 2 {
+			m[kv[i].(string)] = kv[i+1]
+		}
+		return m
+	}
+	A := func(v ...any) []any { return v }
+	item := M("a", Number)
+	side := `"$$0":{"a: Number":0}`
+	roundTrip(t, Contains(1, item, Any), `{"$$":"Any.Contains(1,$$0)",`+side+`}`, A(M("a", 1.0)), "x")
+	roundTrip(t, M("p", Contains(Min(1), M("a", 1.0), String)),
+		`{"p":{"$$":"String.Contains(Any.Min(1),$$0)","$$0":{"a":1}}}`, M("p", "x"), M("p", A(M("a", 1.0))))
+	roundTrip(t, Contains(1, M("a", 1.0), Date), `{"$$":"Date.Contains(1,$$0)","$$0":{"a":1}}`, "1970-01-01T00:00:00.000Z")
+	// A head that makes the node is read without the carrier around it.
+	for want, spec := range map[string]*Node{
+		`"Check(/^b/).Contains(1,$$0)"`:     Contains(1, item, Check(regexp.MustCompile("^b"))),
+		`"Key(1).Contains(1,$$0)"`:          Contains(1, item, Key(1)),
+		`"null.Contains(1,$$0)"`:            Contains(1, item, Null),
+		`"Number.Contains(1,$$0)"`:          Contains(1, item, Number),
+		`"Optional(NaN).Contains(1,$$0)"`:   Contains(1, item, math.NaN()),
+		`"Required(null).Contains(1,$$0)"`:  Contains(1, item, Required(nil)),
+		`"Optional(\"x\").Contains(1,$$0)"`: Contains(1, item, "x"),
+		`"Any.Min(1).Contains(1,$$0)"`:      Min(1).Contains(1, item),
+	} {
+		roundTrip(t, spec, `{"$$":`+want+`,`+side+`}`, "b", "x", 1.0, nil, A(M("a", 1.0)))
+	}
+	roundTrip(t, M("a", Contains(1, item, Key())), `{"a":{"$$":"Key.Contains(1,$$0)",`+side+`}}`, M("a", "x"))
+	// Any other head takes the empty object as its last argument: these
+	// read as Contains(1,$$0,/^a/,{}) and Optional(Date,{}), and the
+	// carrier of an object with no properties is that object.
+	for want, spec := range map[string]*Node{
+		`"Contains(1,$$0,/^a/)"`:           Contains(1, item, regexp.MustCompile("^a")),
+		`"Optional(Date).Contains(1,$$0)"`: Contains(1, item, Optional(Date)),
+		`"Never.Contains(1,$$0)"`:          Contains(1, item, Never()),
+		`"Contains(1,$$0)"`:                Contains(1, item, M()),
+		`"Contains(1,$$0).Closed"`:         Contains(1, item, Closed(M())),
+		`"Required.Contains(1,$$0)"`:       Required(Contains(1, item, M())),
+	} {
+		roundTrip(t, spec, `{"$$":`+want+`,`+side+`}`, "ab", 1.0, nil, M(), M("b", 1.0), A(M("a", 1.0)))
+	}
+	roundTrip(t, M("p", Required(Child(M("a", 1.0)))), `{"p":{"$$":"Required.Child($$0)","$$0":{"a":1}}}`,
+		M("p", M("x", M())), M("p", M("x", 1.0)), M())
+	// A required Any names its kind, as a bare Required is a required
+	// object; its default, which it never takes, is not written.
+	roundTrip(t, Contains(1, item, Required()), `{"$$":"Any.Required.Contains(1,$$0)",`+side+`}`,
+		A(M("a", 1.0)), A(), "x", nil)
+	roundTrip(t, Contains(1, item, Required(Type(Any, 5.0))), `{"$$":"Any.Required.Contains(1,$$0)",`+side+`}`,
+		"x", nil)
+	roundTrip(t, Contains(1, item, Exact(1.0)), `{"$$":"Any.Required.Exact(1).Contains(1,$$0)",`+side+`}`, 1.0, 2.0)
+	roundTrip(t, M("a", Required(Type(Any, 5.0))), `{"a":"Required"}`, M("a", "x"), M())
+}

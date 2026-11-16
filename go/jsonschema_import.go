@@ -12,25 +12,25 @@ import (
 // drafts), the inverse of the export in jsonschema.go: a type becomes a
 // token, bounds become size builders, formats and patterns their builders,
 // enum and const become Exact, properties and items become objects and
-// arrays, the compositions become All, Nof and Discriminated (anyOf a count
-// of at least one, oneOf of exactly one, not of none), and a definition is
-// inlined where it is referenced — Define and Refer only where a definition
-// refers to itself. Every keyword of a schema applies, each a part of All;
-// an enum or a const keeps the values the other parts allow. A schema with
-// no type checks each kind of value with that kind's keywords only, and a
-// subschema of not, allOf, anyOf or oneOf is read for the one kind its
-// parent's type lets through. A property that is not required and has no
-// default is Skip. Unknown keywords are ignored (unless the import is
-// strict); an unknown type or reference is an error. The canonical
-// TypeScript builds the same spec, and the differential harness compares the
-// export of what each imports.
+// arrays, contains and uniqueItems Contains and Unique, the compositions
+// become All, Nof and Discriminated (anyOf a count of at least one, oneOf
+// of exactly one, not of none), if and the dependent keywords become When,
+// and a definition is inlined where it is referenced — Define and Refer
+// only where a definition refers to itself. Every keyword of a schema
+// applies, each a part of All; an enum or a const keeps the values the
+// other parts allow. A schema with no type checks each kind of value with
+// that kind's keywords only, and a subschema of not, allOf, anyOf or oneOf
+// is read for the one kind its parent's type lets through. A property that
+// is not required and has no default is Skip. Unknown keywords are ignored
+// (unless the import is strict); an unknown type or reference is an error.
+// The canonical TypeScript builds the same spec, and the differential
+// harness compares the export of what each imports.
 
 // JSONSchemaImportOptions controls FromJSONSchemaWith.
 type JSONSchemaImportOptions struct {
 	// Strict refuses a keyword the import recognises but does not enforce
-	// (contains, multipleOf, patternProperties, ...), which it otherwise
-	// passes over as it does a keyword it does not know. A uniqueItems of
-	// false asks nothing, and is allowed.
+	// (multipleOf, patternProperties, ...), which it otherwise passes over
+	// as it does a keyword it does not know.
 	Strict bool
 }
 
@@ -88,9 +88,8 @@ var jsonSchemaRefAlone = regexp.MustCompile(`^https?://json-schema\.org/draft-0[
 // Keywords the import recognises but does not enforce. It passes over them,
 // as it does a keyword it does not know, unless it is strict.
 var jsonSchemaUnsupported = []string{
-	"$dynamicRef", "$recursiveRef", "contains", "dependencies", "dependentRequired",
-	"dependentSchemas", "if", "multipleOf", "patternProperties", "propertyNames",
-	"unevaluatedItems", "unevaluatedProperties", "uniqueItems",
+	"$dynamicRef", "$recursiveRef", "multipleOf", "patternProperties", "propertyNames",
+	"unevaluatedItems", "unevaluatedProperties",
 }
 
 func jsonSchemaFault(msg, path string) error {
@@ -193,7 +192,7 @@ func (c *jsonSchemaImport) ref(ref, path string) (any, error) {
 func (c *jsonSchemaImport) keywords(m map[string]any, path, kind string) (any, error) {
 	if c.strict {
 		for _, k := range jsonSchemaUnsupported {
-			if v, has := m[k]; has && !(k == "uniqueItems" && v == false) {
+			if _, has := m[k]; has {
 				return nil, jsonSchemaFault("unsupported keyword \""+k+"\"", path)
 			}
 		}
@@ -220,6 +219,17 @@ func (c *jsonSchemaImport) keywords(m map[string]any, path, kind string) (any, e
 			}
 			parts = append(parts, Nof(0, ns))
 		}
+		// A condition sees the value as given, before a part fills it in.
+		conditions, err := c.when(m, path, inner)
+		if err != nil {
+			return nil, err
+		}
+		parts = append(parts, conditions...)
+		dependents, err := c.dependents(m, path)
+		if err != nil {
+			return nil, err
+		}
+		parts = append(parts, dependents...)
 		if ref, isRef := m["$ref"].(string); isRef {
 			rs, err := c.ref(ref, path)
 			if err != nil {
@@ -274,6 +284,99 @@ func (c *jsonSchemaImport) keywords(m map[string]any, path, kind string) (any, e
 		spec = Default(d, spec)
 	}
 	return spec, nil
+}
+
+// when is if, then and else as a When, each read for the kind the schema
+// lets through, as allOf's branches are. An if with neither then nor else
+// asserts nothing, and is no part.
+func (c *jsonSchemaImport) when(m map[string]any, path, kind string) ([]any, error) {
+	_, hasIf := m["if"]
+	_, hasThen := m["then"]
+	_, hasElse := m["else"]
+	if !hasIf || (!hasThen && !hasElse) {
+		return nil, nil
+	}
+	arms := []any{nil, Any, Any}
+	for i, k := range []string{"if", "then", "else"} {
+		if v, has := m[k]; has {
+			spec, err := c.schema(v, path+"/"+k, kind)
+			if err != nil {
+				return nil, err
+			}
+			arms[i] = spec
+		}
+	}
+	return []any{When(arms[0], arms[1:]...)}, nil
+}
+
+// dependents is each entry of a dependent keyword as a When on its key
+// being present: the object must then hold the names dependentRequired
+// lists, or satisfy the schema dependentSchemas gives, which can only meet
+// an object. Draft 7's dependencies holds either form, and is read where
+// neither of the two that replaced it is written. The entries are read in
+// key order, as the properties are.
+func (c *jsonSchemaImport) dependents(m map[string]any, path string) ([]any, error) {
+	var out []any
+	_, hasRequired := m["dependentRequired"]
+	_, hasSchemas := m["dependentSchemas"]
+	for _, kw := range []string{"dependentRequired", "dependentSchemas", "dependencies"} {
+		v, has := m[kw]
+		if !has || (kw == "dependencies" && (hasRequired || hasSchemas)) {
+			continue
+		}
+		entries, ok := v.(map[string]any)
+		if !ok {
+			return nil, jsonSchemaFault(kw+" must be an object", path+"/"+kw)
+		}
+		keys := make([]string, 0, len(entries))
+		for k := range entries {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			at := path + "/" + kw + "/" + k
+			if _, isList := entries[k].([]any); kw == "dependentRequired" || (kw == "dependencies" && isList) {
+				names, err := dependencyNames(entries[k], at)
+				if err != nil {
+					return nil, err
+				}
+				if len(names) > 0 {
+					out = append(out, When(holds(k), holds(names...)))
+				}
+				continue
+			}
+			spec, err := c.schema(entries[k], at, "object")
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, When(holds(k), spec))
+		}
+	}
+	return out, nil
+}
+
+// holds is an object that holds the properties named, and any others.
+func holds(names ...string) *Node {
+	obj := map[string]any{}
+	for _, k := range names {
+		obj[k] = Required()
+	}
+	return Open(obj)
+}
+
+// dependencyNames is the property names a dependency lists.
+func dependencyNames(v any, path string) ([]string, error) {
+	list, ok := v.([]any)
+	names := make([]string, 0, len(list))
+	for _, n := range list {
+		name, isName := n.(string)
+		ok = ok && isName
+		names = append(names, name)
+	}
+	if !ok {
+		return nil, jsonSchemaFault("a dependency must be an array of property names", path)
+	}
+	return names, nil
 }
 
 // joinParts is the parts of a schema as one spec: nothing is anything, and
@@ -814,6 +917,43 @@ func (c *jsonSchemaImport) array(m map[string]any, path string) (any, error) {
 	}
 	if v, ok := m["maxItems"].(float64); ok {
 		spec = Max(v, spec)
+	}
+
+	// contains counts the items its schema admits, at least one unless
+	// minContains says otherwise; a count of at least none asserts nothing.
+	if cs, has := m["contains"]; has {
+		lo, hasLo := m["minContains"].(float64)
+		if !hasLo {
+			lo = 1
+		}
+		hi, hasHi := m["maxContains"].(float64)
+		if lo > 0 || hasHi {
+			var count any
+			switch {
+			case hasHi && lo == hi:
+				count = lo
+			case !hasHi:
+				count = Min(lo)
+			case lo == 0:
+				count = Max(hi)
+			default:
+				count = Max(hi, Min(lo))
+			}
+			item, err := c.schema(cs, path+"/contains", "")
+			if err != nil {
+				return nil, err
+			}
+			// An exact count that is not a whole number refuses, as the
+			// builder does.
+			counted := Contains(count, item, spec)
+			if counted.n.argFault {
+				return nil, fmt.Errorf("%s", counted.n.faultMsg)
+			}
+			spec = counted
+		}
+	}
+	if m["uniqueItems"] == true {
+		spec = Unique(spec)
 	}
 	return spec, nil
 }

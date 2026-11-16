@@ -20,7 +20,9 @@ func normalize(spec any) (*node, error) {
 }
 
 func normalizeWith(spec any, opts ShapeOptions) (*node, error) {
-	if spec == nil {
+	// Null is the null literal, as nil is: it says a value present and null,
+	// not that no shape was given.
+	if spec == nil || isNull(spec) {
 		// A null literal is an optional null with null as its default, as any
 		// other literal is its own default (TS nodize(null): f = null).
 		return &node{kind: KindNull, hasDefault: true}, nil
@@ -362,13 +364,13 @@ func buildExprWithDefault(src string, dflt any) (*Node, error) {
 		// empty argument and looks the same, so the example is the default
 		// too ("a: Min()" with 3 is a bound of 3 defaulting to 3).
 		if ex.kind != node.n.kind {
-			exampleDefault(src, node.n, dflt)
+			exampleDefault(src, node.n, dflt, ex)
 		}
 		return node, nil
 	}
 
 	if sameShapeNode(node.n, bare.n) {
-		exampleDefault(src, node.n, dflt)
+		exampleDefault(src, node.n, dflt, ex)
 	}
 
 	return node, nil
@@ -377,13 +379,17 @@ func buildExprWithDefault(src string, dflt any) (*Node, error) {
 var requiredWordRE = regexp.MustCompile(`\bRequired\b`)
 
 // exampleDefault makes a key expression's example the default of the node
-// it made no difference to. An Exact asks for a value only until it has a
-// default, as a Default around it would make it optional: here the example
-// is that default, unless the expression says Required outright.
-func exampleDefault(src string, n *node, dflt any) {
-	n.hasDefault = true
-	n.defaultValue = dflt
-	n.defaultNull = dflt == nil
+// it made no difference to, where the example's own node has one: a
+// container's has none, as in TS, its children making the value. An Exact
+// asks for a value only until it has a default, as a Default around it
+// would make it optional: here the example is that default, unless the
+// expression says Required outright.
+func exampleDefault(src string, n *node, dflt any, ex *node) {
+	if ex.hasDefault {
+		n.hasDefault = true
+		n.defaultValue = dflt
+		n.defaultNull = dflt == nil
+	}
 	n.hasLiteral = true
 	n.literal = dflt
 	for _, b := range n.befores {

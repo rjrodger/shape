@@ -30,6 +30,37 @@ type Context struct {
 	// Nof of kinds within puts any value to its branch in its own place, as
 	// TS's own$ says (see nofInPlace).
 	own bool
+	// The trial budget of the call (see trial), which every validation
+	// within it shares.
+	trials trials
+}
+
+// trials is a call's budget of trials. A budget of zero is one no call
+// started, which is the default.
+type trials struct {
+	left, budget int
+	// The error of the first trial refused, which the call then fails with
+	// alone.
+	spent *FieldError
+}
+
+// startCall gives a call a budget of n trials, handing back the one it
+// replaces for endCall.
+func (c *Context) startCall(n int) trials {
+	was := c.trials
+	c.trials = trials{left: n, budget: n}
+	return was
+}
+
+// endCall ends a call. A trial the budget refused could have decided any
+// verdict, so its error is then the call's only error. The budget the call
+// replaced is put back.
+func (c *Context) endCall(was trials, verr *ValidationError) {
+	if spent := c.trials.spent; spent != nil {
+		verr.Issues, verr.n = nil, 0
+		verr.add(*spent)
+	}
+	c.trials = was
 }
 
 // newState hands out the State for one node from the call's stack of them,

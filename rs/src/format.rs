@@ -175,6 +175,7 @@ pub(crate) fn format_validator(f: Format) -> Validator {
         args: Vec::new(),
         suffix: Some(f.name.to_string()),
         inner: None,
+        counted: None,
     }
 }
 

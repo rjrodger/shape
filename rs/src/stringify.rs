@@ -2,7 +2,7 @@
 //! nodes, values for optional ones, the builder chain as a suffix. This is
 //! what a composite message names its branches with.
 
-use crate::node::{Kind, ListMode, Node};
+use crate::node::{Kind, ListMode, Node, Validator};
 use crate::value::{js_date_string, js_number, json_text, Value};
 
 /// A `Nof`'s count as TypeScript renders it: the whole number, or the shape
@@ -73,6 +73,7 @@ pub fn stringify_node(n: &Node, inline: bool) -> String {
                     parts.push(nof_count_text(n));
                     "Nof"
                 }
+                ListMode::When => "When",
                 _ => "All",
             };
             parts.extend(n.list.iter().map(|sn| stringify_node(sn, true)));
@@ -88,7 +89,11 @@ pub fn stringify_node(n: &Node, inline: bool) -> String {
             if let Some(r) = &n.arr_rest {
                 parts.push(format!("...{}", stringify_node(r, true)));
             }
-            suffix(format!("[{}]", parts.join(", ")), n)
+            // The checks of its items are left out, as TypeScript renders
+            // an array as its spec alone.
+            suffix_where(format!("[{}]", parts.join(", ")), n, |v| {
+                v.counted.is_none() && v.name != "Unique"
+            })
         }
         Kind::Object => {
             let parts: Vec<String> = n
@@ -114,8 +119,13 @@ pub fn stringify_node(n: &Node, inline: bool) -> String {
 /// and Empty change whether a value is demanded, not what shape it has, and
 /// are left out, as the canonical rendering leaves them.
 fn suffix(base: String, n: &Node) -> String {
+    suffix_where(base, n, |_| true)
+}
+
+/// The builder chain of the validators `keep` keeps.
+fn suffix_where(base: String, n: &Node, keep: impl Fn(&Validator) -> bool) -> String {
     let mut out = base;
-    for v in n.befores.iter().chain(n.afters.iter()) {
+    for v in n.befores.iter().chain(n.afters.iter()).filter(|v| keep(v)) {
         if let Some(s) = &v.suffix {
             out.push('.');
             out.push_str(s);

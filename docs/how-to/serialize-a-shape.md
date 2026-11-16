@@ -108,6 +108,20 @@ Shape({ a: Nof(1, { x: 1 }, [String]) }).json()
 // { a: { $$: 'Nof(1,$$0,$$1)', $$0: { x: 1 }, $$1: ['String'] } }
 ```
 
+A shape that is not an object is written the same way when one of its calls
+takes such a shape. Its JSON is then the expression and the sidecars alone,
+and the expression is the whole shape:
+
+```js
+Shape(Contains(1, { x: 1 }, Any())).json()
+// { $$: 'Any.Contains(1,$$0)', $$0: { x: 1 } }
+```
+
+That holds where the expression starts with a type token, a literal, a
+composition, `Check` or `Key`. Any other start applies to an empty object, so
+`{ $$: 'Required.Child($$0)', $$0: { x: 1 } }` is a required object whose
+every property is `{ x: 1 }`.
+
 Numbers, booleans and `null` are themselves; a string is JSON-quoted, since a
 bare string would read as an expression.
 

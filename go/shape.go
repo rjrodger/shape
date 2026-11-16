@@ -24,6 +24,8 @@ type Schema struct {
 	// and reuse its per-node state.
 	noUser atomic.Bool
 	gen    atomic.Uint64
+	// trials is the budget of trials each call has (see trial).
+	trials int
 }
 
 // validatorGen counts the validators attached to any node, so a Schema can
@@ -127,6 +129,21 @@ func prepare(n *node, defs map[string]*node) {
 	for _, sn := range n.list {
 		prepare(sn, defs)
 	}
+	for _, cn := range checkNodes(n.afters, checkNodes(n.befores, nil)) {
+		prepare(cn, defs)
+	}
+}
+
+// checkNodes appends the shapes the checks put values to themselves (see
+// validator.nodes), those a Catch or Transform took inside included.
+func checkNodes(vs []validator, out []*node) []*node {
+	for _, v := range vs {
+		out = append(out, v.nodes...)
+		if v.inner != nil {
+			out = checkNodes(v.inner.afters, checkNodes(v.inner.befores, out))
+		}
+	}
+	return out
 }
 
 // plainNode reports whether a present value of n's kind needs nothing but
@@ -176,6 +193,11 @@ func hasUserValidators(n *node) bool {
 			return true
 		}
 	}
+	for _, cn := range checkNodes(n.afters, checkNodes(n.befores, nil)) {
+		if hasUserValidators(cn) {
+			return true
+		}
+	}
 	return hasUserValidators(n.objRest) || hasUserValidators(n.arrChild) || hasUserValidators(n.arrRest)
 }
 
@@ -217,7 +239,7 @@ func ShapeWith(spec any, opts ShapeOptions) (*Schema, error) {
 	if err != nil {
 		return nil, err
 	}
-	s := &Schema{root: n}
+	s := &Schema{root: n, trials: opts.trials()}
 	s.reread(validatorGen.Load())
 	return s, nil
 }
@@ -269,6 +291,7 @@ func (s *Schema) ValidateCtx(input any, ctx *Context) (any, error) {
 		c.noUser = s.isNoUser()
 		path, pathArr = c.start()
 	}
+	was := c.startCall(s.trials)
 
 	var out any
 	if isIgnore(s.root) {
@@ -279,6 +302,7 @@ func (s *Schema) ValidateCtx(input any, ctx *Context) (any, error) {
 	} else {
 		out = validateNode(s.root, rootInput(input), path, pathArr, "", nil, c, false, &verr)
 	}
+	c.endCall(was, &verr)
 
 	if cs != nil {
 		cs.release()
@@ -303,7 +327,9 @@ func (s *Schema) Match(input any) bool {
 		cs := callPool.Get().(*callScratch)
 		c, path, pathArr := cs.begin(s.defsMap(), true, s.isPure())
 		verr := cs.matchErrors()
+		was := c.startCall(s.trials)
 		validateNode(s.root, rootInput(input), path, pathArr, "", nil, c, true, verr)
+		c.endCall(was, verr)
 		ok := !verr.hasAny()
 		cs.release()
 		return ok
@@ -316,7 +342,9 @@ func (s *Schema) Match(input any) bool {
 	c.noUser = s.isNoUser()
 	path, pathArr := c.start()
 	verr := &ValidationError{terse: true}
+	was := c.startCall(s.trials)
 	validateNode(s.root, rootInput(input), path, pathArr, "", nil, c, true, verr)
+	c.endCall(was, verr)
 	return !verr.hasAny()
 }
 
@@ -335,7 +363,9 @@ func (s *Schema) Error(input any) []FieldError {
 	if s.isNoUser() {
 		cs := callPool.Get().(*callScratch)
 		c, path, pathArr := cs.begin(s.defsMap(), false, s.isPure())
+		was := c.startCall(s.trials)
 		validateNode(s.root, rootInput(input), path, pathArr, "", nil, c, false, verr)
+		c.endCall(was, verr)
 		cs.release()
 		return verr.Issues
 	}
@@ -344,7 +374,9 @@ func (s *Schema) Error(input any) []FieldError {
 	c.pure = s.isPure()
 	c.noUser = s.isNoUser()
 	path, pathArr := c.start()
+	was := c.startCall(s.trials)
 	validateNode(s.root, rootInput(input), path, pathArr, "", nil, c, false, verr)
+	c.endCall(was, verr)
 	return verr.Issues
 }
 

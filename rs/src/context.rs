@@ -47,6 +47,51 @@ pub struct Context {
     /// The caller wants a verdict only, so an error is recorded without its
     /// path, text or value rendering.
     pub(crate) terse: bool,
+    /// The trial budget of the validation running, which every validation
+    /// within it shares.
+    pub(crate) trials: Trials,
+}
+
+/// The trials one validation may run, unless its options say otherwise.
+pub(crate) const TRIALS: usize = 100000;
+
+/// A validation's trial budget (see `validate::take_trial`): each shape a
+/// Nof tries, each When condition and each item a Contains counts takes
+/// one.
+#[derive(Debug)]
+pub(crate) struct Trials {
+    pub(crate) left: usize,
+    pub(crate) budget: usize,
+    /// The error of the first trial refused, which then stands alone.
+    pub(crate) spent: Option<FieldError>,
+}
+
+impl Trials {
+    /// A fresh budget of `budget` trials; zero is the default.
+    pub(crate) fn new(budget: usize) -> Trials {
+        let budget = if budget == 0 { TRIALS } else { budget };
+        Trials {
+            left: budget,
+            budget,
+            spent: None,
+        }
+    }
+
+    /// A spent budget leaves no verdict standing, as a trial it refused may
+    /// have decided any of them: its error is the only one.
+    pub(crate) fn settle(self, verr: &mut crate::error::ValidationError) {
+        if let Some(e) = self.spent {
+            verr.issues.clear();
+            verr.n = 0;
+            verr.add(e);
+        }
+    }
+}
+
+impl Default for Trials {
+    fn default() -> Self {
+        Trials::new(0)
+    }
 }
 
 impl Context {

@@ -123,7 +123,7 @@ fn type_token(name: &str) -> Option<Token> {
     })
 }
 
-const BUILDERS: [&str; 44] = [
+const BUILDERS: [&str; 47] = [
     "Required",
     "Optional",
     "Open",
@@ -168,6 +168,9 @@ const BUILDERS: [&str; 44] = [
     "Key",
     "Transform",
     "Discriminated",
+    "When",
+    "Contains",
+    "Unique",
 ];
 
 fn is_builder(name: &str) -> bool {
@@ -556,6 +559,33 @@ fn build_call(name: &str, mut args: Vec<Spec>) -> Result<Node, ExprError> {
             })
         }
         "All" => Ok(All(args)),
+        // An arm not given passes, and an argument past the third is
+        // passed over, as TypeScript reads them.
+        "When" => {
+            let mut args = args.into_iter();
+            let Some(cond) = args.next() else {
+                return err(crate::builders::WHEN_FAULT.to_string());
+            };
+            let then = args.next().unwrap_or_else(any_spec);
+            Ok(When(cond, then, args.next().unwrap_or_else(any_spec)))
+        }
+        // Bare, an array of anything; chained, the carrier is the spec.
+        "Contains" => {
+            if args.is_empty() {
+                return err(crate::builders::CONTAINS_FAULT.to_string());
+            }
+            if args.len() < 2 {
+                return err(crate::builders::CONTAINS_ITEMS_FAULT.to_string());
+            }
+            let count = args.remove(0);
+            let shape = args.remove(0);
+            Ok(Contains(
+                count,
+                shape,
+                shape_at(&mut args, 0, Spec::Arr(Vec::new())),
+            ))
+        }
+        "Unique" => Ok(Unique(shape_at(&mut args, 0, Spec::Arr(Vec::new())))),
         "Nof" => {
             if args.is_empty() {
                 return err(crate::builders::NOF_FAULT.to_string());
@@ -694,14 +724,12 @@ pub(crate) fn key_expr_node(src: &str, example: Spec) -> Node {
             b.literal = ex.literal;
             if b.kind == Kind::Object && ex.kind == Kind::Object {
                 b.obj_children = ex.obj_children;
-                if b.obj_rest.is_none() {
-                    b.obj_rest = ex.obj_rest;
-                }
+                b.obj_rest = b.obj_rest.or(ex.obj_rest);
             } else if b.kind == Kind::Array && ex.kind == Kind::Array {
                 b.arr_children = ex.arr_children;
-                if b.arr_child.is_none() && b.arr_rest.is_none() {
-                    b.arr_child = ex.arr_child;
-                }
+                // A rest of the expression's own leaves the element shape out.
+                let no_rest = b.arr_rest.is_none();
+                b.arr_child = b.arr_child.or(ex.arr_child.filter(|_| no_rest));
             }
             return b;
         }
@@ -758,9 +786,11 @@ const EXAMPLE_REF: &str = "$$example";
 /// is neither: when that call is a composition or sits inside one, the
 /// outermost such composition takes it as its default, and
 /// `Nof(1,String,Number)` with 5 reads as `Default(5,Nof(1,String,Number))`.
-/// When that call is not part of the head's own (`Required.Min(2)`, or a
-/// bare `Open`), `expr_apply` hands the example to the head instead, which
-/// is what TypeScript's chained call on the head's node amounts to.
+/// A Contains reads its first two arguments as its count and the shape of
+/// its items, so when it is the outermost the example is its spec, after
+/// them. When that call is not part of the head's own (`Required.Min(2)`,
+/// or a bare `Open`), `expr_apply` hands the example to the head instead,
+/// which is what TypeScript's chained call on the head's node amounts to.
 fn example_apply(src: &str, example: Spec) -> Result<Node, ExprError> {
     let tokens = tokenize(src)?;
     let Some(first) = tokens.iter().position(|t| t == ")") else {
@@ -769,9 +799,17 @@ fn example_apply(src: &str, example: Spec) -> Result<Node, ExprError> {
     if tokens.len() < 2 || tokens[1] != "(" || first > closing_paren(&tokens, 1) {
         return expr_apply(src, example);
     }
-    let composition =
-        (1..first).find(|&i| tokens[i] == "(" && matches!(tokens[i - 1].as_str(), "All" | "Nof"));
+    let composition = (1..first).find(|&i| {
+        tokens[i] == "(" && matches!(tokens[i - 1].as_str(), "All" | "Nof" | "When" | "Contains")
+    });
     let (spliced, arg) = match composition {
+        Some(open) if tokens[open - 1] == "Contains" => {
+            let end = closing_paren(&tokens, open);
+            let mut spliced: Vec<String> = tokens[..end].to_vec();
+            spliced.push(EXAMPLE_REF.to_string());
+            spliced.extend_from_slice(&tokens[end..]);
+            (spliced, example)
+        }
         Some(open) => {
             let end = closing_paren(&tokens, open);
             let mut wrapped: Vec<String> = tokens[..open - 1].to_vec();
@@ -874,7 +912,7 @@ pub(crate) fn split_key_expr(key: &str) -> Option<(String, String)> {
 
 /// The builders that read every argument for themselves, so a mark of one
 /// is the whole node rather than a chain around the object holding it.
-const COMPOSITION: [&str; 4] = ["All", "Nof", "Exact", "Discriminated"];
+const COMPOSITION: [&str; 5] = ["All", "Nof", "When", "Exact", "Discriminated"];
 
 /// Read the declarative JSON of a shape, what `Schema::json` writes: every
 /// string is an expression (the example of a key expression is a value, so
@@ -925,7 +963,8 @@ fn build_value(v: &Value, example: bool) -> Result<Spec, ExprError> {
 /// The expression under the mark applies to the object that holds it. The
 /// sidecars are its arguments; the object's own keys are the shape a chained
 /// builder takes, but a composition has no slot for a carrier and is read on
-/// its own, the node it becomes being the whole shape.
+/// its own, the node it becomes being the whole shape, as is a head that
+/// names a node in a carrier with sidecars and no keys of its own.
 fn build_mark(src: &str, pairs: Vec<(String, Spec)>) -> Result<Spec, ExprError> {
     let mut refs = std::collections::HashMap::new();
     let mut rest = Vec::with_capacity(pairs.len());
@@ -939,7 +978,16 @@ fn build_mark(src: &str, pairs: Vec<(String, Spec)>) -> Result<Spec, ExprError> 
     let tokens = tokenize(src)?;
     let mut p = Parser::new(tokens, src);
     p.refs = refs;
-    if COMPOSITION.contains(&p.peek()) {
+    // A carrier with sidecars and no keys of its own whose head names a node
+    // (a type token, a literal, Check or Key) is that expression alone,
+    // `String.Contains(1,$$0)`; any other head takes the empty object as its
+    // last argument below, so `Required.Child($$0)` is
+    // `Required({}).Child($$0)`, as TypeScript's carrierApplies reads it. A
+    // sidecar head is the sidecar either way, and is read below.
+    let head = p.peek();
+    let names =
+        (!is_builder(head) && !p.refs.contains_key(head)) || head == "Check" || head == "Key";
+    if COMPOSITION.contains(&head) || (rest.is_empty() && !p.refs.is_empty() && names) {
         return p.parse_full().map(Spec::from);
     }
     let mut val = Spec::Obj(rest);

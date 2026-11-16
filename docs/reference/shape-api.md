@@ -73,6 +73,7 @@ Passed as the second argument to `Shape`/`ShapeWith`. Defaults shown.
 | Key expressions (`"x: Min(1)"`) | `keyexpr.active` | `KeyExpr.Disable` | **on** |
 | Meta sidecar keys | `meta.active`, `meta.suffix` | `Meta.Active`, `Meta.Suffix` | off, `$$` |
 | Value expressions | `valexpr.active`, `valexpr.keymark` | `ValExpr.Active`, `ValExpr.KeyMark` | off, `$$` |
+| Trials one validation may run (see [Trials](builders.md#trials)) | `trials` | `Trials` | 100000 |
 
 ```js
 // TS
@@ -81,6 +82,7 @@ Shape(spec, {
   keyexpr: { active: true },
   meta:    { active: false, suffix: '$$' },
   valexpr: { active: false, keymark: '$$' },
+  trials:  100000,
 })
 ```
 
@@ -90,6 +92,7 @@ shape.ShapeWith(spec, shape.ShapeOptions{
     KeyExpr: shape.KeyExprOptions{Disable: false},
     Meta:    shape.MetaOptions{Active: false, Suffix: "$$"},
     ValExpr: shape.ValExprOptions{Active: false, KeyMark: "$$"},
+    Trials:  100000,
 })
 ```
 

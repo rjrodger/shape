@@ -61,6 +61,7 @@ pub use standard::{StandardIssue, StandardResult, StandardSchema};
 pub use stringify::stringify_node;
 pub use value::{Map, Value};
 
+use context::Trials;
 use std::collections::HashMap;
 use std::sync::Arc;
 use validate::{validate_ignored, validate_node, Cur, Walk};
@@ -76,6 +77,8 @@ pub struct Schema {
     defs: Arc<HashMap<String, Arc<Node>>>,
     /// No validator anywhere in the tree: a verdict needs no path.
     pure: bool,
+    /// The trials one validation may run (zero for the default).
+    trials: usize,
 }
 
 /// Compile a spec.
@@ -97,6 +100,7 @@ impl Schema {
             root,
             defs: Arc::new(defs),
             pure,
+            trials: opts.trials,
         }
     }
 
@@ -138,6 +142,9 @@ impl Schema {
         let mut value = input;
         let mut verr = ValidationError::default();
         ctx.terse = false;
+        // Each call counts its trials against a budget of its own, and
+        // leaves the budget of a call it runs within as it was.
+        let outer = std::mem::replace(&mut ctx.trials, Trials::new(self.trials));
         let kept = {
             let mut w = Walk {
                 ctx,
@@ -149,6 +156,7 @@ impl Schema {
             };
             walk_root(&self.root, Cur::Mut(&mut value), &mut w, &mut verr)
         };
+        std::mem::replace(&mut ctx.trials, outer).settle(&mut verr);
         ctx.err.extend(verr.issues.iter().cloned());
         if verr.has_any() {
             return Err(verr);
@@ -163,6 +171,7 @@ impl Schema {
     pub fn valid(&self, input: &Value) -> bool {
         let mut ctx = Context::new();
         ctx.terse = true;
+        ctx.trials = Trials::new(self.trials);
         let mut verr = ValidationError {
             terse: true,
             ..Default::default()
@@ -176,6 +185,7 @@ impl Schema {
             own: false,
         };
         walk_root(&self.root, Cur::Ref(input), &mut w, &mut verr);
+        ctx.trials.settle(&mut verr);
         !verr.has_any()
     }
 
@@ -187,6 +197,7 @@ impl Schema {
     /// The errors of validating the value; empty when it validates.
     pub fn error(&self, input: &Value) -> Vec<FieldError> {
         let mut ctx = Context::new();
+        ctx.trials = Trials::new(self.trials);
         let mut verr = ValidationError::default();
         let mut w = Walk {
             ctx: &mut ctx,
@@ -197,6 +208,7 @@ impl Schema {
             own: false,
         };
         walk_root(&self.root, Cur::Ref(input), &mut w, &mut verr);
+        ctx.trials.settle(&mut verr);
         verr.issues
     }
 }
@@ -255,10 +267,28 @@ fn prepare(n: &mut Node, defs: &mut HashMap<String, Arc<Node>>) -> bool {
     for sn in n.list.iter_mut() {
         pure &= prepare(sn, defs);
     }
+    // A Contains counts with a shape of its own, prepared when it was
+    // built; what that shape defines is the schema's to refer to as well.
+    for c in counted(&n.befores) {
+        prepare(&mut c.shape.clone(), defs);
+    }
     if let Some(name) = &n.define_name {
         defs.insert(name.clone(), Arc::new(n.clone()));
     }
     pure
+}
+
+/// The Contains checks among a node's befores, those a Catch or Transform
+/// took inside included.
+fn counted(vs: &[Validator]) -> Vec<Arc<node::Counted>> {
+    let mut out = Vec::new();
+    for v in vs {
+        if let Some(inner) = &v.inner {
+            out.extend(counted(&inner.befores));
+        }
+        out.extend(v.counted.iter().cloned());
+    }
+    out
 }
 
 /// What `validate_into` can fail with: the validation, or the deserialization

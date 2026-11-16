@@ -447,6 +447,192 @@ fn lists() {
         r#"{"$$":"Discriminated(\"k\",$$0)","$$0":{"x":{"k: Min(1)":"x"}}}"#,
         &[v(r#"{"k":"x"}"#)],
     );
+
+    // When is a list head too; Contains and Unique are checks of an array.
+    let bare = || arr::<Spec>([]);
+    round_trip(
+        When(Token::String, Min(2, Any()), Any()),
+        r#""When(String,Any.Min(2),Any)""#,
+        &[v("\"a\""), v("\"abc\""), v("5")],
+    );
+    round_trip(
+        obj([(
+            "a",
+            When(
+                Open(obj([("k", Required(Any()))])),
+                Open(obj([("b", Required(Token::Number))])),
+                Any(),
+            ),
+        )]),
+        r#"{"a":{"$$":"When($$0,$$1,Any)","$$0":{"k":"Required","$$":"Open"},"$$1":{"b: Number":0,"$$":"Open"}}}"#,
+        &[
+            v(r#"{"a":{"k":1}}"#),
+            v(r#"{"a":{"k":1,"b":2}}"#),
+            v(r#"{"a":{}}"#),
+        ],
+    );
+    round_trip(
+        Contains(Min(1, Any()), Token::Number, bare()),
+        r#"{"$$":"Contains(Any.Min(1),Number,$$0)","$$0":[]}"#,
+        &[v("[1]"), v(r#"["a"]"#)],
+    );
+    round_trip(
+        obj([("a", Contains(2, Token::String, bare()))]),
+        r#"{"a: Contains(2,String)":[]}"#,
+        &[v(r#"{"a":["x","y"]}"#), v(r#"{"a":["x"]}"#)],
+    );
+    round_trip(
+        obj([("a", Contains(Min(1, Any()), Token::Number, bare()))]),
+        r#"{"a: Contains(Any.Min(1),Number)":[]}"#,
+        &[v(r#"{"a":[1]}"#), v(r#"{"a":["x"]}"#), v("{}")],
+    );
+    round_trip(
+        Contains(Max(1, Any()), Exact([1]), arr([Token::Number])),
+        r#"{"$$":"Contains(Any.Max(1),Required.Exact(1),$$0)","$$0":["Number"]}"#,
+        &[v("[1,2]"), v("[1,1]"), v(r#"["a"]"#)],
+    );
+    round_trip(
+        obj([
+            ("u", Unique(arr([Token::String]))),
+            ("v", Skip(Unique(bare()))),
+        ]),
+        r#"{"u: Unique":["String"],"v: Skip.Unique":[]}"#,
+        &[
+            v(r#"{"u":["a","b"]}"#),
+            v(r#"{"u":["a","a"]}"#),
+            v(r#"{"u":[],"v":[1,1]}"#),
+        ],
+    );
+    // An item shape in a sidecar, beside the array's own; a check the
+    // string form cannot say cannot be written in a Contains either.
+    round_trip(
+        Contains(1, obj([("x", Token::Number)]), bare()),
+        r#"{"$$":"Contains(1,$$1,$$0)","$$0":[],"$$1":{"x: Number":0}}"#,
+        &[v(r#"[{"x":1},2]"#), v("[2]")],
+    );
+    round_trip(
+        Unique(bare()),
+        r#"{"$$":"Unique($$0)","$$0":[]}"#,
+        &[v("[1,2]"), v("[1,1]")],
+    );
+    // On a node that is not an array, the item shape rides beside the
+    // expression, whatever the head, and a scalar property then has no key
+    // form.
+    let item = || obj([("a", Token::Number)]);
+    round_trip(
+        Contains(1, item(), Any()),
+        r#"{"$$":"Any.Contains(1,$$0)","$$0":{"a: Number":0}}"#,
+        &[v(r#"[{"a":1}]"#), v("\"x\"")],
+    );
+    round_trip(
+        obj([("p", Contains(Min(1, Any()), obj([("a", 1)]), Token::String))]),
+        r#"{"p":{"$$":"String.Contains(Any.Min(1),$$0)","$$0":{"a":1}}}"#,
+        &[v(r#"{"p":"x"}"#)],
+    );
+    round_trip(
+        Contains(1, obj([("a", 1)]), Token::Date),
+        r#"{"$$":"Date.Contains(1,$$0)","$$0":{"a":1}}"#,
+        &[v("\"1970-01-01T00:00:00.000Z\"")],
+    );
+    // A head that makes the node from its own arguments remakes the
+    // carrier, as TypeScript reads it: a literal, Check, a type token with
+    // a default.
+    round_trip(
+        Contains(1, item(), null()),
+        r#"{"$$":"null.Contains(1,$$0)","$$0":{"a: Number":0}}"#,
+        &[v("null"), v(r#"[{"a":1}]"#), v(r#"[{"a":1},{"a":2}]"#)],
+    );
+    round_trip(
+        Contains(1, item(), CheckRe(regex::Regex::new("^x").unwrap(), Any())),
+        r#"{"$$":"Check(/^x/).Contains(1,$$0)","$$0":{"a: Number":0}}"#,
+        &[v("\"xy\""), v("\"y\""), v("5")],
+    );
+    round_trip(
+        Contains(1, item(), Type(Token::Any, 5)),
+        r#"{"$$":"Any(5).Contains(1,$$0)","$$0":{"a: Number":0}}"#,
+        &[v("\"x\""), v(r#"[{"a":1}]"#)],
+    );
+    round_trip(
+        Contains(1, item(), f64::NAN),
+        r#"{"$$":"Optional(NaN).Contains(1,$$0)","$$0":{"a: Number":0}}"#,
+        &[v(r#"[{"a":1}]"#), v("\"x\"")],
+    );
+    round_trip(
+        Contains(1, item(), KeyDepth(1)),
+        r#"{"$$":"Key(1).Contains(1,$$0)","$$0":{"a: Number":0}}"#,
+        &[v(r#"[{"a":1}]"#), v("\"x\"")],
+    );
+    // Any other head takes the empty object as its last argument, and the
+    // carrier of an object with no properties is that object.
+    let all = [
+        v("\"ab\""),
+        v("1"),
+        v("null"),
+        v("{}"),
+        v(r#"{"b":1}"#),
+        v(r#"[{"a":1}]"#),
+    ];
+    for (spec, want) in [
+        (
+            Contains(1, item(), regex::Regex::new("^a").unwrap()),
+            "Contains(1,$$0,/^a/)",
+        ),
+        (
+            Contains(1, item(), Optional(Token::Date)),
+            "Optional(Date).Contains(1,$$0)",
+        ),
+        (Contains(1, item(), Never(Any())), "Never.Contains(1,$$0)"),
+        (
+            Contains(1, item(), obj::<&str, Spec>([])),
+            "Contains(1,$$0)",
+        ),
+        (
+            Contains(1, item(), Closed(obj::<&str, Spec>([]))),
+            "Contains(1,$$0).Closed",
+        ),
+        (
+            Required(Contains(1, item(), obj::<&str, Spec>([]))),
+            "Required.Contains(1,$$0)",
+        ),
+    ] {
+        round_trip(
+            spec,
+            &format!(r#"{{"$$":"{}","$$0":{{"a: Number":0}}}}"#, want),
+            &all,
+        );
+    }
+    round_trip(
+        obj([("p", Required(Child(obj([("a", 1)]), obj::<&str, Spec>([]))))]),
+        r#"{"p":{"$$":"Required.Child($$0)","$$0":{"a":1}}}"#,
+        &[v(r#"{"p":{"x":{}}}"#), v(r#"{"p":{"x":1}}"#), v("{}")],
+    );
+    // A required Any names its kind, as a bare Required is a required
+    // object; its default, which it never takes, is not written.
+    for spec in [Required(Any()), Required(Type(Token::Any, 5))] {
+        round_trip(
+            Contains(1, item(), spec),
+            r#"{"$$":"Any.Required.Contains(1,$$0)","$$0":{"a: Number":0}}"#,
+            &[v(r#"[{"a":1}]"#), v("[]"), v("\"x\""), v("null")],
+        );
+    }
+    round_trip(
+        Contains(1, item(), Exact([1])),
+        r#"{"$$":"Any.Required.Exact(1).Contains(1,$$0)","$$0":{"a: Number":0}}"#,
+        &[v("1"), v("2")],
+    );
+    round_trip(
+        obj([("a", Required(Type(Token::Any, 5)))]),
+        r#"{"a":"Required"}"#,
+        &[v(r#"{"a":"x"}"#), v("{}")],
+    );
+    cannot(
+        Contains(1, Check(|_, _| true, Any()), bare()),
+        "a check function",
+    );
+    cannot(
+        Contains(Check(|_, _| true, Any()), Token::Number, bare()),
+        "a check function",
+    );
 }
 
 #[test]
