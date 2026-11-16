@@ -164,6 +164,13 @@ describe('json', () => {
       { $$: 'Contains(Any.Max(1),Required.Exact(1),$$0)', $$0: ['Number'] }, [1, 2], [1, 1], ['a'])
     roundTrip({ u: Unique([String]), v: Skip(Unique()) }, { 'u: Unique': ['String'], 'v: Skip.Unique': [] },
       { u: ['a', 'b'] }, { u: ['a', 'a'] }, { u: [], v: [1, 1] })
+    // On a node that is not an array, the item shape rides beside the
+    // expression, whatever the head.
+    roundTrip(Contains(1, { a: Number }, Any()), { $$: 'Any.Contains(1,$$0)', $$0: { 'a: Number': 0 } },
+      [{ a: 1 }], 'x')
+    roundTrip({ p: Contains(Min(1), { a: 1 }, String) },
+      { p: { $$: 'String.Contains(Any.Min(1),$$0)', $$0: { a: 1 } } }, { p: 'x' })
+    roundTrip(Contains(1, { a: 1 }, Date), { $$: 'Date.Contains(1,$$0)', $$0: { a: 1 } }, new Date(0).toISOString())
   })
 
 

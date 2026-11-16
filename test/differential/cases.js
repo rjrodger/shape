@@ -410,6 +410,7 @@ function build() {
   add('c-unique', E('Unique'), DUPS)
   add('c-unique-strings', CALL('Unique', [T]), DUPS)
   add('c-contains-unique', E('Contains(Min(2),Number).Unique'), DUPS)
+  add('c-contains-two', E('Contains(0,Number).Contains(Min(1),String)'), DUPS)
 
   // A bare type token in the DSL is Type(token): Object is closed there.
   for (const t of ['String', 'Number', 'Boolean', 'Object', 'Array', 'Any', 'Integer']) {

@@ -229,6 +229,12 @@ describe('jsonschema', () => {
     deepEqual(js(Contains(Len(2), Number)), { type: 'array', contains: num, minContains: 2, maxContains: 2 })
     deepEqual(js(Contains(Check((n: number) => 0 === n % 2), Number)), { type: 'array', contains: num, minContains: 0 })
 
+    // A second count is a constraint of its own.
+    deepEqual(js(Contains(0, Number).Contains(Min(1), String)), {
+      type: 'array', contains: num, minContains: 0, maxContains: 0,
+      allOf: [{ contains: { type: 'string', minLength: 1 } }],
+    })
+
     // Unique is uniqueItems.
     deepEqual(js(Unique([String])), { type: 'array', items: { type: 'string', minLength: 1 }, uniqueItems: true })
     deepEqual(js({ a: Unique() }), { type: 'object', properties: { a: { type: 'array', uniqueItems: true } },

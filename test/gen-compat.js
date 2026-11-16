@@ -399,6 +399,12 @@ const files = {
     ['contains-key-expr-nof-items', { 'a: Contains(1,Nof(1,String,Number))': [] }, { a: ['x', true] }],
     ['contains-chained', { a: { $expr: 'Min(1).Contains(1,String)' } }, { a: [] }],
     ['contains-in-nof-kinds', { a: { $expr: 'Nof(1,Contains(Min(1),Number),String)' } }, { a: ['x'] }],
+    // A Contains on a node that is not an array keeps its item shape in json().
+    ['contains-any-carrier', { a: CALL('Contains', 1, { x: N }, { $expr: 'Any' }) }, { a: [{ x: 1 }] }],
+    ['contains-string-carrier', { a: CALL('Contains', 1, [N], T) }, { a: 'x' }],
+    // Two counts on one array are two constraints.
+    ['contains-two-counts-ok', { a: { $expr: 'Contains(0,Number).Contains(Min(1),String)' } }, { a: ['a'] }],
+    ['contains-two-counts-fail', { a: { $expr: 'Contains(0,Number).Contains(Min(1),String)' } }, { a: ['a', 1] }],
     // Unique: no two items equal as JSON values.
     ['unique-ok', { a: { $expr: 'Unique' } }, { a: [1, '1', true, null, [1], { a: 1 }] }],
     ['unique-scalar-dup', { a: { $expr: 'Unique' } }, { a: [1, 2, 2, 1] }],

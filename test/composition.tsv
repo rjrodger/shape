@@ -109,6 +109,10 @@ contains-key-expr-count-shape	{"a: Contains(Min(1),Number)":[]}	{"a":["x"]}		"Va
 contains-key-expr-nof-items	{"a: Contains(1,Nof(1,String,Number))":[]}	{"a":["x",true]}	{"a":["x",true]}	
 contains-chained	{"a":{"$expr":"Min(1).Contains(1,String)"}}	{"a":[]}		"Value \"[]\" for property \"a\" must be a minimum length of 1 (was 0).\nValue \"[]\" for property \"a\" has 0 of its items satisfying String; the count must be 1."
 contains-in-nof-kinds	{"a":{"$expr":"Nof(1,Contains(Min(1),Number),String)"}}	{"a":["x"]}		"Value \"[x]\" for property \"a\" has 0 of its items satisfying Number; the count must be Min(1)."
+contains-any-carrier	{"a":{"$call":["Contains",1,{"x":{"$type":"Number"}},{"$expr":"Any"}]}}	{"a":[{"x":1}]}	{"a":[{"x":1}]}	
+contains-string-carrier	{"a":{"$call":["Contains",1,[{"$type":"Number"}],{"$type":"String"}]}}	{"a":"x"}	{"a":"x"}	
+contains-two-counts-ok	{"a":{"$expr":"Contains(0,Number).Contains(Min(1),String)"}}	{"a":["a"]}	{"a":["a"]}	
+contains-two-counts-fail	{"a":{"$expr":"Contains(0,Number).Contains(Min(1),String)"}}	{"a":["a",1]}		"Value \"[a,1]\" for property \"a\" has 1 of its items satisfying Number; the count must be 0."
 unique-ok	{"a":{"$expr":"Unique"}}	{"a":[1,"1",true,null,[1],{"a":1}]}	{"a":[1,"1",true,null,[1],{"a":1}]}	
 unique-scalar-dup	{"a":{"$expr":"Unique"}}	{"a":[1,2,2,1]}		"Value \"[1,2,2,1]\" for property \"a\" must have unique items (items 1 and 2 are equal)."
 unique-object-dup	{"a":{"$expr":"Unique"}}	{"a":[{"a":1,"b":2},0,{"a":1,"b":2}]}		"Value \"[{a:1,b:2},0,{a:1,b:2}]\" for property \"a\" must have unique items (items 0 and 2 are equal)."

@@ -1950,9 +1950,9 @@ function expr(
         return new RegExp(body)
       }
       else if (m = head.match(/^\$\$([^$]+)$/)) {
-        return spec.node ?
-          ((spec.node.m?.$$ || {})[m[1]] || spec.node.v['$$' + m[1]])
-          : (spec.refs ? spec.refs[m[1]] : undefined)
+        const held = spec.node ?
+          ((spec.node.m?.$$ || {})[m[1]] || spec.node.v?.['$$' + m[1]]) : undefined
+        return undefined !== held ? held : spec.refs ? spec.refs[m[1]] : undefined
       }
       else {
         let val = JP(head)
@@ -2430,10 +2430,17 @@ function build(v: any, opts: ShapeOptions = {}, top = true): any {
     }
 
     // The expression under the mark applies to the object that holds it,
-    // and the sidecars beside it ("$$0") are its arguments.
+    // and the sidecars beside it ("$$0") are its arguments, read from the
+    // object or, where a type token has remade it, kept aside.
     if (S.string === typeof mark) {
+      const refs: any = {}
+      for (const k of keys(out)) {
+        if (k.startsWith(keymark)) {
+          refs[k.substring(keymark.length)] = out[k]
+        }
+      }
       const node: any = nodize(out)
-      const res: any = nodize(expr({ src: mark, node }, node))
+      const res: any = nodize(expr({ src: mark, node, refs }, node))
       if (null != res.v && S.object === typeof res.v) {
         for (const k of keys(res.v)) {
           if (k.startsWith(keymark)) {
@@ -5275,6 +5282,13 @@ function jsonCarrier(text: string, refs: any): any {
 }
 
 
+// The text alone where it needs no sidecars, a carrier where it does (a
+// shape argument of Contains, say).
+function jsonCarried(text: string, refs: any): any {
+  return 0 === keys(refs).length ? text : jsonCarrier(text, refs)
+}
+
+
 // A literal, held by the call that says whether it is required.
 function jsonLiteralHead(n: Node<any>, lit: string): string {
   return (n.p ? S.Skip : n.r ? S.Required : S.Optional) + '(' + lit + ')'
@@ -5342,7 +5356,9 @@ function jsonKeyForm(n: Node<any>): { chain: string, example: any } | null {
     const sc = jsonScalar(n)
     // With a literal head, the call that held the literal starts the chain.
     const head = null !== sc.token ? sc.token : n.p ? S.Skip : n.r ? S.Required : null
-    return { chain: jsonChainText(head, sc.calls, {}) || '', example: sc.example }
+    const refs: any = {}
+    const chain = jsonChainText(head, sc.calls, refs) || ''
+    return 0 < keys(refs).length ? null : { chain, example: sc.example }
   }
 
   if (S.object === t) {
@@ -5470,7 +5486,8 @@ function jsonHeaded(n: Node<any>, hv: any, kind: string): any {
   jsonValidatorCall(hv, kc)
   const calls = jsonRequiredCalls(n, false)
     .concat(jsonFlagCalls(n, false), jsonValidatorCalls(n, hv), jsonTailCalls(n))
-  return jsonChainText(jsonCallText(kc[0], {}), calls, {})
+  const refs: any = {}
+  return jsonCarried(jsonChainText(jsonCallText(kc[0], refs), calls, refs) as string, refs)
 }
 
 
@@ -5487,7 +5504,8 @@ function nodeJson(n: Node<any>): any {
       undefined === jsonHeadValidator(n) && !n.r && !n.p) {
       return S.string === t ? JSON.stringify(sc.example) : sc.example
     }
-    return jsonChainText(sc.head, sc.calls, {})
+    const refs: any = {}
+    return jsonCarried(jsonChainText(sc.head, sc.calls, refs) as string, refs)
   }
 
   const hv = jsonHeadValidator(n)
@@ -5554,13 +5572,17 @@ function nodeJson(n: Node<any>): any {
     const calls = jsonRequiredCalls(n, true)
       .concat(jsonFlagCalls(n, false), jsonValidatorCalls(n), jsonTailCalls(n))
     const re = String(n.v)
-    return 0 === calls.length ? re : jsonWrapText(calls, re, {})
+    const refs: any = {}
+    return 0 === calls.length ? re : jsonCarried(jsonWrapText(calls, re, refs), refs)
   }
+
+  // From here on, the sidecars of any call that takes a shape.
+  const refs: any = {}
 
   if (S.nan === t) {
     const calls = jsonFlagCalls(n, true).concat(jsonValidatorCalls(n), jsonTailCalls(n))
     return 0 === calls.length && !n.r && !n.p ? 'NaN' :
-      jsonChainText(jsonLiteralHead(n, 'NaN'), calls, {})
+      jsonCarried(jsonChainText(jsonLiteralHead(n, 'NaN'), calls, refs) as string, refs)
   }
 
   // The rest are a call that names the kind, then the chain.
@@ -5607,10 +5629,10 @@ function nodeJson(n: Node<any>): any {
     }
     const kc: JsonCall[] = []
     jsonValidatorCall(first, kc)
-    head = jsonCallText(kc[0], {})
+    head = jsonCallText(kc[0], refs)
     const calls = jsonRequiredCalls(n, true)
       .concat(jsonFlagCalls(n, false), jsonValidatorCalls(n, first), jsonTailCalls(n))
-    return jsonChainText(head, calls, {})
+    return jsonCarried(jsonChainText(head, calls, refs) as string, refs)
   }
   else {
     jsonFault('a ' + t + ' value')
@@ -5621,9 +5643,9 @@ function nodeJson(n: Node<any>): any {
   if (headRequired && 0 < rp.length && S.any !== t) {
     // Optional(Date), Skip(Never): the call holds the token.
     head = rp[0].n + '(' + head + ')'
-    return jsonChainText(head, calls, {})
+    return jsonCarried(jsonChainText(head, calls, refs) as string, refs)
   }
-  return jsonChainText(head, rp.concat(calls), {})
+  return jsonCarried(jsonChainText(head, rp.concat(calls), refs) as string, refs)
 }
 
 
@@ -6133,7 +6155,15 @@ function checkSchema(n: Node<any>, s: any, defs: any) {
       s.pattern = v.a[0].source
     }
     else if (S.Contains === name) {
-      containsSchema(v, s, defs)
+      // Each count is a constraint of its own: a second one on the node
+      // joins the first through allOf.
+      const c = containsSchema(v, defs)
+      if (undefined === s.contains) {
+        Object.assign(s, c)
+      }
+      else {
+        s.allOf = (s.allOf || []).concat(c)
+      }
     }
     else if (S.Unique === name) {
       s.uniqueItems = true
@@ -6145,8 +6175,8 @@ function checkSchema(n: Node<any>, s: any, defs: any) {
 // A count of an array's items, as contains and the bounds on it. A count
 // shape with a check that is not a bound has no keyword for that check, so
 // the schema admits more than the shape does.
-function containsSchema(v: any, s: any, defs: any) {
-  s.contains = nodeSchema(v.u.shape, defs)
+function containsSchema(v: any, defs: any): any {
+  const s: any = { contains: nodeSchema(v.u.shape, defs) }
   const { lo, hi } = v.u.bounds
   if (1 !== lo) {
     s.minContains = lo
@@ -6154,6 +6184,7 @@ function containsSchema(v: any, s: any, defs: any) {
   if (Infinity !== hi) {
     s.maxContains = hi
   }
+  return s
 }
 
 
