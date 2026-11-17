@@ -436,3 +436,35 @@ func TestBuilderTrials(t *testing.T) {
 		t.Fatalf("argu rest: %v %v", out, err)
 	}
 }
+
+// A composition is its node's first check, whatever kind a chained Check or
+// type token gives the node: it still runs, and a check after it reports
+// too (ts/test, the corpus rows *-chained-*).
+func TestCompositionFirst(t *testing.T) {
+	check := MustShape(MustExpr("All(Min(2)).Check(/^a/)"))
+	wcErr(t, check, "b", "Value \"b\" for property \"\" must be a minimum length of 2 (was 1).\n"+
+		"Validation failed for string \"b\" because check \"/^a/\" failed.")
+	wcErr(t, check, "a", `Value "a" for property "" must be a minimum length of 2 (was 1).`)
+	mustOK(t, check, "ab")
+	typed := MustShape(MustExpr("All(Min(2)).String"))
+	wcErr(t, typed, "a", `Value "a" for property "" must be a minimum length of 2 (was 1).`)
+	wcErr(t, typed, 5.0, `Validation failed for number "5" because the number is not of type string.`)
+	// A Catch or Transform takes the composition inside with the node's
+	// other checks: it runs once, in the probe.
+	if out, err := MustShape(Catch(0.0, All(Number))).Validate("bad"); err != nil || out != 0.0 {
+		t.Fatalf("catch all: %v %v", out, err)
+	}
+	if out, err := MustShape(Catch(0.0, Nof(1, Number, String))).Validate(true); err != nil || out != 0.0 {
+		t.Fatalf("catch nof: %v %v", out, err)
+	}
+	inc := func(v any, _ *State) any { return v.(float64) + 1 }
+	wcErr(t, MustShape(Transform(inc, All(Number))), "bad",
+		`Validation failed for string "bad" because the string is not of type number.`)
+	if out, err := MustShape(Transform(inc, All(Number))).Validate(1.0); err != nil || out != 2.0 {
+		t.Fatalf("transform all: %v %v", out, err)
+	}
+	nof := MustShape(MustExpr("Nof(1,String,Number).Check(/^t/)"))
+	wcErr(t, nof, true, "Value \"true\" for property \"\" satisfies 0 of: String, Number; the count must be 1.\n"+
+		"Validation failed for boolean \"true\" because check \"/^t/\" failed.")
+	mustOK(t, nof, "t")
+}

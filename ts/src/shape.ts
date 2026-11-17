@@ -853,7 +853,8 @@ const EMPTY_VAL: { [name: string]: any } = {
 // Normalize a value into a Node<S>.
 function nodize<S>(shape?: any, depth?: number, meta?: NodeMeta): Node<S> {
 
-  // If using builder as property of Shape, `this` is just Shape, not a node.
+  // Shape itself is no shape: as a spec ({ a: Shape }), or handed to
+  // buildize, it gives nothing, which is Any.
   if (shapify === shape) {
     shape = undefined
   }
@@ -2668,7 +2669,7 @@ function truncate(str?: string, len?: number): string {
 
 // Value is required.
 const Required = function <V = any>(this: any, shape?: Node<V> | V): Node<V> {
-  let node = buildize(this, shape)
+  let node = buildize(chainNode(this), shape)
 
   node.r = true
   node.p = false
@@ -2696,7 +2697,7 @@ const Required = function <V = any>(this: any, shape?: Node<V> | V): Node<V> {
 
 // Value can contain additional undeclared properties.
 const Open = function <V = any>(this: any, shape?: Node<V> | V): Node<V> {
-  let node = buildize(this, shape)
+  let node = buildize(chainNode(this), shape)
   node.c = Any()
   return node
 }
@@ -2704,7 +2705,7 @@ const Open = function <V = any>(this: any, shape?: Node<V> | V): Node<V> {
 
 // Value is optional.
 const Optional = function <V = any>(this: any, shape?: Node<V> | V): Node<V> {
-  let node = buildize(this, shape)
+  let node = buildize(chainNode(this), shape)
   node.r = false
 
   // Handle an explicit undefined.
@@ -2803,7 +2804,7 @@ function coerceTo(t: string, val: any): any {
 // to a boolean, a number or boolean to a string, an ISO 8601 string or a time
 // value to a Date. Anything else is left alone, so the usual type error speaks.
 const Coerce = function <V = any>(this: any, shape?: Node<V> | V): Node<V> {
-  let node = buildize(this, shape)
+  let node = buildize(chainNode(this), shape)
 
   const coercer: any = function Coerce(val: any, update: Update, state: State) {
     const c = coerceTo(state.node.t, val)
@@ -2898,7 +2899,7 @@ function makeFormatBuilder(
   what: string,
   valid: (str: string) => boolean
 ) {
-  let node = buildize(self, shape)
+  let node = buildize(chainNode(self), shape)
 
   // A format is a shape of string, so an untyped node becomes one.
   if (S.any === node.t) {
@@ -3029,7 +3030,7 @@ function jsonText(val: any): string {
 
 // Whatever fails inside is replaced by the fallback, and raises nothing.
 const Catch = function <F, V = any>(this: any, fallback: F, shape?: Node<V> | V): Node<V | F> {
-  let node = buildize(this, shape)
+  let node = buildize(chainNode(this), shape)
   const inner = takeInner(node)
 
   const catcher: any = function Catch(val: any, update: Update, state: State) {
@@ -3056,7 +3057,7 @@ const Transform = function <V = any, R = any>(
   transform: (val: ShapeResult<V>, state: State) => R,
   shape?: Node<V> | V
 ): Node<R> {
-  let node = buildize(this, shape)
+  let node = buildize(chainNode(this), shape)
   const inner = takeInner(node)
 
   const transformer: any = function Transform(val: any, update: Update, state: State) {
@@ -3081,7 +3082,7 @@ const Transform = function <V = any, R = any>(
 
 // Attach a description to the node, read back as node.m.description.
 const Describe = function <V = any>(this: any, description: string, shape?: Node<V> | V): Node<V> {
-  let node = buildize(this, shape)
+  let node = buildize(chainNode(this), shape)
   node.m = node.m || {}
   node.m.description = '' + description
   return node
@@ -3103,7 +3104,7 @@ const Discriminated = function <T extends string, B extends Record<string, any>>
     throw new Error('Shape: Discriminated needs a tag property name and at least one branch')
   }
 
-  let node = buildize(this)
+  let node = buildize(chainNode(this))
   node.t = (S.list as ValType)
   node.r = true
 
@@ -3210,7 +3211,7 @@ function ownprop(o: any, k: string, value: any) {
 
 
 function objectBase(self: any, shape: any, name: string): Node<any> {
-  const base = buildize(self, shape)
+  const base = buildize(chainNode(self), shape)
   if (S.object !== base.t) {
     throw new Error('Shape: ' + name + ' needs an object shape')
   }
@@ -3319,7 +3320,7 @@ const Extend = function <E, V = any>(this: any, extra: E, shape?: Node<V> | V): 
 
 // Value may also be null. Absent is still governed by required/optional.
 const Nullable = function <V = any>(this: any, shape?: Node<V> | V): Node<V | null> {
-  let node = buildize(this, shape)
+  let node = buildize(chainNode(this), shape)
   node.u.nullable = true
   return node
 }
@@ -3328,7 +3329,7 @@ const Nullable = function <V = any>(this: any, shape?: Node<V> | V): Node<V | nu
 // A number with no fractional part. Behaves as a type token: required, with
 // the default 0, so Optional(Integer) injects 0 and Integer alone demands one.
 const Integer = bare<number>()(function Integer <V = number>(this: any, shape?: Node<V> | V): Node<V> {
-  let node = buildize(this, shape)
+  let node = buildize(chainNode(this), shape)
   node.t = (S.integer as ValType)
   node.r = true
   node.p = false
@@ -3341,7 +3342,7 @@ const Integer = bare<number>()(function Integer <V = number>(this: any, shape?: 
 
 // Value can be anything.
 const Any = bare<any>()(function Any <V = any>(this: any, shape?: Node<V> | V): Node<V> {
-  let node = buildize(this, shape)
+  let node = buildize(chainNode(this), shape)
   node.t = (S.any as ValType)
 
   // Any is a kind the spec asked for, not an absent one: a key expression's
@@ -3359,7 +3360,7 @@ const Any = bare<any>()(function Any <V = any>(this: any, shape?: Node<V> | V): 
 
 // Custom error message.
 const Fault = function <V = any>(this: any, msg: string, shape?: Node<V> | V): Node<V> {
-  let node = buildize(this, shape)
+  let node = buildize(chainNode(this), shape)
   node.z = msg
   return node
 }
@@ -3367,7 +3368,7 @@ const Fault = function <V = any>(this: any, msg: string, shape?: Node<V> | V): N
 
 // Value is skipped if not present (optional, but no default).
 const Skip = function <V = any>(this: any, shape?: Node<V> | V): Node<V | undefined> {
-  let node = buildize(this, shape)
+  let node = buildize(chainNode(this), shape)
   node.r = false
 
   // Do not insert empty arrays and objects.
@@ -3380,7 +3381,7 @@ const Skip = function <V = any>(this: any, shape?: Node<V> | V): Node<V | undefi
 // Errors for this value are ignored, and the value is undefined. The whole
 // subtree is probed, so a failing descendant is swallowed too.
 const Ignore = function <V = any>(this: any, shape?: Node<V> | V): Node<V | undefined> {
-  let node = buildize(this, shape)
+  let node = buildize(chainNode(this), shape)
   node.r = false
 
   // Do not insert empty arrays and objects.
@@ -3408,7 +3409,7 @@ const Ignore = function <V = any>(this: any, shape?: Node<V> | V): Node<V | unde
 
 // Value must be a function.
 const Func = bare<Function>()(function Func <V = Function>(this: any, shape?: Node<V> | V): Node<V> {
-  let node = buildize(this)
+  let node = buildize(chainNode(this))
   node.t = (S.function as ValType)
   node.v = shape
   node.f = shape
@@ -3424,13 +3425,13 @@ const Default = function <D = any, V = D>(this: any, dval?: D, shape?: Node<V> |
   // and so takes the default's kind.
   let node: Node<any>
   if (undefined === shape) {
-    node = buildize(this, dval)
+    node = buildize(chainNode(this), dval)
   }
   else if (S.any === nodize(shape).t) {
-    node = buildize(buildize(this, dval), shape)
+    node = buildize(buildize(chainNode(this), dval), shape)
   }
   else {
-    node = buildize(this, shape)
+    node = buildize(chainNode(this), shape)
   }
 
   node.r = false
@@ -3453,7 +3454,7 @@ const Default = function <D = any, V = D>(this: any, dval?: D, shape?: Node<V> |
 
 // String can be empty.
 const Empty = function <V = any>(this: any, shape?: Node<V> | V): Node<V> {
-  let node = buildize(this, shape)
+  let node = buildize(chainNode(this), shape)
   node.u.empty = true
   return node
 }
@@ -3464,7 +3465,7 @@ const Empty = function <V = any>(this: any, shape?: Node<V> | V): Node<V> {
 // value, and so fails always; Optional or Skip around it means the value
 // must be absent.
 const Never = bare<never>()(function Never <V = never>(this: any, shape?: Node<V> | V): Node<never> {
-  let node = buildize(this, shape)
+  let node = buildize(chainNode(this), shape)
   node.t = (S.never as ValType)
   if (!this?.$?.shape$) {
     node.r = true
@@ -3485,7 +3486,7 @@ interface KeyBuilder {
 }
 
 const Key = bare<string>()(function Key(this: any, depth?: number | Function, join?: string): Node<any> {
-  let node = buildize(this)
+  let node = buildize(chainNode(this))
 
   let ascend = S.number === typeof depth
   node.t = (S.string as ValType)
@@ -3531,7 +3532,7 @@ const Key = bare<string>()(function Key(this: any, depth?: number | Function, jo
 
 // Pass only if all match. Does not short circuit (as defaults may be missed).
 const All = function <const S extends readonly any[]>(this: any, ...inshapes: S): Node<S[number]> {
-  const node = buildize(this)
+  const node = buildize(chainNode(this))
   node.t = (S.list as ValType)
   node.r = true
 
@@ -3607,7 +3608,7 @@ const Nof = function Nof(this: any, count: any, ...inshapes: any[]): Node<any> {
     throw new Error('Shape: Nof needs a whole number of zero or more, or a shape for the count')
   }
 
-  const node = buildize(this)
+  const node = buildize(chainNode(this))
   node.t = (S.list as ValType)
   node.r = true
 
@@ -3803,7 +3804,7 @@ const When = function When(this: any, cond: any, then?: any, otherwise?: any): N
     throw new Error('Shape: When needs a shape for its condition')
   }
 
-  const node = buildize(this)
+  const node = buildize(chainNode(this))
   node.t = (S.list as ValType)
   node.r = true
 
@@ -3861,7 +3862,7 @@ const Contains = function Contains(this: any, count: any, inshape: any, spec?: a
     throw new Error('Shape: Contains needs a shape for the items it counts')
   }
 
-  const node = buildize(this, undefined === spec && !this?.$?.shape$ ? [] : spec)
+  const node = buildize(chainNode(this), undefined === spec && !this?.$?.shape$ ? [] : spec)
   const shape = Shape(inshape)
   const countShape = exact ? undefined : Shape(count)
   const bounds = exact ? { lo: count, hi: count, exact: true } : countBounds((countShape as any).node())
@@ -3935,7 +3936,7 @@ const Contains = function Contains(this: any, count: any, inshape: any, spec?: a
 // before it, and the first of those. A value that is not an array is not
 // checked. Without a spec of its own the node is an array of anything.
 const Unique = function Unique(this: any, spec?: any): Node<any> {
-  const node = buildize(this, undefined === spec && !this?.$?.shape$ ? [] : spec)
+  const node = buildize(chainNode(this), undefined === spec && !this?.$?.shape$ ? [] : spec)
 
   const validator = function Unique(val: any, update: Update, state: State) {
     if (!isarr(val)) {
@@ -4016,7 +4017,7 @@ function sameJson(x: any, y: any): boolean {
 
 // Value must match excatly one of the literal values provided.
 const Exact = function <const T extends readonly any[]>(this: any, ...vals: T): Node<Literal<T[number]>> {
-  const node = buildize(this)
+  const node = buildize(chainNode(this))
 
   // Exact asks for a value, as a type token does, so Optional or Skip after
   // it lets the value be absent. Chained, the node stays as it was.
@@ -4076,7 +4077,7 @@ const Before = function <V = any>(
   validate: Validate,
   shape?: Node<V> | V
 ): Node<V> {
-  let node = buildize(this, shape)
+  let node = buildize(chainNode(this), shape)
   attach(node.b, validate)
   return node
 }
@@ -4088,7 +4089,7 @@ const After = function <V = any>(
   validate: Validate,
   shape?: Node<V> | V
 ): Node<V> {
-  let node = buildize(this, shape)
+  let node = buildize(chainNode(this), shape)
   attach(node.a, validate)
   return node
 }
@@ -4100,7 +4101,7 @@ const Check = function <V = any>(
   check: Validate | RegExp | string,
   shape?: Node<V> | V
 ): Node<V> {
-  let node = buildize(this, shape)
+  let node = buildize(chainNode(this), shape)
 
   node.r = true
 
@@ -4151,7 +4152,7 @@ const Check = function <V = any>(
 
 // Value cannot contain undeclared properties or elements.
 const Closed = function <V = any>(this: any, shape?: Node<V> | V): Node<V> {
-  let node = buildize(this, shape)
+  let node = buildize(chainNode(this), shape)
 
   // Makes one element array fixed.
   if (S.array === node.t && undefined !== node.c && 0 === node.n) {
@@ -4183,7 +4184,7 @@ function needsName(builder: string, name: any) {
 
 // Define a named reference to this value. See Refer.
 const Define = function <V = any>(this: any, inopts: any, shape?: Node<V> | V): Node<V> {
-  let node = buildize(this, shape)
+  let node = buildize(chainNode(this), shape)
 
   let opts = S.object === typeof inopts ? inopts || {} : {}
   let name = S.string === typeof inopts ? inopts : opts.name
@@ -4209,7 +4210,7 @@ const Define = function <V = any>(this: any, inopts: any, shape?: Node<V> | V): 
 // TODO: copy option to copy value instead of node - need index of value in stack
 // Inject a referenced value. See Define.
 const Refer = function <V = any>(this: any, inopts: any, shape?: Node<V> | V): Node<V> {
-  let node = buildize(this, shape)
+  let node = buildize(chainNode(this), shape)
 
   let opts = S.object === typeof inopts ? inopts || {} : {}
   let name = S.string === typeof inopts ? inopts : opts.name
@@ -4259,7 +4260,7 @@ const Refer = function <V = any>(this: any, inopts: any, shape?: Node<V> | V): N
 // TODO: no mutate is State.match
 // Rename a property.
 const Rename = function <V = any>(this: any, inopts: any, shape?: Node<V> | V): Node<V> {
-  let node = buildize(this, shape)
+  let node = buildize(chainNode(this), shape)
 
   let opts = S.object === typeof inopts ? inopts || {} : {}
   let name = S.string === typeof inopts ? inopts : opts.name
@@ -4389,7 +4390,7 @@ const Child = function <C = any, V = unknown>(
   shape?: Node<V> | V
 ): Node<unknown extends V ? { [key: string]: C } : V> {
   // Child provides implicit open object if no shape defined.
-  let node = buildize(this, shape)
+  let node = buildize(chainNode(this), shape)
   node.c = nodize(child)
 
   if (undefined === node.v) {
@@ -4414,7 +4415,7 @@ const Rest = function <C = any, V = unknown>(
   // so a tuple keeps its positions: [String, Number].Rest(Number).
   let self = this
   let chainedArray = undefined === shape && null != self && S.array === self.t
-  let node = chainedArray ? buildize(self) : buildize(self, shape || [])
+  let node = chainedArray ? buildize(self) : buildize(chainNode(self), shape || [])
   node.t = 'array'
   node.c = nodize(child)
   node.m = node.m || {}
@@ -4438,7 +4439,7 @@ const Type = function <K extends TypeRef>(
 ): Node<ShapeResult<K>> {
   let tnat = nodize(TNAT[tref as string] || (S.Integer === tref ? Integer : tref))
 
-  let node = buildize(this, shape)
+  let node = buildize(chainNode(this), shape)
   if (node !== tnat) {
     node.t = tnat.t
     node.r = tnat.r
@@ -4495,7 +4496,7 @@ function makeSizeBuilder(
   name: string,
   valid: (vsize: number, size: number, val: any, update: Update, state: State) => boolean
 ) {
-  let node = buildize(self, shape)
+  let node = buildize(chainNode(self), shape)
 
   // A bound is a finite number, a string that reads as one, or a date; no
   // bound at all is the key-expression form ("a: Min()": 3), whose bound
@@ -4643,6 +4644,15 @@ const Len = function <V = any>(
 
 
 // Make a Node chainable with Builder methods.
+// The node a builder chains onto: its `this` where that is a node, as in
+// node.Min(1). Called bare, or as a method of Shape or of the module
+// (Shape.Min, shape.Min), a builder chains onto nothing, so Shape.Min(1,
+// String) is Min(1, String).
+function chainNode(self: any): any {
+  return null != self && self.$?.shape$ ? self : undefined
+}
+
+
 function buildize<V = any>(self?: any, shape?: any): Node<V> {
   // A builder may re-chain a retained node (see VGEN).
   VGEN++
@@ -5527,6 +5537,15 @@ function jsonHeaded(n: Node<any>, hv: any, kind: string): any {
 }
 
 
+// The composition that heads a list node: its own check, or one that a
+// Catch, Transform or Ignore took inside with the node's other checks.
+function jsonListHead(b: Validate[]): string {
+  const head: any = b.find((v: any) => S.All === v.n || S.Nof === v.n || S.When === v.n)
+  const taker: any = b.find((v: any) => undefined !== v.inner)
+  return undefined !== head ? head.n : jsonListHead(taker.inner.b)
+}
+
+
 // The value form of a node: the JSON that reads back as it.
 function nodeJson(n: Node<any>): any {
   n = jsonNode(n)
@@ -5585,7 +5604,7 @@ function nodeJson(n: Node<any>): any {
         ]
       } :
       {
-        n: n.b.find((v: any) => S.All === v.n || S.Nof === v.n || S.When === v.n)?.n as string,
+        n: jsonListHead(n.b),
         // A Nof's count leads its shapes: a number inline, a shape as its value.
         a: (undefined === n.u.nof ? [] :
           [S.number === typeof n.u.nof.count ? { x: '' + n.u.nof.count } : jsonArg(n.u.nof.count)])

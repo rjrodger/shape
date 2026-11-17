@@ -174,18 +174,34 @@ func validateNode(n *node, in any, path []string, pathArr []any, key string, par
 	// failing one ends the structural checks (TS handleValidate sets
 	// update.done) — but every before still runs, and so do the afters.
 	//
+	// A composition (All, Nof, When) is its node's first check, at -1, as in
+	// TS, where it is the node's first validator: the befores chained after
+	// it see what it produced, and each reports what it finds. It runs
+	// whatever kind a chained Check or type token gave the node, as TS's
+	// validator does.
+	//
 	// A before that puts another node in this one's place (Refer, a claimed
-	// Rename) leaves that node's befores to run, from its first, each once:
+	// Rename) leaves that node's checks to run, from its first, each once:
 	// TS restarts its loop on the new node, and a Refer back to a node whose
 	// befores have begun does not run them again.
 	done := false
 	var ran map[beforeAt]bool
-	for bI := 0; bI < len(n.befores); bI++ {
+	for bI := -1; bI < len(n.befores); bI++ {
+		if bI < 0 && (n.listMode == listNone || isolated(n.befores)) {
+			continue
+		}
 		if ran != nil {
 			if ran[beforeAt{n, bI}] {
 				continue
 			}
 			ran[beforeAt{n, bI}] = true
+		}
+		if bI < 0 {
+			if !composeList(n, state, absent, verr) {
+				done = true
+			}
+			in = state.Value
+			continue
 		}
 		b := n.befores[bI]
 		update := &state.upd
@@ -202,11 +218,11 @@ func validateNode(n *node, in any, path []string, pathArr []any, key string, par
 		if n != was {
 			if ran == nil {
 				ran = map[beforeAt]bool{}
-				for i := 0; i <= bI; i++ {
+				for i := -1; i <= bI; i++ {
 					ran[beforeAt{was, i}] = true
 				}
 			}
-			bI = -1
+			bI = -2
 		}
 		if !ok && absentSkips(state, update) {
 			continue
@@ -229,6 +245,14 @@ func validateNode(n *node, in any, path []string, pathArr []any, key string, par
 		ctx.popState()
 	}
 	return out
+}
+
+// isolated reports whether a Catch or Transform took the node's checks
+// inside, its composition among them: the composition then runs in that
+// builder's probe of the node (see inner.probe), and not before it, as TS
+// moves the composition's validator inside.
+func isolated(befores []validator) bool {
+	return len(befores) > 0 && befores[0].inner != nil
 }
 
 // beforeAt names one before of one node, so that each runs once per value.
@@ -258,32 +282,23 @@ func nullPasses(state *State) bool {
 func validateStructure(n *node, state *State, absent bool, path []string, pathArr []any, key string, parent any, ctx *Context, match bool, verr *ValidationError) any {
 
 	// Nullable: an explicit null is accepted as the value, whatever a
-	// composition would make of it (TS drops the errors of the All or Nof
-	// check, as it does any check's). Absent is still governed by
+	// composition made of it (see composeList). Absent is still governed by
 	// required/optional below, since a nil that is absent is not yet in play
 	// here — the absent sentinel was translated above.
 	if state.Value == nil && !absent && n.nullable {
-		// The composition still runs, as TS runs its check, so the trials
-		// it takes count.
-		if n.kind == KindList && n.listMode != listNone {
-			evaluateList(n, state, &ValidationError{})
-		}
 		return state.Value
 	}
 
-	// Composition shortcuts. An absent value on a node that does not require
-	// one is not put to the branches: TS drops the errors such a check would
-	// raise, so Optional(All(...)) given nothing is simply absent.
+	// A composition ran as its node's first check (see composeList), and
+	// passed, or the structural checks would not run. A required one that
+	// left an absent subject absent (All produces nothing from it) reports
+	// the missing value, as TypeScript's required check does after the
+	// validators.
 	if n.kind == KindList && n.listMode != listNone && !(absent && !n.required) {
-		before := verr.count()
-		out := evaluateList(n, state, verr)
-		// A required composition that passed but left an absent subject
-		// absent (All produces nothing from it) reports the missing value,
-		// as TypeScript's required check does after the validators.
-		if absent && n.required && out == nil && verr.count() == before {
+		if absent && n.required && state.Value == nil {
 			addRequired(state, n, verr)
 		}
-		return out
+		return state.Value
 	}
 
 	// Never rejects any present value, and an absent one where the node
@@ -924,6 +939,26 @@ func addRequired(state *State, n *node, verr *ValidationError) {
 	if !n.silent {
 		verr.add(err)
 	}
+}
+
+// composeList puts the value to the branches of a composition, as its
+// node's first check, and reports whether they admit it. What it produces is
+// the value the checks after it see. A present null on a nullable node
+// passes whatever they make of it, though they still run, so the trials
+// they take count; an absent value on a node that does not require one is
+// not put to them, as TS drops the errors such a check raises, so
+// Optional(All(...)) given nothing is simply absent.
+func composeList(n *node, state *State, absent bool, verr *ValidationError) bool {
+	if state.Value == nil && !absent && n.nullable {
+		evaluateList(n, state, &ValidationError{})
+		return true
+	}
+	if absent && !n.required {
+		return true
+	}
+	before := verr.count()
+	state.Value = evaluateList(n, state, verr)
+	return verr.count() == before
 }
 
 // evaluateList puts the value of a composition node's state to its branches.

@@ -152,29 +152,75 @@ pub(crate) fn validate_node_with(
     let mut node_over: Option<Arc<Node>> = None;
     let mut done = false;
 
+    // The checks of a node, in order: its composition (All, Nof, When) at
+    // slot 0, as in TypeScript, where it is the node's first validator, so
+    // that the befores chained after it see what it produced and each
+    // reports what it finds; then its befores, from slot 1. The composition
+    // runs whatever kind a chained Check or type token gave the node.
+    //
     // A before that puts another node in this one's place (Refer, a claimed
-    // Rename) leaves that node's befores to run, from its first, each once:
+    // Rename) leaves that node's checks to run, from its first, each once:
     // TS restarts its loop on the new node.
     let mut ran: Option<Vec<(*const Node, usize)>> = None;
-    let mut bi = 0;
+    let mut slot = 0;
+    let mut list_kept = true;
     loop {
         let holder = node_over.clone();
         let bs: &[Validator] = match holder.as_deref() {
             Some(nn) => &nn.befores,
             None => befores,
         };
-        let Some(b) = bs.get(bi) else { break };
+        if slot > bs.len() {
+            break;
+        }
         let at: *const Node = holder
             .as_deref()
             .map_or(n as *const Node, |nn| nn as *const Node);
-        bi += 1;
+        slot += 1;
         if let Some(r) = ran.as_mut() {
-            if r.contains(&(at, bi - 1)) {
+            if r.contains(&(at, slot - 1)) {
                 continue;
             }
-            r.push((at, bi - 1));
+            r.push((at, slot - 1));
         }
         let cur_node: &Node = node_over.as_deref().unwrap_or(n);
+        if slot == 1 {
+            // A Catch or Transform that took the node's checks inside took
+            // its composition too: that runs in the builder's probe of the
+            // node, and not before it, as TypeScript moves the
+            // composition's validator inside.
+            let isolated = bs.first().is_some_and(|b| b.inner.is_some());
+            if cur_node.list_mode != ListMode::None && !isolated {
+                let cur_silent = if node_over.is_some() {
+                    cur_node.silent
+                } else {
+                    silent
+                };
+                // What the composition produces is what the befores after
+                // it see, in a walk for the verdict alone too.
+                if over.is_none() && !bs.is_empty() && matches!(cur, Cur::Ref(_)) {
+                    over = Some(cur.get().clone());
+                }
+                let inner = match over.as_mut() {
+                    Some(v) => Cur::Mut(v),
+                    None => cur.reborrow(),
+                };
+                let (passed, kept) = compose_list(
+                    cur_node,
+                    cur_silent,
+                    inner,
+                    key,
+                    parent_is_array,
+                    absent,
+                    w,
+                    verr,
+                );
+                list_kept = kept;
+                done = done || !passed;
+            }
+            continue;
+        }
+        let b = &bs[slot - 2];
         let mut update = Update::default();
         let (ok, nulled) = {
             let value: &Value = over.as_ref().unwrap_or_else(|| cur.get());
@@ -204,8 +250,9 @@ pub(crate) fn validate_node_with(
         }
         if let Some(nn) = update.node.take() {
             if !std::ptr::eq(Arc::as_ptr(&nn), at) {
-                ran.get_or_insert_with(|| (0..bi).map(|j| (at, j)).collect());
-                bi = 0;
+                ran.get_or_insert_with(|| (0..slot).map(|j| (at, j)).collect());
+                slot = 0;
+                list_kept = true;
             }
             node_over = Some(nn);
         }
@@ -240,7 +287,8 @@ pub(crate) fn validate_node_with(
             Some(v) => Cur::Mut(v),
             None => cur.reborrow(),
         };
-        kept = validate_structure(n, silent, inner, key, parent_is_array, absent, w, verr);
+        kept = validate_structure(n, silent, inner, key, parent_is_array, absent, w, verr)
+            && list_kept;
     }
 
     // Afters run whatever the structural check reported.
@@ -434,29 +482,12 @@ fn validate_structure(
     verr: &mut ValidationError,
 ) -> bool {
     if n.kind == Kind::List && n.list_mode != ListMode::None && (n.required || !absent) {
-        // Nullable allows a present null, whatever the composition makes
-        // of it: its errors are dropped.
-        let mut dropped = ValidationError::default();
-        let verr = if n.nullable && cur.get().is_null() {
-            &mut dropped
-        } else {
-            verr
-        };
-        let before = verr.count();
-        let kept = evaluate_list(
-            n,
-            silent,
-            cur.reborrow(),
-            key,
-            parent_is_array,
-            absent,
-            w,
-            verr,
-        );
-        // A required composition that passed but left an absent subject
-        // absent (All produces nothing from it) reports the missing value,
-        // as TypeScript's required check does after the validators.
-        if absent && n.required && verr.count() == before && cur.get().is_undefined() {
+        // The composition ran as the node's first check, and passed, or
+        // the structural checks would not run (see compose_list). A
+        // required one that left an absent subject absent (All produces
+        // nothing from it) reports the missing value, as TypeScript's
+        // required check does after the validators.
+        if absent && n.required && cur.get().is_undefined() {
             let at = at_of(w, key, n, cur.get(), parent_is_array, "");
             add_structural(
                 &at,
@@ -468,7 +499,7 @@ fn validate_structure(
             );
             return false;
         }
-        return kept;
+        return true;
     }
 
     // Nullable: an explicit null is the value.
@@ -1254,6 +1285,47 @@ pub(crate) fn count_items(
         return false;
     }
     true
+}
+
+/// A composition (All, Nof, When) puts the value to its branches as its
+/// node's first check, as TypeScript's first validator does: what it
+/// produces is the value the befores after it see. It returns whether the
+/// branches admit the value, and whether the value is kept. A present null
+/// on a nullable node passes whatever they make of it, though they still
+/// run, so the trials they take count; an absent value on a node that does
+/// not require one is not put to them, as TypeScript drops the errors such
+/// a check raises.
+#[allow(clippy::too_many_arguments)]
+fn compose_list(
+    n: &Node,
+    silent: bool,
+    cur: Cur<'_>,
+    key: &str,
+    parent_is_array: bool,
+    absent: bool,
+    w: &mut Walk<'_>,
+    verr: &mut ValidationError,
+) -> (bool, bool) {
+    if absent && !n.required {
+        return (true, true);
+    }
+    if n.nullable && cur.get().is_null() {
+        let mut dropped = ValidationError::default();
+        let kept = evaluate_list(
+            n,
+            silent,
+            cur,
+            key,
+            parent_is_array,
+            absent,
+            w,
+            &mut dropped,
+        );
+        return (true, kept);
+    }
+    let before = verr.count();
+    let kept = evaluate_list(n, silent, cur, key, parent_is_array, absent, w, verr);
+    (verr.count() == before, kept)
 }
 
 /// All, Nof and When. The branches see the value as the parent saw it:

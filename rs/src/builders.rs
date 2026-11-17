@@ -1489,6 +1489,62 @@ mod tests {
         format!("{{\"a\":{}}}", s)
     }
 
+    /// A composition is its node's first check, whatever kind a chained
+    /// Check or type token gives the node: it still runs, and a check after
+    /// it reports too (the corpus rows *-chained-*).
+    #[test]
+    fn composition_first() {
+        let check = Schema::parse("All(Min(2)).Check(/^a/)").unwrap();
+        assert_eq!(
+            run(&check, "\"b\""),
+            "ERR Value \"b\" for property \"\" must be a minimum length of 2 (was 1).\nValidation failed for string \"b\" because check \"/^a/\" failed."
+        );
+        assert_eq!(
+            run(&check, "\"a\""),
+            "ERR Value \"a\" for property \"\" must be a minimum length of 2 (was 1)."
+        );
+        assert_eq!(run(&check, "\"ab\""), "\"ab\"");
+        let typed = Schema::parse("All(Min(2)).String").unwrap();
+        assert_eq!(
+            run(&typed, "\"a\""),
+            "ERR Value \"a\" for property \"\" must be a minimum length of 2 (was 1)."
+        );
+        assert_eq!(
+            run(&typed, "5"),
+            "ERR Validation failed for number \"5\" because the number is not of type string."
+        );
+        // A Catch or Transform takes the composition inside with the
+        // node's other checks: it runs once, in the probe.
+        assert_eq!(
+            run(&Schema::new(Catch(0, All([Token::Number]))), "\"bad\""),
+            "0"
+        );
+        assert_eq!(
+            run(
+                &Schema::new(Catch(0, Nof(1, [Token::Number, Token::String]))),
+                "true"
+            ),
+            "0"
+        );
+        let inc = || {
+            Transform(
+                |v: Value, _: &mut State<'_>| Value::from(v.as_f64().unwrap_or(0.0) + 1.0),
+                All([Token::Number]),
+            )
+        };
+        assert_eq!(
+            run(&Schema::new(inc()), "\"bad\""),
+            "ERR Validation failed for string \"bad\" because the string is not of type number."
+        );
+        assert_eq!(run(&Schema::new(inc()), "1"), "2");
+        let nof = Schema::parse("Nof(1,String,Number).Check(/^t/)").unwrap();
+        assert_eq!(
+            run(&nof, "true"),
+            "ERR Value \"true\" for property \"\" satisfies 0 of: String, Number; the count must be 1.\nValidation failed for boolean \"true\" because check \"/^t/\" failed."
+        );
+        assert_eq!(run(&nof, "\"t\""), "\"t\"");
+    }
+
     #[test]
     fn bounds_on_numbers_strings_and_containers() {
         let cases: Vec<(Node, &str, &str)> = vec![

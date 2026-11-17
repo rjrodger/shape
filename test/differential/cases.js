@@ -412,6 +412,22 @@ function build() {
   add('c-contains-unique', E('Contains(Min(2),Number).Unique'), DUPS)
   add('c-contains-two', E('Contains(0,Number).Contains(Min(1),String)'), DUPS)
 
+  // A composition is its node's first check: a check chained after it sees
+  // what it produced, and each reports what it finds.
+  add('c-chained-nof-min', E('Nof(1,String,Number).Min(1)'), SCALARS.concat(ARRS))
+  add('c-chained-all-min', E('All(Min(1)).Min(2)'), SCALARS.concat(ARRS))
+  add('c-chained-nof-contains', E('Nof(1,String,Number).Contains(1,Number)'), SCALARS.concat(ARRS))
+  add('c-chained-all-unique', E('All(Max(2)).Unique'), DUPS)
+  add('c-chained-when-max', E('When(String,Min(3)).Max(4)'), SCALARS)
+  add('c-chained-nof-obj', { a: E('Nof(1,String,Number).Min(2).Optional') }, OBJS)
+  // Values the Nof admits: a failing one names the object branch in a form
+  // the ports render apart (see the parity page).
+  add('c-chained-nof-produces', CALL('Min', 1, CALL('Nof', 1, { x: 1 }, T)), [{}, { x: 5 }, 'ab', 'a'])
+  // A Catch takes the composition inside with the node's other checks.
+  add('c-catch-all', E('Catch(0,All(Number))'), SCALARS)
+  add('c-catch-nof', E('Catch(0,Nof(1,Number,String))'), SCALARS.concat(ARRS))
+  add('c-catch-chained', E('Catch(0,All(Min(2))).Max(5)'), SCALARS)
+
   // A bare type token in the DSL is Type(token): Object is closed there.
   for (const t of ['String', 'Number', 'Boolean', 'Object', 'Array', 'Any', 'Integer']) {
     add('dsl-bare-' + t, E(t), SCALARS)
