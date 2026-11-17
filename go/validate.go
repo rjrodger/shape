@@ -187,7 +187,7 @@ func validateNode(n *node, in any, path []string, pathArr []any, key string, par
 	done := false
 	var ran map[beforeAt]bool
 	for bI := -1; bI < len(n.befores); bI++ {
-		if bI < 0 && n.listMode == listNone {
+		if bI < 0 && (n.listMode == listNone || isolated(n.befores)) {
 			continue
 		}
 		if ran != nil {
@@ -245,6 +245,14 @@ func validateNode(n *node, in any, path []string, pathArr []any, key string, par
 		ctx.popState()
 	}
 	return out
+}
+
+// isolated reports whether a Catch or Transform took the node's checks
+// inside, its composition among them: the composition then runs in that
+// builder's probe of the node (see inner.probe), and not before it, as TS
+// moves the composition's validator inside.
+func isolated(befores []validator) bool {
+	return len(befores) > 0 && befores[0].inner != nil
 }
 
 // beforeAt names one before of one node, so that each runs once per value.

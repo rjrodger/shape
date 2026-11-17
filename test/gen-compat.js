@@ -420,6 +420,10 @@ const files = {
     ['all-chained-unique', { a: { $expr: 'All(Max(1)).Unique' } }, { a: [1, 1] }],
     ['when-chained-max', { a: { $expr: 'When(String,Min(5)).Max(3)' } }, { a: 'abcd' }],
     ['nof-produces-for-min', { a: CALL('Min', 1, CALL('Nof', 1, { x: 1 }, T)) }, { a: {} }],
+    // A Catch takes the composition inside with the node's other checks.
+    ['catch-all', { a: { $expr: 'Catch(0,All(Number))' } }, { a: 'bad' }],
+    ['catch-nof', { a: { $expr: 'Catch(0,Nof(1,Number,String))' } }, { a: true }],
+    ['catch-all-chained', { a: { $expr: 'Catch(0,All(Min(2))).Max(5)' } }, { a: 1 }],
     // Two counts on one array are two constraints.
     ['contains-two-counts-ok', { a: { $expr: 'Contains(0,Number).Contains(Min(1),String)' } }, { a: ['a'] }],
     ['contains-two-counts-fail', { a: { $expr: 'Contains(0,Number).Contains(Min(1),String)' } }, { a: ['a', 1] }],

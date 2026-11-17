@@ -1513,6 +1513,30 @@ mod tests {
             run(&typed, "5"),
             "ERR Validation failed for number \"5\" because the number is not of type string."
         );
+        // A Catch or Transform takes the composition inside with the
+        // node's other checks: it runs once, in the probe.
+        assert_eq!(
+            run(&Schema::new(Catch(0, All([Token::Number]))), "\"bad\""),
+            "0"
+        );
+        assert_eq!(
+            run(
+                &Schema::new(Catch(0, Nof(1, [Token::Number, Token::String]))),
+                "true"
+            ),
+            "0"
+        );
+        let inc = || {
+            Transform(
+                |v: Value, _: &mut State<'_>| Value::from(v.as_f64().unwrap_or(0.0) + 1.0),
+                All([Token::Number]),
+            )
+        };
+        assert_eq!(
+            run(&Schema::new(inc()), "\"bad\""),
+            "ERR Validation failed for string \"bad\" because the string is not of type number."
+        );
+        assert_eq!(run(&Schema::new(inc()), "1"), "2");
         let nof = Schema::parse("Nof(1,String,Number).Check(/^t/)").unwrap();
         assert_eq!(
             run(&nof, "true"),

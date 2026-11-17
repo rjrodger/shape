@@ -5537,6 +5537,15 @@ function jsonHeaded(n: Node<any>, hv: any, kind: string): any {
 }
 
 
+// The composition that heads a list node: its own check, or one that a
+// Catch, Transform or Ignore took inside with the node's other checks.
+function jsonListHead(b: Validate[]): string {
+  const head: any = b.find((v: any) => S.All === v.n || S.Nof === v.n || S.When === v.n)
+  const taker: any = b.find((v: any) => undefined !== v.inner)
+  return undefined !== head ? head.n : jsonListHead(taker.inner.b)
+}
+
+
 // The value form of a node: the JSON that reads back as it.
 function nodeJson(n: Node<any>): any {
   n = jsonNode(n)
@@ -5595,7 +5604,7 @@ function nodeJson(n: Node<any>): any {
         ]
       } :
       {
-        n: n.b.find((v: any) => S.All === v.n || S.Nof === v.n || S.When === v.n)?.n as string,
+        n: jsonListHead(n.b),
         // A Nof's count leads its shapes: a number inline, a shape as its value.
         a: (undefined === n.u.nof ? [] :
           [S.number === typeof n.u.nof.count ? { x: '' + n.u.nof.count } : jsonArg(n.u.nof.count)])

@@ -154,6 +154,10 @@ describe('json', () => {
  
     // When is a list head too; Contains and Unique are checks of an array.
     const { When, Contains, Unique } = ShapeModule
+    // A composition a Catch or Ignore took inside still heads the node.
+    roundTrip(Catch(0, All(Number)), 'All(Number).Catch(0)', 'bad', 5)
+    roundTrip(Catch(0, Nof(1, Number, String)), 'Nof(1,Number,String).Catch(0)', true, 'x')
+    roundTrip({ a: Ignore(All(Number)) }, { a: 'All(Number).Ignore' }, { a: 'bad' }, { a: 1 })
     roundTrip(When(String, Min(2)), 'When(String,Any.Min(2),Any)', 'a', 'abc', 5)
     roundTrip({ a: When(Open({ k: Required() }), Open({ b: Required(Number) })) },
       { a: { $$: 'When($$0,$$1,Any)', $$0: { k: 'Required', $$: 'Open' }, $$1: { 'b: Number': 0, $$: 'Open' } } },

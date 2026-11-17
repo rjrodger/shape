@@ -423,6 +423,10 @@ function build() {
   // Values the Nof admits: a failing one names the object branch in a form
   // the ports render apart (see the parity page).
   add('c-chained-nof-produces', CALL('Min', 1, CALL('Nof', 1, { x: 1 }, T)), [{}, { x: 5 }, 'ab', 'a'])
+  // A Catch takes the composition inside with the node's other checks.
+  add('c-catch-all', E('Catch(0,All(Number))'), SCALARS)
+  add('c-catch-nof', E('Catch(0,Nof(1,Number,String))'), SCALARS.concat(ARRS))
+  add('c-catch-chained', E('Catch(0,All(Min(2))).Max(5)'), SCALARS)
 
   // A bare type token in the DSL is Type(token): Object is closed there.
   for (const t of ['String', 'Number', 'Boolean', 'Object', 'Array', 'Any', 'Integer']) {

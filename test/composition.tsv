@@ -124,6 +124,9 @@ nof-chained-contains	{"a":{"$expr":"Nof(1,String,Number).Contains(1,Number)"}}	{
 all-chained-unique	{"a":{"$expr":"All(Max(1)).Unique"}}	{"a":[1,1]}		"Value \"[1,1]\" for property \"a\" must be a maximum length of 1 (was 2).\nValue \"[1,1]\" for property \"a\" must have unique items (items 0 and 1 are equal)."
 when-chained-max	{"a":{"$expr":"When(String,Min(5)).Max(3)"}}	{"a":"abcd"}		"Value \"abcd\" for property \"a\" must be a minimum length of 5 (was 4).\nValue \"abcd\" for property \"a\" must be a maximum length of 3 (was 4)."
 nof-produces-for-min	{"a":{"$call":["Min",1,{"$call":["Nof",1,{"x":1},{"$type":"String"}]}]}}	{"a":{}}	{"a":{"x":1}}	
+catch-all	{"a":{"$expr":"Catch(0,All(Number))"}}	{"a":"bad"}	{"a":0}	
+catch-nof	{"a":{"$expr":"Catch(0,Nof(1,Number,String))"}}	{"a":true}	{"a":0}	
+catch-all-chained	{"a":{"$expr":"Catch(0,All(Min(2))).Max(5)"}}	{"a":1}	{"a":0}	
 contains-two-counts-ok	{"a":{"$expr":"Contains(0,Number).Contains(Min(1),String)"}}	{"a":["a"]}	{"a":["a"]}	
 contains-two-counts-fail	{"a":{"$expr":"Contains(0,Number).Contains(Min(1),String)"}}	{"a":["a",1]}		"Value \"[a,1]\" for property \"a\" has 1 of its items satisfying Number; the count must be 0."
 unique-ok	{"a":{"$expr":"Unique"}}	{"a":[1,"1",true,null,[1],{"a":1}]}	{"a":[1,"1",true,null,[1],{"a":1}]}	

@@ -185,7 +185,12 @@ pub(crate) fn validate_node_with(
         }
         let cur_node: &Node = node_over.as_deref().unwrap_or(n);
         if slot == 1 {
-            if cur_node.list_mode != ListMode::None {
+            // A Catch or Transform that took the node's checks inside took
+            // its composition too: that runs in the builder's probe of the
+            // node, and not before it, as TypeScript moves the
+            // composition's validator inside.
+            let isolated = bs.first().is_some_and(|b| b.inner.is_some());
+            if cur_node.list_mode != ListMode::None && !isolated {
                 let cur_silent = if node_over.is_some() {
                     cur_node.silent
                 } else {
