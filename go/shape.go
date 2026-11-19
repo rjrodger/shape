@@ -293,14 +293,11 @@ func (s *Schema) ValidateCtx(input any, ctx *Context) (any, error) {
 	}
 	was := c.startCall(s.trials)
 
-	var out any
-	if isIgnore(s.root) {
-		// Ignore at the root drops a value that does not validate, exactly as
-		// it does for an object property. Without this the failing value was
-		// handed back unchanged.
-		out, _ = validateIgnored(s.root, rootInput(input), path, pathArr, "", nil, c, false)
-	} else {
-		out = validateNode(s.root, rootInput(input), path, pathArr, "", nil, c, false, &verr)
+	// Ignore at the root drops a value that does not validate, exactly as it
+	// does for an object property: nothing is produced.
+	out := validateNode(s.root, rootInput(input), path, pathArr, "", nil, c, false, &verr)
+	if isUndef(out) {
+		out = nil
 	}
 	c.endCall(was, &verr)
 

@@ -119,6 +119,26 @@ catch-optional-absent	{"a":{"$expr":"Optional(Catch(7,Number))"}}	{}	{"a":0}
 catch-null-fallback	{"a":{"$expr":"Catch(null,Number)"}}	{"a":"x"}	{"a":null}	
 describe-keeps-validation	{"a":{"$expr":"Describe(\"a number\",Number)"}}	{"a":"x"}		"Validation failed for property \"a\" with string \"x\" because the string is not of type number."
 ignore-inner-bound	{"a":{"$expr":"Ignore(Min(2,Number))"}}	{"a":1}	{}	
+ignore-then-default-drops	{"a":{"$expr":"Number.Ignore.Default(0)"}}	{"a":"x"}	{}	
+ignore-then-default-inserts	{"a":{"$expr":"Number.Ignore.Default(0)"}}	{}	{"a":0}	
+ignore-then-check-keeps	{"a":{"$expr":"Number.Ignore.Min(3)"}}	{"a":0}	{"a":0}	
+ignore-then-check-drops-bad	{"a":{"$expr":"Number.Ignore.Min(3)"}}	{"a":"x"}	{}	
+ignore-then-token-drops	{"a":{"$expr":"String.Ignore.Number"}}	{"a":"x"}	{}	
+ignore-then-required-drops	{"a":{"$expr":"Number.Ignore.Required"}}	{"a":"x"}	{}	
+ignore-then-required-absent	{"a":{"$expr":"Number.Ignore.Required"}}	{}	{}	
+ignore-element-then-default	[{"$expr":"Number.Ignore.Default(0)"}]	[1,"x"]	[1,null]	
+ignore-child-then-default	{"$expr":"Child(Number.Ignore.Default(0))"}	{"a":"x","b":1}	{"b":1}	
+ignore-of-another-kind	{"a":{"$expr":"String.Default(5).Ignore"}}	{"a":5}	{}	
+ignore-nested-drops	{"a":{"$expr":"Ignore(Ignore(Number))"}}	{"a":"x"}	{}	
+ignore-nested-element-drops	[{"$expr":"Ignore(Ignore(Number))"}]	[1,"x"]	[1,null]	
+ignore-then-coerce-drops	{"a":{"$expr":"Number.Ignore.Coerce"}}	{"a":"x"}	{}	
+ignore-then-coerce-keeps	{"a":{"$expr":"Number.Ignore.Coerce"}}	{"a":"5"}	{"a":5}	
+ignore-in-catch-drops	{"a":{"$expr":"Number.Ignore.Catch(5)"}}	{"a":"x"}	{}	
+catch-of-ignore-drops	{"a":{"$expr":"Catch(5,Ignore(Number))"}}	{"a":"x"}	{}	
+ignore-nested-branch-keeps	{"a":{"$expr":"All(Ignore(Ignore(Min(2,Number))),Number)"}}	{"a":1}	{"a":1}	
+nof-of-ignore-branch-kept	{"a":{"$expr":"Nof(1,Ignore(Min(2,Number)),String)"}}	{"a":3}	{"a":3}	
+rename-then-default	{"a":{"$expr":"Rename(\"b\").Default(5)"}}	{}	{"b":5}	
+default-of-rename	{"a":{"$expr":"Default(5,Rename(\"b\"))"}}	{"a":1}	{"b":1}	
 disc-branch-ok	{"p":{"$discriminated":["kind",{"dog":{"bark":{"$type":"Boolean"}},"fish":{"fins":{"$type":"Number"}}}]}}	{"p":{"bark":true,"kind":"dog"}}	{"p":{"bark":true,"kind":"dog"}}	
 disc-branch-error	{"p":{"$discriminated":["kind",{"dog":{"bark":{"$type":"Boolean"}},"fish":{"fins":{"$type":"Number"}}}]}}	{"p":{"fins":"x","kind":"fish"}}		"Validation failed for property \"p.fins\" with string \"x\" because the string is not of type number."
 disc-branch-missing-key	{"p":{"$discriminated":["kind",{"dog":{"bark":{"$type":"Boolean"}},"fish":{"fins":{"$type":"Number"}}}]}}	{"p":{"kind":"dog"}}		"Validation failed for property \"p.bark\" because the property is missing."

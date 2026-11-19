@@ -5,3 +5,11 @@ required-token-missing	{"name":{"$type":"String"}}	{}		"Validation failed for pr
 required-token-present	{"name":{"$type":"String"}}	{"name":"alice"}	{"name":"alice"}	
 optional-absent	{"name":{"$optional":{"$type":"String"}}}	{}	{"name":""}	
 required-number-wrong-type	{"age":{"$type":"Number"}}	{"age":"x"}		"Validation failed for property \"age\" with string \"x\" because the string is not of type number."
+default-chained-keeps-kind	{"a":{"$expr":"String.Default(5)"}}	{"a":"x"}	{"a":"x"}	
+default-chained-keeps-kind-rejects	{"a":{"$expr":"String.Default(5)"}}	{"a":5}		"Validation failed for property \"a\" with number \"5\" because the number is not of type string."
+default-chained-of-another-kind	{"a":{"$expr":"String.Default(5)"}}	{}	{"a":5}	
+default-chained-number-of-a-string	{"a":{"$expr":"Number.Default(\"x\")"}}	{}	{"a":"x"}	
+default-chained-composition	{"a":{"$expr":"All(Min(1)).Default(0)"}}	{"a":"x"}	{"a":"x"}	
+default-chained-composition-inserts	{"a":{"$expr":"All(Min(1)).Default(0)"}}	{}	{"a":0}	
+default-chained-nof	{"a":{"$expr":"Nof(1,String,Number).Default(3)"}}	{"a":"x"}	{"a":"x"}	
+default-chained-untyped	{"a":{"$expr":"Min(1).Default(5)"}}	{"a":"x"}		"Validation failed for property \"a\" with string \"x\" because the string is not of type number."

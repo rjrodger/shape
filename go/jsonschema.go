@@ -93,13 +93,20 @@ func nodeSchema(n *node, defs map[string]any) map[string]any {
 	case KindArray:
 		arraySchema(n, s, defs)
 	case KindList:
-		listSchema(n, s, defs)
+		// A nullable composition admits null whatever its branches say.
+		if n.nullable {
+			ls := map[string]any{}
+			listSchema(n, ls, defs)
+			s["anyOf"] = []any{map[string]any{"type": "null"}, ls}
+		} else {
+			listSchema(n, s, defs)
+		}
 	}
 	// A composition says what its branches say, whatever kind a type token
 	// or a Check gave it, beside what the kind says: a keyword both say
-	// holds as an allOf of its own, so that neither replaces the other.
-	// Given a kind, a nullable one admits null whatever the branches make of
-	// it (TS nodeSchema).
+	// holds as an allOf of its own, so that neither replaces the other. A
+	// nullable one admits null whatever the branches make of it (TS
+	// nodeSchema).
 	if n.listMode != listNone && n.kind != KindList {
 		ls := map[string]any{}
 		listSchema(n, ls, defs)

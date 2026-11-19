@@ -164,6 +164,12 @@ Some differences are inherent to Go and are unlikely ever to close.
   Go compares a `time.Time` by value, never takes two functions as equal,
   and reads a typed slice, map or struct as the validator reads it.
 
+- **`Rename` onto a key the value has.** In TypeScript a closed object
+  rejects the target of a `Rename` as not allowed where the input carries
+  it: `{ a: Rename("b") }` given `{ a: 1, b: 2 }` fails. Go and Rust put the
+  renamed value in its place, and give `{ b: 1 }`. Inputs without the target
+  key agree.
+
 - **A check around a composition.** Go and Rust run a node's own checks
   before its `All`, `Nof` or `When`, and one that fails ends them, so
   `Min(2, Nof(1, Boolean, Integer))` given `1.5` reports the bound alone;

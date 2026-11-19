@@ -89,29 +89,26 @@ fn node_schema(n: &Node, defs: &mut Map) -> Map {
         }
         Kind::Object => object_schema(n, &mut s, defs),
         Kind::Array => array_schema(n, &mut s, defs),
+        // A nullable composition admits null whatever its branches say.
+        Kind::List if !retyped && n.nullable => {
+            let mut ls = Map::new();
+            list_schema(n, &mut ls, defs);
+            for (k, v) in or_null(ls) {
+                s.insert(k, v);
+            }
+        }
         Kind::List if !retyped => list_schema(n, &mut s, defs),
         _ => {}
     }
     // A composition says what its branches say, whatever kind a type token
     // or a Check gave it, beside what the kind says: a keyword both say
-    // holds as an allOf of its own, so that neither replaces the other.
-    // Given a kind, a nullable one admits null whatever the branches make
-    // of it (TS nodeSchema).
+    // holds as an allOf of its own, so that neither replaces the other. A
+    // nullable one admits null whatever the branches make of it (TS
+    // nodeSchema).
     if retyped {
         let mut ls = Map::new();
         list_schema(n, &mut ls, defs);
-        let part = if n.nullable {
-            let mut null = Map::new();
-            null.insert("type".to_string(), Value::from("null"));
-            let mut any = Map::new();
-            any.insert(
-                "anyOf".to_string(),
-                Value::Arr(vec![Value::Obj(null), Value::Obj(ls)]),
-            );
-            any
-        } else {
-            ls
-        };
+        let part = if n.nullable { or_null(ls) } else { ls };
         // In key order, so that every language says them in one order.
         let mut keys: Vec<&String> = part.keys().collect();
         keys.sort();
@@ -252,6 +249,19 @@ fn array_schema(n: &Node, s: &mut Map, defs: &mut Map) {
     } else if let Some(c) = child {
         s.insert("items".to_string(), Value::Obj(node_schema(c, defs)));
     }
+}
+
+/// The keywords of a composition that admits null: its branches' under an
+/// anyOf beside a null branch.
+fn or_null(ls: Map) -> Map {
+    let mut null = Map::new();
+    null.insert("type".to_string(), Value::from("null"));
+    let mut any = Map::new();
+    any.insert(
+        "anyOf".to_string(),
+        Value::Arr(vec![Value::Obj(null), Value::Obj(ls)]),
+    );
+    any
 }
 
 fn list_schema(n: &Node, s: &mut Map, defs: &mut Map) {
@@ -837,12 +847,14 @@ mod tests {
             ]))),
             json!(["string", "number", "null"])
         );
+        // A nullable composition admits null beside what its branches say.
         assert_eq!(
             js(Nullable(Nof(
                 1,
                 [Spec::from(Token::String), Spec::from(Token::Number)]
             ))),
-            json!({"oneOf": [{"type": "string", "minLength": 1}, {"type": "number"}]})
+            json!({"anyOf": [{"type": "null"},
+                {"oneOf": [{"type": "string", "minLength": 1}, {"type": "number"}]}]})
         );
     }
 

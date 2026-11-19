@@ -1754,6 +1754,27 @@ Value "5" for property "d.1" must be below 4 (was 5).`)
 
 
 
+  test('builder-default-chained', () => {
+    // A chained Default is Default(value, spec): a typed node keeps its
+    // kind and its children, and a composition its branches; an untyped one
+    // is built over the default.
+    const s = Shape({ a: Required(String).Default(5) })
+    deepEqual(s({}), { a: 5 })
+    deepEqual(s({ a: 'x' }), { a: 'x' })
+    throws(() => s({ a: 5 }), 'not of type string')
+    const o = Shape({ a: Required({ x: String }).Default({ x: 'b' }) })
+    deepEqual(o({}), { a: { x: 'b' } })
+    throws(() => o({ a: {} }), 'is missing')
+    const c = Shape({ a: All(Min(1)).Default(0) })
+    deepEqual(c({}), { a: 0 })
+    deepEqual(c({ a: 'x' }), { a: 'x' })
+    throws(() => Shape({ a: Required().Default(5) })({ a: 'x' }), 'not of type number')
+    throws(() => Shape({ a: Min(1).Default(5) })({ a: 'x' }), 'not of type number')
+    // A type marker as the value gives the node the type's empty default,
+    // as Default(Number) alone does, when the node is untyped only.
+    deepEqual(Shape({ a: Required().Default(Number) })({}), { a: 0 })
+  })
+
   test('builder-default', () => {
 
     let d0 = Shape({

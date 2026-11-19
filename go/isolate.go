@@ -7,13 +7,12 @@ import (
 	"strings"
 )
 
-// Isolated validation: Catch and Transform (Ignore probes the same way from
-// its call sites). These builders take the checks a node carries — its
-// befores, its afters — inside, and validate the node as a whole (those
-// checks, the structural check, every descendant) in a sub-run before the
-// node itself proceeds. Only then is the outcome of the entire subtree known
-// at once; TS does the same, since it runs a node's afters before visiting its
-// children.
+// Isolated validation: Catch, Transform and Ignore. These builders take the
+// checks a node carries — its befores, its afters — inside, and validate the
+// node as a whole (those checks, the structural check, every descendant) in a
+// sub-run before the node itself proceeds. Only then is the outcome of the
+// entire subtree known at once; TS does the same, since it runs a node's
+// afters before visiting its children.
 
 type inner struct {
 	befores, afters []validator
@@ -47,6 +46,8 @@ func (in inner) probe(state *State) (any, *ValidationError) {
 	// next call, for every Catch or Transform validated.
 	n := *state.Node
 	n.befores, n.afters = in.befores, in.afters
+	// Errors must be observable, so the probe is never silent (Ignore's).
+	n.silent = false
 	val := state.Value
 	if state.absent {
 		val = undefinedT{}
@@ -95,6 +96,12 @@ func (n *Node) Catch(fallback any) *Node {
 			out, sub := in.probe(state)
 			if sub.hasAny() {
 				out = cloneAny(fallback)
+			} else if isUndef(out) {
+				// What an Ignore inside dropped stays dropped, as TS's
+				// undefined does.
+				dropValue(state)
+				update.Done = true
+				return true
 			}
 			update.Val, update.HasVal, update.Done = out, true, true
 			return true
@@ -126,6 +133,10 @@ func (n *Node) Transform(fn func(val any, state *State) any) *Node {
 			if sub.hasAny() {
 				update.Err = sub.Issues
 				return false
+			}
+			// What an Ignore inside dropped reaches the function absent.
+			if isUndef(out) {
+				out = nil
 			}
 			update.Val, update.HasVal, update.Done = fn(out, state), true, true
 			return true

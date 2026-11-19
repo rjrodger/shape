@@ -64,7 +64,7 @@ pub use value::{Map, Value};
 use context::Trials;
 use std::collections::HashMap;
 use std::sync::Arc;
-use validate::{validate_ignored, validate_node, Cur, Walk};
+use validate::{validate_node, Cur, Walk};
 
 /// The crate version.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -328,11 +328,7 @@ impl Schema {
 /// The root honours `Ignore` as a property or an element does: a value that
 /// does not validate is dropped along with its errors.
 fn walk_root(root: &Node, cur: Cur<'_>, w: &mut Walk<'_>, verr: &mut ValidationError) -> bool {
-    if root.is_ignore() {
-        validate_ignored(root, cur, "", false, w, verr)
-    } else {
-        validate_node(root, cur, "", false, w, verr)
-    }
+    validate_node(root, cur, "", false, w, verr)
 }
 
 #[cfg(test)]

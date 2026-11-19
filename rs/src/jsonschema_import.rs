@@ -1510,9 +1510,10 @@ mod tests {
             export(json!({"minLength": 2, "description": "d"})),
             json!({"minLength": 2, "description": "d"})
         );
+        // Null is a branch of its own beside them, so the export admits it.
         assert_eq!(
             export(json!({"type": ["string", "number", "null"]})),
-            json!({"oneOf": [{"type": "string"}, {"type": "number"}]})
+            json!({"anyOf": [{"type": "null"}, {"oneOf": [{"type": "string"}, {"type": "number"}]}]})
         );
     }
 

@@ -678,6 +678,56 @@ fn lists() {
             r#"{"a":"All(Any.Min(1)).Ignore.Number.Skip"}"#,
             vec![v("{}"), v(r#"{"a":"x"}"#)],
         ),
+        // Ignore makes the node optional and skipped, and what a builder
+        // after it changed of that follows it; a check after it stays after.
+        (
+            "All(Min(1)).Ignore.Default(0)",
+            r#"{"a":"All(Any.Min(1)).Ignore.Default(0)"}"#,
+            vec![v("{}"), v(r#"{"a":""}"#), v(r#"{"a":"x"}"#)],
+        ),
+        (
+            "Number.Ignore.Default(0)",
+            r#"{"a: Ignore.Default(0)":0}"#,
+            vec![v("{}"), v(r#"{"a":"x"}"#), v(r#"{"a":5}"#)],
+        ),
+        (
+            "Number.Ignore.Required",
+            r#"{"a: Number.Ignore.Required":0}"#,
+            vec![v("{}"), v(r#"{"a":"x"}"#)],
+        ),
+        (
+            "Number.Ignore.Min(3)",
+            r#"{"a: Skip.Ignore.Min(3)":0}"#,
+            vec![v(r#"{"a":0}"#), v(r#"{"a":"x"}"#)],
+        ),
+        // A default of another kind than the node's reads as a literal of
+        // its own, so the type token holds the kind and Default the value.
+        (
+            "String.Default(5)",
+            r#"{"a":"String.Default(5)"}"#,
+            vec![v("{}"), v(r#"{"a":"x"}"#), v(r#"{"a":5}"#)],
+        ),
+        (
+            "Number.Default(\"x\")",
+            r#"{"a":"Number.Default(\"x\")"}"#,
+            vec![v("{}"), v(r#"{"a":5}"#)],
+        ),
+        (
+            "String.Default(5).Skip",
+            r#"{"a":"String.Default(5).Skip"}"#,
+            vec![v("{}"), v(r#"{"a":5}"#)],
+        ),
+        (
+            "String.Default(5).Ignore",
+            r#"{"a":"String.Default(5).Ignore"}"#,
+            vec![v("{}"), v(r#"{"a":5}"#)],
+        ),
+        // A required node never inserts its default, so it is its token.
+        (
+            "Required(String.Default(5))",
+            r#"{"a: String":""}"#,
+            vec![v("{}"), v(r#"{"a":"x"}"#), v(r#"{"a":5}"#)],
+        ),
     ] {
         round_trip(obj([("a", e(src))]), want, &vals);
     }
@@ -700,6 +750,11 @@ fn lists() {
     cannot(
         obj([("a", e("All(Min(1)).Never"))]),
         "a composition of kind never",
+    );
+    // A null that inserts a default other than null.
+    cannot(
+        obj([("a", e("Default(null).Default(5)"))]),
+        "the default of a null",
     );
     cannot(
         obj([("a", Default("xy", e("All(Min(2)).String")))]),

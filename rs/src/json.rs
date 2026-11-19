@@ -126,27 +126,40 @@ fn validator_calls(n: &Node, skip: Option<usize>) -> R<Vec<Call>> {
     let mut calls = Vec::new();
     for (i, v) in n.befores.iter().enumerate() {
         if Some(i) != skip {
-            validator_call(v, &mut calls)?;
+            validator_call(v, &mut calls, n)?;
         }
     }
     no_afters(&n.afters)?;
     Ok(calls)
 }
 
-fn validator_call(v: &Validator, calls: &mut Vec<Call>) -> R<()> {
+/// A check of `n`, as calls.
+fn validator_call(v: &Validator, calls: &mut Vec<Call>, n: &Node) -> R<()> {
     let name = v.name.as_str();
     match name {
         "Min" | "Max" | "Above" | "Below" | "Len" => {
             calls.push(call1(name, literal(&v.args[0], "the bound")?));
         }
-        "Catch" => {
+        "Catch" | "Ignore" => {
             // The taken checks run inside, so they read ahead of the taker.
-            let inner = v.inner.as_ref().expect("Catch takes its checks inside");
+            let inner = v.inner.as_ref().expect("a taker takes its checks inside");
             for iv in &inner.befores {
-                validator_call(iv, calls)?;
+                validator_call(iv, calls, n)?;
             }
             no_afters(&inner.afters)?;
-            calls.push(call1(name, literal(&v.args[0], "the fallback")?));
+            if name == "Catch" {
+                calls.push(call1(name, literal(&v.args[0], "the fallback")?));
+            } else {
+                // Ignore makes the node optional and skipped; a builder
+                // after it that required the node, or gave it a default to
+                // insert, follows it.
+                calls.push(call(name));
+                if n.required {
+                    calls.push(call("Required"));
+                } else if !n.skippable && n.has_default && !n.default.is_undefined() {
+                    calls.push(call1("Default", literal(&n.default, "the default")?));
+                }
+            }
         }
         "Transform" => return cannot("Transform"),
         "Coerce" => calls.push(call(name)),
@@ -198,12 +211,16 @@ fn validator_call(v: &Validator, calls: &mut Vec<Call>) -> R<()> {
 
 /// Whether the node is required or skipped, as calls, for a head that says
 /// neither: Required where the head is optional by itself, Optional or Skip
-/// where it is required. Ignore says skipped already.
+/// where it is required. Ignore says optional and skipped, and what a later
+/// builder changed of that follows it (see `validator_call`).
 fn required_calls(n: &Node, head_required: bool) -> Vec<Call> {
     let mut calls = Vec::new();
+    if ignored(&n.befores) {
+        return calls;
+    }
     if n.required && !head_required {
         calls.push(call("Required"));
-    } else if !n.required && !n.is_ignore() {
+    } else if !n.required {
         if n.skippable {
             calls.push(call("Skip"));
         } else if head_required {
@@ -239,19 +256,16 @@ fn flag_calls(n: &Node, literal_head: bool) -> R<Vec<Call>> {
     Ok(calls)
 }
 
-/// Ignore is a flag, read after the checks it silences, then the description
-/// and the fault text.
-fn tail_calls(n: &Node) -> Vec<Call> {
-    let mut calls = Vec::new();
-    if n.is_ignore() {
-        calls.push(call("Ignore"));
-    }
-    calls.extend(note_calls(n));
-    calls
+/// Whether an Ignore, or a Catch that took one, is among the checks.
+fn ignored(vs: &[Validator]) -> bool {
+    vs.iter().any(|v| {
+        v.name == "Ignore"
+            || (v.name == "Catch" && v.inner.as_ref().is_some_and(|i| ignored(&i.befores)))
+    })
 }
 
 /// The Describe and the Fault of a node, as calls.
-fn note_calls(n: &Node) -> Vec<Call> {
+fn tail_calls(n: &Node) -> Vec<Call> {
     let mut calls = Vec::new();
     if let Some(Value::Str(d)) = n.meta.get("description") {
         calls.push(call1("Describe", json_text(d)));
@@ -385,21 +399,40 @@ struct Scalar {
 fn scalar(n: &Node) -> R<Scalar> {
     let zero = Node::zero_for(n.kind);
     let is_zero = !n.has_default || n.default == zero;
-    let example = if is_zero { zero } else { n.default.clone() };
+    let other = other_kind(n);
+    let example = if is_zero || other {
+        zero
+    } else {
+        n.default.clone()
+    };
     let hv = head_validator(n);
     let keyed = matches!(hv, Some(i) if n.befores[i].name == "Key");
 
     let (head, token, mut calls) = if keyed {
         let mut kc = Vec::new();
-        validator_call(&n.befores[hv.unwrap()], &mut kc)?;
+        validator_call(&n.befores[hv.unwrap()], &mut kc, n)?;
         let head = call_text(&kc[0], &mut Vec::new(), None);
         let mut calls = required_calls(n, false);
         calls.extend(flag_calls(n, false)?);
         (head, None, calls)
+    // A default of another kind would read as a literal of its own: the
+    // type token holds the kind, and Default the value.
+    } else if !n.required && other {
+        let mut calls = vec![call1("Default", literal(&n.default, "the default")?)];
+        if n.skippable && !ignored(&n.befores) {
+            calls.push(call("Skip"));
+        }
+        calls.extend(flag_calls(n, false)?);
+        (
+            token_of(n.kind).unwrap_or_default().to_string(),
+            None,
+            calls,
+        )
     // A literal stands for its own kind, but not for integer, and an empty
     // string literal allows the empty string; a required zero is the type
-    // token.
-    } else if (n.required && is_zero)
+    // token, and so is a required node whose default, which it never
+    // inserts, is of another kind.
+    } else if (n.required && (is_zero || other))
         || n.kind == Kind::Integer
         || (n.kind == Kind::String && !n.empty && n.default == Value::Str(String::new()))
     {
@@ -426,12 +459,28 @@ fn scalar(n: &Node) -> R<Scalar> {
     })
 }
 
+/// Whether a scalar's default is of another kind than the node, which its
+/// literal cannot say: `String.Default(5)`.
+fn other_kind(n: &Node) -> bool {
+    n.has_default
+        && !n.default.is_undefined()
+        && !matches!(
+            (n.kind, &n.default),
+            (Kind::String, Value::Str(_))
+                | (Kind::Boolean, Value::Bool(_))
+                | (Kind::Number | Kind::Integer, Value::Num(_))
+        )
+}
+
 /// The key form of a property, the chain of `"name: chain"` with its
 /// example, or none where the node has no key form (a list, a regexp, a
-/// shape needing sidecars).
+/// shape needing sidecars, a default the example cannot be).
 fn key_form(n: &Node) -> R<Option<(String, Value)>> {
     // A composition has no key form, whatever kind a type token gave it.
-    if head_validator(n).is_some() || n.list_mode != ListMode::None {
+    if head_validator(n).is_some()
+        || n.list_mode != ListMode::None
+        || (token_of(n.kind).is_some() && !n.required && other_kind(n))
+    {
         return Ok(None);
     }
     if token_of(n.kind).is_some() {
@@ -632,7 +681,7 @@ fn headed(n: &Node, hv: usize, what: &str) -> R<Value> {
         return cannot(format!("Exact on {}", what));
     }
     let mut kc = Vec::new();
-    validator_call(&n.befores[hv], &mut kc)?;
+    validator_call(&n.befores[hv], &mut kc, n)?;
     let mut refs = Vec::new();
     let head = call_text(&kc[0], &mut refs, None);
     let mut calls = required_calls(n, false);
@@ -719,8 +768,9 @@ pub fn node_json(n: &Node) -> R<Value> {
             let mut refs: Vec<(String, Value)> = Vec::new();
             let head = list_call(n)?;
             // A default the node injects is a Default around the list,
-            // which makes it optional too.
-            let dflt = n.has_default && !n.required && !n.skippable;
+            // which makes it optional too, unless an Ignore says it (see
+            // `validator_call`).
+            let dflt = n.has_default && !n.required && !n.skippable && !ignored(&n.befores);
             let mut calls = if dflt {
                 Vec::new()
             } else {
@@ -791,6 +841,16 @@ pub fn node_json(n: &Node) -> R<Value> {
                 // Skip(Never) say that the value must be absent.
                 Kind::Never => "Never".to_string(),
                 Kind::Null => {
+                    // A default it inserts that is not null, which no null
+                    // literal says.
+                    if !n.required
+                        && !n.skippable
+                        && n.has_default
+                        && !n.default.is_null()
+                        && !n.default.is_undefined()
+                    {
+                        return cannot("the default of a null");
+                    }
                     if !n.required
                         && !n.skippable
                         && n.befores.is_empty()
@@ -830,7 +890,7 @@ pub fn node_json(n: &Node) -> R<Value> {
                         _ => return cannot("a check function"),
                     };
                     let mut kc = Vec::new();
-                    validator_call(first, &mut kc)?;
+                    validator_call(first, &mut kc, n)?;
                     let mut refs = Vec::new();
                     let head = call_text(&kc[0], &mut refs, None);
                     let mut calls = required_calls(n, true);
@@ -937,11 +997,7 @@ fn typed(n: &Node) -> R<Value> {
     if has != brings.is_some() || brings.is_some_and(|b| b != n.default) {
         return cannot("the default of a composition given a kind");
     }
-    // Ignore reads among the checks, as it is one of them in TypeScript.
     let mut calls = validator_calls(n, None)?;
-    if n.is_ignore() {
-        calls.push(call("Ignore"));
-    }
     if let Some(token) = token {
         calls.push(call(token));
         // A container's own shape follows its token: Open, or the shape of
@@ -972,7 +1028,7 @@ fn typed(n: &Node) -> R<Value> {
         calls.extend(flag_calls(n, false)?);
         calls.extend(required_calls(n, true));
     }
-    calls.extend(note_calls(n));
+    calls.extend(tail_calls(n));
     let mut refs = Vec::new();
     let head = call_text(&list_call(n)?, &mut refs, None);
     let text = chain_text(&head, &calls, &mut refs);

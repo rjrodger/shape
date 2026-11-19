@@ -151,6 +151,7 @@ pub(crate) fn validate_node_with(
     let mut over: Option<Value> = None;
     let mut node_over: Option<Arc<Node>> = None;
     let mut done = false;
+    let mut dropped = false;
 
     // The checks of a node, in order: its composition (All, Nof, When) at
     // slot 0, as in TypeScript, where it is the node's first validator, so
@@ -243,6 +244,7 @@ pub(crate) fn validate_node_with(
             continue;
         }
         if let Some(v) = update.val.take() {
+            dropped = v.is_undefined();
             match &mut cur {
                 Cur::Mut(_) => cur.set(v),
                 Cur::Ref(_) => over = Some(v),
@@ -316,6 +318,7 @@ pub(crate) fn validate_node_with(
         }
         if let Some(v) = update.val.take() {
             kept = true;
+            dropped = v.is_undefined();
             match &mut cur {
                 Cur::Mut(_) => cur.set(v),
                 Cur::Ref(_) => over = Some(v),
@@ -331,7 +334,9 @@ pub(crate) fn validate_node_with(
         }
     }
 
-    kept
+    // A value a check set undefined, as Ignore drops one, leaves the slot
+    // out, as TypeScript's undefined does.
+    kept && !dropped
 }
 
 /// A failed check against an absent value on a node that does not require
@@ -856,11 +861,7 @@ fn validate_object(
                 }
             }
         };
-        let keep = if cn.is_ignore() {
-            validate_ignored(cn, child, k, false, w, verr)
-        } else {
-            validate_node(cn, child, k, false, w, verr)
-        };
+        let keep = validate_node(cn, child, k, false, w, verr);
         w.pop();
         if let Cur::Mut(m) = &mut oc {
             if !keep {
@@ -897,11 +898,7 @@ fn validate_object(
                 Cur::Mut(map) => Cur::Mut(map.get_mut(&k).unwrap()),
                 Cur::Ref(map) => Cur::Ref(map.get(&k).unwrap()),
             };
-            let keep = if rest.is_ignore() {
-                validate_ignored(rest, child, &k, false, w, verr)
-            } else {
-                validate_node(rest, child, &k, false, w, verr)
-            };
+            let keep = validate_node(rest, child, &k, false, w, verr);
             w.pop();
             if !keep {
                 if let Cur::Mut(m) = &mut oc {
@@ -974,13 +971,9 @@ fn validate_array(
                 _ => (Cur::Mut(&mut scratch), true),
             },
         };
-        let keep = if cn.is_ignore() {
-            validate_ignored(cn, child, k, true, w, verr)
-        } else {
-            validate_node(cn, child, k, true, w, verr)
-        };
+        let keep = validate_node(cn, child, k, true, w, verr);
         w.pop();
-        if !keep && !appended && cn.is_ignore() {
+        if !keep && !appended {
             if let Cur::Mut(a) = &mut ac {
                 a[i] = Value::Undefined;
             }
@@ -1032,13 +1025,9 @@ fn validate_array(
                 Cur::Mut(a) => Cur::Mut(&mut a[i]),
                 Cur::Ref(a) => Cur::Ref(&a[i]),
             };
-            let keep = if child_shape.is_ignore() {
-                validate_ignored(child_shape, child, k, true, w, verr)
-            } else {
-                validate_node(child_shape, child, k, true, w, verr)
-            };
+            let keep = validate_node(child_shape, child, k, true, w, verr);
             w.pop();
-            if !keep && child_shape.is_ignore() {
+            if !keep {
                 drop_at.push(i);
             }
             i += 1;
@@ -1050,31 +1039,6 @@ fn validate_array(
         }
     }
     true
-}
-
-/// An `Ignore` node: run it with its silence lifted into a collector of its
-/// own, and drop the value when anything failed.
-pub(crate) fn validate_ignored(
-    n: &Node,
-    cur: Cur<'_>,
-    key: &str,
-    parent_is_array: bool,
-    w: &mut Walk<'_>,
-    _verr: &mut ValidationError,
-) -> bool {
-    let mut sub = ValidationError::default();
-    let kept = validate_node_with(
-        n,
-        &n.befores,
-        &n.afters,
-        false,
-        cur,
-        key,
-        parent_is_array,
-        w,
-        &mut sub,
-    );
-    !sub.has_any() && kept
 }
 
 /// Take one trial from the validation's budget for the composition at the
@@ -1421,17 +1385,33 @@ fn evaluate_list(
                 );
                 return true;
             }
-            // Exactly one: the branch the value satisfies produces it.
+            // Exactly one: the branch the value satisfies produces it. One
+            // that drops it (Ignore) leaves it as it was, as TypeScript's
+            // undefined output changes nothing.
             if n.nof_one {
                 let mut sub = ValidationError::default();
-                return validate_node(
-                    &n.list[matched],
-                    cur.reborrow(),
+                let branch = &n.list[matched];
+                if !branch.befores.iter().any(|b| b.inner.is_some()) {
+                    return validate_node(
+                        branch,
+                        cur.reborrow(),
+                        key,
+                        parent_is_array,
+                        w,
+                        &mut sub,
+                    );
+                }
+                let mut out = cur.get().clone();
+                if validate_node(
+                    branch,
+                    Cur::Mut(&mut out),
                     key,
                     parent_is_array,
                     w,
                     &mut sub,
-                );
+                ) {
+                    cur.set(out);
+                }
             }
             true
         }
@@ -1450,11 +1430,7 @@ fn evaluate_list(
             let picked = &n.list[if cond { 1 } else { 2 }];
             let mut out = value.clone();
             let mut sub = ValidationError::default();
-            let kept = if picked.is_ignore() {
-                validate_ignored(picked, Cur::Mut(&mut out), key, false, w, &mut sub)
-            } else {
-                validate_node(picked, Cur::Mut(&mut out), key, false, w, &mut sub)
-            };
+            let kept = validate_node(picked, Cur::Mut(&mut out), key, false, w, &mut sub);
             if sub.has_any() {
                 if !silent {
                     sub.issues.into_iter().for_each(|e| verr.add(e));

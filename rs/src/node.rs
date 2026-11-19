@@ -333,9 +333,13 @@ impl Node {
         self.obj_rest.is_some()
     }
 
-    /// An `Ignore` node: optional, no default injection, and silent.
+    /// An `Ignore` node: its first check is the Ignore, which took the
+    /// checks before it. Whatever the builders after it made of the node, a
+    /// value that fails is dropped.
     pub fn is_ignore(&self) -> bool {
-        self.silent && self.skippable
+        self.befores
+            .first()
+            .is_some_and(|b| b.name == "Ignore" && b.inner.is_some())
     }
 
     /// The empty value of a kind (`EMPTY_VAL` in TypeScript).

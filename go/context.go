@@ -188,6 +188,9 @@ type State struct {
 	// explicit null. It distinguishes a missing key (required error, rendered as
 	// "undefined") from a present null (a type error), mirroring TS.
 	absent bool
+	// dropped is true when an Ignore dropped the value (TS sets it undefined):
+	// the node then produces nothing, which its parent leaves out.
+	dropped bool
 	// checkName is the name of the validator currently running (TS s.check.name),
 	// used to render `check "<name>" failed` for checks with no custom text.
 	checkName string

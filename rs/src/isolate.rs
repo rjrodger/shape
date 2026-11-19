@@ -1,10 +1,10 @@
-//! Isolated validation: Catch and Transform (Ignore probes the same way from
-//! its call sites). These builders take the checks a node carries, its
-//! befores and its afters, inside, and validate the node as a whole (those
-//! checks, the structural check, every descendant) in a sub-run before the
-//! node itself proceeds. Only then is the outcome of the entire subtree
-//! known at once; the canonical implementation does the same, since it runs
-//! a node's afters before visiting its children.
+//! Isolated validation: Catch, Transform and Ignore. These builders take the
+//! checks a node carries, its befores and its afters, inside, and validate
+//! the node as a whole (those checks, the structural check, every
+//! descendant) in a sub-run before the node itself proceeds. Only then is
+//! the outcome of the entire subtree known at once; the canonical
+//! implementation does the same, since it runs a node's afters before
+//! visiting its children.
 
 use crate::context::{State, Update, UpdateErr};
 use crate::error::ValidationError;
@@ -13,7 +13,7 @@ use crate::validate::{validate_node_with, Cur, Walk};
 use crate::value::Value;
 use std::sync::Arc;
 
-/// The checks a Catch or Transform took inside.
+/// The checks a Catch, Transform or Ignore took inside.
 #[derive(Clone, Debug, Default)]
 pub struct Inner {
     pub befores: Vec<Validator>,
@@ -46,11 +46,12 @@ impl Inner {
             paths: true,
             own: false,
         };
+        // Errors must be observable, so the probe is never silent (Ignore's).
         let kept = validate_node_with(
             state.node,
             &self.befores,
             &self.afters,
-            state.node.silent,
+            false,
             Cur::Mut(&mut val),
             state.key,
             state.parent_is_array,
@@ -95,6 +96,41 @@ pub(crate) fn catch_node(mut n: Node, fallback: Value) -> Node {
         }),
         args: vec![fallback],
         suffix: Some(suffix),
+        inner: Some(inner),
+        counted: None,
+    }];
+    n
+}
+
+/// Ignore: a value that fails inside is dropped, raising nothing. The node
+/// is optional and skipped; a later builder may require it, or give it a
+/// default to insert, and the probe follows the node as it then is. A check
+/// chained after Ignore runs on what it kept, and raises nothing either.
+pub(crate) fn ignore_node(mut n: Node) -> Node {
+    n.required = false;
+    n.required_set = true;
+    n.skippable = true;
+    n.silent = true;
+    let inner = take_inner(&mut n);
+    // The taken checks render, and Ignore itself does not, as in TypeScript.
+    let desc = inner.desc();
+    let suffix =
+        Some(desc.strip_suffix('.').unwrap_or(&desc).to_string()).filter(|s| !s.is_empty());
+    let run = Arc::clone(&inner);
+    n.befores = vec![Validator {
+        name: "Ignore".to_string(),
+        func: Arc::new(move |state: &mut State<'_>, update: &mut Update| {
+            // A value that fails is dropped, set undefined as TypeScript
+            // sets it, and so is one an Ignore inside dropped: the node then
+            // keeps nothing, which its parent leaves out, and a composition
+            // takes as no change.
+            let (out, sub) = run.probe(state);
+            update.val = Some(if sub.has_any() { Value::Undefined } else { out });
+            update.done = true;
+            true
+        }),
+        args: Vec::new(),
+        suffix,
         inner: Some(inner),
         counted: None,
     }];

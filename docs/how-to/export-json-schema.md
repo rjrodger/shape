@@ -80,7 +80,7 @@ alongside the validation results.
 | `Contains` | `contains`, with the count as `minContains` and `maxContains`: an exact count is both, and a count shape the bounds of its `Min`, `Max`, `Above`, `Below` and `Len`. `minContains: 1` is the default, and is left out |
 | `Unique` | `uniqueItems: true` |
 | `Discriminated` | `oneOf`, each branch with the tag as a `const` and required |
-| `Nullable` | `type: [t, "null"]` |
+| `Nullable` | `type: [t, "null"]`; a composition's keywords go under an `anyOf` beside `{"type": "null"}` |
 | `Define(name)` / `Refer(name)` | the definition under `$defs`; `{ "$ref": "#/$defs/name" }` |
 | `Describe` | `description` |
 | `Never` | `{ "not": {} }` |

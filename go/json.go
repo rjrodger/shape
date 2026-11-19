@@ -144,25 +144,38 @@ func jsonValidatorCalls(n *node, skip *validator) []jsonCall {
 	var calls []jsonCall
 	for i := range n.befores {
 		if skip != &n.befores[i] {
-			calls = jsonValidatorCall(&n.befores[i], calls)
+			calls = jsonValidatorCall(&n.befores[i], calls, n)
 		}
 	}
 	jsonNoAfters(n.afters)
 	return calls
 }
 
-func jsonValidatorCall(v *validator, calls []jsonCall) []jsonCall {
+// jsonValidatorCall appends a check of n as calls.
+func jsonValidatorCall(v *validator, calls []jsonCall, n *node) []jsonCall {
 	name := v.name
 	switch {
 	case name == "Min" || name == "Max" || name == "Above" || name == "Below" || name == "Len":
 		return append(calls, jsonCall{n: name, a: []jsonArg{jx(jsonLiteral(v.args[0], "the bound"))}})
-	case name == "Catch":
+	case name == "Catch" || name == "Ignore":
 		// The taken checks run inside, so they read ahead of the taker.
 		for i := range v.inner.befores {
-			calls = jsonValidatorCall(&v.inner.befores[i], calls)
+			calls = jsonValidatorCall(&v.inner.befores[i], calls, n)
 		}
 		jsonNoAfters(v.inner.afters)
-		return append(calls, jsonCall{n: name, a: []jsonArg{jx(jsonLiteral(v.args[0], "the fallback"))}})
+		if name == "Catch" {
+			return append(calls, jsonCall{n: name, a: []jsonArg{jx(jsonLiteral(v.args[0], "the fallback"))}})
+		}
+		// Ignore makes the node optional and skipped; a builder after it
+		// that required the node, or gave it a default to insert, follows it.
+		calls = append(calls, jsonCall{n: name})
+		if n.required {
+			return append(calls, jsonCall{n: "Required"})
+		}
+		if !n.skippable && hasDefaultValue(n) {
+			return append(calls, jsonCall{n: "Default", a: []jsonArg{jx(jsonLiteral(n.defaultValue, "the default"))}})
+		}
+		return calls
 	case name == "Transform":
 		jsonFault(name)
 	case name == "Coerce" || jsonFormats[name]:
@@ -206,14 +219,17 @@ func jsonValidatorCall(v *validator, calls []jsonCall) []jsonCall {
 
 // jsonRequiredCalls is whether the node is required or skipped, as calls,
 // for a head that says neither: Required where the head is optional by
-// itself, Optional or Skip where it is required. Ignore says skipped
-// already.
+// itself, Optional or Skip where it is required. Ignore says optional and
+// skipped, and what a later builder changed of that follows it (see
+// jsonValidatorCall).
 func jsonRequiredCalls(n *node, headRequired bool) []jsonCall {
 	var calls []jsonCall
-	ignored := n.silent && n.skippable
+	if jsonIgnored(n.befores) {
+		return calls
+	}
 	if n.required && !headRequired {
 		calls = append(calls, jsonCall{n: "Required"})
-	} else if !n.required && !ignored {
+	} else if !n.required {
 		if n.skippable {
 			calls = append(calls, jsonCall{n: "Skip"})
 		} else if headRequired {
@@ -246,22 +262,19 @@ func jsonFlagCalls(n *node, literalHead bool) []jsonCall {
 	return calls
 }
 
-// jsonTailCalls: Ignore is a flag, read after the checks it silences, then
-// the description and the fault text.
-func jsonTailCalls(n *node) []jsonCall {
-	return append(jsonIgnoreCalls(n), jsonNoteCalls(n)...)
-}
-
-// jsonIgnoreCalls is the Ignore of a node, as a call.
-func jsonIgnoreCalls(n *node) []jsonCall {
-	if n.silent && n.skippable {
-		return []jsonCall{{n: "Ignore"}}
+// jsonIgnored reports whether an Ignore, or a Catch that took one, is among
+// the checks.
+func jsonIgnored(vs []validator) bool {
+	for _, v := range vs {
+		if v.name == "Ignore" || (v.name == "Catch" && jsonIgnored(v.inner.befores)) {
+			return true
+		}
 	}
-	return nil
+	return false
 }
 
-// jsonNoteCalls is the Describe and the Fault of a node, as calls.
-func jsonNoteCalls(n *node) []jsonCall {
+// jsonTailCalls is the Describe and the Fault of a node, as calls.
+func jsonTailCalls(n *node) []jsonCall {
 	var calls []jsonCall
 	if d, ok := n.meta["description"]; ok {
 		calls = append(calls, jsonCall{n: "Describe", a: []jsonArg{jx(jsonText(d))}})
@@ -407,8 +420,9 @@ type jsonScalarParts struct {
 // one), the example of the key form, and the calls after the head.
 func jsonScalar(n *node) jsonScalarParts {
 	zero := jsonZero(n)
+	other := jsonOtherKind(n)
 	var example any = n.defaultValue
-	if zero {
+	if zero || other {
 		example = zeroForKind(n.kind)
 	}
 	hv := jsonHeadValidator(n)
@@ -416,12 +430,22 @@ func jsonScalar(n *node) jsonScalarParts {
 
 	switch {
 	case hv != nil && hv.name == "Key":
-		p.head = jsonCallText(jsonValidatorCall(hv, nil)[0], nil, "")
+		p.head = jsonCallText(jsonValidatorCall(hv, nil, n)[0], nil, "")
 		p.calls = append(jsonRequiredCalls(n, false), jsonFlagCalls(n, false)...)
+	// A default of another kind would read as a literal of its own: the type
+	// token holds the kind, and Default the value.
+	case !n.required && other:
+		p.head = jsonToken[n.kind]
+		p.calls = []jsonCall{{n: "Default", a: []jsonArg{jx(jsonLiteral(n.defaultValue, "the default"))}}}
+		if n.skippable && !jsonIgnored(n.befores) {
+			p.calls = append(p.calls, jsonCall{n: "Skip"})
+		}
+		p.calls = append(p.calls, jsonFlagCalls(n, false)...)
 	// A literal stands for its own kind, but not for integer, and an empty
 	// string literal allows the empty string; a required zero is the type
-	// token.
-	case (n.required && zero) || n.kind == KindInteger ||
+	// token, and so is a required node whose default, which it never
+	// inserts, is of another kind.
+	case (n.required && (zero || other)) || n.kind == KindInteger ||
 		(n.kind == KindString && !n.empty && n.defaultValue == ""):
 		p.token = jsonToken[n.kind]
 		p.head = p.token
@@ -440,15 +464,32 @@ func jsonScalar(n *node) jsonScalarParts {
 	return p
 }
 
+// jsonOtherKind reports whether a scalar's default is of another kind than
+// the node, which its literal cannot say: String.Default(5).
+func jsonOtherKind(n *node) bool {
+	var own bool
+	switch n.kind {
+	case KindString:
+		_, own = n.defaultValue.(string)
+	case KindBoolean:
+		_, own = n.defaultValue.(bool)
+	default:
+		_, own = toFloat64(n.defaultValue)
+	}
+	return hasDefaultValue(n) && !own
+}
+
 // jsonKeyForm is the key form of a property, "name: chain" with its
 // example, or false where the node has no key form (a list, a regexp, a
 // shape needing sidecars).
 func jsonKeyForm(n *node) (chain string, example any, ok bool) {
-	// A composition has no key form, whatever kind a type token gave it.
-	if jsonHeadValidator(n) != nil || n.listMode != listNone {
+	// A composition has no key form, whatever kind a type token gave it, and
+	// nor has a default the example cannot be.
+	_, isTok := jsonToken[n.kind]
+	if jsonHeadValidator(n) != nil || n.listMode != listNone || (isTok && !n.required && jsonOtherKind(n)) {
 		return "", nil, false
 	}
-	if _, isTok := jsonToken[n.kind]; isTok {
+	if isTok {
 		sc := jsonScalar(n)
 		// With a literal head, the call that held the literal starts the chain.
 		head := sc.token
@@ -595,7 +636,7 @@ func jsonHeaded(n *node, hv *validator, kind string) any {
 	if hv.name == "Exact" {
 		jsonFault("Exact on " + kind)
 	}
-	head := jsonCallText(jsonValidatorCall(hv, nil)[0], nil, "")
+	head := jsonCallText(jsonValidatorCall(hv, nil, n)[0], nil, "")
 	calls := append(jsonRequiredCalls(n, false), jsonFlagCalls(n, false)...)
 	calls = append(calls, jsonValidatorCalls(n, hv)...)
 	calls = append(calls, jsonTailCalls(n)...)
@@ -665,8 +706,9 @@ func nodeJSON(n *node) any {
 		refs := map[string]any{}
 		head := jsonListCall(n)
 		// A default the node injects is a Default around the list, which
-		// makes it optional too.
-		dflt := n.hasDefault && !n.required && !n.skippable
+		// makes it optional too, unless an Ignore says it (see
+		// jsonValidatorCall).
+		dflt := n.hasDefault && !n.required && !n.skippable && !jsonIgnored(n.befores)
 		var calls []jsonCall
 		if !dflt {
 			calls = jsonRequiredCalls(n, true)
@@ -732,6 +774,10 @@ func nodeJSON(n *node) any {
 		// Skip holds it.
 		head = "Never"
 	case KindNull:
+		// A default it inserts that is not null, which no null literal says.
+		if !n.required && !n.skippable && n.hasDefault && n.defaultValue != nil {
+			jsonFault("the default of a null")
+		}
 		if !n.required && !n.skippable && len(n.befores) == 0 && len(n.afters) == 0 &&
 			!n.nullable && n.faultMsg == "" && n.meta["description"] == nil && n.renameTo == "" {
 			return nil
@@ -762,7 +808,7 @@ func nodeJSON(n *node) any {
 			jsonFault("a check function")
 		}
 		first := &n.befores[0]
-		head = jsonCallText(jsonValidatorCall(first, nil)[0], nil, "")
+		head = jsonCallText(jsonValidatorCall(first, nil, n)[0], nil, "")
 		calls := append(jsonRequiredCalls(n, true), jsonFlagCalls(n, false)...)
 		calls = append(calls, jsonValidatorCalls(n, first)...)
 		calls = append(calls, jsonTailCalls(n)...)
@@ -851,12 +897,11 @@ func jsonTyped(n *node) any {
 		jsonFault("the default of a composition given a kind")
 	}
 	refs := map[string]any{}
-	// Ignore reads among the checks, as it is one of them in TypeScript.
-	calls := append(jsonValidatorCalls(n, nil), jsonIgnoreCalls(n)...)
+	calls := jsonValidatorCalls(n, nil)
 	if !typed {
 		calls = append(calls, jsonFlagCalls(n, false)...)
 		calls = append(calls, jsonRequiredCalls(n, true)...)
-		calls = append(calls, jsonNoteCalls(n)...)
+		calls = append(calls, jsonTailCalls(n)...)
 		return jsonCarried(jsonChainText(jsonCallText(jsonListCall(n), refs, ""), calls, refs), refs)
 	}
 	calls = append(calls, jsonCall{n: tok})
@@ -880,7 +925,7 @@ func jsonTyped(n *node) any {
 	} else if !n.required {
 		calls = append(calls, jsonCall{n: "Optional"})
 	}
-	calls = append(calls, jsonNoteCalls(n)...)
+	calls = append(calls, jsonTailCalls(n)...)
 	return jsonCarried(jsonChainText(jsonCallText(jsonListCall(n), refs, ""), calls, refs), refs)
 }
 
