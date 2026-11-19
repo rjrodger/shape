@@ -118,6 +118,23 @@ describe('jsonschema', () => {
   })
 
 
+  test('composition-given-a-kind', () => {
+    // A composition says what its branches say, whatever kind a type token
+    // or a Check gave it.
+    const min2 = { minimum: 2, minLength: 2, minItems: 2, minProperties: 2 }
+    deepEqual(Shape({ a: Shape.expr('All(Min(2)).String') }).jsonSchema().properties.a,
+      { type: 'string', minLength: 1, allOf: [min2] })
+    deepEqual(Shape({ a: Shape.expr('All(Min(2)).Check(/^a/)') }).jsonSchema().properties.a,
+      { allOf: [min2], pattern: '^a' })
+    // A keyword the kind says too holds beside it, and a nullable one
+    // admits null whatever the branches make of it.
+    deepEqual(Shape({ a: Shape.expr('Nof(0,String).Never') }).jsonSchema().properties.a,
+      { not: {}, allOf: [{ not: { type: 'string', minLength: 1 } }] })
+    deepEqual(Shape({ a: Shape.expr('All(String).String.Nullable') }).jsonSchema().properties.a,
+      { type: ['string', 'null'], minLength: 1, anyOf: [{ type: 'null' }, { allOf: [{ type: 'string', minLength: 1 }] }] })
+  })
+
+
   test('composition-and-references', () => {
     const s = Shape({
       a: Nof(Min(1), String, Number), b: Nof(1, String, Number), c: All(Number, Min(1)),

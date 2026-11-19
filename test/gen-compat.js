@@ -420,6 +420,24 @@ const files = {
     ['all-chained-unique', { a: { $expr: 'All(Max(1)).Unique' } }, { a: [1, 1] }],
     ['when-chained-max', { a: { $expr: 'When(String,Min(5)).Max(3)' } }, { a: 'abcd' }],
     ['nof-produces-for-min', { a: CALL('Min', 1, CALL('Nof', 1, { x: 1 }, T)) }, { a: {} }],
+    // A composition a Check or a type token gave a kind of its own still
+    // runs, and json() writes it with the composition first.
+    ['all-chained-check-both', { a: { $expr: 'All(Min(2)).Check(/^a/)' } }, { a: 'b' }],
+    ['all-chained-check-all', { a: { $expr: 'All(Min(2)).Check(/^a/)' } }, { a: 'a' }],
+    ['all-chained-check-optional', { a: { $expr: 'All(Min(2)).Check(/^a/).Optional' } }, {}],
+    ['nof-chained-check', { a: { $expr: 'Nof(1,String,Number).Check(/^t/)' } }, { a: true }],
+    ['when-chained-check', { a: { $expr: 'When(String,Min(2)).Check(/^a/)' } }, { a: 'b' }],
+    ['all-chained-type', { a: { $expr: 'All(Min(2)).String' } }, { a: 5 }],
+    ['all-typed-short', { a: { $expr: 'All(Min(2)).String' } }, { a: 'a' }],
+    ['all-typed-optional', { a: { $expr: 'All(Min(2)).String.Optional' } }, {}],
+    ['nof-typed-number', { a: { $expr: 'Nof(1,Min(1),Max(3)).Number' } }, { a: 5 }],
+    // A container given a kind keeps its own shape, and Ignore keeps its place.
+    ['typed-array-child', { a: { $expr: 'All(Min(1)).Array.Child(Number)' } }, { a: [1, 'a'] }],
+    ['typed-array-rest', { a: { $expr: 'All(Min(1)).Array.Rest(Number)' } }, { a: [1, 2] }],
+    ['typed-object-open', { a: { $expr: 'All(Min(1)).Object.Open' } }, { a: { x: 1 } }],
+    ['typed-object-child', { a: { $expr: 'All(Min(1)).Object.Child(Number)' } }, { a: { x: 'a' } }],
+    ['typed-ignore', { a: { $expr: 'All(Min(1)).Number.Ignore' } }, { a: 'x' }],
+    ['typed-nullable', { a: { $expr: 'All(String).String.Nullable' } }, { a: null }],
     // A Catch takes the composition inside with the node's other checks.
     ['catch-all', { a: { $expr: 'Catch(0,All(Number))' } }, { a: 'bad' }],
     ['catch-nof', { a: { $expr: 'Catch(0,Nof(1,Number,String))' } }, { a: true }],

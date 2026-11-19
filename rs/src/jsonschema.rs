@@ -66,6 +66,12 @@ fn node_schema(n: &Node, defs: &mut Map) -> Map {
         s.insert("type".to_string(), Value::from(t));
     }
 
+    // A composition a type token or a Check gave a kind of its own. A Check
+    // leaves the kind a list here, where TypeScript gives the node the
+    // check's kind.
+    let checked = n.befores.iter().any(|v| v.name.starts_with('/'));
+    let retyped = n.list_mode != ListMode::None && (n.kind != Kind::List || checked);
+
     match n.kind {
         Kind::String => {
             if !n.empty {
@@ -83,8 +89,47 @@ fn node_schema(n: &Node, defs: &mut Map) -> Map {
         }
         Kind::Object => object_schema(n, &mut s, defs),
         Kind::Array => array_schema(n, &mut s, defs),
-        Kind::List => list_schema(n, &mut s, defs),
+        Kind::List if !retyped => list_schema(n, &mut s, defs),
         _ => {}
+    }
+    // A composition says what its branches say, whatever kind a type token
+    // or a Check gave it, beside what the kind says: a keyword both say
+    // holds as an allOf of its own, so that neither replaces the other.
+    // Given a kind, a nullable one admits null whatever the branches make
+    // of it (TS nodeSchema).
+    if retyped {
+        let mut ls = Map::new();
+        list_schema(n, &mut ls, defs);
+        let part = if n.nullable {
+            let mut null = Map::new();
+            null.insert("type".to_string(), Value::from("null"));
+            let mut any = Map::new();
+            any.insert(
+                "anyOf".to_string(),
+                Value::Arr(vec![Value::Obj(null), Value::Obj(ls)]),
+            );
+            any
+        } else {
+            ls
+        };
+        // In key order, so that every language says them in one order.
+        let mut keys: Vec<&String> = part.keys().collect();
+        keys.sort();
+        for k in keys {
+            if !s.contains_key(k) {
+                s.insert(k.clone(), part[k].clone());
+            } else {
+                let mut all = s
+                    .get("allOf")
+                    .and_then(Value::as_arr)
+                    .cloned()
+                    .unwrap_or_default();
+                let mut one = Map::new();
+                one.insert(k.clone(), part[k].clone());
+                all.push(Value::Obj(one));
+                s.insert("allOf".to_string(), Value::Arr(all));
+            }
+        }
     }
 
     check_schema(n, &mut s, defs);
@@ -522,6 +567,38 @@ mod tests {
         let mut v = serde_json::Value::from(Schema::new(spec).json_schema());
         v.as_object_mut().unwrap().remove("$schema");
         v
+    }
+
+    /// A composition says what its branches say, whatever kind a type
+    /// token or a Check gave it (ts/test/jsonschema.test.ts).
+    #[test]
+    fn renders_a_composition_given_a_kind() {
+        let min2 = json!({"minimum": 2, "minLength": 2, "minItems": 2, "minProperties": 2});
+        let e = |src: &str| crate::expr::expr(src).unwrap();
+        assert_eq!(
+            js(e("All(Min(2)).String")),
+            json!({"type": "string", "minLength": 1, "allOf": [min2]})
+        );
+        assert_eq!(
+            js(e("All(Min(2)).Check(/^a/)")),
+            json!({"allOf": [min2], "pattern": "^a"})
+        );
+        // A keyword the kind says too holds beside it, and a nullable one
+        // admits null whatever the branches make of it.
+        assert_eq!(
+            js(e("Nof(0,String).Never")),
+            json!({"not": {}, "allOf": [{"not": {"type": "string", "minLength": 1}}]})
+        );
+        let string = json!({"type": "string", "minLength": 1});
+        assert_eq!(
+            js(e("All(String).String.Nullable")),
+            json!({"type": ["string", "null"], "minLength": 1,
+                "anyOf": [{"type": "null"}, {"allOf": [string]}]})
+        );
+        assert_eq!(
+            js(e("All(Min(2)).Check(/^a/).Nullable")),
+            json!({"anyOf": [{"type": "null"}, {"allOf": [min2]}], "pattern": "^a"})
+        );
     }
 
     #[test]
