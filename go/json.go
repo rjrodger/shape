@@ -434,7 +434,8 @@ func jsonScalar(n *node) jsonScalarParts {
 // example, or false where the node has no key form (a list, a regexp, a
 // shape needing sidecars).
 func jsonKeyForm(n *node) (chain string, example any, ok bool) {
-	if jsonHeadValidator(n) != nil {
+	// A composition has no key form, whatever kind a type token gave it.
+	if jsonHeadValidator(n) != nil || n.listMode != listNone {
 		return "", nil, false
 	}
 	if _, isTok := jsonToken[n.kind]; isTok {
@@ -594,6 +595,10 @@ func jsonHeaded(n *node, hv *validator, kind string) any {
 
 // nodeJSON is the value form of a node: the JSON that reads back as it.
 func nodeJSON(n *node) any {
+	// A composition that a type token or a Check gave a kind of its own.
+	if n.listMode != listNone && n.kind != KindList {
+		return jsonTyped(n)
+	}
 	if _, isTok := jsonToken[n.kind]; isTok {
 		sc := jsonScalar(n)
 		// A literal with nothing after it is the JSON value; a string is
@@ -648,31 +653,7 @@ func nodeJSON(n *node) any {
 
 	case KindList:
 		refs := map[string]any{}
-		var head jsonCall
-		if n.disc != nil {
-			head = jsonCall{n: "Discriminated", a: []jsonArg{
-				jx(jsonText(n.disc.tag)), {j: jsonBranches(n), side: true}}}
-		} else {
-			mode := "All"
-			switch n.listMode {
-			case listNof:
-				// A Nof's count leads its shapes: a number inline, a shape
-				// as its value.
-				mode = "Nof"
-				if n.nofCount == nil {
-					head.a = append(head.a, jx(fmtFloat(n.nofExact)))
-				} else {
-					head.a = append(head.a, jsonArgOf(n.nofCount))
-				}
-			case listWhen:
-				// Every shape is written, a defaulted one as Any.
-				mode = "When"
-			}
-			head.n = mode
-			for _, b := range n.list {
-				head.a = append(head.a, jsonArgOf(b))
-			}
-		}
+		head := jsonListCall(n)
 		// A default the node injects is a Default around the list, which
 		// makes it optional too.
 		dflt := n.hasDefault && !n.required && !n.skippable
@@ -800,6 +781,74 @@ func nodeJSON(n *node) any {
 			append([]jsonCall{{n: "Required"}}, calls...), anyRefs), anyRefs)
 	}
 	return jsonCarried(text, refs)
+}
+
+// jsonListCall is the call that heads a list node: its composition, or
+// Discriminated.
+func jsonListCall(n *node) jsonCall {
+	if n.disc != nil {
+		return jsonCall{n: "Discriminated", a: []jsonArg{
+			jx(jsonText(n.disc.tag)), {j: jsonBranches(n), side: true}}}
+	}
+	head := jsonCall{n: "All"}
+	switch n.listMode {
+	case listNof:
+		// A Nof's count leads its shapes: a number inline, a shape as its
+		// value.
+		head.n = "Nof"
+		if n.nofCount == nil {
+			head.a = append(head.a, jx(fmtFloat(n.nofExact)))
+		} else {
+			head.a = append(head.a, jsonArgOf(n.nofCount))
+		}
+	case listWhen:
+		// Every shape is written, a defaulted one as Any.
+		head.n = "When"
+	}
+	for _, b := range n.list {
+		head.a = append(head.a, jsonArgOf(b))
+	}
+	return head
+}
+
+// The type tokens that give a composition a kind of its own, and the
+// default each brings; a Check gives it one too, and is among its checks.
+var jsonTypedTokens = map[Kind]string{
+	KindString: "String", KindNumber: "Number", KindInteger: "Integer", KindBoolean: "Boolean",
+	KindObject: "Object", KindArray: "Array", KindDate: "Date", KindFunction: "Function",
+}
+
+var jsonTypedDefaults = map[Kind]any{
+	KindString: "", KindNumber: 0.0, KindInteger: 0.0, KindBoolean: false,
+	KindObject: map[string]any{}, KindArray: []any{},
+}
+
+// jsonTyped writes a composition that a type token or a Check gave a kind
+// of its own (TS jsonTyped): the composition heads it, and its checks, the
+// type, its flags and whether it is required follow, in that order, as
+// both a type token and a Check say required, so that
+// All(Any.Min(2)).Check(/^a/).Optional reads back as it was.
+func jsonTyped(n *node) any {
+	tok, typed := jsonTypedTokens[n.kind]
+	if !typed && n.kind != KindCheck {
+		jsonFault("a composition of kind " + string(n.kind))
+	}
+	// The type token brings its own default; any other is one the
+	// expression cannot spell. A nil default that is not null is none.
+	want, brings := jsonTypedDefaults[n.kind]
+	has := n.hasDefault && (n.defaultValue != nil || n.defaultNull)
+	if has != brings || (brings && jsonText(n.defaultValue) != jsonText(want)) {
+		jsonFault("the default of a composition given a kind")
+	}
+	refs := map[string]any{}
+	calls := jsonValidatorCalls(n, nil)
+	if typed {
+		calls = append(calls, jsonCall{n: tok})
+	}
+	calls = append(calls, jsonFlagCalls(n, false)...)
+	calls = append(calls, jsonRequiredCalls(n, true)...)
+	calls = append(calls, jsonTailCalls(n)...)
+	return jsonCarried(jsonChainText(jsonCallText(jsonListCall(n), refs, ""), calls, refs), refs)
 }
 
 // jsonBranches is the branches of a Discriminated union by tag value. A

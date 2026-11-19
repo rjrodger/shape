@@ -625,6 +625,55 @@ fn lists() {
         r#"{"a":"Required"}"#,
         &[v(r#"{"a":"x"}"#), v("{}")],
     );
+    // A composition a Check or a type token gave a kind of its own: the
+    // composition heads it, then its checks, the type and Optional, as both
+    // say required. It keeps its kind's own default, and a kind a type
+    // token can spell.
+    let e = |src: &str| expr(src).unwrap_or_else(|err| panic!("{}: {}", src, err));
+    round_trip(
+        obj([("a", e("All(Min(2)).Check(/^a/).Optional"))]),
+        r#"{"a":"All(Any.Min(2)).Check(/^a/).Optional"}"#,
+        &[v(r#"{"a":"b"}"#), v(r#"{"a":"ab"}"#), v("{}")],
+    );
+    round_trip(
+        obj([("a", e("All(Min(2)).String.Max(5)"))]),
+        r#"{"a":"All(Any.Min(2)).Max(5).String"}"#,
+        &[
+            v(r#"{"a":"a"}"#),
+            v(r#"{"a":5}"#),
+            v(r#"{"a":"ab"}"#),
+            v(r#"{"a":"abcdef"}"#),
+        ],
+    );
+    round_trip(
+        e("Nof(1,Min(1),Max(3)).Number"),
+        r#""Nof(1,Any.Min(1),Any.Max(3)).Number""#,
+        &[v("0"), v("2"), v("5"), v("\"x\"")],
+    );
+    for k in ["Integer", "Boolean", "Object", "Array", "Date", "Function"] {
+        round_trip(
+            e(&format!("All(Min(1)).{}", k)),
+            &format!(r#""All(Any.Min(1)).{}""#, k),
+            &[
+                v("0"),
+                v("2"),
+                v("true"),
+                v("{}"),
+                v(r#"{"b":1}"#),
+                v("[]"),
+                v("[1]"),
+                v("\"x\""),
+            ],
+        );
+    }
+    cannot(
+        obj([("a", e("All(Min(1)).Never"))]),
+        "a composition of kind never",
+    );
+    cannot(
+        obj([("a", Default("xy", e("All(Min(2)).String")))]),
+        "the default of a composition given a kind",
+    );
     cannot(
         Contains(1, Check(|_, _| true, Any()), bare()),
         "a check function",

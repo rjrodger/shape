@@ -5394,7 +5394,8 @@ function jsonScalar(n: Node<any>): { head: string, token: string | null, example
 function jsonKeyForm(n: Node<any>): { chain: string, example: any } | null {
   const t = n.t
 
-  if (undefined !== jsonHeadValidator(n)) {
+  // A composition has no key form, whatever kind a type token gave it.
+  if (undefined !== jsonHeadValidator(n) || undefined !== n.u.list) {
     return null
   }
 
@@ -5546,10 +5547,64 @@ function jsonListHead(b: Validate[]): string {
 }
 
 
+// The call that heads a list node: its composition, or Discriminated.
+function jsonListCall(n: Node<any>): JsonCall {
+  return n.u.discriminated ?
+    {
+      n: S.Discriminated, a: [
+        { x: JSON.stringify(n.u.discriminated.tag) },
+        { j: jsonBranches(n) },
+      ]
+    } :
+    {
+      n: jsonListHead(n.b),
+      // A Nof's count leads its shapes: a number inline, a shape as its value.
+      a: (undefined === n.u.nof ? [] :
+        [S.number === typeof n.u.nof.count ? { x: '' + n.u.nof.count } : jsonArg(n.u.nof.count)])
+        .concat(n.u.list.map((b: any) => jsonArg(b)))
+    }
+}
+
+
+// The type tokens that give a composition a kind of its own; a Check gives
+// it one too, and is among its checks.
+const JSON_TYPED: { [t: string]: string } = {
+  string: S.String, number: S.Number, integer: S.Integer, boolean: S.Boolean,
+  object: S.Object, array: S.Array, date: S.Date, function: S.Function,
+}
+
+
+// A composition that a type token or a Check gave a kind of its own: the
+// composition heads it, and its checks, the type, its flags and whether it
+// is required follow, in that order, as both a type token and a Check say
+// required: All(Any.Min(2)).Check(/^a/).Optional reads back as it was.
+function jsonTyped(n: Node<any>): any {
+  const t = n.t
+  if (S.check !== t && undefined === JSON_TYPED[t]) {
+    jsonFault('a composition of kind ' + t)
+  }
+  // The type token brings its own default; any other is one the
+  // expression cannot spell.
+  if (JSON.stringify(n.f) !== JSON.stringify(EMPTY_VAL[t])) {
+    jsonFault('the default of a composition given a kind')
+  }
+  const refs: any = {}
+  const typed: JsonCall[] = S.check === t ? [] : [{ n: JSON_TYPED[t], a: [] }]
+  const calls = jsonValidatorCalls(n)
+    .concat(typed, jsonFlagCalls(n, false), jsonRequiredCalls(n, true), jsonTailCalls(n))
+  return jsonCarried(jsonChainText(jsonCallText(jsonListCall(n), refs), calls, refs) as string, refs)
+}
+
+
 // The value form of a node: the JSON that reads back as it.
 function nodeJson(n: Node<any>): any {
   n = jsonNode(n)
   const t = n.t
+
+  // A composition that a type token or a Check gave a kind of its own.
+  if (S.list !== t && undefined !== n.u.list && !n.u.discriminated) {
+    return jsonTyped(n)
+  }
 
   if (undefined !== JSON_TOKEN[t]) {
     const sc = jsonScalar(n)
@@ -5596,24 +5651,10 @@ function nodeJson(n: Node<any>): any {
 
   if (S.list === t) {
     const refs: any = {}
-    const head: JsonCall = n.u.discriminated ?
-      {
-        n: S.Discriminated, a: [
-          { x: JSON.stringify(n.u.discriminated.tag) },
-          { j: jsonBranches(n) },
-        ]
-      } :
-      {
-        n: jsonListHead(n.b),
-        // A Nof's count leads its shapes: a number inline, a shape as its value.
-        a: (undefined === n.u.nof ? [] :
-          [S.number === typeof n.u.nof.count ? { x: '' + n.u.nof.count } : jsonArg(n.u.nof.count)])
-          .concat(n.u.list.map((b: any) => jsonArg(b)))
-      }
     // A default the node injects is a Default around the list, which makes
     // it optional too.
     const dflt = undefined !== n.f && !n.r && !n.p
-    const headText = jsonCallText(head, refs)
+    const headText = jsonCallText(jsonListCall(n), refs)
     const calls = (dflt ? [] : jsonRequiredCalls(n, true))
       .concat(jsonFlagCalls(n, false), jsonValidatorCalls(n), jsonTailCalls(n))
     const text = jsonChainText(dflt ?
@@ -5955,7 +5996,9 @@ function nodeSchema(raw: any, defs: any): any {
   else if (S.array === n.t) {
     arraySchema(n, s, defs)
   }
-  else if (S.list === n.t) {
+  // A composition says what its branches say, whatever kind a type token
+  // or a Check gave it.
+  if (S.list === n.t || (undefined !== n.u.list && !n.u.discriminated)) {
     listSchema(n, s, defs)
   }
 

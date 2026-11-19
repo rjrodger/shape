@@ -423,6 +423,15 @@ function build() {
   // Values the Nof admits: a failing one names the object branch in a form
   // the ports render apart (see the parity page).
   add('c-chained-nof-produces', CALL('Min', 1, CALL('Nof', 1, { x: 1 }, T)), [{}, { x: 5 }, 'ab', 'a'])
+  // A composition a Check or a type token gave a kind of its own.
+  add('c-typed-check', E('All(Min(2)).Check(/^a/)'), SCALARS)
+  add('c-typed-check-optional', { a: E('All(Min(2)).Check(/^a/).Optional') }, OBJS)
+  add('c-typed-nof-check', E('Nof(1,String,Number).Check(/^x/).Min(1)'), SCALARS.concat(ARRS))
+  add('c-typed-when-check', E('When(String,Min(2)).Check(/^a/)'), SCALARS)
+  add('c-typed-string', E('All(Min(2)).String.Max(5)'), SCALARS)
+  add('c-typed-optional', { a: E('All(Min(2)).String.Optional') }, OBJS)
+  add('c-typed-number', E('Nof(1,Min(1),Max(3)).Number'), SCALARS)
+  add('c-typed-array', E('All(Min(1)).Array'), SCALARS.concat(ARRS))
   // A Catch takes the composition inside with the node's other checks.
   add('c-catch-all', E('Catch(0,All(Number))'), SCALARS)
   add('c-catch-nof', E('Catch(0,Nof(1,Number,String))'), SCALARS.concat(ARRS))

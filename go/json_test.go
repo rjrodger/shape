@@ -270,6 +270,20 @@ func TestJSONCannot(t *testing.T) {
 	}
 	fn := func(val any, update *Update, state *State) bool { return true }
 	cannot(t, M("a", Check(fn)), "cannot express a check function")
+	// A composition keeps its kind's own default, and a kind a type token
+	// can spell (ts/test/json.test.ts).
+	cannot(t, M("a", MustExpr("All(Min(1)).Never")), "cannot express a composition of kind never")
+	cannot(t, M("a", Default("xy", MustExpr("All(Min(2)).String"))),
+		"cannot express the default of a composition given a kind")
+	roundTrip(t, M("a", MustExpr("All(Min(2)).Check(/^a/).Optional")),
+		`{"a":"All(Any.Min(2)).Check(/^a/).Optional"}`, M("a", "b"), M("a", "ab"), M())
+	roundTrip(t, M("a", MustExpr("All(Min(2)).String.Max(5)")), `{"a":"All(Any.Min(2)).Max(5).String"}`,
+		M("a", "a"), M("a", 5.0), M("a", "ab"), M("a", "abcdef"))
+	roundTrip(t, MustExpr("Nof(1,Min(1),Max(3)).Number"), `"Nof(1,Any.Min(1),Any.Max(3)).Number"`, 0.0, 2.0, 5.0, "x")
+	for _, k := range []string{"Integer", "Boolean", "Object", "Array", "Date", "Function"} {
+		roundTrip(t, MustExpr("All(Min(1))."+k), `"All(Any.Min(1)).`+k+`"`,
+			0.0, 2.0, true, M(), M("b", 1.0), []any{}, []any{1.0}, "x")
+	}
 	cannot(t, M("a", Before(fn, Number)), "cannot express a custom check Before")
 	cannot(t, M("a", After(fn, Number)), "cannot express a custom after check After")
 	cannot(t, M("a", Catch(0.0, After(fn, Number))), "cannot express a custom after check")

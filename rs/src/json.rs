@@ -423,7 +423,8 @@ fn scalar(n: &Node) -> R<Scalar> {
 /// example, or none where the node has no key form (a list, a regexp, a
 /// shape needing sidecars).
 fn key_form(n: &Node) -> R<Option<(String, Value)>> {
-    if head_validator(n).is_some() {
+    // A composition has no key form, whatever kind a type token gave it.
+    if head_validator(n).is_some() || n.list_mode != ListMode::None {
         return Ok(None);
     }
     if token_of(n.kind).is_some() {
@@ -637,6 +638,13 @@ fn headed(n: &Node, hv: usize, what: &str) -> R<Value> {
 
 /// The value form of a node: the JSON that reads back as it.
 pub fn node_json(n: &Node) -> R<Value> {
+    // A composition that a type token or a Check gave a kind of its own. A
+    // Check leaves the kind a list here, where TypeScript gives the node the
+    // check's kind.
+    let checked = n.befores.iter().any(|v| v.name.starts_with('/'));
+    if n.list_mode != ListMode::None && (n.kind != Kind::List || checked) {
+        return typed(n);
+    }
     if token_of(n.kind).is_some() {
         let sc = scalar(n)?;
         // A literal with nothing after it is the JSON value; a string is
@@ -702,36 +710,7 @@ pub fn node_json(n: &Node) -> R<Value> {
 
         Kind::List => {
             let mut refs: Vec<(String, Value)> = Vec::new();
-            let head = match &n.disc {
-                Some(d) => Call {
-                    name: "Discriminated".to_string(),
-                    args: vec![Arg::Text(json_text(&d.tag)), Arg::Side(branches(n)?)],
-                },
-                None => {
-                    let mut args = Vec::with_capacity(n.list.len() + 1);
-                    let mode = match n.list_mode {
-                        ListMode::Nof => {
-                            // A Nof's count leads its shapes: a number
-                            // inline, a shape as its value.
-                            args.push(match &n.nof_count {
-                                Some(c) => arg_of(c)?,
-                                None => Arg::Text(crate::value::js_number(n.nof_exact)),
-                            });
-                            "Nof"
-                        }
-                        // Every arm is written, a defaulted one as Any.
-                        ListMode::When => "When",
-                        _ => "All",
-                    };
-                    for b in &n.list {
-                        args.push(arg_of(b)?);
-                    }
-                    Call {
-                        name: mode.to_string(),
-                        args,
-                    }
-                }
-            };
+            let head = list_call(n)?;
             // A default the node injects is a Default around the list,
             // which makes it optional too.
             let dflt = n.has_default && !n.required && !n.skippable;
@@ -893,6 +872,73 @@ pub fn node_json(n: &Node) -> R<Value> {
             Ok(carried(text, refs))
         }
     }
+}
+
+/// The call that heads a list node: its composition, or Discriminated.
+fn list_call(n: &Node) -> R<Call> {
+    if let Some(d) = &n.disc {
+        return Ok(Call {
+            name: "Discriminated".to_string(),
+            args: vec![Arg::Text(json_text(&d.tag)), Arg::Side(branches(n)?)],
+        });
+    }
+    let mut args = Vec::with_capacity(n.list.len() + 1);
+    let mode = match n.list_mode {
+        ListMode::Nof => {
+            // A Nof's count leads its shapes: a number inline, a shape as
+            // its value.
+            args.push(match &n.nof_count {
+                Some(c) => arg_of(c)?,
+                None => Arg::Text(crate::value::js_number(n.nof_exact)),
+            });
+            "Nof"
+        }
+        // Every arm is written, a defaulted one as Any.
+        ListMode::When => "When",
+        _ => "All",
+    };
+    for b in &n.list {
+        args.push(arg_of(b)?);
+    }
+    Ok(Call {
+        name: mode.to_string(),
+        args,
+    })
+}
+
+/// A composition that a type token or a Check gave a kind of its own (TS
+/// jsonTyped): the composition heads it, and its checks, the type, its
+/// flags and whether it is required follow, in that order, as both a type
+/// token and a Check say required, so that
+/// `All(Any.Min(2)).Check(/^a/).Optional` reads back as it was.
+fn typed(n: &Node) -> R<Value> {
+    // The type token, and the default it brings.
+    let (token, brings) = match n.kind {
+        Kind::String => (Some("String"), Some(Value::from(""))),
+        Kind::Number => (Some("Number"), Some(Value::from(0.0))),
+        Kind::Integer => (Some("Integer"), Some(Value::from(0.0))),
+        Kind::Boolean => (Some("Boolean"), Some(Value::Bool(false))),
+        Kind::Object => (Some("Object"), Some(Value::Obj(Map::new()))),
+        Kind::Array => (Some("Array"), Some(Value::Arr(Vec::new()))),
+        Kind::Date => (Some("Date"), None),
+        Kind::Function => (Some("Function"), None),
+        Kind::List | Kind::Check => (None, None),
+        other => return cannot(format!("a composition of kind {}", other)),
+    };
+    // Any other default is one the expression cannot spell.
+    let has = n.has_default && !n.default.is_undefined();
+    if has != brings.is_some() || brings.is_some_and(|b| b != n.default) {
+        return cannot("the default of a composition given a kind");
+    }
+    let mut calls = validator_calls(n, None)?;
+    calls.extend(token.map(call));
+    calls.extend(flag_calls(n, false)?);
+    calls.extend(required_calls(n, true));
+    calls.extend(tail_calls(n));
+    let mut refs = Vec::new();
+    let head = call_text(&list_call(n)?, &mut refs, None);
+    let text = chain_text(&head, &calls, &mut refs);
+    Ok(carried(text, refs))
 }
 
 /// The branches of a discriminated union by tag value. A branch's tag

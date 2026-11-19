@@ -82,6 +82,16 @@ func TestJSONSchemaChecks(t *testing.T) {
 		"required":["a","e","f","g","h","i","k","l","m","n","o","p","q","r","s","t","u"],"additionalProperties":false}`)
 }
 
+// A composition says what its branches say, whatever kind a type token or a
+// Check gave it (ts/test/jsonschema.test.ts).
+func TestJSONSchemaCompositionGivenAKind(t *testing.T) {
+	min2 := `{"minimum":2,"minLength":2,"minItems":2,"minProperties":2}`
+	schemaWant(t, "typed", MustShape(MustExpr("All(Min(2)).String")).JSONSchema(),
+		`{`+draft+`,"type":"string","minLength":1,"allOf":[`+min2+`]}`)
+	schemaWant(t, "checked", MustShape(MustExpr("All(Min(2)).Check(/^a/)")).JSONSchema(),
+		`{`+draft+`,"allOf":[`+min2+`],"pattern":"^a"}`)
+}
+
 func TestJSONSchemaCompositionAndReferences(t *testing.T) {
 	s := MustShape(map[string]any{
 		"a": Nof(Min(1), String, Number), "b": Nof(1, String, Number), "c": All(Number, Min(1)),

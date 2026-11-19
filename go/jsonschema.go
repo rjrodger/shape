@@ -95,6 +95,11 @@ func nodeSchema(n *node, defs map[string]any) map[string]any {
 	case KindList:
 		listSchema(n, s, defs)
 	}
+	// A composition says what its branches say, whatever kind a type token
+	// or a Check gave it.
+	if n.listMode != listNone && n.kind != KindList {
+		listSchema(n, s, defs)
+	}
 
 	checkSchema(n, s, defs)
 

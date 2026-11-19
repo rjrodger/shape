@@ -86,6 +86,11 @@ fn node_schema(n: &Node, defs: &mut Map) -> Map {
         Kind::List => list_schema(n, &mut s, defs),
         _ => {}
     }
+    // A composition says what its branches say, whatever kind a type token
+    // gave it.
+    if n.list_mode != ListMode::None && n.kind != Kind::List {
+        list_schema(n, &mut s, defs);
+    }
 
     check_schema(n, &mut s, defs);
 
@@ -522,6 +527,22 @@ mod tests {
         let mut v = serde_json::Value::from(Schema::new(spec).json_schema());
         v.as_object_mut().unwrap().remove("$schema");
         v
+    }
+
+    /// A composition says what its branches say, whatever kind a type
+    /// token or a Check gave it (ts/test/jsonschema.test.ts).
+    #[test]
+    fn renders_a_composition_given_a_kind() {
+        let min2 = json!({"minimum": 2, "minLength": 2, "minItems": 2, "minProperties": 2});
+        let e = |src: &str| crate::expr::expr(src).unwrap();
+        assert_eq!(
+            js(e("All(Min(2)).String")),
+            json!({"type": "string", "minLength": 1, "allOf": [min2]})
+        );
+        assert_eq!(
+            js(e("All(Min(2)).Check(/^a/)")),
+            json!({"allOf": [min2], "pattern": "^a"})
+        );
     }
 
     #[test]

@@ -142,7 +142,9 @@ Shape({ a: Shape.Check(v => v > 1) }).json()
 
 Everything else round trips, including tuples, rests, objects both open
 and closed, discriminated unions, formats, bounds, `Catch`, `Ignore`, `Coerce`,
-`Define` and `Refer`, `Describe` and `Fault`.
+`Define` and `Refer`, `Describe` and `Fault`. So does a composition that a
+chained `Check` or type token gives a kind of its own:
+`All(Min(2)).String()` is written `"All(Any.Min(2)).String"`.
 
 ## When to use which export
 

@@ -420,6 +420,17 @@ const files = {
     ['all-chained-unique', { a: { $expr: 'All(Max(1)).Unique' } }, { a: [1, 1] }],
     ['when-chained-max', { a: { $expr: 'When(String,Min(5)).Max(3)' } }, { a: 'abcd' }],
     ['nof-produces-for-min', { a: CALL('Min', 1, CALL('Nof', 1, { x: 1 }, T)) }, { a: {} }],
+    // A composition a Check or a type token gave a kind of its own still
+    // runs, and json() writes it with the composition first.
+    ['all-chained-check-both', { a: { $expr: 'All(Min(2)).Check(/^a/)' } }, { a: 'b' }],
+    ['all-chained-check-all', { a: { $expr: 'All(Min(2)).Check(/^a/)' } }, { a: 'a' }],
+    ['all-chained-check-optional', { a: { $expr: 'All(Min(2)).Check(/^a/).Optional' } }, {}],
+    ['nof-chained-check', { a: { $expr: 'Nof(1,String,Number).Check(/^t/)' } }, { a: true }],
+    ['when-chained-check', { a: { $expr: 'When(String,Min(2)).Check(/^a/)' } }, { a: 'b' }],
+    ['all-chained-type', { a: { $expr: 'All(Min(2)).String' } }, { a: 5 }],
+    ['all-typed-short', { a: { $expr: 'All(Min(2)).String' } }, { a: 'a' }],
+    ['all-typed-optional', { a: { $expr: 'All(Min(2)).String.Optional' } }, {}],
+    ['nof-typed-number', { a: { $expr: 'Nof(1,Min(1),Max(3)).Number' } }, { a: 5 }],
     // A Catch takes the composition inside with the node's other checks.
     ['catch-all', { a: { $expr: 'Catch(0,All(Number))' } }, { a: 'bad' }],
     ['catch-nof', { a: { $expr: 'Catch(0,Nof(1,Number,String))' } }, { a: true }],
