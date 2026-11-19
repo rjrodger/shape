@@ -164,6 +164,13 @@ describe('json', () => {
     roundTrip({ a: expr('All(Min(2)).String.Max(5)') }, { a: 'All(Any.Min(2)).Max(5).String' },
       { a: 'a' }, { a: 5 }, { a: 'ab' }, { a: 'abcdef' })
     roundTrip(expr('Nof(1,Min(1),Max(3)).Number'), 'Nof(1,Any.Min(1),Any.Max(3)).Number', 0, 2, 5, 'x')
+    // A container's own shape follows its token, and a type token, which
+    // says required, comes before Optional or Skip, after an Ignore too.
+    roundTrip({ a: expr('All(Min(1)).Array.Child(Number)') }, { a: 'All(Any.Min(1)).Array.Child(Number)' },
+      { a: [1, 'a'] }, { a: [1, 2] })
+    roundTrip({ a: expr('All(Min(1)).Object.Open') }, { a: 'All(Any.Min(1)).Object.Open' }, { a: { x: 1 } })
+    roundTrip({ a: expr('All(Min(1)).Ignore.Default(0)') }, { a: 'All(Any.Min(1)).Ignore.Number.Optional' }, {})
+    roundTrip({ a: expr('All(Min(1)).Number.Ignore') }, { a: 'All(Any.Min(1)).Ignore.Number.Skip' }, {}, { a: 'x' })
     for (const k of ['Integer', 'Boolean', 'Object', 'Array', 'Date', 'Function']) {
       roundTrip(expr('All(Min(1)).' + k), 'All(Any.Min(1)).' + k, 0, 2, true, {}, { b: 1 }, [], [1], 'x')
     }

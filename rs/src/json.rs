@@ -246,6 +246,13 @@ fn tail_calls(n: &Node) -> Vec<Call> {
     if n.is_ignore() {
         calls.push(call("Ignore"));
     }
+    calls.extend(note_calls(n));
+    calls
+}
+
+/// The Describe and the Fault of a node, as calls.
+fn note_calls(n: &Node) -> Vec<Call> {
+    let mut calls = Vec::new();
     if let Some(Value::Str(d)) = n.meta.get("description") {
         calls.push(call1("Describe", json_text(d)));
     }
@@ -930,11 +937,42 @@ fn typed(n: &Node) -> R<Value> {
     if has != brings.is_some() || brings.is_some_and(|b| b != n.default) {
         return cannot("the default of a composition given a kind");
     }
+    // Ignore reads among the checks, as it is one of them in TypeScript.
     let mut calls = validator_calls(n, None)?;
-    calls.extend(token.map(call));
-    calls.extend(flag_calls(n, false)?);
-    calls.extend(required_calls(n, true));
-    calls.extend(tail_calls(n));
+    if n.is_ignore() {
+        calls.push(call("Ignore"));
+    }
+    if let Some(token) = token {
+        calls.push(call(token));
+        // A container's own shape follows its token: Open, or the shape of
+        // its children, or of its rest.
+        match (n.kind, &n.obj_rest, &n.arr_rest, &n.arr_child) {
+            (Kind::Object, Some(rest), _, _) if is_open_any(rest) => calls.push(call("Open")),
+            (Kind::Object, Some(rest), _, _) => calls.push(Call {
+                name: "Child".to_string(),
+                args: vec![arg_of(rest)?],
+            }),
+            (Kind::Array, _, Some(rest), _) => calls.push(Call {
+                name: "Rest".to_string(),
+                args: vec![arg_of(rest)?],
+            }),
+            (Kind::Array, _, None, Some(child)) => calls.push(Call {
+                name: "Child".to_string(),
+                args: vec![arg_of(child)?],
+            }),
+            _ => {}
+        }
+        calls.extend(flag_calls(n, false)?);
+        // A type token says required and not skipped, after an Ignore too,
+        // so whether the node is either follows it.
+        if !n.required {
+            calls.push(call(if n.skippable { "Skip" } else { "Optional" }));
+        }
+    } else {
+        calls.extend(flag_calls(n, false)?);
+        calls.extend(required_calls(n, true));
+    }
+    calls.extend(note_calls(n));
     let mut refs = Vec::new();
     let head = call_text(&list_call(n)?, &mut refs, None);
     let text = chain_text(&head, &calls, &mut refs);

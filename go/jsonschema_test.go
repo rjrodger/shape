@@ -90,6 +90,12 @@ func TestJSONSchemaCompositionGivenAKind(t *testing.T) {
 		`{`+draft+`,"type":"string","minLength":1,"allOf":[`+min2+`]}`)
 	schemaWant(t, "checked", MustShape(MustExpr("All(Min(2)).Check(/^a/)")).JSONSchema(),
 		`{`+draft+`,"allOf":[`+min2+`],"pattern":"^a"}`)
+	// A keyword the kind says too holds beside it, and a nullable one admits
+	// null whatever the branches make of it.
+	schemaWant(t, "never", MustShape(MustExpr("Nof(0,String).Never")).JSONSchema(),
+		`{`+draft+`,"not":{},"allOf":[{"not":{"type":"string","minLength":1}}]}`)
+	schemaWant(t, "nullable", MustShape(MustExpr("All(String).String.Nullable")).JSONSchema(),
+		`{`+draft+`,"type":["string","null"],"minLength":1,"anyOf":[{"type":"null"},{"allOf":[{"type":"string","minLength":1}]}]}`)
 }
 
 func TestJSONSchemaCompositionAndReferences(t *testing.T) {

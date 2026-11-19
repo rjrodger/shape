@@ -96,9 +96,26 @@ func nodeSchema(n *node, defs map[string]any) map[string]any {
 		listSchema(n, s, defs)
 	}
 	// A composition says what its branches say, whatever kind a type token
-	// or a Check gave it.
+	// or a Check gave it, beside what the kind says: a keyword both say
+	// holds as an allOf of its own, so that neither replaces the other.
+	// Given a kind, a nullable one admits null whatever the branches make of
+	// it (TS nodeSchema).
 	if n.listMode != listNone && n.kind != KindList {
-		listSchema(n, s, defs)
+		ls := map[string]any{}
+		listSchema(n, ls, defs)
+		part := ls
+		if n.nullable {
+			part = map[string]any{"anyOf": []any{map[string]any{"type": "null"}, ls}}
+		}
+		// In key order, so that every language says them in one order.
+		for _, k := range orderedKeys(part) {
+			if _, has := s[k]; !has {
+				s[k] = part[k]
+			} else {
+				allOf, _ := s["allOf"].([]any)
+				s["allOf"] = append(allOf, map[string]any{k: part[k]})
+			}
+		}
 	}
 
 	checkSchema(n, s, defs)

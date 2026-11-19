@@ -249,10 +249,20 @@ func jsonFlagCalls(n *node, literalHead bool) []jsonCall {
 // jsonTailCalls: Ignore is a flag, read after the checks it silences, then
 // the description and the fault text.
 func jsonTailCalls(n *node) []jsonCall {
-	var calls []jsonCall
+	return append(jsonIgnoreCalls(n), jsonNoteCalls(n)...)
+}
+
+// jsonIgnoreCalls is the Ignore of a node, as a call.
+func jsonIgnoreCalls(n *node) []jsonCall {
 	if n.silent && n.skippable {
-		calls = append(calls, jsonCall{n: "Ignore"})
+		return []jsonCall{{n: "Ignore"}}
 	}
+	return nil
+}
+
+// jsonNoteCalls is the Describe and the Fault of a node, as calls.
+func jsonNoteCalls(n *node) []jsonCall {
+	var calls []jsonCall
 	if d, ok := n.meta["description"]; ok {
 		calls = append(calls, jsonCall{n: "Describe", a: []jsonArg{jx(jsonText(d))}})
 	}
@@ -841,13 +851,36 @@ func jsonTyped(n *node) any {
 		jsonFault("the default of a composition given a kind")
 	}
 	refs := map[string]any{}
-	calls := jsonValidatorCalls(n, nil)
-	if typed {
-		calls = append(calls, jsonCall{n: tok})
+	// Ignore reads among the checks, as it is one of them in TypeScript.
+	calls := append(jsonValidatorCalls(n, nil), jsonIgnoreCalls(n)...)
+	if !typed {
+		calls = append(calls, jsonFlagCalls(n, false)...)
+		calls = append(calls, jsonRequiredCalls(n, true)...)
+		calls = append(calls, jsonNoteCalls(n)...)
+		return jsonCarried(jsonChainText(jsonCallText(jsonListCall(n), refs, ""), calls, refs), refs)
+	}
+	calls = append(calls, jsonCall{n: tok})
+	// A container's own shape follows its token: Open, or the shape of its
+	// children, or of its rest.
+	switch {
+	case n.kind == KindObject && n.objRest != nil && jsonIsOpen(n.objRest):
+		calls = append(calls, jsonCall{n: "Open"})
+	case n.kind == KindObject && n.objRest != nil:
+		calls = append(calls, jsonCall{n: "Child", a: []jsonArg{jsonArgOf(n.objRest)}})
+	case n.kind == KindArray && n.arrRest != nil:
+		calls = append(calls, jsonCall{n: "Rest", a: []jsonArg{jsonArgOf(n.arrRest)}})
+	case n.kind == KindArray && n.arrChild != nil:
+		calls = append(calls, jsonCall{n: "Child", a: []jsonArg{jsonArgOf(n.arrChild)}})
 	}
 	calls = append(calls, jsonFlagCalls(n, false)...)
-	calls = append(calls, jsonRequiredCalls(n, true)...)
-	calls = append(calls, jsonTailCalls(n)...)
+	// A type token says required and not skipped, after an Ignore too, so
+	// whether the node is either follows it.
+	if !n.required && n.skippable {
+		calls = append(calls, jsonCall{n: "Skip"})
+	} else if !n.required {
+		calls = append(calls, jsonCall{n: "Optional"})
+	}
+	calls = append(calls, jsonNoteCalls(n)...)
 	return jsonCarried(jsonChainText(jsonCallText(jsonListCall(n), refs, ""), calls, refs), refs)
 }
 

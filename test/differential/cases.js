@@ -432,6 +432,13 @@ function build() {
   add('c-typed-optional', { a: E('All(Min(2)).String.Optional') }, OBJS)
   add('c-typed-number', E('Nof(1,Min(1),Max(3)).Number'), SCALARS)
   add('c-typed-array', E('All(Min(1)).Array'), SCALARS.concat(ARRS))
+  add('c-typed-array-child', E('All(Min(1)).Array.Child(Number)'), SCALARS.concat(ARRS))
+  add('c-typed-array-rest', E('All(Min(1)).Array.Rest(Number)'), SCALARS.concat(ARRS))
+  add('c-typed-object-open', E('All(Min(1)).Object.Open'), [{}, { x: 1 }, { x: 'a' }, 'x', 5, []])
+  add('c-typed-object-child', E('All(Min(1)).Object.Child(Number)'), [{}, { x: 1 }, { x: 'a' }, 'x'])
+  add('c-typed-ignore', { a: E('All(Min(1)).Number.Ignore') }, OBJS)
+  add('c-typed-nullable', E('All(String).String.Nullable'), SCALARS)
+  add('c-typed-never', E('Nof(0,String).Never'), SCALARS)
   // A Catch takes the composition inside with the node's other checks.
   add('c-catch-all', E('Catch(0,All(Number))'), SCALARS)
   add('c-catch-nof', E('Catch(0,Nof(1,Number,String))'), SCALARS.concat(ARRS))

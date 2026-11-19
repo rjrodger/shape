@@ -431,6 +431,13 @@ const files = {
     ['all-typed-short', { a: { $expr: 'All(Min(2)).String' } }, { a: 'a' }],
     ['all-typed-optional', { a: { $expr: 'All(Min(2)).String.Optional' } }, {}],
     ['nof-typed-number', { a: { $expr: 'Nof(1,Min(1),Max(3)).Number' } }, { a: 5 }],
+    // A container given a kind keeps its own shape, and Ignore keeps its place.
+    ['typed-array-child', { a: { $expr: 'All(Min(1)).Array.Child(Number)' } }, { a: [1, 'a'] }],
+    ['typed-array-rest', { a: { $expr: 'All(Min(1)).Array.Rest(Number)' } }, { a: [1, 2] }],
+    ['typed-object-open', { a: { $expr: 'All(Min(1)).Object.Open' } }, { a: { x: 1 } }],
+    ['typed-object-child', { a: { $expr: 'All(Min(1)).Object.Child(Number)' } }, { a: { x: 'a' } }],
+    ['typed-ignore', { a: { $expr: 'All(Min(1)).Number.Ignore' } }, { a: 'x' }],
+    ['typed-nullable', { a: { $expr: 'All(String).String.Nullable' } }, { a: null }],
     // A Catch takes the composition inside with the node's other checks.
     ['catch-all', { a: { $expr: 'Catch(0,All(Number))' } }, { a: 'bad' }],
     ['catch-nof', { a: { $expr: 'Catch(0,Nof(1,Number,String))' } }, { a: true }],

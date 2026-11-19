@@ -126,6 +126,12 @@ describe('jsonschema', () => {
       { type: 'string', minLength: 1, allOf: [min2] })
     deepEqual(Shape({ a: Shape.expr('All(Min(2)).Check(/^a/)') }).jsonSchema().properties.a,
       { allOf: [min2], pattern: '^a' })
+    // A keyword the kind says too holds beside it, and a nullable one
+    // admits null whatever the branches make of it.
+    deepEqual(Shape({ a: Shape.expr('Nof(0,String).Never') }).jsonSchema().properties.a,
+      { not: {}, allOf: [{ not: { type: 'string', minLength: 1 } }] })
+    deepEqual(Shape({ a: Shape.expr('All(String).String.Nullable') }).jsonSchema().properties.a,
+      { type: ['string', 'null'], minLength: 1, anyOf: [{ type: 'null' }, { allOf: [{ type: 'string', minLength: 1 }] }] })
   })
 
 

@@ -5589,9 +5589,18 @@ function jsonTyped(n: Node<any>): any {
     jsonFault('the default of a composition given a kind')
   }
   const refs: any = {}
-  const typed: JsonCall[] = S.check === t ? [] : [{ n: JSON_TYPED[t], a: [] }]
+  const token: JsonCall[] = S.check === t ? [] : [{ n: JSON_TYPED[t], a: [] }]
+  // A container's own shape follows its token: Open, or the shape of its
+  // children, or of its rest.
+  const shape: JsonCall[] = (S.object !== t && S.array !== t) || undefined === n.c ? [] :
+    S.object === t && jsonIsOpen(n.c) ? [{ n: S.Open, a: [] }] :
+      [{ n: n.m?.rest ? S.Rest : S.Child, a: [jsonArg(n.c)] }]
+  // A type token says required and not skipped, after an Ignore too, so
+  // whether the node is either follows it.
+  const required: JsonCall[] = 0 === token.length ? jsonRequiredCalls(n, true) :
+    n.r ? [] : [{ n: n.p ? S.Skip : S.Optional, a: [] }]
   const calls = jsonValidatorCalls(n)
-    .concat(typed, jsonFlagCalls(n, false), jsonRequiredCalls(n, true), jsonTailCalls(n))
+    .concat(token, shape, jsonFlagCalls(n, false), required, jsonTailCalls(n))
   return jsonCarried(jsonChainText(jsonCallText(jsonListCall(n), refs), calls, refs) as string, refs)
 }
 
@@ -5997,9 +6006,25 @@ function nodeSchema(raw: any, defs: any): any {
     arraySchema(n, s, defs)
   }
   // A composition says what its branches say, whatever kind a type token
-  // or a Check gave it.
-  if (S.list === n.t || (undefined !== n.u.list && !n.u.discriminated)) {
+  // or a Check gave it, beside what the kind says: a keyword both say holds
+  // as an allOf of its own, so that neither replaces the other. Given a
+  // kind, a nullable one admits null whatever the branches make of it.
+  if (S.list === n.t) {
     listSchema(n, s, defs)
+  }
+  else if (undefined !== n.u.list && !n.u.discriminated) {
+    const ls: any = {}
+    listSchema(n, ls, defs)
+    const part: any = n.u.nullable ? { anyOf: [{ type: S.null }, ls] } : ls
+    // In key order, so that every language says them in one order.
+    for (const k of keys(part).sort()) {
+      if (undefined === s[k]) {
+        s[k] = part[k]
+      }
+      else {
+        s.allOf = (s.allOf || []).concat({ [k]: part[k] })
+      }
+    }
   }
 
   checkSchema(n, s, defs)

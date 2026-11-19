@@ -280,6 +280,13 @@ func TestJSONCannot(t *testing.T) {
 	roundTrip(t, M("a", MustExpr("All(Min(2)).String.Max(5)")), `{"a":"All(Any.Min(2)).Max(5).String"}`,
 		M("a", "a"), M("a", 5.0), M("a", "ab"), M("a", "abcdef"))
 	roundTrip(t, MustExpr("Nof(1,Min(1),Max(3)).Number"), `"Nof(1,Any.Min(1),Any.Max(3)).Number"`, 0.0, 2.0, 5.0, "x")
+	// A container's own shape follows its token, and a type token, which says
+	// required, comes before Optional or Skip, after an Ignore too.
+	roundTrip(t, M("a", MustExpr("All(Min(1)).Array.Child(Number)")), `{"a":"All(Any.Min(1)).Array.Child(Number)"}`,
+		M("a", []any{1.0, "a"}), M("a", []any{1.0, 2.0}))
+	roundTrip(t, M("a", MustExpr("All(Min(1)).Object.Open")), `{"a":"All(Any.Min(1)).Object.Open"}`, M("a", M("x", 1.0)))
+	roundTrip(t, M("a", MustExpr("All(Min(1)).Number.Ignore")), `{"a":"All(Any.Min(1)).Ignore.Number.Skip"}`,
+		M(), M("a", "x"))
 	for _, k := range []string{"Integer", "Boolean", "Object", "Array", "Date", "Function"} {
 		roundTrip(t, MustExpr("All(Min(1))."+k), `"All(Any.Min(1)).`+k+`"`,
 			0.0, 2.0, true, M(), M("b", 1.0), []any{}, []any{1.0}, "x")

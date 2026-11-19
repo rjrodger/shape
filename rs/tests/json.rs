@@ -650,6 +650,37 @@ fn lists() {
         r#""Nof(1,Any.Min(1),Any.Max(3)).Number""#,
         &[v("0"), v("2"), v("5"), v("\"x\"")],
     );
+    // A container's own shape follows its token, and a type token, which
+    // says required, comes before Optional or Skip, after an Ignore too.
+    for (src, want, vals) in [
+        (
+            "All(Min(1)).Array.Child(Number)",
+            r#"{"a":"All(Any.Min(1)).Array.Child(Number)"}"#,
+            vec![v(r#"{"a":[1,"a"]}"#), v(r#"{"a":[1,2]}"#)],
+        ),
+        (
+            "All(Min(1)).Array.Rest(Number)",
+            r#"{"a":"All(Any.Min(1)).Array.Rest(Number)"}"#,
+            vec![v(r#"{"a":[1,"a"]}"#)],
+        ),
+        (
+            "All(Min(1)).Object.Open",
+            r#"{"a":"All(Any.Min(1)).Object.Open"}"#,
+            vec![v(r#"{"a":{"x":1}}"#)],
+        ),
+        (
+            "All(Min(1)).Object.Child(Number)",
+            r#"{"a":"All(Any.Min(1)).Object.Child(Number)"}"#,
+            vec![v(r#"{"a":{"x":"a"}}"#)],
+        ),
+        (
+            "All(Min(1)).Number.Ignore",
+            r#"{"a":"All(Any.Min(1)).Ignore.Number.Skip"}"#,
+            vec![v("{}"), v(r#"{"a":"x"}"#)],
+        ),
+    ] {
+        round_trip(obj([("a", e(src))]), want, &vals);
+    }
     for k in ["Integer", "Boolean", "Object", "Array", "Date", "Function"] {
         round_trip(
             e(&format!("All(Min(1)).{}", k)),
