@@ -774,6 +774,10 @@ func nodeJSON(n *node) any {
 		// Skip holds it.
 		head = "Never"
 	case KindNull:
+		// A default it inserts that is not null, which no null literal says.
+		if !n.required && !n.skippable && n.hasDefault && n.defaultValue != nil {
+			jsonFault("the default of a null")
+		}
 		if !n.required && !n.skippable && len(n.befores) == 0 && len(n.afters) == 0 &&
 			!n.nullable && n.faultMsg == "" && n.meta["description"] == nil && n.renameTo == "" {
 			return nil

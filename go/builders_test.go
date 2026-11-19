@@ -393,6 +393,43 @@ func TestDefaultChained(t *testing.T) {
 	mustInvalid(t, m, map[string]any{"a": "x"}, "not of type number")
 }
 
+// A transform the Ignore took runs once, and a check after the Ignore sees
+// what it produced; what an Ignore inside a Catch drops stays dropped.
+func TestIgnoreTakesItsChecksOnce(t *testing.T) {
+	runs := 0
+	inc := Required(Number).Transform(func(v any, _ *State) any {
+		runs++
+		return v.(float64) + 1
+	}).Ignore().Min(0)
+	out := mustValid(t, MustShape(map[string]any{"a": inc}), map[string]any{"a": 1.0}).(map[string]any)
+	if out["a"] != 2.0 || runs != 1 {
+		t.Fatalf("expected a=2 from one run, got %v from %d", out["a"], runs)
+	}
+	c := mustValid(t, MustShape(map[string]any{"a": Catch(5.0, Ignore(Number))}), map[string]any{"a": "x"}).(map[string]any)
+	if _, has := c["a"]; has {
+		t.Fatalf("expected the dropped value left out, got %v", c)
+	}
+	// What an Ignore inside a Transform dropped reaches the function absent.
+	none := Transform(func(v any, _ *State) any {
+		if v == nil {
+			return "none"
+		}
+		return v
+	}, Ignore(Number))
+	if out := mustValid(t, MustShape(map[string]any{"a": none}), map[string]any{"a": "x"}).(map[string]any); out["a"] != "none" {
+		t.Fatalf("expected none, got %v", out)
+	}
+	// An argument an Ignore drops is nil.
+	args, err := MakeArgu("QAZ").Validate([]any{"x"}, "foo", map[string]any{"a": Ignore(Number)})
+	if err != nil || args["a"] != nil {
+		t.Fatalf("expected the argument dropped, got %v, %v", args, err)
+	}
+	r := MustShape(map[string]any{"a": Rename("b").Default(5.0)})
+	if out := mustValid(t, r, map[string]any{}).(map[string]any); out["b"] != 5.0 {
+		t.Fatalf("expected the default under b, got %v", out)
+	}
+}
+
 func TestIgnoreSuppressesErrors(t *testing.T) {
 	s := MustShape(map[string]any{"x": Ignore(Number)})
 	out, err := s.Validate(map[string]any{"x": "not a number"})

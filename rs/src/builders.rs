@@ -1016,6 +1016,15 @@ impl Node {
             base.silent = self.silent;
             base.fault_msg = self.fault_msg.take();
             base.arg_fault = self.arg_fault;
+            // Rename, Define and Refer are checks in TypeScript, which the
+            // node built over the default keeps with the others.
+            base.rename_to = self.rename_to.take();
+            base.rename_keep = self.rename_keep;
+            base.rename_claim = std::mem::take(&mut self.rename_claim);
+            base.define_name = self.define_name.take();
+            base.refer_name = self.refer_name.take();
+            base.refer_fill = self.refer_fill;
+            base.refer_strict = self.refer_strict;
             base.meta.extend(std::mem::take(&mut self.meta));
             self = base;
         }
@@ -2174,6 +2183,47 @@ mod tests {
 
     #[test]
     fn catch_and_transform() {
+        // A transform the Ignore took runs once, and a check after the
+        // Ignore sees what it produced.
+        let runs = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let seen = Arc::clone(&runs);
+        let inc = Required(Token::Number)
+            .Transform(move |v, _| {
+                seen.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                Value::Num(v.as_f64().unwrap_or(0.0) + 1.0)
+            })
+            .Ignore()
+            .Min(0);
+        assert_eq!(run(&at_a(inc), &a("1")), a("2"));
+        assert_eq!(runs.load(std::sync::atomic::Ordering::SeqCst), 1);
+        // What an Ignore inside a Catch drops stays dropped, and reaches a
+        // Transform undefined.
+        assert_eq!(
+            run(&at_a(Catch(5, Ignore(Token::Number))), &a("\"x\"")),
+            "{}"
+        );
+        let none = Transform(
+            |v, _| {
+                if v.is_undefined() {
+                    Value::from("none")
+                } else {
+                    v
+                }
+            },
+            Ignore(Token::Number),
+        );
+        let kept = at_a(none);
+        assert_eq!(run(&kept, &a("\"x\"")), a("\"none\""));
+        assert_eq!(run(&kept, &a("5")), a("5"));
+        // A branch that could drop its value and keeps it produces it.
+        let nof = Nof(
+            1,
+            [
+                Spec::from(Ignore(Min(2, Token::Number))),
+                Spec::from(Token::String),
+            ],
+        );
+        assert_eq!(run(&at_a(nof), &a("3")), a("3"));
         assert_eq!(run(&at_a(Catch(0, Token::Number)), &a("\"x\"")), a("0"));
         assert_eq!(run(&at_a(Catch(0, Token::Number)), &a("5")), a("5"));
         assert_eq!(
@@ -2628,6 +2678,15 @@ mod tests {
         }
         let d = Default(2, Describe("two", Any()));
         assert_eq!(d.meta.get("description"), Some(&Value::from("two")));
+    }
+
+    #[test]
+    fn default_keeps_rename_and_refer() {
+        // Rename, Define and Refer are checks in TypeScript, which a node
+        // built over its default keeps.
+        let r = at_a(Rename("b", Any()).Default(5));
+        assert_eq!(run(&r, "{}"), r#"{"b":5}"#);
+        assert_eq!(run(&r, &a("1")), r#"{"b":1}"#);
     }
 
     #[test]

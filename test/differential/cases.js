@@ -468,6 +468,22 @@ function build() {
   add('i-when-then-default', { a: E('When(Number,Min(5).Ignore.Default(0))') }, OBJS)
   add('i-branch-then-default', { a: E('Nof(1,Number.Ignore.Default(0),String)') }, OBJS)
   add('i-message', { a: E('Nof(2,Number.Min(2).Ignore.Min(3),String)') }, OBJS)
+  // What an Ignore inside drops stays dropped.
+  add('i-nested', { a: E('Ignore(Ignore(Number))') }, OBJS)
+  add('i-nested-elements', [E('Ignore(Ignore(Number))')], ARRS)
+  add('i-nested-root', E('Ignore(Ignore(Number))'), SCALARS)
+  add('i-then-coerce', { a: E('Number.Ignore.Coerce') }, OBJS.concat([{ a: '5' }, { a: ' 5 ' }]))
+  add('i-then-check-coerce', { a: E('Number.Ignore.Min(3).Coerce') }, OBJS.concat([{ a: '1' }, { a: '5' }]))
+  add('i-in-catch', { a: E('Number.Ignore.Catch(5)') }, OBJS)
+  add('i-catch-of', { a: E('Catch(5,Ignore(Number))') }, OBJS)
+  add('i-nested-branch', { a: E('All(Ignore(Ignore(Min(2,Number))),Number)') }, OBJS)
+  add('i-nested-when', { a: E('When(Number,Ignore(Ignore(Min(5))))') }, OBJS)
+  // Inputs without the target key: a closed object that has it differs
+  // (see the parity notes).
+  const RENAMES = [{}, { a: 1 }, { a: 'x' }, { a: null }, { a: {} }, { a: [] }, { c: 1 }]
+  add('d-rename-chained', { a: E('Rename("b").Default(5)') }, RENAMES)
+  add('d-rename-spec', { a: E('Default(5,Rename("b"))') }, RENAMES)
+  add('d-null-chained', { a: E('Default(null).Default(5)') }, OBJS)
   // A Catch takes the composition inside with the node's other checks.
   add('c-catch-all', E('Catch(0,All(Number))'), SCALARS)
   add('c-catch-nof', E('Catch(0,Nof(1,Number,String))'), SCALARS.concat(ARRS))

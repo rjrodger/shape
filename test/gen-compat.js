@@ -266,6 +266,19 @@ const files = {
     ['ignore-element-then-default', [{ $expr: 'Number.Ignore.Default(0)' }], [1, 'x']],
     ['ignore-child-then-default', { $expr: 'Child(Number.Ignore.Default(0))' }, { a: 'x', b: 1 }],
     ['ignore-of-another-kind', { a: { $expr: 'String.Default(5).Ignore' } }, { a: 5 }],
+    // What an Ignore inside drops stays dropped: within another Ignore, a
+    // Catch, or after a Coerce, which runs first.
+    ['ignore-nested-drops', { a: { $expr: 'Ignore(Ignore(Number))' } }, { a: 'x' }],
+    ['ignore-nested-element-drops', [{ $expr: 'Ignore(Ignore(Number))' }], [1, 'x']],
+    ['ignore-then-coerce-drops', { a: { $expr: 'Number.Ignore.Coerce' } }, { a: 'x' }],
+    ['ignore-then-coerce-keeps', { a: { $expr: 'Number.Ignore.Coerce' } }, { a: '5' }],
+    ['ignore-in-catch-drops', { a: { $expr: 'Number.Ignore.Catch(5)' } }, { a: 'x' }],
+    ['catch-of-ignore-drops', { a: { $expr: 'Catch(5,Ignore(Number))' } }, { a: 'x' }],
+    ['ignore-nested-branch-keeps', { a: { $expr: 'All(Ignore(Ignore(Min(2,Number))),Number)' } }, { a: 1 }],
+    ['nof-of-ignore-branch-kept', { a: { $expr: 'Nof(1,Ignore(Min(2,Number)),String)' } }, { a: 3 }],
+    // Rename is a check, which a node built over its default keeps.
+    ['rename-then-default', { a: { $expr: 'Rename("b").Default(5)' } }, {}],
+    ['default-of-rename', { a: { $expr: 'Default(5,Rename("b"))' } }, { a: 1 }],
     ['disc-branch-ok', { p: DISC }, { p: { bark: true, kind: 'dog' } }],
     ['disc-branch-error', { p: DISC }, { p: { fins: 'x', kind: 'fish' } }],
     ['disc-branch-missing-key', { p: DISC }, { p: { kind: 'dog' } }],

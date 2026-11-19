@@ -751,6 +751,11 @@ fn lists() {
         obj([("a", e("All(Min(1)).Never"))]),
         "a composition of kind never",
     );
+    // A null that inserts a default other than null.
+    cannot(
+        obj([("a", e("Default(null).Default(5)"))]),
+        "the default of a null",
+    );
     cannot(
         obj([("a", Default("xy", e("All(Min(2)).String")))]),
         "the default of a composition given a kind",

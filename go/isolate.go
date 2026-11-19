@@ -96,6 +96,12 @@ func (n *Node) Catch(fallback any) *Node {
 			out, sub := in.probe(state)
 			if sub.hasAny() {
 				out = cloneAny(fallback)
+			} else if isUndef(out) {
+				// What an Ignore inside dropped stays dropped, as TS's
+				// undefined does.
+				dropValue(state)
+				update.Done = true
+				return true
 			}
 			update.Val, update.HasVal, update.Done = out, true, true
 			return true
@@ -127,6 +133,10 @@ func (n *Node) Transform(fn func(val any, state *State) any) *Node {
 			if sub.hasAny() {
 				update.Err = sub.Issues
 				return false
+			}
+			// What an Ignore inside dropped reaches the function absent.
+			if isUndef(out) {
+				out = nil
 			}
 			update.Val, update.HasVal, update.Done = fn(out, state), true, true
 			return true

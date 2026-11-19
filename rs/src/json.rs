@@ -841,6 +841,16 @@ pub fn node_json(n: &Node) -> R<Value> {
                 // Skip(Never) say that the value must be absent.
                 Kind::Never => "Never".to_string(),
                 Kind::Null => {
+                    // A default it inserts that is not null, which no null
+                    // literal says.
+                    if !n.required
+                        && !n.skippable
+                        && n.has_default
+                        && !n.default.is_null()
+                        && !n.default.is_undefined()
+                    {
+                        return cannot("the default of a null");
+                    }
                     if !n.required
                         && !n.skippable
                         && n.befores.is_empty()

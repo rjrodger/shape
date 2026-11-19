@@ -5754,6 +5754,10 @@ function nodeJson(n: Node<any>): any {
     head = S.Never
   }
   else if (S.null === t) {
+    // A default it inserts that is not null, which no null literal says.
+    if (!n.r && !n.p && undefined !== n.f && null !== n.f) {
+      jsonFault('the default of a null')
+    }
     if (!n.r && !n.p && 0 === n.b.length && 0 === n.a.length &&
       !n.u.nullable && undefined === n.z && undefined === n.m?.description) {
       return null

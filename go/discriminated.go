@@ -79,6 +79,10 @@ func (d *discriminated) validate(val any, update *Update, state *State) bool {
 		update.Err = sub.Issues
 		return false
 	}
-	update.Val, update.HasVal = out, true
+	// A branch that drops the value (Ignore) changes nothing, as TS's
+	// undefined does.
+	if !isUndef(out) {
+		update.Val, update.HasVal = out, true
+	}
 	return true
 }

@@ -120,14 +120,12 @@ pub(crate) fn ignore_node(mut n: Node) -> Node {
     n.befores = vec![Validator {
         name: "Ignore".to_string(),
         func: Arc::new(move |state: &mut State<'_>, update: &mut Update| {
-            // Where a parent puts the value, a failing one is dropped (see
-            // validate_ignored). Anywhere else, a composition's branch, it
-            // is left as it was, as TypeScript's undefined there changes
-            // nothing.
+            // A value that fails is dropped, set undefined as TypeScript
+            // sets it, and so is one an Ignore inside dropped: the node then
+            // keeps nothing, which its parent leaves out, and a composition
+            // takes as no change.
             let (out, sub) = run.probe(state);
-            if !sub.has_any() {
-                update.val = Some(out);
-            }
+            update.val = Some(if sub.has_any() { Value::Undefined } else { out });
             update.done = true;
             true
         }),

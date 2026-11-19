@@ -272,6 +272,8 @@ func TestJSONCannot(t *testing.T) {
 	}
 	fn := func(val any, update *Update, state *State) bool { return true }
 	cannot(t, M("a", Check(fn)), "cannot express a check function")
+	// A null that inserts a default other than null.
+	cannot(t, M("a", Default(nil).Default(5.0)), "cannot express the default of a null")
 	// A composition keeps its kind's own default, and a kind a type token
 	// can spell (ts/test/json.test.ts).
 	cannot(t, M("a", MustExpr("All(Min(1)).Never")), "cannot express a composition of kind never")

@@ -174,7 +174,8 @@ func (n *Node) Skip() *Node {
 // Ignore drops a value that fails to match, and raises nothing for it. Like
 // Catch it takes the checks chained before it inside (see isolate.go): the
 // node as it stands, with those checks, every descendant included, is
-// probed, and a value the probe faults is dropped. It makes the node
+// probed, and a value the probe faults is dropped, as one an Ignore inside
+// dropped is. It makes the node
 // optional and skipped; a later builder may require it, or give it a
 // default to insert, and the probe follows the node as it then is. A check
 // chained after it runs on what it kept, and raises nothing either.
@@ -196,10 +197,11 @@ func (n *Node) Ignore() *Node {
 		name:  "Ignore",
 		inner: &in,
 		fn: func(_ any, update *Update, state *State) bool {
-			// Where a parent puts the value, a failing one is dropped (see
-			// validateIgnored). Anywhere else, a composition's branch, it is
-			// left as it was, as TS's undefined there changes nothing.
-			if out, sub := in.probe(state); !sub.hasAny() {
+			// A value that fails is dropped, and so is one an Ignore inside
+			// dropped (see dropValue).
+			if out, sub := in.probe(state); sub.hasAny() || isUndef(out) {
+				dropValue(state)
+			} else {
 				update.Val, update.HasVal = out, true
 			}
 			update.Done = true
@@ -256,7 +258,12 @@ func Default(dval any, spec ...any) *Node {
 				bumpValidatorGen()
 				base.hasExact, base.exactVals = nb.n.hasExact, nb.n.exactVals
 				base.empty, base.nullable, base.silent = nb.n.empty, nb.n.nullable, nb.n.silent
-				base.faultMsg = nb.n.faultMsg
+				base.faultMsg, base.argFault = nb.n.faultMsg, nb.n.argFault
+				// Rename, Define and Refer are checks in TS, which the node
+				// built over the default keeps with the others.
+				base.renameTo, base.renameKeep, base.renameClaim = nb.n.renameTo, nb.n.renameKeep, nb.n.renameClaim
+				base.defineName = nb.n.defineName
+				base.referName, base.referFill, base.referStrict = nb.n.referName, nb.n.referFill, nb.n.referStrict
 				for k, v := range nb.n.meta {
 					if base.meta == nil {
 						base.meta = map[string]any{}

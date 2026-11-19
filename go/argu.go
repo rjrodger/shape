@@ -187,6 +187,9 @@ func argCall(n *node, val any, path []string, pathArr []any, key string, parent 
 	was := ctx.startCall(defaultTrials)
 	out := validateNode(n, val, path, pathArr, key, parent, ctx, match, verr)
 	ctx.endCall(was, verr)
+	if isUndef(out) {
+		return nil
+	}
 	return out
 }
 

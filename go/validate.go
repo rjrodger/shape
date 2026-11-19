@@ -168,6 +168,7 @@ func validateNode(n *node, in any, path []string, pathArr []any, key string, par
 	state.Match = match
 	state.Ctx = ctx
 	state.absent = absent
+	state.dropped = false
 	state.checkName = ""
 
 	// Run before-validators. They may replace the value or the node, and a
@@ -240,11 +241,23 @@ func validateNode(n *node, in any, path []string, pathArr []any, key string, par
 	if len(state.Node.afters) > 0 {
 		runAfters(state, verr)
 	}
+	// A value an Ignore dropped is absent, as TS's undefined is: the
+	// sentinel tells the caller to leave the slot out (see dropValue).
 	out := state.Value
+	if state.dropped {
+		out = undefinedVal
+	}
 	if ctx != nil {
 		ctx.popState()
 	}
 	return out
+}
+
+// dropValue drops the value of the node being validated, as TS's Ignore
+// sets it undefined: what runs after sees it absent, and the node produces
+// the absent sentinel, which its parent leaves out.
+func dropValue(state *State) {
+	state.Value, state.absent, state.dropped = nil, true, true
 }
 
 // isolated reports whether a Catch or Transform took the node's checks
@@ -739,28 +752,16 @@ func validateObject(n *node, in any, path []string, pathArr []any, parent any, c
 				continue
 			}
 		} else {
-			// Ignore: keep the value only when it validates cleanly, otherwise
-			// drop it (and any errors it would raise).
-			if isIgnore(cn) {
-				probed, kept := validateIgnored(cn, v, kpath, kpathArr, k, parentOf, ctx, match)
-				if match {
-					continue
-				}
-				if !kept {
-					ensure()
-					delete(out, k)
-					continue
-				}
-				if out != nil || !sameValue(probed, v) {
-					ensure()
-					out[k] = probed
-				}
-				continue
-			}
 			produced = validateNode(cn, v, kpath, kpathArr, k, parentOf, ctx, match, verr)
 		}
 
 		if match {
+			continue
+		}
+		// A value an Ignore dropped leaves the key out.
+		if isUndef(produced) {
+			ensure()
+			delete(out, k)
 			continue
 		}
 		if !has || out != nil || !sameValue(produced, v) {
@@ -794,7 +795,7 @@ func validateObject(n *node, in any, path []string, pathArr []any, parent any, c
 			continue
 		}
 		produced := validateNode(cn, undefinedVal, append(path, k), append(pathArr, k), k, parentOf, ctx, match, verr)
-		if produced != nil && !match {
+		if produced != nil && !isUndef(produced) && !match {
 			ensure()
 			out[k] = produced
 		}
@@ -812,26 +813,14 @@ func validateObject(n *node, in any, path []string, pathArr []any, parent any, c
 		sort.Strings(rest)
 
 		for _, k := range rest {
-			// Honour Ignore here too: an open object whose rest shape is an
-			// Ignore drops the keys that do not validate.
-			if isIgnore(n.objRest) {
-				produced, kept := validateIgnored(n.objRest, obj[k],
-					append(path, k), append(pathArr, k), k, parentOf, ctx, match)
-				if match {
-					continue
-				}
-				if !kept {
-					ensure()
-					delete(out, k)
-					continue
-				}
-				if out != nil || !sameValue(produced, obj[k]) {
-					ensure()
-					out[k] = produced
-				}
+			produced := validateNode(n.objRest, obj[k], append(path, k), append(pathArr, k), k, parentOf, ctx, match, verr)
+			// An open object whose rest shape is an Ignore drops the keys
+			// that do not validate.
+			if !match && isUndef(produced) {
+				ensure()
+				delete(out, k)
 				continue
 			}
-			produced := validateNode(n.objRest, obj[k], append(path, k), append(pathArr, k), k, parentOf, ctx, match, verr)
 			if !match && (out != nil || !sameValue(produced, obj[k])) {
 				ensure()
 				out[k] = produced
@@ -855,7 +844,7 @@ func validateObject(n *node, in any, path []string, pathArr []any, parent any, c
 // default, a null literal's own or one Default(null, ...) gave: TS injects
 // it, so the key is present and null.
 func absentOmits(cn *node, produced any) bool {
-	if cn.skippable && (produced == nil || cn.silent) {
+	if isUndef(produced) || (cn.skippable && (produced == nil || cn.silent)) {
 		return true
 	}
 	return produced == nil && !(cn.hasDefault && !cn.required && (cn.kind == KindNull || cn.defaultNull))
@@ -992,7 +981,9 @@ func evaluateList(n *node, state *State, verr *ValidationError) any {
 			if sub.hasAny() {
 				passAll = false
 				errs = appendUnique(errs, sub.Issues)
-			} else if res != nil || !isUndef(branchOut) {
+			} else if !isUndef(res) && (res != nil || !isUndef(branchOut)) {
+				// A branch that drops its value (Ignore) passes the one
+				// before it on, as TS's undefined there changes nothing.
 				out = res
 				branchOut = res
 			}
@@ -1036,7 +1027,7 @@ func evaluateList(n *node, state *State, verr *ValidationError) any {
 				}
 				return in
 			}
-			return res
+			return keptOr(res, in)
 		}
 		// A branch is tried only while the untried could change the verdict.
 		k, tried, total, matched := 0, 0, len(n.list), 0
@@ -1072,7 +1063,7 @@ func evaluateList(n *node, state *State, verr *ValidationError) any {
 			if match && !deep {
 				return matchedOut
 			}
-			return validateNode(n.list[matched], branchIn, path, pathArr, key, parent, ctx, match, &ValidationError{})
+			return keptOr(validateNode(n.list[matched], branchIn, path, pathArr, key, parent, ctx, match, &ValidationError{}), in)
 		}
 		return in
 	case listWhen:
@@ -1086,13 +1077,6 @@ func evaluateList(n *node, state *State, verr *ValidationError) any {
 		if ok, _, _ := trial(n.list[0], in, path, pathArr, key, state); ok {
 			pick = n.list[1]
 		}
-		// A shape that drops its value (Ignore) leaves the value as it was.
-		if isIgnore(pick) {
-			if res, kept := validateIgnored(pick, in, path, pathArr, key, nil, ctx, match); kept {
-				return res
-			}
-			return in
-		}
 		sub := &ValidationError{}
 		res := branchNode(pick, in, path, pathArr, key, ctx, match, sub)
 		if sub.hasAny() {
@@ -1103,9 +1087,19 @@ func evaluateList(n *node, state *State, verr *ValidationError) any {
 			}
 			return in
 		}
-		return res
+		// A shape that drops its value (Ignore) leaves the value as it was.
+		return keptOr(res, in)
 	}
 	return in
+}
+
+// keptOr is what a branch produced, or the value it was given where the
+// branch dropped it (Ignore): TS's undefined output changes nothing there.
+func keptOr(res, in any) any {
+	if isUndef(res) {
+		return in
+	}
+	return res
 }
 
 // trial tries a shape on a value for a verdict alone, as a call of its own
@@ -1306,6 +1300,7 @@ func emitUpdateErrors(state *State, update *Update, verr *ValidationError) {
 func applyUpdate(state *State, update *Update) {
 	if update.HasVal {
 		state.Value = update.Val
+		state.dropped = false
 	}
 	if update.Node != nil {
 		state.Node = update.Node
@@ -1323,15 +1318,11 @@ func validateElem(cn *node, v any, path []string, pathArr []any, i int, parent a
 		epathArr = append(pathArr, boxed)
 	}
 
-	if isIgnore(cn) {
-		produced, kept := validateIgnored(cn, v, epath, epathArr, key, parent, ctx, match)
-		if !kept {
-			return nil
-		}
-		return produced
+	produced := validateNode(cn, v, epath, epathArr, key, parent, ctx, match, verr)
+	if isUndef(produced) {
+		return nil
 	}
-
-	return validateNode(cn, v, epath, epathArr, key, parent, ctx, match, verr)
+	return produced
 }
 
 // indexOf is an index as a key, and boxed for the path.
@@ -1340,33 +1331,6 @@ func indexOf(i int) (string, any) {
 		return indexKey[i], indexAny[i]
 	}
 	return strconv.Itoa(i), i
-}
-
-// isIgnore reports whether a node's first check is an Ignore, which took the
-// checks before it: whatever the builders after it made of the node, a value
-// that fails is dropped.
-func isIgnore(n *node) bool {
-	return n != nil && len(n.befores) > 0 && n.befores[0].name == "Ignore" && n.befores[0].inner != nil
-}
-
-// validateIgnored runs an Ignore node, reporting whether the value survived:
-// the node as it stands is probed with the checks Ignore took, as TS's
-// Ignore probes them, and the caller drops the value when kept is false.
-// The checks chained after Ignore then run on what it kept, raising nothing.
-func validateIgnored(n *node, in any, path []string, pathArr []any, key string, parent any, ctx *Context, match bool) (any, bool) {
-	taken := n.befores[0].inner
-	probe := *n
-	probe.befores, probe.afters = taken.befores, taken.afters
-	probe.silent = false
-	sub := &ValidationError{}
-	produced := validateNode(&probe, in, path, pathArr, key, parent, ctx, match, sub)
-	if sub.hasAny() {
-		return nil, false
-	}
-	if len(n.befores) == 1 && len(n.afters) == 0 {
-		return produced, true
-	}
-	return validateNode(n, in, path, pathArr, key, parent, ctx, match, &ValidationError{}), true
 }
 
 // emptyContainer is the value a container node descends into when its own

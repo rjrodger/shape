@@ -276,6 +276,8 @@ describe('json', () => {
 
 
   test('cannot', () => {
+    // A null that inserts a default other than null.
+    throws(() => Shape({ a: Shape.Default(null).Default(5) }).json(), /cannot express the default of a null/)
     const cannot = (spec: any, re: RegExp) => throws(() =>
       (('function' === typeof spec && undefined !== spec.node) ? spec : Shape(spec)).json(), re)
     cannot({ a: Check((v: any) => v > 1) }, /cannot express a check function/)
