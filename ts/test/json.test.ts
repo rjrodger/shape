@@ -169,7 +169,23 @@ describe('json', () => {
     roundTrip({ a: expr('All(Min(1)).Array.Child(Number)') }, { a: 'All(Any.Min(1)).Array.Child(Number)' },
       { a: [1, 'a'] }, { a: [1, 2] })
     roundTrip({ a: expr('All(Min(1)).Object.Open') }, { a: 'All(Any.Min(1)).Object.Open' }, { a: { x: 1 } })
-    roundTrip({ a: expr('All(Min(1)).Ignore.Default(0)') }, { a: 'All(Any.Min(1)).Ignore.Number.Optional' }, {})
+    // A default after Ignore, which skips, inserts again, so it follows it,
+    // as does a Required; a check after it stays after.
+    roundTrip({ a: expr('All(Min(1)).Ignore.Default(0)') }, { a: 'All(Any.Min(1)).Ignore.Default(0)' },
+      {}, { a: '' }, { a: 0 }, { a: 'x' })
+    roundTrip({ a: expr('Number.Ignore.Default(0)') }, { 'a: Ignore.Default(0)': 0 }, {}, { a: 'x' }, { a: 5 })
+    roundTrip({ a: expr('Number.Ignore.Required') }, { 'a: Number.Ignore.Required': 0 }, {}, { a: 'x' })
+    roundTrip({ a: expr('Number.Ignore.Min(3)') }, { 'a: Skip.Ignore.Min(3)': 0 }, { a: 0 }, { a: 'x' })
+    roundTrip({ a: expr('Number.Ignore.Catch(5)') }, { 'a: Skip.Ignore.Catch(5)': 0 }, {}, { a: 3 })
+    // A default of another kind than the node's reads as a literal of its
+    // own, so the type token holds the kind and Default the value.
+    roundTrip({ a: expr('String.Default(5)') }, { a: 'String.Default(5)' }, {}, { a: 'x' }, { a: 5 })
+    roundTrip({ a: expr('Number.Default("x")') }, { a: 'Number.Default("x")' }, {}, { a: 5 })
+    roundTrip({ a: expr('String.Default(null)') }, { a: 'String.Default(null)' }, {}, { a: null })
+    roundTrip({ a: expr('String.Default(5).Skip') }, { a: 'String.Default(5).Skip' }, {}, { a: 5 })
+    // A required node never inserts its default, so it is its token.
+    roundTrip({ a: expr('Required(String.Default(5))') }, { 'a: String': '' }, {}, { a: 'x' }, { a: 5 })
+    roundTrip({ a: expr('String.Default(5).Ignore') }, { a: 'String.Default(5).Ignore' }, {}, { a: 5 })
     roundTrip({ a: expr('All(Min(1)).Number.Ignore') }, { a: 'All(Any.Min(1)).Ignore.Number.Skip' }, {}, { a: 'x' })
     for (const k of ['Integer', 'Boolean', 'Object', 'Array', 'Date', 'Function']) {
       roundTrip(expr('All(Min(1)).' + k), 'All(Any.Min(1)).' + k, 0, 2, true, {}, { b: 1 }, [], [1], 'x')

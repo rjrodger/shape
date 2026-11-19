@@ -1,5 +1,8 @@
 name	spec	input	output	error
 js-number-min-and-exclusive-ok	{"$jsonschema":{"type":"number","minimum":1,"exclusiveMinimum":0}}	1	1	
+js-nullable-composition-null	{"$jsonschema":{"type":"object","properties":{"a":{"anyOf":[{"type":"null"},{"oneOf":[{"type":"string"},{"type":"number"}]}]}}}}	{"a":null}	{"a":null}	
+js-nullable-composition-branch	{"$jsonschema":{"type":"object","properties":{"a":{"anyOf":[{"type":"null"},{"oneOf":[{"type":"string"},{"type":"number"}]}]}}}}	{"a":"x"}	{"a":"x"}	
+js-nullable-composition-neither	{"$jsonschema":{"type":"object","properties":{"a":{"anyOf":[{"type":"null"},{"oneOf":[{"type":"string"},{"type":"number"}]}]}}}}	{"a":true}		"Value \"true\" for property \"a\" satisfies 0 of: null, Nof(1,String,Number); the count must be Min(1)."
 js-number-min-and-exclusive-low	{"$jsonschema":{"type":"number","minimum":1,"exclusiveMinimum":0}}	0.5		"Value \"0.5\" for property \"\" must be a minimum of 1 (was 0.5)."
 js-number-max-and-exclusive-high	{"$jsonschema":{"type":"number","maximum":1,"exclusiveMaximum":2}}	1.5		"Value \"1.5\" for property \"\" must be a maximum of 1 (was 1.5)."
 js-untyped-min-and-exclusive-low	{"$jsonschema":{"minimum":1,"exclusiveMinimum":0}}	0.5		"Value \"0.5\" for property \"\" must be a minimum of 1 (was 0.5)."

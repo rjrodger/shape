@@ -373,6 +373,26 @@ func TestDefault(t *testing.T) {
 	}
 }
 
+// A chained Default is Default(value, spec): a typed node keeps its kind and
+// its children, and a composition its branches; an untyped one is built over
+// the default, as in TS.
+func TestDefaultChained(t *testing.T) {
+	s := MustShape(map[string]any{"a": Required(String).Default(5.0)})
+	if out := mustValid(t, s, map[string]any{}).(map[string]any); out["a"] != 5.0 {
+		t.Fatalf("expected the default 5, got %v", out["a"])
+	}
+	mustValid(t, s, map[string]any{"a": "x"})
+	mustInvalid(t, s, map[string]any{"a": 5.0}, "not of type string")
+	o := MustShape(map[string]any{"a": Required(map[string]any{"x": String}).Default(map[string]any{"x": "b"})})
+	mustInvalid(t, o, map[string]any{"a": map[string]any{}}, "is missing")
+	c := MustShape(map[string]any{"a": All(Min(1)).Default(0.0)})
+	mustValid(t, c, map[string]any{"a": "x"})
+	u := MustShape(map[string]any{"a": Required().Default(5.0)})
+	mustInvalid(t, u, map[string]any{"a": "x"}, "not of type number")
+	m := MustShape(map[string]any{"a": Min(1).Default(5.0)})
+	mustInvalid(t, m, map[string]any{"a": "x"}, "not of type number")
+}
+
 func TestIgnoreSuppressesErrors(t *testing.T) {
 	s := MustShape(map[string]any{"x": Ignore(Number)})
 	out, err := s.Validate(map[string]any{"x": "not a number"})

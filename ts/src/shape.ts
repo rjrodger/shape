@@ -3419,25 +3419,31 @@ const Func = bare<Function>()(function Func <V = Function>(this: any, shape?: No
 
 // Specify default value.
 const Default = function <D = any, V = D>(this: any, dval?: D, shape?: Node<V> | V): Node<V> {
-  // The node is the shape's when one is given, so an object or array shape
-  // keeps its children and child shape; the default is only the value. An
-  // untyped shape (Required(), Exact(1)) is built over the default instead,
-  // and so takes the default's kind.
+  // The node is the shape's, given or chained onto, so an object or array
+  // shape keeps its children and child shape, and a composition its
+  // branches; the default is only the value: X.Default(v) is Default(v, X).
+  // An untyped shape (Required(), Exact(1)) is built over the default
+  // instead, and so takes the default's kind, as Default(value) alone does.
+  const self = chainNode(this)
+  const over = undefined === shape && (undefined === self || S.any === self.t)
   let node: Node<any>
-  if (undefined === shape) {
-    node = buildize(chainNode(this), dval)
+  if (over) {
+    node = buildize(self, dval)
+  }
+  else if (undefined === shape) {
+    node = buildize(self)
   }
   else if (S.any === nodize(shape).t) {
-    node = buildize(buildize(chainNode(this), dval), shape)
+    node = buildize(buildize(self, dval), shape)
   }
   else {
-    node = buildize(chainNode(this), shape)
+    node = buildize(self, shape)
   }
 
   node.r = false
   node.f = dval
 
-  if (undefined === shape) {
+  if (over) {
     let t = typeof dval
     if (S.function === t && IS_TYPE[(dval as any).name]) {
       node.t = ((dval as any).name.toLowerCase() as ValType)
@@ -5152,7 +5158,7 @@ function jsonValidatorCalls(n: Node<any>, skip?: any): JsonCall[] {
   const calls: JsonCall[] = []
   for (const v of n.b) {
     if (skip !== v) {
-      jsonValidatorCall(v, calls)
+      jsonValidatorCall(v, calls, n)
     }
   }
   jsonNoAfters(n.a)
@@ -5160,7 +5166,7 @@ function jsonValidatorCalls(n: Node<any>, skip?: any): JsonCall[] {
 }
 
 
-function jsonValidatorCall(v: any, calls: JsonCall[]) {
+function jsonValidatorCall(v: any, calls: JsonCall[], n: Node<any>) {
   const name: string | undefined = v.n
   const args: any[] = v.a || []
 
@@ -5177,13 +5183,21 @@ function jsonValidatorCall(v: any, calls: JsonCall[]) {
   else if (S.Catch === name || S.Ignore === name) {
     // The taken checks run inside, so they read ahead of the taker.
     for (const iv of v.inner.b) {
-      jsonValidatorCall(iv, calls)
+      jsonValidatorCall(iv, calls, n)
     }
     jsonNoAfters(v.inner.a)
     calls.push({
       n: name,
       a: S.Catch === name ? [{ x: jsonLiteral(args[0], 'the fallback') }] : []
     })
+    // Ignore makes the node optional and skipped; a builder after it that
+    // required the node, or gave it a default to insert, follows it.
+    if (S.Ignore === name && n.r) {
+      calls.push({ n: S.Required, a: [] })
+    }
+    else if (S.Ignore === name && !n.p && undefined !== n.f) {
+      calls.push({ n: S.Default, a: [{ x: jsonLiteral(n.f, 'the default') }] })
+    }
   }
   else if (S.Coerce === name || JSON_FORMATS[name]) {
     calls.push({ n: name, a: [] })
@@ -5219,14 +5233,17 @@ function jsonValidatorCall(v: any, calls: JsonCall[]) {
 
 // Whether the node is required or skipped, as calls, for a head that says
 // neither: Required where the head is optional by itself, Optional or Skip
-// where it is required. Ignore says skipped already.
+// where it is required. Ignore says optional and skipped, and what a later
+// builder changed of that follows it (see jsonValidatorCall).
 function jsonRequiredCalls(n: Node<any>, headRequired: boolean): JsonCall[] {
   const calls: JsonCall[] = []
-  const ignored = n.b.some((v: any) => S.Ignore === v.n)
+  if (jsonIgnored(n)) {
+    return calls
+  }
   if (n.r && !headRequired) {
     calls.push({ n: S.Required, a: [] })
   }
-  else if (!n.r && !ignored) {
+  else if (!n.r) {
     if (n.p) {
       calls.push({ n: S.Skip, a: [] })
     }
@@ -5235,6 +5252,14 @@ function jsonRequiredCalls(n: Node<any>, headRequired: boolean): JsonCall[] {
     }
   }
   return calls
+}
+
+
+// Whether an Ignore, or a Catch that took one, is among the node's checks.
+function jsonIgnored(n: Node<any>): boolean {
+  const has = (b: any[]): boolean => b.some((v: any) => S.Ignore === v.n ||
+    (S.Catch === v.n && has(v.inner.b)))
+  return has(n.b)
 }
 
 
@@ -5355,7 +5380,8 @@ function jsonHeadValidator(n: Node<any>): any {
 function jsonScalar(n: Node<any>): { head: string, token: string | null, example: any, calls: JsonCall[] } {
   const z = EMPTY_VAL[n.t]
   const zero = undefined === n.f || z === n.f
-  const example = zero ? z : n.f
+  const other = jsonOtherKind(n)
+  const example = zero || other ? z : n.f
   const hv = jsonHeadValidator(n)
   let head: string
   let token: string | null = null
@@ -5363,14 +5389,22 @@ function jsonScalar(n: Node<any>): { head: string, token: string | null, example
 
   if (undefined !== hv && S.Key === hv.n) {
     const kc: JsonCall[] = []
-    jsonValidatorCall(hv, kc)
+    jsonValidatorCall(hv, kc, n)
     head = jsonCallText(kc[0], {})
     calls = jsonRequiredCalls(n, false).concat(jsonFlagCalls(n, false))
   }
+  // A default of another kind would read as a literal of its own: the type
+  // token holds the kind, and Default the value.
+  else if (!n.r && other) {
+    head = JSON_TOKEN[n.t]
+    const dflt: JsonCall[] = [{ n: S.Default, a: [{ x: jsonLiteral(n.f, 'the default') }] }]
+    calls = dflt.concat(n.p && !jsonIgnored(n) ? [{ n: S.Skip, a: [] }] : [], jsonFlagCalls(n, false))
+  }
   // A literal stands for its own kind, but not for integer, and an empty
   // string literal allows the empty string; a required zero is the type
-  // token.
-  else if ((n.r && zero) || S.integer === n.t ||
+  // token, and so is a required node whose default, which it never
+  // inserts, is of another kind.
+  else if ((n.r && (zero || other)) || S.integer === n.t ||
     (S.string === n.t && !n.u.empty && '' === n.f)) {
     token = JSON_TOKEN[n.t]
     head = token
@@ -5389,13 +5423,23 @@ function jsonScalar(n: Node<any>): { head: string, token: string | null, example
 }
 
 
+// Whether a scalar's default is of another kind than the node, which its
+// literal cannot say: String.Default(5).
+function jsonOtherKind(n: Node<any>): boolean {
+  const own = S.integer === n.t ? S.number : n.t
+  return undefined !== n.f && (null === n.f || own !== typeof n.f)
+}
+
+
 // The key form of a property, "name: chain" with its example, or null where
-// the node has no key form (a list, a regexp, a shape needing sidecars).
+// the node has no key form (a list, a regexp, a shape needing sidecars, a
+// default the example cannot be).
 function jsonKeyForm(n: Node<any>): { chain: string, example: any } | null {
   const t = n.t
 
   // A composition has no key form, whatever kind a type token gave it.
-  if (undefined !== jsonHeadValidator(n) || undefined !== n.u.list) {
+  if (undefined !== jsonHeadValidator(n) || undefined !== n.u.list ||
+    (undefined !== JSON_TOKEN[t] && !n.r && jsonOtherKind(n))) {
     return null
   }
 
@@ -5530,7 +5574,7 @@ function jsonHeaded(n: Node<any>, hv: any, kind: string): any {
     jsonFault('Exact on ' + kind)
   }
   const kc: JsonCall[] = []
-  jsonValidatorCall(hv, kc)
+  jsonValidatorCall(hv, kc, n)
   const calls = jsonRequiredCalls(n, false)
     .concat(jsonFlagCalls(n, false), jsonValidatorCalls(n, hv), jsonTailCalls(n))
   const refs: any = {}
@@ -5661,8 +5705,8 @@ function nodeJson(n: Node<any>): any {
   if (S.list === t) {
     const refs: any = {}
     // A default the node injects is a Default around the list, which makes
-    // it optional too.
-    const dflt = undefined !== n.f && !n.r && !n.p
+    // it optional too, unless an Ignore says it (see jsonValidatorCall).
+    const dflt = undefined !== n.f && !n.r && !n.p && !jsonIgnored(n)
     const headText = jsonCallText(jsonListCall(n), refs)
     const calls = (dflt ? [] : jsonRequiredCalls(n, true))
       .concat(jsonFlagCalls(n, false), jsonValidatorCalls(n), jsonTailCalls(n))
@@ -5735,7 +5779,7 @@ function nodeJson(n: Node<any>): any {
       jsonFault('a check function')
     }
     const kc: JsonCall[] = []
-    jsonValidatorCall(first, kc)
+    jsonValidatorCall(first, kc, n)
     head = jsonCallText(kc[0], refs)
     const calls = jsonRequiredCalls(n, true)
       .concat(jsonFlagCalls(n, false), jsonValidatorCalls(n, first), jsonTailCalls(n))
@@ -6007,9 +6051,14 @@ function nodeSchema(raw: any, defs: any): any {
   }
   // A composition says what its branches say, whatever kind a type token
   // or a Check gave it, beside what the kind says: a keyword both say holds
-  // as an allOf of its own, so that neither replaces the other. Given a
-  // kind, a nullable one admits null whatever the branches make of it.
-  if (S.list === n.t) {
+  // as an allOf of its own, so that neither replaces the other. A nullable
+  // one admits null whatever the branches make of it.
+  if (S.list === n.t && n.u.nullable) {
+    const ls: any = {}
+    listSchema(n, ls, defs)
+    s.anyOf = [{ type: S.null }, ls]
+  }
+  else if (S.list === n.t) {
     listSchema(n, s, defs)
   }
   else if (undefined !== n.u.list && !n.u.discriminated) {

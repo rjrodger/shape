@@ -382,8 +382,16 @@ describe('jsonschema-import', () => {
       $schema: 'https://json-schema.org/draft/2020-12/schema',
       minimum: 1, minLength: 2, properties: { a: { type: 'number' } }, maxItems: 3,
     })
-    deepEqual(Shape(fromJsonSchema({ type: ['string', 'number', 'null'] })).jsonSchema().oneOf.length, 2)
-    deepEqual(Shape(fromJsonSchema({ type: ['string', 'number', 'null'] })).jsonSchema().type, undefined)
+    // Null is a branch of its own beside them, so the export admits it too.
+    const kinds = Shape(fromJsonSchema({ type: ['string', 'number', 'null'] })).jsonSchema()
+    deepEqual(kinds.anyOf[0], { type: 'null' })
+    deepEqual(kinds.anyOf[1].oneOf.length, 2)
+    deepEqual(kinds.type, undefined)
+    const again = Shape(fromJsonSchema(kinds))
+    equal(again(null), null)
+    equal(again('x'), 'x')
+    equal(again(5), 5)
+    throws(() => again(true), /satisfies 0 of/)
   })
 
 

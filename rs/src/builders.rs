@@ -90,7 +90,8 @@ pub fn Skip(spec: impl Into<Spec>) -> Node {
     buildize(spec).Skip()
 }
 
-/// Like `Skip`, and a value that fails is dropped with its errors.
+/// Like `Skip`, and a value that fails is dropped with its errors: the checks
+/// before it, the structural check and every descendant are probed.
 pub fn Ignore(spec: impl Into<Spec>) -> Node {
     buildize(spec).Ignore()
 }
@@ -1033,12 +1034,8 @@ impl Node {
         self
     }
 
-    pub fn Ignore(mut self) -> Node {
-        self.required = false;
-        self.required_set = true;
-        self.skippable = true;
-        self.silent = true;
-        self
+    pub fn Ignore(self) -> Node {
+        crate::isolate::ignore_node(self)
     }
 
     pub fn Empty(mut self) -> Node {
@@ -2021,6 +2018,11 @@ mod tests {
         let mut quiet = one_ns();
         quiet.silent = true;
         assert_eq!(run(&at_a(quiet), &a("true")), a("true"));
+        // A silent node raises no structural error either, whatever made it
+        // silent: Ignore makes its own probe speak.
+        let mut hushed = Required(Token::String);
+        hushed.silent = true;
+        assert_eq!(run(&at_a(hushed), &a("5")), a("5"));
     }
 
     #[test]
@@ -2604,8 +2606,10 @@ mod tests {
             (Default(2, Nullable(Required(Any()))), "null", "null"),
             (Default("x", Empty(Required(Any()))), "\"\"", "\"\""),
             (Default(2, After(|_, _| false, Any())), "3", "ERR Validation failed for property \"a\" with number \"3\" because check \"After\" failed."),
-            // Default clears skippable, so an Ignore's silence remains alone.
-            (Default(2, Ignore(Any())), "\"x\"", "\"x\""),
+            // An Ignore still drops what fails, now against the default's
+            // kind, though Default makes the node insert it.
+            (Default(2, Ignore(Any())), "\"x\"", "{}"),
+            (Default(2, Ignore(Any())), "{}", "2"),
             (Default(Value::Undefined, Any()), "\"x\"", "\"x\""),
             (Default(7, Token::Number), "{}", "7"),
         ];
@@ -2624,6 +2628,27 @@ mod tests {
         }
         let d = Default(2, Describe("two", Any()));
         assert_eq!(d.meta.get("description"), Some(&Value::from("two")));
+    }
+
+    #[test]
+    fn chained_default_keeps_a_typed_node() {
+        // X.Default(v) is Default(v, X): a typed node keeps its kind and
+        // its children, and a composition its branches; an untyped one is
+        // built over the default.
+        let s = at_a(Required(Token::String).Default(5));
+        assert_eq!(run(&s, "{}"), a("5"));
+        assert_eq!(run(&s, &a("\"x\"")), a("\"x\""));
+        assert!(run(&s, &a("5")).contains("not of type string"));
+        let mut x = crate::value::Map::new();
+        x.insert("x".to_string(), Value::from("b"));
+        let o = at_a(Required(obj([("x", Token::String)])).Default(Value::Obj(x)));
+        assert_eq!(run(&o, "{}"), a(r#"{"x":"b"}"#));
+        assert!(run(&o, &a("{}")).contains("is missing"));
+        let c = at_a(All([Spec::from(Min(1, Any()))]).Default(0));
+        assert_eq!(run(&c, "{}"), a("0"));
+        assert_eq!(run(&c, &a("\"x\"")), a("\"x\""));
+        let u = at_a(Required(Any()).Default(5));
+        assert!(run(&u, &a("\"x\"")).contains("not of type number"));
     }
 
     /// The bare form of Contains and Unique: an array of anything.

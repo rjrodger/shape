@@ -1052,29 +1052,52 @@ fn validate_array(
     true
 }
 
-/// An `Ignore` node: run it with its silence lifted into a collector of its
-/// own, and drop the value when anything failed.
+/// An `Ignore` node: the node as it stands is probed with the checks Ignore
+/// took, as TypeScript's Ignore probes them, its silence lifted into a
+/// collector of its own, and the value is dropped when anything failed. The
+/// checks chained after Ignore then run on what it kept, raising nothing.
 pub(crate) fn validate_ignored(
     n: &Node,
-    cur: Cur<'_>,
+    mut cur: Cur<'_>,
     key: &str,
     parent_is_array: bool,
     w: &mut Walk<'_>,
     _verr: &mut ValidationError,
 ) -> bool {
+    let taken = n.befores[0]
+        .inner
+        .as_ref()
+        .expect("Ignore takes its checks inside");
     let mut sub = ValidationError::default();
     let kept = validate_node_with(
         n,
-        &n.befores,
-        &n.afters,
+        &taken.befores,
+        &taken.afters,
         false,
-        cur,
+        cur.reborrow(),
         key,
         parent_is_array,
         w,
         &mut sub,
     );
-    !sub.has_any() && kept
+    if sub.has_any() || !kept {
+        return false;
+    }
+    if n.befores.len() == 1 && n.afters.is_empty() {
+        return true;
+    }
+    let mut quiet = ValidationError::default();
+    validate_node_with(
+        n,
+        &n.befores,
+        &n.afters,
+        true,
+        cur,
+        key,
+        parent_is_array,
+        w,
+        &mut quiet,
+    )
 }
 
 /// Take one trial from the validation's budget for the composition at the

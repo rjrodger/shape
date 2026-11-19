@@ -518,8 +518,14 @@ func TestJSONSchemaImportKinds(t *testing.T) {
 	// The kinds export as the keywords side by side, with no type.
 	schemaWant(t, "kinds", importShape(t, `{"minimum":1,"minLength":2,"properties":{"a":{"type":"number"}},"maxItems":3}`).JSONSchema(),
 		`{`+draft+`,"minimum":1,"minLength":2,"properties":{"a":{"type":"number"}},"maxItems":3}`)
+	// Null is a branch of its own beside them, so the export admits it too.
+	types := `{"anyOf":[{"type":"null"},{"oneOf":[{"type":"string"},{"type":"number"}]}]}`
 	schemaWant(t, "types", importShape(t, `{"type":["string","number","null"]}`).JSONSchema(),
-		`{`+draft+`,"oneOf":[{"type":"string"},{"type":"number"}]}`)
+		`{`+draft+`,"anyOf":[{"type":"null"},{"oneOf":[{"type":"string"},{"type":"number"}]}]}`)
+	jsvOK(t, types, Null, nil)
+	jsvOK(t, types, "x", "x")
+	jsvOK(t, types, 5.0, 5.0)
+	mustErr(t, importShape(t, types), true, "satisfies 0 of")
 	// A kind's shape that says more than its keywords is counted, as oneOf.
 	schemaWant(t, "ip", importShape(t, `{"anyOf":[{"format":"ipv4"},{"format":"ipv6"}]}`).JSONSchema(),
 		`{`+draft+`,"oneOf":[{"type":"null"},{"type":"boolean"},{"type":"number"},

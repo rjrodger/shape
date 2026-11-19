@@ -225,8 +225,10 @@ func TestJSONKinds(t *testing.T) {
 	roundTrip(t, M("a", Type(Any), "b", Required(), "c", Never(), "d", Date, "e", Optional(Date), "f", Func(), "g", Function),
 		`{"a":"Any","b":"Required","c":"Never","d":"Date","e":"Optional(Date)","f":"Optional(Function)","g":"Function"}`,
 		M("b", 1.0, "d", time.Now()), M("c", 1.0), M())
-	roundTrip(t, M("a", Type(Any).Open(), "b", Type(Any).Default(3.0), "e", Skip(Never())),
-		`{"a":"Any.Open","b":"Any(3)","e":"Skip(Never)"}`, M("a", M("z", 1.0)), M())
+	// Any(3) keeps the value as its default; a Default chained onto Any is
+	// built over the default, and so takes its kind, as Default(3, Any) does.
+	roundTrip(t, M("a", Type(Any).Open(), "b", Type(Any, 3.0), "c", Type(Any).Default(3.0), "e", Skip(Never())),
+		`{"a":"Any.Open","b":"Any(3)","c":3,"e":"Skip(Never)"}`, M("a", M("z", 1.0)), M(), M("c", "x"))
 	roundTrip(t, M("a", MustExpr("NaN"), "b", Required(MustExpr("NaN")), "c", Min(2, MustExpr("NaN")), "d", MustExpr("Skip(null)"), "e", MustExpr("Required(null)")),
 		`{"a":"NaN","b":"Required(NaN)","c":"Optional(NaN).Min(2)","d":"Skip(null)","e":"Required(null)"}`,
 		M("e", nil), M(), M("d", 1.0))
@@ -287,6 +289,22 @@ func TestJSONCannot(t *testing.T) {
 	roundTrip(t, M("a", MustExpr("All(Min(1)).Object.Open")), `{"a":"All(Any.Min(1)).Object.Open"}`, M("a", M("x", 1.0)))
 	roundTrip(t, M("a", MustExpr("All(Min(1)).Number.Ignore")), `{"a":"All(Any.Min(1)).Ignore.Number.Skip"}`,
 		M(), M("a", "x"))
+	// Ignore makes the node optional and skipped, and what a builder after it
+	// changed of that follows it; a check after it stays after.
+	roundTrip(t, M("a", MustExpr("All(Min(1)).Ignore.Default(0)")), `{"a":"All(Any.Min(1)).Ignore.Default(0)"}`,
+		M(), M("a", ""), M("a", "x"))
+	roundTrip(t, M("a", MustExpr("Number.Ignore.Default(0)")), `{"a: Ignore.Default(0)":0}`, M(), M("a", "x"), M("a", 5.0))
+	roundTrip(t, M("a", MustExpr("Number.Ignore.Required")), `{"a: Number.Ignore.Required":0}`, M(), M("a", "x"))
+	roundTrip(t, M("a", MustExpr("Number.Ignore.Min(3)")), `{"a: Skip.Ignore.Min(3)":0}`, M("a", 0.0), M("a", "x"))
+	// A default of another kind than the node's reads as a literal of its
+	// own, so the type token holds the kind and Default the value.
+	roundTrip(t, M("a", MustExpr("String.Default(5)")), `{"a":"String.Default(5)"}`, M(), M("a", "x"), M("a", 5.0))
+	roundTrip(t, M("a", MustExpr(`Number.Default("x")`)), `{"a":"Number.Default(\"x\")"}`, M(), M("a", 5.0))
+	roundTrip(t, M("a", MustExpr("Boolean.Default(1)")), `{"a":"Boolean.Default(1)"}`, M(), M("a", true))
+	roundTrip(t, M("a", MustExpr("String.Default(5).Skip")), `{"a":"String.Default(5).Skip"}`, M(), M("a", 5.0))
+	// A required node never inserts its default, so it is its token.
+	roundTrip(t, M("a", MustExpr("Required(String.Default(5))")), `{"a: String":""}`, M(), M("a", "x"), M("a", 5.0))
+	roundTrip(t, M("a", MustExpr("String.Default(5).Ignore")), `{"a":"String.Default(5).Ignore"}`, M(), M("a", 5.0))
 	for _, k := range []string{"Integer", "Boolean", "Object", "Array", "Date", "Function"} {
 		roundTrip(t, MustExpr("All(Min(1))."+k), `"All(Any.Min(1)).`+k+`"`,
 			0.0, 2.0, true, M(), M("b", 1.0), []any{}, []any{1.0}, "x")
@@ -312,7 +330,7 @@ func TestJSONCannot(t *testing.T) {
 	roundTrip(t, M("a", Exact(math.NaN()), "b", Min(int8(2), Number), "c", Max(float32(3), Number)),
 		`{"a":"Required.Exact(NaN)","b: Number.Min(2)":0,"c: Number.Max(3)":0}`, M("b", 2.0, "c", 3.0), M("b", 1.0))
 	cannot(t, M("a", Exact(M())), "cannot express the Exact value object")
-	cannot(t, M("a", Type(Any).Default(M())), "cannot express the default object")
+	cannot(t, M("a", Type(Any, Default(M()))), "cannot express the default object")
 	cannot(t, M("a", Type(Kind("bigint"))), "cannot express a bigint value")
 	s, _ := ShapeWith(M("a: b", Nof(1, 1.0, 2.0)), ShapeOptions{KeyExpr: KeyExprOptions{Disable: true}})
 	if _, err := s.JSON(); err == nil || !strings.Contains(err.Error(), `property name "a: b" of a value with no key form`) {

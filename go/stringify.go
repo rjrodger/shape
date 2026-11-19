@@ -121,7 +121,9 @@ func suffix(base string, n *node) string {
 		// An array's checks of its items read as the array itself, as TS
 		// renders them.
 		if b.stringify != nil && !(n.kind == KindArray && (b.name == "Contains" || b.name == "Unique")) {
-			out += "." + b.stringify()
+			if d := b.stringify(); d != "" {
+				out += "." + d
+			}
 		}
 	}
 	for _, a := range n.afters {

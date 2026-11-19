@@ -84,6 +84,14 @@ func TestJSONSchemaChecks(t *testing.T) {
 
 // A composition says what its branches say, whatever kind a type token or a
 // Check gave it (ts/test/jsonschema.test.ts).
+// A nullable composition admits null beside what its branches say.
+func TestJSONSchemaNullableComposition(t *testing.T) {
+	schemaWant(t, "all", MustShape(MustExpr("All(String).Nullable")).JSONSchema(),
+		`{`+draft+`,"anyOf":[{"type":"null"},{"allOf":[{"type":"string","minLength":1}]}]}`)
+	schemaWant(t, "nof", MustShape(Nullable(Nof(1, String, Number))).JSONSchema(),
+		`{`+draft+`,"anyOf":[{"type":"null"},{"oneOf":[{"type":"string","minLength":1},{"type":"number"}]}]}`)
+}
+
 func TestJSONSchemaCompositionGivenAKind(t *testing.T) {
 	min2 := `{"minimum":2,"minLength":2,"minItems":2,"minProperties":2}`
 	schemaWant(t, "typed", MustShape(MustExpr("All(Min(2)).String")).JSONSchema(),

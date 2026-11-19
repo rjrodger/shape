@@ -439,6 +439,35 @@ function build() {
   add('c-typed-ignore', { a: E('All(Min(1)).Number.Ignore') }, OBJS)
   add('c-typed-nullable', E('All(String).String.Nullable'), SCALARS)
   add('c-typed-never', E('Nof(0,String).Never'), SCALARS)
+  // A chained Default is Default(value, spec): a typed node or a
+  // composition keeps its kind, and an untyped one takes the default's. A
+  // default of another kind than the node's is written with its token.
+  add('d-chained-string-of-number', { a: E('String.Default(5)') }, OBJS)
+  add('d-chained-number-of-string', { a: E('Number.Default("x")') }, OBJS)
+  add('d-chained-boolean-of-number', { a: E('Boolean.Default(1)') }, OBJS)
+  add('d-chained-string-of-null', { a: E('String.Default(null)') }, OBJS)
+  add('d-chained-of-another-kind-skip', { a: E('String.Default(5).Skip') }, OBJS)
+  add('d-required-of-another-kind', { a: E('Required(String.Default(5))') }, OBJS)
+  add('d-chained-all', { a: E('All(Min(1)).Default(0)') }, OBJS)
+  add('d-chained-nof', { a: E('Nof(1,String,Number).Default(3)') }, OBJS)
+  add('d-chained-untyped', { a: E('Min(1).Default(5)') }, OBJS)
+  add('d-chained-exact', { a: E('Exact(1,2).Default(1)') }, OBJS)
+  // Ignore drops what fails whatever a later builder made of the node, and a
+  // check chained after it raises nothing and drops nothing.
+  add('i-then-default', { a: E('Number.Ignore.Default(0)') }, OBJS)
+  add('i-then-check', { a: E('Number.Ignore.Min(3)') }, OBJS)
+  add('i-check-then', { a: E('Number.Min(3).Ignore') }, OBJS)
+  add('i-then-token', { a: E('String.Ignore.Number') }, OBJS)
+  add('i-then-required', { a: E('Number.Ignore.Required') }, OBJS)
+  add('i-then-nullable', { a: E('Number.Ignore.Nullable') }, OBJS)
+  add('i-then-default-skip', { a: E('Number.Ignore.Default(0).Skip') }, OBJS)
+  add('i-all-then-default', { a: E('All(Min(1)).Ignore.Default(0)') }, OBJS)
+  add('i-exact-then-default', { a: E('Exact(1,2).Ignore.Default(1)') }, OBJS)
+  add('i-elements-then-default', [E('Number.Ignore.Default(0)')], ARRS)
+  add('i-child-then-default', E('Child(Number.Ignore.Default(0))'), OBJS)
+  add('i-when-then-default', { a: E('When(Number,Min(5).Ignore.Default(0))') }, OBJS)
+  add('i-branch-then-default', { a: E('Nof(1,Number.Ignore.Default(0),String)') }, OBJS)
+  add('i-message', { a: E('Nof(2,Number.Min(2).Ignore.Min(3),String)') }, OBJS)
   // A Catch takes the composition inside with the node's other checks.
   add('c-catch-all', E('Catch(0,All(Number))'), SCALARS)
   add('c-catch-nof', E('Catch(0,Nof(1,Number,String))'), SCALARS.concat(ARRS))

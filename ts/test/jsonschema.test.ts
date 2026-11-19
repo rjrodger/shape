@@ -118,6 +118,15 @@ describe('jsonschema', () => {
   })
 
 
+  test('nullable-composition', () => {
+    // A nullable composition admits null beside what its branches say.
+    deepEqual(Shape({ a: Shape.expr('All(String).Nullable') }).jsonSchema().properties.a,
+      { anyOf: [{ type: 'null' }, { allOf: [{ type: 'string', minLength: 1 }] }] })
+    deepEqual(Shape({ a: Shape.expr('Nullable(Nof(1,String,Number))') }).jsonSchema().properties.a,
+      { anyOf: [{ type: 'null' }, { oneOf: [{ type: 'string', minLength: 1 }, { type: 'number' }] }] })
+  })
+
+
   test('composition-given-a-kind', () => {
     // A composition says what its branches say, whatever kind a type token
     // or a Check gave it.

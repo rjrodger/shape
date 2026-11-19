@@ -164,6 +164,12 @@ Some differences are inherent to Go and are unlikely ever to close.
   Go compares a `time.Time` by value, never takes two functions as equal,
   and reads a typed slice, map or struct as the validator reads it.
 
+- **A `Catch` around an `Ignore`.** In TypeScript a value that an `Ignore`
+  among a `Catch`'s checks drops stays dropped: `Number.Ignore.Catch(5)`
+  given `"x"` leaves the property out. Go and Rust keep the value, as no
+  check inside the `Catch` fails there. An `Ignore` alone and a `Catch`
+  alone agree, and so does their JSON.
+
 - **A check around a composition.** Go and Rust run a node's own checks
   before its `All`, `Nof` or `When`, and one that fails ends them, so
   `Min(2, Nof(1, Boolean, Integer))` given `1.5` reports the bound alone;

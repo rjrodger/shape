@@ -119,6 +119,16 @@ catch-optional-absent	{"a":{"$expr":"Optional(Catch(7,Number))"}}	{}	{"a":0}
 catch-null-fallback	{"a":{"$expr":"Catch(null,Number)"}}	{"a":"x"}	{"a":null}	
 describe-keeps-validation	{"a":{"$expr":"Describe(\"a number\",Number)"}}	{"a":"x"}		"Validation failed for property \"a\" with string \"x\" because the string is not of type number."
 ignore-inner-bound	{"a":{"$expr":"Ignore(Min(2,Number))"}}	{"a":1}	{}	
+ignore-then-default-drops	{"a":{"$expr":"Number.Ignore.Default(0)"}}	{"a":"x"}	{}	
+ignore-then-default-inserts	{"a":{"$expr":"Number.Ignore.Default(0)"}}	{}	{"a":0}	
+ignore-then-check-keeps	{"a":{"$expr":"Number.Ignore.Min(3)"}}	{"a":0}	{"a":0}	
+ignore-then-check-drops-bad	{"a":{"$expr":"Number.Ignore.Min(3)"}}	{"a":"x"}	{}	
+ignore-then-token-drops	{"a":{"$expr":"String.Ignore.Number"}}	{"a":"x"}	{}	
+ignore-then-required-drops	{"a":{"$expr":"Number.Ignore.Required"}}	{"a":"x"}	{}	
+ignore-then-required-absent	{"a":{"$expr":"Number.Ignore.Required"}}	{}	{}	
+ignore-element-then-default	[{"$expr":"Number.Ignore.Default(0)"}]	[1,"x"]	[1,null]	
+ignore-child-then-default	{"$expr":"Child(Number.Ignore.Default(0))"}	{"a":"x","b":1}	{"b":1}	
+ignore-of-another-kind	{"a":{"$expr":"String.Default(5).Ignore"}}	{"a":5}	{}	
 disc-branch-ok	{"p":{"$discriminated":["kind",{"dog":{"bark":{"$type":"Boolean"}},"fish":{"fins":{"$type":"Number"}}}]}}	{"p":{"bark":true,"kind":"dog"}}	{"p":{"bark":true,"kind":"dog"}}	
 disc-branch-error	{"p":{"$discriminated":["kind",{"dog":{"bark":{"$type":"Boolean"}},"fish":{"fins":{"$type":"Number"}}}]}}	{"p":{"fins":"x","kind":"fish"}}		"Validation failed for property \"p.fins\" with string \"x\" because the string is not of type number."
 disc-branch-missing-key	{"p":{"$discriminated":["kind",{"dog":{"bark":{"$type":"Boolean"}},"fish":{"fins":{"$type":"Number"}}}]}}	{"p":{"kind":"dog"}}		"Validation failed for property \"p.bark\" because the property is missing."

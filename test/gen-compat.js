@@ -47,6 +47,7 @@ const JS_OPTIONAL = { type: 'object', properties: { e: { enum: ['a'] }, c: { con
 const JS_LIST = { $defs: { t: { properties: { v: { type: 'number' }, next: { $ref: '#/$defs/t' } } } }, $ref: '#/$defs/t' }
 const JS_FILLED = { type: 'array', prefixItems: [{ type: 'string' }, { default: 7 }, {}] }
 const JS_COND = { if: { type: 'number' }, then: { minimum: 1 }, else: { type: 'string' } }
+const JS_NULLABLE = { anyOf: [{ type: 'null' }, { oneOf: [{ type: 'string' }, { type: 'number' }] }] }
 const JS_DEPENDENT = { dependentSchemas: { a: { properties: { b: { type: 'number' } }, required: ['b'] } } }
 // A builder the string DSL cannot express, called by name with its arguments.
 const CALL = (name, ...args) => ({ $call: [name, ...args] })
@@ -61,6 +62,16 @@ const files = {
     ['required-token-present', { name: T }, { name: 'alice' }],
     ['optional-absent', { name: { $optional: T } }, {}],
     ['required-number-wrong-type', { age: N }, { age: 'x' }],
+    // A chained Default is Default(value, spec): a typed node or a
+    // composition keeps its kind, and an untyped one takes the default's.
+    ['default-chained-keeps-kind', { a: { $expr: 'String.Default(5)' } }, { a: 'x' }],
+    ['default-chained-keeps-kind-rejects', { a: { $expr: 'String.Default(5)' } }, { a: 5 }],
+    ['default-chained-of-another-kind', { a: { $expr: 'String.Default(5)' } }, {}],
+    ['default-chained-number-of-a-string', { a: { $expr: 'Number.Default("x")' } }, {}],
+    ['default-chained-composition', { a: { $expr: 'All(Min(1)).Default(0)' } }, { a: 'x' }],
+    ['default-chained-composition-inserts', { a: { $expr: 'All(Min(1)).Default(0)' } }, {}],
+    ['default-chained-nof', { a: { $expr: 'Nof(1,String,Number).Default(3)' } }, { a: 'x' }],
+    ['default-chained-untyped', { a: { $expr: 'Min(1).Default(5)' } }, { a: 'x' }],
   ],
   objects: [
     ['closed-object-rejects-unknown', { a: 1 }, { a: 2, b: true }],
@@ -243,6 +254,18 @@ const files = {
     ['catch-null-fallback', { a: { $expr: 'Catch(null,Number)' } }, { a: 'x' }],
     ['describe-keeps-validation', { a: { $expr: 'Describe("a number",Number)' } }, { a: 'x' }],
     ['ignore-inner-bound', { a: { $expr: 'Ignore(Min(2,Number))' } }, { a: 1 }],
+    // Ignore drops what fails whatever a later builder made of the node, and
+    // a check chained after it raises nothing and drops nothing.
+    ['ignore-then-default-drops', { a: { $expr: 'Number.Ignore.Default(0)' } }, { a: 'x' }],
+    ['ignore-then-default-inserts', { a: { $expr: 'Number.Ignore.Default(0)' } }, {}],
+    ['ignore-then-check-keeps', { a: { $expr: 'Number.Ignore.Min(3)' } }, { a: 0 }],
+    ['ignore-then-check-drops-bad', { a: { $expr: 'Number.Ignore.Min(3)' } }, { a: 'x' }],
+    ['ignore-then-token-drops', { a: { $expr: 'String.Ignore.Number' } }, { a: 'x' }],
+    ['ignore-then-required-drops', { a: { $expr: 'Number.Ignore.Required' } }, { a: 'x' }],
+    ['ignore-then-required-absent', { a: { $expr: 'Number.Ignore.Required' } }, {}],
+    ['ignore-element-then-default', [{ $expr: 'Number.Ignore.Default(0)' }], [1, 'x']],
+    ['ignore-child-then-default', { $expr: 'Child(Number.Ignore.Default(0))' }, { a: 'x', b: 1 }],
+    ['ignore-of-another-kind', { a: { $expr: 'String.Default(5).Ignore' } }, { a: 5 }],
     ['disc-branch-ok', { p: DISC }, { p: { bark: true, kind: 'dog' } }],
     ['disc-branch-error', { p: DISC }, { p: { fins: 'x', kind: 'fish' } }],
     ['disc-branch-missing-key', { p: DISC }, { p: { kind: 'dog' } }],
@@ -438,6 +461,10 @@ const files = {
     ['typed-object-child', { a: { $expr: 'All(Min(1)).Object.Child(Number)' } }, { a: { x: 'a' } }],
     ['typed-ignore', { a: { $expr: 'All(Min(1)).Number.Ignore' } }, { a: 'x' }],
     ['typed-nullable', { a: { $expr: 'All(String).String.Nullable' } }, { a: null }],
+    // An Ignore keeps dropping what fails after a Default.
+    ['all-ignore-then-default-drops', { a: { $expr: 'All(Min(1)).Ignore.Default(0)' } }, { a: '' }],
+    ['all-ignore-then-default-keeps', { a: { $expr: 'All(Min(1)).Ignore.Default(0)' } }, { a: 'x' }],
+    ['all-ignore-then-default-inserts', { a: { $expr: 'All(Min(1)).Ignore.Default(0)' } }, {}],
     // A Catch takes the composition inside with the node's other checks.
     ['catch-all', { a: { $expr: 'Catch(0,All(Number))' } }, { a: 'bad' }],
     ['catch-nof', { a: { $expr: 'Catch(0,Nof(1,Number,String))' } }, { a: true }],
@@ -579,6 +606,10 @@ const files = {
   jsonschema: [
     // A numeric exclusive bound and a plain bound both apply.
     ['js-number-min-and-exclusive-ok', { $jsonschema: { type: 'number', minimum: 1, exclusiveMinimum: 0 } }, 1],
+    // The export of a nullable composition: null beside the branches.
+    ['js-nullable-composition-null', { $jsonschema: { type: 'object', properties: { a: JS_NULLABLE } } }, { a: null }],
+    ['js-nullable-composition-branch', { $jsonschema: { type: 'object', properties: { a: JS_NULLABLE } } }, { a: 'x' }],
+    ['js-nullable-composition-neither', { $jsonschema: { type: 'object', properties: { a: JS_NULLABLE } } }, { a: true }],
     ['js-number-min-and-exclusive-low', { $jsonschema: { type: 'number', minimum: 1, exclusiveMinimum: 0 } }, 0.5],
     ['js-number-max-and-exclusive-high', { $jsonschema: { type: 'number', maximum: 1, exclusiveMaximum: 2 } }, 1.5],
     // Untyped, where the length keywords beside an exclusive bound are that bound.

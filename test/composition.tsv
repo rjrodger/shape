@@ -139,6 +139,9 @@ typed-object-open	{"a":{"$expr":"All(Min(1)).Object.Open"}}	{"a":{"x":1}}	{"a":{
 typed-object-child	{"a":{"$expr":"All(Min(1)).Object.Child(Number)"}}	{"a":{"x":"a"}}		"Validation failed for property \"a.x\" with string \"a\" because the string is not of type number."
 typed-ignore	{"a":{"$expr":"All(Min(1)).Number.Ignore"}}	{"a":"x"}	{}	
 typed-nullable	{"a":{"$expr":"All(String).String.Nullable"}}	{"a":null}	{"a":null}	
+all-ignore-then-default-drops	{"a":{"$expr":"All(Min(1)).Ignore.Default(0)"}}	{"a":""}	{}	
+all-ignore-then-default-keeps	{"a":{"$expr":"All(Min(1)).Ignore.Default(0)"}}	{"a":"x"}	{"a":"x"}	
+all-ignore-then-default-inserts	{"a":{"$expr":"All(Min(1)).Ignore.Default(0)"}}	{}	{"a":0}	
 catch-all	{"a":{"$expr":"Catch(0,All(Number))"}}	{"a":"bad"}	{"a":0}	
 catch-nof	{"a":{"$expr":"Catch(0,Nof(1,Number,String))"}}	{"a":true}	{"a":0}	
 catch-all-chained	{"a":{"$expr":"Catch(0,All(Min(2))).Max(5)"}}	{"a":1}	{"a":0}	

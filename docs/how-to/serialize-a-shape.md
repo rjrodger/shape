@@ -123,7 +123,9 @@ composition, `Check` or `Key`. Any other start applies to an empty object, so
 every property is `{ x: 1 }`.
 
 Numbers, booleans and `null` are themselves; a string is JSON-quoted, since a
-bare string would read as an expression.
+bare string would read as an expression. A default of another kind than its
+node is written with the node's token, as the literal alone would name the
+wrong kind: a string that defaults to `5` is `"String.Default(5)"`.
 
 ## What cannot be written down
 
@@ -142,7 +144,9 @@ Shape({ a: Shape.Check(v => v > 1) }).json()
 
 Everything else round trips, including tuples, rests, objects both open
 and closed, discriminated unions, formats, bounds, `Catch`, `Ignore`, `Coerce`,
-`Define` and `Refer`, `Describe` and `Fault`. So does a composition that a
+`Define` and `Refer`, `Describe` and `Fault`. `Ignore` keeps its place among
+the checks, and a `Default` or `Required` after it follows it: a property `a`
+that is `Number.Ignore.Default(0)` is written `{ "a: Ignore.Default(0)": 0 }`. So does a composition that a
 chained `Check` or type token gives a kind of its own:
 `All(Min(2)).String()` is written `"All(Any.Min(2)).String"`.
 

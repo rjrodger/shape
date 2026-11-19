@@ -7,13 +7,12 @@ import (
 	"strings"
 )
 
-// Isolated validation: Catch and Transform (Ignore probes the same way from
-// its call sites). These builders take the checks a node carries — its
-// befores, its afters — inside, and validate the node as a whole (those
-// checks, the structural check, every descendant) in a sub-run before the
-// node itself proceeds. Only then is the outcome of the entire subtree known
-// at once; TS does the same, since it runs a node's afters before visiting its
-// children.
+// Isolated validation: Catch, Transform and Ignore. These builders take the
+// checks a node carries — its befores, its afters — inside, and validate the
+// node as a whole (those checks, the structural check, every descendant) in a
+// sub-run before the node itself proceeds. Only then is the outcome of the
+// entire subtree known at once; TS does the same, since it runs a node's
+// afters before visiting its children.
 
 type inner struct {
 	befores, afters []validator
@@ -47,6 +46,8 @@ func (in inner) probe(state *State) (any, *ValidationError) {
 	// next call, for every Catch or Transform validated.
 	n := *state.Node
 	n.befores, n.afters = in.befores, in.afters
+	// Errors must be observable, so the probe is never silent (Ignore's).
+	n.silent = false
 	val := state.Value
 	if state.absent {
 		val = undefinedT{}

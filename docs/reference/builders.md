@@ -33,12 +33,19 @@ Notes:
 - `Default(value)` alone takes the value's kind; `Default(value, spec)` keeps
   the spec, and an untyped spec (`Required()`, `Exact(1)`) takes the value's
   kind. In a key expression `"a: Default()": 5` the example is the default.
+- Chained, `spec.Default(value)` is `Default(value, spec)`: `String.Default(5)`
+  is a string whose default is `5`, an object keeps the properties it
+  declares, and `All(Min(1)).Default(0)` is a composition that inserts `0`.
 - A builder called with the wrong argument is a mistake in the spec:
   `Min('x')`, `Len(-1)`, `Define('')`. TypeScript throws at build
   (`Shape: Min needs a number`); a Go builder cannot, so it returns a node
   that accepts nothing and reports the same message at validation.
 - `Ignore` keeps a valid value and silently drops an invalid one. It judges the
-  whole subtree, so a failing descendant is swallowed too.
+  whole subtree, so a failing descendant is swallowed too, and the checks
+  chained before it: one chained after it raises nothing and drops nothing,
+  so `Number.Ignore.Min(3)` keeps `0`. A later `Default`, `Required` or type
+  token changes whether a value is demanded or inserted, and `Ignore` still
+  drops what fails: `Number.Ignore.Default(0)` inserts `0` and drops `"x"`.
 
 ## Type / equality
 

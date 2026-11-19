@@ -1342,24 +1342,31 @@ func indexOf(i int) (string, any) {
 	return strconv.Itoa(i), i
 }
 
-// isIgnore reports whether a node was built by Ignore: optional, no default
-// injection, and errors below it suppressed.
+// isIgnore reports whether a node's first check is an Ignore, which took the
+// checks before it: whatever the builders after it made of the node, a value
+// that fails is dropped.
 func isIgnore(n *node) bool {
-	return n != nil && n.silent && n.skippable
+	return n != nil && len(n.befores) > 0 && n.befores[0].name == "Ignore" && n.befores[0].inner != nil
 }
 
-// validateIgnored runs an Ignore node, reporting whether the value survived.
-// The probe disables silence so the failure is observable, mirroring TS Ignore
-// inspecting curerr; the caller drops the value when kept is false.
+// validateIgnored runs an Ignore node, reporting whether the value survived:
+// the node as it stands is probed with the checks Ignore took, as TS's
+// Ignore probes them, and the caller drops the value when kept is false.
+// The checks chained after Ignore then run on what it kept, raising nothing.
 func validateIgnored(n *node, in any, path []string, pathArr []any, key string, parent any, ctx *Context, match bool) (any, bool) {
+	taken := n.befores[0].inner
 	probe := *n
+	probe.befores, probe.afters = taken.befores, taken.afters
 	probe.silent = false
 	sub := &ValidationError{}
 	produced := validateNode(&probe, in, path, pathArr, key, parent, ctx, match, sub)
 	if sub.hasAny() {
 		return nil, false
 	}
-	return produced, true
+	if len(n.befores) == 1 && len(n.afters) == 0 {
+		return produced, true
+	}
+	return validateNode(n, in, path, pathArr, key, parent, ctx, match, &ValidationError{}), true
 }
 
 // emptyContainer is the value a container node descends into when its own

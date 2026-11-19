@@ -171,19 +171,18 @@ func (n *Node) Skip() *Node {
 	return n
 }
 
-// Ignore behaves like Skip but also suppresses errors raised on the value.
+// Ignore drops a value that fails to match, and raises nothing for it. Like
+// Catch it takes the checks chained before it inside (see isolate.go): the
+// node as it stands, with those checks, every descendant included, is
+// probed, and a value the probe faults is dropped. It makes the node
+// optional and skipped; a later builder may require it, or give it a
+// default to insert, and the probe follows the node as it then is. A check
+// chained after it runs on what it kept, and raises nothing either.
 func Ignore(spec ...any) *Node {
-	var nb *Node
 	if len(spec) == 0 {
-		nb = buildize(nil)
-	} else {
-		nb = buildize(spec[0])
+		return buildize(nil).Ignore()
 	}
-	nb.n.required = false
-	nb.n.requiredSet = true
-	nb.n.skippable = true
-	nb.n.silent = true
-	return nb
+	return buildize(spec[0]).Ignore()
 }
 
 // Ignore (chained).
@@ -192,6 +191,24 @@ func (n *Node) Ignore() *Node {
 	n.n.requiredSet = true
 	n.n.skippable = true
 	n.n.silent = true
+	in := takeInner(n.n)
+	n.n.befores = []validator{{
+		name:  "Ignore",
+		inner: &in,
+		fn: func(_ any, update *Update, state *State) bool {
+			// Where a parent puts the value, a failing one is dropped (see
+			// validateIgnored). Anywhere else, a composition's branch, it is
+			// left as it was, as TS's undefined there changes nothing.
+			if out, sub := in.probe(state); !sub.hasAny() {
+				update.Val, update.HasVal = out, true
+			}
+			update.Done = true
+			return true
+		},
+		// The taken checks render, and Ignore itself does not, as in TS.
+		stringify: func() string { return strings.TrimSuffix(in.desc(), ".") },
+	}}
+	bumpValidatorGen()
 	return n
 }
 
@@ -259,15 +276,10 @@ func Default(dval any, spec ...any) *Node {
 	return nb
 }
 
-// Default (chained).
+// Default (chained) is Default(dval, n): a typed node or a composition keeps
+// its kind, and an untyped one is built over the default, as in TS.
 func (n *Node) Default(dval any) *Node {
-	n.n.required = false
-	n.n.requiredSet = true
-	n.n.skippable = false
-	n.n.hasDefault = true
-	n.n.defaultValue = dval
-	n.n.defaultNull = dval == nil
-	return n
+	return Default(dval, n)
 }
 
 // Fault sets a custom error message used when this node's validation fails.
