@@ -312,7 +312,7 @@ key expression, whose example is the shape:
 | `Refer(name, spec?)` | Substitute the named shape at validation time. |
 | `Refer({name, fill})` / `ReferWith(name, opts)` | `fill` substitutes even when the value is absent (do not use for self-recursion). |
 | `Refer({name, strict})` / `ReferOptions{Strict}` | A name no `Define` supplies is an error, rather than a `Refer` that does nothing. |
-| `Rename({name, keep?, claim?}, spec?)` / `RenameWith` | Move the property to `name` after validation. `keep` retains the original key; `claim` lists alternate source keys. |
+| `Rename({name, keep?, claim?}, spec?)` / `RenameWith` | Move the property to `name` after validation. `keep` retains the original key; `claim` lists alternate source keys. The target is not a key a closed object accepts, so a value that already has it fails. |
 
 ## Misc
 

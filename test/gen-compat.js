@@ -279,6 +279,18 @@ const files = {
     // Rename is a check, which a node built over its default keeps.
     ['rename-then-default', { a: { $expr: 'Rename("b").Default(5)' } }, {}],
     ['default-of-rename', { a: { $expr: 'Default(5,Rename("b"))' } }, { a: 1 }],
+    // A rename's target is not a key a closed object accepts, so a value
+    // that already has it fails; a declared target holds its own value from
+    // the input; a rename with no value clears its target.
+    ['rename-target-present', { a: { $expr: 'Rename("b")' } }, { a: 1, b: 2 }],
+    ['rename-target-alone', { a: { $expr: 'Number.Rename("b")' } }, { b: 2 }],
+    ['rename-target-nested', { o: { a: { $expr: 'Rename("b")' } } }, { o: { a: 1, b: 2 } }],
+    ['rename-target-declared', { a: { $expr: 'Rename("b")' }, b: { $expr: 'Optional(Number)' } }, { a: 1, b: 2 }],
+    ['rename-target-declared-absent', { a: { $expr: 'Rename("b")' }, b: { $expr: 'Optional(Number)' } }, { a: 1 }],
+    ['rename-swap', { a: { $expr: 'Rename("b")' }, b: { $expr: 'Rename("a")' } }, { a: 1, b: 2 }],
+    ['rename-swap-one', { a: { $expr: 'Rename("b")' }, b: { $expr: 'Rename("a")' } }, { a: 1 }],
+    ['rename-clears-target', { a: { $expr: 'Number' }, b: { $expr: 'Rename("a")' } }, { a: 2 }],
+    ['rename-open-target', { $open: { a: { $expr: 'Rename("b")' } } }, { a: 1, b: 2 }],
     ['disc-branch-ok', { p: DISC }, { p: { bark: true, kind: 'dog' } }],
     ['disc-branch-error', { p: DISC }, { p: { fins: 'x', kind: 'fish' } }],
     ['disc-branch-missing-key', { p: DISC }, { p: { kind: 'dog' } }],

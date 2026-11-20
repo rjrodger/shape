@@ -2094,8 +2094,45 @@ mod tests {
     fn renames() {
         let s = at_a(buildize(Token::Number).Rename("b"));
         assert_eq!(run(&s, &a("1")), r#"{"b":1}"#);
-        assert_eq!(run(&s, r#"{"a":1,"b":2}"#), r#"{"b":1}"#);
+        // The target is not a key the object accepts: a value that has it
+        // already fails, as in TypeScript.
+        assert_eq!(
+            run(&s, r#"{"a":1,"b":2}"#),
+            "ERR Validation failed for object \"{a:1,b:2}\" because the property \"b\" is not allowed."
+        );
         assert!(s.valid(&j(&a("1"))));
+        // A declared target holds its own value from the input, whatever a
+        // rename before it put there, and a rename with no value clears it.
+        let both = Schema::new(obj([
+            ("a", Spec::from(Rename("b", Any()))),
+            ("b", Spec::from(Optional(Token::Number))),
+        ]));
+        assert_eq!(run(&both, r#"{"a":1,"b":2}"#), r#"{"b":2}"#);
+        assert_eq!(run(&both, r#"{"a":1}"#), r#"{"b":0}"#);
+        let swap = Schema::new(obj([
+            ("a", Spec::from(Rename("b", Any()))),
+            ("b", Spec::from(Rename("a", Any()))),
+        ]));
+        assert_eq!(run(&swap, r#"{"a":1,"b":2}"#), r#"{"a":2}"#);
+        assert_eq!(run(&swap, r#"{"a":1}"#), "{}");
+        let open = Schema::new(Open(obj([("a", Spec::from(Rename("b", Any())))])));
+        assert_eq!(run(&open, r#"{"a":1,"b":2}"#), r#"{"b":2}"#);
+        // A child or a rest key an Ignore drops is left out there too.
+        let dropping = Schema::new(Child(
+            Ignore(Token::Number),
+            obj([
+                ("a", Spec::from(Rename("b", Any()))),
+                ("c", Spec::from(Ignore(Token::Number))),
+            ]),
+        ));
+        assert_eq!(
+            run(&dropping, r#"{"a":1,"c":"x","d":"y","e":2}"#),
+            r#"{"e":2,"b":1}"#
+        );
+        // An absent object that renames is made and walked for a verdict too.
+        let nested = Schema::new(obj([("o", obj([("a", Spec::from(Rename("b", Any())))]))]));
+        assert!(nested.valid(&j("{}")));
+        assert!(!nested.valid(&j(r#"{"o":{"a":1,"b":2}}"#)));
         let s = at_a(RenameWith(
             "b",
             RenameOptions {

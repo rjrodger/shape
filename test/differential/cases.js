@@ -478,11 +478,20 @@ function build() {
   add('i-catch-of', { a: E('Catch(5,Ignore(Number))') }, OBJS)
   add('i-nested-branch', { a: E('All(Ignore(Ignore(Min(2,Number))),Number)') }, OBJS)
   add('i-nested-when', { a: E('When(Number,Ignore(Ignore(Min(5))))') }, OBJS)
-  // Inputs without the target key: a closed object that has it differs
-  // (see the parity notes).
-  const RENAMES = [{}, { a: 1 }, { a: 'x' }, { a: null }, { a: {} }, { a: [] }, { c: 1 }]
-  add('d-rename-chained', { a: E('Rename("b").Default(5)') }, RENAMES)
-  add('d-rename-spec', { a: E('Default(5,Rename("b"))') }, RENAMES)
+  add('d-rename-chained', { a: E('Rename("b").Default(5)') }, OBJS)
+  add('d-rename-spec', { a: E('Default(5,Rename("b"))') }, OBJS)
+  // A rename's target: an extra key where undeclared, its own value where
+  // declared, and cleared by a rename with no value.
+  add('r-target', { a: E('Rename("b")') }, OBJS)
+  add('r-target-number', { a: E('Number.Rename("b")') }, OBJS)
+  add('r-target-nested', { o: { a: E('Rename("b")') } }, OBJS.map(v => ({ o: v })))
+  add('r-target-elements', [{ a: E('Rename("b")') }], [[], [{}], [{ a: 1 }], [{ a: 1, b: 2 }], [{ b: 2 }], [1]])
+  add('r-target-declared', { a: E('Rename("b")'), b: E('Optional(Number)') }, OBJS)
+  add('r-target-required', { a: E('Rename("b")'), b: E('Number') }, OBJS)
+  add('r-swap', { a: E('Rename("b")'), b: E('Rename("a")') }, OBJS)
+  add('r-clears', { a: E('Number'), b: E('Rename("a")') }, OBJS)
+  add('r-open', { $open: { a: E('Rename("b")') } }, OBJS)
+  add('r-keyexpr', { 'a: Rename("b")': 1 }, OBJS)
   add('d-null-chained', { a: E('Default(null).Default(5)') }, OBJS)
   // A Catch takes the composition inside with the node's other checks.
   add('c-catch-all', E('Catch(0,All(Number))'), SCALARS)

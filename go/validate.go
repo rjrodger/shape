@@ -732,11 +732,12 @@ func validateObject(n *node, in any, path []string, pathArr []any, parent any, c
 		}
 
 		// Rename.claim: if the value is missing and claim source has it, pick up.
+		claimed := false
 		if !has && cn.renameTo != "" && len(cn.renameClaim) > 0 {
 			for _, src := range cn.renameClaim {
 				if sv, sh := obj[src]; sh {
 					v = sv
-					has = true
+					has, claimed = true, true
 					if !cn.renameKeep && !match {
 						ensure()
 						delete(out, src)
@@ -749,6 +750,7 @@ func validateObject(n *node, in any, path []string, pathArr []any, parent any, c
 		if !has {
 			produced = validateNode(cn, undefinedVal, kpath, kpathArr, k, parentOf, ctx, match, verr)
 			if absentOmits(cn, produced) {
+				renameNothing(cn, k, match, ensure, &out)
 				continue
 			}
 		} else {
@@ -762,9 +764,11 @@ func validateObject(n *node, in any, path []string, pathArr []any, parent any, c
 		if isUndef(produced) {
 			ensure()
 			delete(out, k)
+			renameNothing(cn, k, match, ensure, &out)
 			continue
 		}
-		if !has || out != nil || !sameValue(produced, v) {
+		// A claimed value is put under the key as well, as TS's claim does.
+		if !has || claimed || out != nil || !sameValue(produced, v) {
 			ensure()
 			out[k] = produced
 		}
@@ -835,6 +839,20 @@ func validateObject(n *node, in any, path []string, pathArr []any, parent any, c
 		return obj
 	}
 	return out
+}
+
+// renameNothing applies a Rename whose value is absent or dropped, as TS's
+// does: the target is set undefined, which leaves it out, whatever an
+// earlier rename put there, and the key goes too unless kept.
+func renameNothing(cn *node, k string, match bool, ensure func(), out *map[string]any) {
+	if cn.renameTo == "" || cn.renameTo == k || match {
+		return
+	}
+	ensure()
+	delete(*out, cn.renameTo)
+	if !cn.renameKeep {
+		delete(*out, k)
+	}
 }
 
 // absentOmits reports whether what a node produced for an absent value is

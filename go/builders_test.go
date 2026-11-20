@@ -572,6 +572,20 @@ func TestRename(t *testing.T) {
 	if _, has := m["a"]; has {
 		t.Fatalf("expected a to be removed: %v", m)
 	}
+	// The target is not a key the object accepts: a value that has it
+	// already fails, as in TS.
+	mustInvalid(t, s, map[string]any{"a": 1, "b": 2}, `the property "b" is not allowed`)
+	// A rename with no value clears its target, whatever a rename before it
+	// put there, and takes its key away.
+	swap := MustShape(map[string]any{"a": Rename("b"), "b": Rename("a")})
+	if out := mustValid(t, swap, map[string]any{"a": 1}).(map[string]any); len(out) != 0 {
+		t.Fatalf("expected nothing left, got %v", out)
+	}
+	// A claimed value is put under the key as well when kept.
+	kept := MustShape(map[string]any{"a": RenameWith("b", RenameOptions{Keep: true, Claim: []string{"c"}}, Number)})
+	if out := mustValid(t, kept, map[string]any{"c": 1.0}).(map[string]any); out["a"] != 1.0 || out["b"] != 1.0 || out["c"] != 1.0 {
+		t.Fatalf("expected a, b and c, got %v", out)
+	}
 }
 
 // --- Chainable methods ------------------------------------------------
