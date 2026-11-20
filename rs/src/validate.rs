@@ -712,6 +712,37 @@ fn guess_index(map: &Map, idx: usize, k: &str) -> Option<usize> {
     }
 }
 
+/// Records the one error naming the keys a closed object does not accept,
+/// added after the errors so far, or put in at index `at`.
+fn report_unknown(
+    n: &Node,
+    unknown: &[String],
+    value: &Value,
+    parent_is_array: bool,
+    w: &Walk<'_>,
+    verr: &mut ValidationError,
+    at: Option<usize>,
+) {
+    let joined = unknown.join(", ");
+    // TypeScript reports the keys once it has started on the declared ones,
+    // so an object that declares any names its value as a property, even in
+    // an array.
+    let parent = parent_is_array && n.obj_children.is_empty();
+    let place = at_of(w, &joined, n, value, parent, "");
+    let mut err = make_err(&place, WHY_CLOSED, MARK_OBJECT_CLOSED, "");
+    err.plural = unknown.len() > 1;
+    if !err.terse {
+        err.text = default_err_text(&err);
+        if let Some(f) = &n.fault_msg {
+            err.text = expand_err_text(f, &err.path, value, false);
+        }
+    }
+    match at {
+        Some(at) => verr.insert(at, err),
+        None => verr.add(err),
+    }
+}
+
 /// The keys of a closed object it does not consume, in the input's order.
 fn unknown_keys(n: &Node, map: &Map) -> Vec<String> {
     map.iter()
@@ -730,29 +761,19 @@ fn validate_object(
     verr: &mut ValidationError,
 ) -> bool {
     // Unknown keys are reported before descending, in one message, in the
-    // input's order.
+    // input's order. An object a child of which claims keys reports them
+    // once its children have run, leaving out the keys the claims took,
+    // still ahead of its children's errors.
     let aligned = cur.get().as_obj().is_some_and(|map| aligned(n, map));
+    let mut pending: Option<(Vec<String>, Value, usize)> = None;
     if let Some(map) = cur.get().as_obj() {
-        if !n.is_open() && !aligned {
+        if !n.is_open() && !aligned && !silent {
             let unknown = unknown_keys(n, map);
             if !unknown.is_empty() {
-                let value = cur.get();
-                let joined = unknown.join(", ");
-                // TypeScript reports the keys once it has started on the
-                // declared ones, so an object that declares any names its
-                // value as a property, even in an array.
-                let parent = parent_is_array && n.obj_children.is_empty();
-                let at = at_of(w, &joined, n, value, parent, "");
-                let mut err = make_err(&at, WHY_CLOSED, MARK_OBJECT_CLOSED, "");
-                err.plural = unknown.len() > 1;
-                if !err.terse {
-                    err.text = default_err_text(&err);
-                    if let Some(f) = &n.fault_msg {
-                        err.text = expand_err_text(f, &err.path, value, false);
-                    }
-                }
-                if !silent {
-                    verr.add(err);
+                if n.claims {
+                    pending = Some((unknown, cur.get().clone(), verr.issues.len()));
+                } else {
+                    report_unknown(n, &unknown, cur.get(), parent_is_array, w, verr, None);
                 }
             }
         }
@@ -778,6 +799,10 @@ fn validate_object(
         }
         _ => None,
     };
+    // The keys claims took, each true once its claim removed it: the
+    // object's own, and gone for a later claim even where a read-only walk
+    // leaves them in place.
+    let mut taken: HashMap<String, bool> = HashMap::new();
 
     for (idx, (k, cn)) in n.obj_children.iter().enumerate() {
         if let (Some(orig), Cur::Mut(map)) = (orig.as_ref(), &mut oc) {
@@ -794,6 +819,7 @@ fn validate_object(
                 if let Some(src) = src {
                     val = map.get(src).cloned().unwrap_or(Value::Undefined);
                     claimed = true;
+                    taken.insert(src.clone(), !cn.rename_keep);
                     if !cn.rename_keep {
                         map.shift_remove(src);
                     }
@@ -874,7 +900,15 @@ fn validate_object(
         // from there.
         let claimed: Option<&Value> = match &oc {
             Cur::Ref(map) if !map.get(k).is_some_and(|v| !v.is_undefined()) => {
-                cn.rename_claim.iter().find_map(|src| map.get(src))
+                let found = cn.rename_claim.iter().find_map(|src| {
+                    map.get(src)
+                        .filter(|v| !v.is_undefined() && taken.get(src) != Some(&true))
+                        .map(|v| (src, v))
+                });
+                found.map(|(src, v)| {
+                    taken.insert(src.clone(), !cn.rename_keep);
+                    v
+                })
             }
             _ => None,
         };
@@ -895,11 +929,13 @@ fn validate_object(
             Cur::Ref(map) => {
                 // A read-only walk of an aligned input finds the child by
                 // index; the map cannot have changed under it.
-                let found = if aligned {
-                    map.get_index(idx).map(|(_, v)| v)
-                } else {
-                    claimed.or_else(|| guess(map, idx, k))
-                };
+                let found = claimed.or_else(|| {
+                    if aligned {
+                        map.get_index(idx).map(|(_, v)| v)
+                    } else {
+                        guess(map, idx, k)
+                    }
+                });
                 match found {
                     Some(child) if !child.is_undefined() => Cur::Ref(child),
                     _ => {
@@ -920,6 +956,16 @@ fn validate_object(
         }
     }
 
+    if let Some((unknown, value, at)) = pending {
+        let unknown: Vec<String> = unknown
+            .into_iter()
+            .filter(|k| !taken.contains_key(k))
+            .collect();
+        if !unknown.is_empty() {
+            report_unknown(n, &unknown, &value, parent_is_array, w, verr, Some(at));
+        }
+    }
+
     // An aligned read-only walk has nothing left over.
     let rest_keys = !(aligned && matches!(oc, Cur::Ref(_)));
     if let Some(rest) = n.obj_rest.as_deref().filter(|_| rest_keys) {
@@ -929,7 +975,10 @@ fn validate_object(
             .as_ref()
             .unwrap_or_else(|| oc.get())
             .iter()
-            .filter(|(k, v)| !v.is_undefined() && !n.obj_children.contains_key(*k))
+            .filter(|(k, v)| {
+                // A key a claim took is the object's, not the rest shape's.
+                !v.is_undefined() && !n.obj_children.contains_key(*k) && !taken.contains_key(*k)
+            })
             .map(|(k, _)| k.clone())
             .collect();
         for k in extra {

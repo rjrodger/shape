@@ -594,6 +594,25 @@ func TestRename(t *testing.T) {
 	if out := mustValid(t, rest, map[string]any{"a": 1.0, "b": 2.0}).(map[string]any); len(out) != 1 || out["b"] != 1.0 {
 		t.Fatalf("expected b from a, got %v", out)
 	}
+	// A claimed key is the object's only once the claim takes its value,
+	// and a verdict agrees with validating: a key a claim removed is gone
+	// for a later claim, and a claimed declared key passes.
+	claim := MustShape(map[string]any{"b": RenameWith("b", RenameOptions{Claim: []string{"a"}}, Number)})
+	if !claim.Valid(map[string]any{"a": 2.0}) || claim.Valid(map[string]any{"a": 2.0, "z": 1.0}) ||
+		claim.Valid(map[string]any{"a": 2.0, "b": 1.0}) {
+		t.Fatal("expected a claimed key alone to pass")
+	}
+	once := MustShape(map[string]any{
+		"b": RenameWith("b", RenameOptions{Claim: []string{"a"}}, Number),
+		"e": RenameWith("e", RenameOptions{Claim: []string{"a"}}, Number),
+	})
+	if once.Valid(map[string]any{"a": 2.0}) {
+		t.Fatal("expected e missing")
+	}
+	declared := MustShape(map[string]any{"a": Number, "b": RenameWith("b", RenameOptions{Claim: []string{"a"}}, Number)})
+	if !declared.Valid(map[string]any{"a": 2.0}) {
+		t.Fatal("expected a claimed declared key to pass")
+	}
 	// A claimed value is put under the key as well when kept.
 	kept := MustShape(map[string]any{"a": RenameWith("b", RenameOptions{Keep: true, Claim: []string{"c"}}, Number)})
 	if out := mustValid(t, kept, map[string]any{"c": 1.0}).(map[string]any); out["a"] != 1.0 || out["b"] != 1.0 || out["c"] != 1.0 {

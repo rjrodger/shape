@@ -345,6 +345,21 @@ func callBuilder(name string, args []any) any {
 		opts.Fill, _ = o["fill"].(bool)
 		opts.Strict, _ = o["strict"].(bool)
 		return ReferWith(o["name"].(string), opts, args[1:]...)
+	case "Fault":
+		return Fault(args[0].(string), args[1:]...)
+	case "Rename":
+		// A name, or an options object as the TS form takes it.
+		if name, ok := args[0].(string); ok {
+			return Rename(name, args[1:]...)
+		}
+		o := args[0].(map[string]any)
+		opts := RenameOptions{}
+		opts.Keep, _ = o["keep"].(bool)
+		claim, _ := o["claim"].([]any)
+		for _, c := range claim {
+			opts.Claim = append(opts.Claim, c.(string))
+		}
+		return RenameWith(o["name"].(string), opts, args[1:]...)
 	}
 	panic("decodeSpec: unknown builder " + name)
 }

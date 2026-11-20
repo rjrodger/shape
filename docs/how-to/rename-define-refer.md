@@ -36,6 +36,12 @@ Shape({ userId: Rename({ name: 'userId', claim: ['id', 'uid'] }, Number) })
 // accepts { id: 7 } or { uid: 7 } → { userId: 7 }
 ```
 
+While the renamed key is absent, a claim takes the first of its keys that
+the object holds, and removes it unless `keep` is set. The key it takes
+belongs to the object. A claim key it leaves is unknown, like any key the
+object does not declare: a closed object rejects `{ userId: 7, id: 8 }`, and
+an open one hands `id` to its rest shape.
+
 ## Define and refer to a shape
 
 `Define(name, shape)` records a shape under a name during validation;

@@ -3,7 +3,7 @@
 
 #![allow(dead_code)]
 
-use shape::{expr, ReferOptions, Spec, Token, Value};
+use shape::{expr, ReferOptions, RenameOptions, Spec, Token, Value};
 
 /// A sentinel the port cannot build.
 pub struct Unsupported(pub String);
@@ -81,6 +81,35 @@ pub fn decode_spec(v: &serde_json::Value) -> Result<Spec, Unsupported> {
                                     )))
                                 }
                                 _ => Err(Unsupported("$call Refer".into())),
+                            },
+                            "Fault" => Ok(Spec::from(shape::Fault(arr[1].as_str().unwrap(), spec))),
+                            "Rename" => match &arr[1] {
+                                serde_json::Value::String(n) => {
+                                    Ok(Spec::from(shape::Rename(n, spec)))
+                                }
+                                serde_json::Value::Object(o) => {
+                                    let opts = RenameOptions {
+                                        keep: o
+                                            .get("keep")
+                                            .and_then(|v| v.as_bool())
+                                            .unwrap_or(false),
+                                        claim: o
+                                            .get("claim")
+                                            .and_then(|v| v.as_array())
+                                            .map(|a| {
+                                                a.iter()
+                                                    .filter_map(|c| c.as_str().map(String::from))
+                                                    .collect()
+                                            })
+                                            .unwrap_or_default(),
+                                    };
+                                    Ok(Spec::from(shape::RenameWith(
+                                        o["name"].as_str().unwrap(),
+                                        opts,
+                                        spec,
+                                    )))
+                                }
+                                _ => Err(Unsupported("$call Rename".into())),
                             },
                             "All" => {
                                 let branches = arr[1..]

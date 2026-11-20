@@ -979,6 +979,52 @@ describe('builder', () => {
   })
 
 
+  // A claimed key is the object's only once the claim takes its value. A
+  // verdict agrees with validating, and the context is left alone.
+  test('builder-rename-claim', () => {
+    const R = (o: any = {}) => Rename({ name: 'b', claim: ['a'], ...o }, Number)
+    const g = Shape({ b: R() })
+    deepEqual(g({ a: 2 }), { b: 2 })
+    throws(() => g({ a: 2, z: 1 }), 'because the property "z" is not allowed')
+    throws(() => g({ a: 2, y: 1, z: 1 }), 'because the properties "y, z" are not allowed')
+    throws(() => g({ a: 2, b: 1 }), 'because the property "a" is not allowed')
+    throws(() => g({}), 'because the property is missing')
+    assert.equal(g.valid({ a: 2 }), true)
+    assert.equal(g.valid({ a: 2, z: 1 }), false)
+    assert.equal(g.valid({ a: 2, b: 1 }), false)
+
+    // A key a claim removed is gone for a later claim, a verdict's too; one
+    // a claim kept is there for it.
+    const once = Shape({ b: R(), e: Rename({ name: 'e', claim: ['a'] }, Number) })
+    throws(() => once({ a: 2 }), 'property "e" because the property is missing')
+    assert.equal(once.valid({ a: 2 }), false)
+    const kept = Shape({ b: R({ keep: true }), e: Rename({ name: 'e', claim: ['a'] }, Number) })
+    deepEqual(kept({ a: 2 }), { b: 2, e: 2 })
+    assert.equal(kept.valid({ a: 2 }), true)
+
+    // A declared key claimed, and nested and element objects.
+    deepEqual(Shape({ a: Number, b: R() })({ a: 2 }), { b: 2 })
+    assert.equal(Shape({ a: Number, b: R() }).valid({ a: 2 }), true)
+    deepEqual(Shape({ o: { b: R() } })({ o: { a: 2 } }), { o: { b: 2 } })
+    throws(() => Shape([{ b: R() }])([{ a: 2 }, { a: 3, z: 1 }]),
+      'property "1" with object "{a:3,z:1}" because the property "z" is not allowed')
+
+    // An open object's rest shape does not take a claimed key.
+    deepEqual(Shape(Child(String, { b: R() }))({ a: 2, z: 'q' }), { z: 'q', b: 2 })
+    deepEqual(Shape(Open({ b: R() }))({ a: 2, z: 1 }), { z: 1, b: 2 })
+
+    // A Fault's message stands; the error goes once no key is left in it.
+    const fault = Shape(Shape.Fault('bad keys', { b: R() }))
+    deepEqual(fault({ a: 2 }), { b: 2 })
+    throws(() => fault({ a: 2, z: 1 }), /^bad keys$/)
+
+    // Validating writes nothing into the context.
+    const ctx: any = {}
+    g({ a: 2 }, ctx)
+    deepEqual(Object.keys(ctx), [])
+  })
+
+
   test('builder-exact', () => {
     let g0 = Shape({ a: Exact(null) })
     matchObject(g0({ a: null }), { a: null })

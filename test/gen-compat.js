@@ -51,6 +51,8 @@ const JS_NULLABLE = { anyOf: [{ type: 'null' }, { oneOf: [{ type: 'string' }, { 
 const JS_DEPENDENT = { dependentSchemas: { a: { properties: { b: { type: 'number' } }, required: ['b'] } } }
 // A builder the string DSL cannot express, called by name with its arguments.
 const CALL = (name, ...args) => ({ $call: [name, ...args] })
+// A Rename that claims key a for b, by default, as a Number.
+const CL = (o = {}, spec = N) => CALL('Rename', { name: 'b', claim: ['a'], ...o }, spec)
 const ABASE = { a: 1, b: T, c: true }
 
 // Cases grouped by file. Each case: [name, spec, input].
@@ -302,6 +304,35 @@ const files = {
     ['rename-skip-rest', CALL('Child', { $expr: 'Skip(Number)' }, { a: { $expr: 'Rename("b")' } }), { a: 1, c: 2 }],
     ['rename-skip-rest-target', CALL('Child', { $expr: 'Skip(Number)' }, { a: { $expr: 'Rename("b")' } }), { a: 1, b: 2 }],
     ['rename-skip-rest-target-alone', CALL('Child', { $expr: 'Skip(Number)' }, { a: { $expr: 'Rename("b")' } }), { b: 2 }],
+    // A claim takes the value of the first claim key the object holds while
+    // the renamed key is absent. The key it takes is the object's; one it
+    // does not take is unknown, as any other key the object does not declare.
+    ['claim-taken', { b: CL() }, { a: 2 }],
+    ['claim-taken-unknown', { b: CL() }, { a: 2, z: 1 }],
+    ['claim-taken-unknowns', { b: CL() }, { a: 2, y: 1, z: 1 }],
+    ['claim-not-taken', { b: CL() }, { a: 2, b: 1 }],
+    ['claim-nothing', { b: CL() }, {}],
+    ['claim-nothing-default', { b: CL({}, 5) }, {}],
+    ['claim-bad', { b: CL() }, { a: 'x' }],
+    ['claim-keep', { b: CL({ keep: true }) }, { a: 3 }],
+    ['claim-keep-unknown', { b: CL({ keep: true }) }, { a: 3, z: 1 }],
+    ['claim-nested', { o: { b: CL() } }, { o: { a: 2 } }],
+    ['claim-nested-unknown', { o: { b: CL() } }, { o: { a: 2, z: 1 } }],
+    ['claim-elements', [{ b: CL() }], [{ a: 2 }, { a: 3, z: 1 }]],
+    ['claim-open', { $open: { b: CL() } }, { a: 2, z: 1 }],
+    ['claim-rest', CALL('Child', N, { b: CL() }), { a: 'x', z: 1 }],
+    ['claim-rest-keep', CALL('Child', N, { b: CL({ keep: true }) }), { a: 'x', z: 1 }],
+    ['claim-first-of-two', { b: CL({ claim: ['a', 'c'] }) }, { a: 1, c: 2 }],
+    ['claim-second-of-two', { b: CL({ claim: ['a', 'c'] }) }, { c: 2 }],
+    ['claim-declared', { a: N, b: CL() }, { a: 2, z: 1 }],
+    ['claim-once', { b: CL({ claim: ['c'] }), e: CALL('Rename', { name: 'e', claim: ['c'] }, N) }, { c: 1 }],
+    ['claim-rename-target', { a: CALL('Rename', 'x', 1), b: CL({ claim: ['x'] }) }, {}],
+    ['claim-rename-target-bad', { a: CALL('Rename', 'x', N), b: CL({ claim: ['x'] }) }, { a: 'q' }],
+    ['claim-kept-claimed-again', { b: CL({ keep: true }), e: CALL('Rename', { name: 'e', claim: ['a'] }, N) }, { a: 2 }],
+    ['fault-closed', CALL('Fault', 'bad keys at $PATH', { o: { b: N } }), { o: { b: 1, z: 1 } }],
+    ['fault-closed-nested', { o: CALL('Fault', 'bad keys at $PATH', { b: N }) }, { o: { b: 1, z: 1 } }],
+    ['claim-fault', CALL('Fault', 'bad keys', { b: CL() }), { a: 2 }],
+    ['claim-fault-unknown', CALL('Fault', 'bad keys', { b: CL() }), { a: 2, z: 1 }],
     ['disc-branch-ok', { p: DISC }, { p: { bark: true, kind: 'dog' } }],
     ['disc-branch-error', { p: DISC }, { p: { fins: 'x', kind: 'fish' } }],
     ['disc-branch-missing-key', { p: DISC }, { p: { kind: 'dog' } }],
