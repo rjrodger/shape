@@ -279,6 +279,29 @@ const files = {
     // Rename is a check, which a node built over its default keeps.
     ['rename-then-default', { a: { $expr: 'Rename("b").Default(5)' } }, {}],
     ['default-of-rename', { a: { $expr: 'Default(5,Rename("b"))' } }, { a: 1 }],
+    // A rename's target is not a key a closed object accepts, so a value
+    // that already has it fails; a declared target holds its own value from
+    // the input; a rename with no value clears its target.
+    ['rename-target-present', { a: { $expr: 'Rename("b")' } }, { a: 1, b: 2 }],
+    ['rename-target-alone', { a: { $expr: 'Number.Rename("b")' } }, { b: 2 }],
+    ['rename-target-nested', { o: { a: { $expr: 'Rename("b")' } } }, { o: { a: 1, b: 2 } }],
+    ['rename-target-declared', { a: { $expr: 'Rename("b")' }, b: { $expr: 'Optional(Number)' } }, { a: 1, b: 2 }],
+    ['rename-target-declared-absent', { a: { $expr: 'Rename("b")' }, b: { $expr: 'Optional(Number)' } }, { a: 1 }],
+    ['rename-swap', { a: { $expr: 'Rename("b")' }, b: { $expr: 'Rename("a")' } }, { a: 1, b: 2 }],
+    ['rename-swap-one', { a: { $expr: 'Rename("b")' }, b: { $expr: 'Rename("a")' } }, { a: 1 }],
+    ['rename-clears-target', { a: { $expr: 'Number' }, b: { $expr: 'Rename("a")' } }, { a: 2 }],
+    ['rename-open-target', { $open: { a: { $expr: 'Rename("b")' } } }, { a: 1, b: 2 }],
+    // A skipped target its checks leave as it was is not put back, so a
+    // rename's value stays; a taker sets even an absent target.
+    ['rename-skip-target', { a: { $expr: 'Rename("b")' }, b: { $expr: 'Skip(Number)' } }, { a: 1, b: 2 }],
+    ['rename-skip-target-alone', { a: { $expr: 'Rename("b")' }, b: { $expr: 'Skip(Number)' } }, { b: 2 }],
+    ['rename-skip-target-coerced', { a: { $expr: 'Rename("b")' }, b: { $expr: 'Skip(Number).Coerce' } }, { a: 1, b: '2' }],
+    ['rename-ignore-target-absent', { a: { $expr: 'Rename("b")' }, b: { $expr: 'Ignore(Number)' } }, { a: 'x' }],
+    ['rename-ignore-default-target', { a: { $expr: 'Rename("b")' }, b: { $expr: 'Number.Ignore.Default(0)' } }, { a: 'x' }],
+    ['rename-catch-target', { a: { $expr: 'Rename("b")' }, b: { $expr: 'Catch(7,Number)' } }, { a: 'x' }],
+    ['rename-skip-rest', CALL('Child', { $expr: 'Skip(Number)' }, { a: { $expr: 'Rename("b")' } }), { a: 1, c: 2 }],
+    ['rename-skip-rest-target', CALL('Child', { $expr: 'Skip(Number)' }, { a: { $expr: 'Rename("b")' } }), { a: 1, b: 2 }],
+    ['rename-skip-rest-target-alone', CALL('Child', { $expr: 'Skip(Number)' }, { a: { $expr: 'Rename("b")' } }), { b: 2 }],
     ['disc-branch-ok', { p: DISC }, { p: { bark: true, kind: 'dog' } }],
     ['disc-branch-error', { p: DISC }, { p: { fins: 'x', kind: 'fish' } }],
     ['disc-branch-missing-key', { p: DISC }, { p: { kind: 'dog' } }],

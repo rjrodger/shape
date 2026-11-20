@@ -237,12 +237,12 @@ fn prepare(n: &mut Node, defs: &mut HashMap<String, Arc<Node>>) -> bool {
             .keys()
             .map(|k| Arc::from(k.as_str()))
             .collect();
+        // The declared keys and a claim's sources. A rename's target is
+        // not one: a value that already has it is not allowed, as in
+        // TypeScript.
         let mut consumed = std::collections::HashSet::with_capacity(n.obj_children.len());
         for (k, cn) in &n.obj_children {
             consumed.insert(k.clone());
-            if let Some(to) = &cn.rename_to {
-                consumed.insert(to.clone());
-            }
             for src in &cn.rename_claim {
                 consumed.insert(src.clone());
             }

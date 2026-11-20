@@ -769,7 +769,72 @@ fn validate_object(
         }
     };
 
+    // An object that renames takes each value as the input held it, as
+    // TypeScript captures them before any child runs: a rename writes into
+    // the object while the children after it still read the input.
+    let orig: Option<Map> = match &oc {
+        Cur::Mut(map) if n.obj_children.values().any(|c| c.rename_to.is_some()) => {
+            Some((**map).clone())
+        }
+        _ => None,
+    };
+
     for (idx, (k, cn)) in n.obj_children.iter().enumerate() {
+        if let (Some(orig), Cur::Mut(map)) = (orig.as_ref(), &mut oc) {
+            let mut val = orig.get(k).cloned().unwrap_or(Value::Undefined);
+            // A rename's claim: the value is missing and a claimed source
+            // has it, so it is picked up from there, from the object as it
+            // now is: a source an earlier claim took is gone.
+            let mut claimed = false;
+            if val.is_undefined() {
+                let src = cn
+                    .rename_claim
+                    .iter()
+                    .find(|src| map.get(*src).is_some_and(|v| !v.is_undefined()));
+                if let Some(src) = src {
+                    val = map.get(src).cloned().unwrap_or(Value::Undefined);
+                    claimed = true;
+                    if !cn.rename_keep {
+                        map.shift_remove(src);
+                    }
+                }
+            }
+            let present = !val.is_undefined();
+            let takes = takes(cn);
+            // A skipped key its checks leave as it was is not put back (see
+            // below); only then is the value before them needed.
+            let before = (cn.skippable && !takes && present && !claimed).then(|| val.clone());
+            if w.paths {
+                w.push(PathPart::Key(child_key(n, idx, k)));
+            }
+            let keep = validate_node(cn, Cur::Mut(&mut val), k, false, w, verr);
+            w.pop();
+            // What the child produced goes under its key, over what a rename
+            // before it put there, as TypeScript puts it back. A skipped key
+            // its checks left as it was is not put back, so that stays; one
+            // that produced nothing from an absent value leaves it too; and
+            // one a taker set to nothing, absent or dropped, is left out.
+            let left = before.is_some_and(|b| b == val);
+            if keep && !left {
+                map.insert(k.clone(), val.clone());
+            } else if !keep && (present || takes) {
+                map.shift_remove(k);
+            }
+            // A rename then sets its target to the value, undefined (left
+            // out) where there is none, and takes the key away unless kept.
+            if let Some(to) = cn.rename_to.as_ref().filter(|to| *to != k) {
+                if keep {
+                    map.insert(to.clone(), val);
+                } else {
+                    map.shift_remove(to);
+                }
+                if !cn.rename_keep {
+                    map.shift_remove(k);
+                }
+            }
+            continue;
+        }
+
         // A plain child with a present value of its kind: a scalar is judged
         // here, and a read-only walk descends into a container directly,
         // without the general walk's bookkeeping.
@@ -804,32 +869,15 @@ fn validate_object(
             }
         }
 
-        // A rename's claim: the value is missing and a claimed source has
-        // it, so it is picked up from there.
-        let mut claimed: Option<&Value> = None;
-        if cn.rename_to.is_some() && !cn.rename_claim.is_empty() {
-            let present = oc.get().get(k).map(|v| !v.is_undefined()).unwrap_or(false);
-            if !present {
-                let src = cn
-                    .rename_claim
-                    .iter()
-                    .find(|src| oc.get().contains_key(*src))
-                    .cloned();
-                if let Some(src) = src {
-                    match &mut oc {
-                        Cur::Mut(map) => {
-                            let v = if cn.rename_keep {
-                                map.get(&src).cloned().unwrap()
-                            } else {
-                                map.shift_remove(&src).unwrap()
-                            };
-                            map.insert(k.clone(), v);
-                        }
-                        Cur::Ref(map) => claimed = map.get(&src),
-                    }
-                }
+        // A rename's claim on a read-only walk (a writing one renames above):
+        // the value is missing and a claimed source has it, so it is read
+        // from there.
+        let claimed: Option<&Value> = match &oc {
+            Cur::Ref(map) if !map.get(k).is_some_and(|v| !v.is_undefined()) => {
+                cn.rename_claim.iter().find_map(|src| map.get(src))
             }
-        }
+            _ => None,
+        };
 
         // The shared key is only taken when the path is kept.
         if w.paths {
@@ -868,17 +916,6 @@ fn validate_object(
                 // A slot is left out only where nothing was there, or an
                 // Ignore dropped what was (see validate_node).
                 m.shift_remove(k);
-            } else if let Some(to) = &cn.rename_to {
-                // The produced value moves under the new name.
-                if to != k {
-                    let v = if cn.rename_keep {
-                        m.get(k).cloned()
-                    } else {
-                        m.shift_remove(k)
-                    };
-                    // A slot kept holds a value (see validate_node).
-                    m.extend(v.map(|v| (to.clone(), v)));
-                }
             }
         }
     }
@@ -886,14 +923,31 @@ fn validate_object(
     // An aligned read-only walk has nothing left over.
     let rest_keys = !(aligned && matches!(oc, Cur::Ref(_)));
     if let Some(rest) = n.obj_rest.as_deref().filter(|_| rest_keys) {
-        let extra: Vec<String> = oc
-            .get()
+        // The keys the input held that the object does not declare, as it
+        // held them (see orig).
+        let extra: Vec<String> = orig
+            .as_ref()
+            .unwrap_or_else(|| oc.get())
             .iter()
             .filter(|(k, v)| !v.is_undefined() && !n.obj_children.contains_key(*k))
             .map(|(k, _)| k.clone())
             .collect();
         for k in extra {
             w.push(PathPart::Key(Arc::from(k.as_str())));
+            if let (Some(orig), Cur::Mut(map)) = (orig.as_ref(), &mut oc) {
+                let mut val = orig.get(&k).cloned().unwrap_or(Value::Undefined);
+                let before = (rest.skippable && !takes(rest)).then(|| val.clone());
+                let keep = validate_node(rest, Cur::Mut(&mut val), &k, false, w, verr);
+                w.pop();
+                // As a declared key: one its checks left as it was under a
+                // skipping shape is not put back.
+                if keep && !before.is_some_and(|b| b == val) {
+                    map.insert(k, val);
+                } else if !keep {
+                    map.shift_remove(&k);
+                }
+                continue;
+            }
             let child = match &mut oc {
                 Cur::Mut(map) => Cur::Mut(map.get_mut(&k).unwrap()),
                 Cur::Ref(map) => Cur::Ref(map.get(&k).unwrap()),
@@ -908,6 +962,12 @@ fn validate_object(
         }
     }
     true
+}
+
+/// Whether a node's checks include a taker (Ignore, Catch, Transform), which
+/// always sets the value, as TypeScript's `uval` does.
+fn takes(n: &Node) -> bool {
+    n.befores.iter().any(|b| b.inner.is_some())
 }
 
 fn validate_array(

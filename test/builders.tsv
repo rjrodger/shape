@@ -139,6 +139,24 @@ ignore-nested-branch-keeps	{"a":{"$expr":"All(Ignore(Ignore(Min(2,Number))),Numb
 nof-of-ignore-branch-kept	{"a":{"$expr":"Nof(1,Ignore(Min(2,Number)),String)"}}	{"a":3}	{"a":3}	
 rename-then-default	{"a":{"$expr":"Rename(\"b\").Default(5)"}}	{}	{"b":5}	
 default-of-rename	{"a":{"$expr":"Default(5,Rename(\"b\"))"}}	{"a":1}	{"b":1}	
+rename-target-present	{"a":{"$expr":"Rename(\"b\")"}}	{"a":1,"b":2}		"Validation failed for object \"{a:1,b:2}\" because the property \"b\" is not allowed."
+rename-target-alone	{"a":{"$expr":"Number.Rename(\"b\")"}}	{"b":2}		"Validation failed for object \"{b:2}\" because the property \"b\" is not allowed.\nValidation failed for property \"a\" because the property is missing."
+rename-target-nested	{"o":{"a":{"$expr":"Rename(\"b\")"}}}	{"o":{"a":1,"b":2}}		"Validation failed for property \"o\" with object \"{a:1,b:2}\" because the property \"b\" is not allowed."
+rename-target-declared	{"a":{"$expr":"Rename(\"b\")"},"b":{"$expr":"Optional(Number)"}}	{"a":1,"b":2}	{"b":2}	
+rename-target-declared-absent	{"a":{"$expr":"Rename(\"b\")"},"b":{"$expr":"Optional(Number)"}}	{"a":1}	{"b":0}	
+rename-swap	{"a":{"$expr":"Rename(\"b\")"},"b":{"$expr":"Rename(\"a\")"}}	{"a":1,"b":2}	{"a":2}	
+rename-swap-one	{"a":{"$expr":"Rename(\"b\")"},"b":{"$expr":"Rename(\"a\")"}}	{"a":1}	{}	
+rename-clears-target	{"a":{"$expr":"Number"},"b":{"$expr":"Rename(\"a\")"}}	{"a":2}	{}	
+rename-open-target	{"$open":{"a":{"$expr":"Rename(\"b\")"}}}	{"a":1,"b":2}	{"b":2}	
+rename-skip-target	{"a":{"$expr":"Rename(\"b\")"},"b":{"$expr":"Skip(Number)"}}	{"a":1,"b":2}	{"b":1}	
+rename-skip-target-alone	{"a":{"$expr":"Rename(\"b\")"},"b":{"$expr":"Skip(Number)"}}	{"b":2}	{}	
+rename-skip-target-coerced	{"a":{"$expr":"Rename(\"b\")"},"b":{"$expr":"Skip(Number).Coerce"}}	{"a":1,"b":"2"}	{"b":2}	
+rename-ignore-target-absent	{"a":{"$expr":"Rename(\"b\")"},"b":{"$expr":"Ignore(Number)"}}	{"a":"x"}	{}	
+rename-ignore-default-target	{"a":{"$expr":"Rename(\"b\")"},"b":{"$expr":"Number.Ignore.Default(0)"}}	{"a":"x"}	{"b":0}	
+rename-catch-target	{"a":{"$expr":"Rename(\"b\")"},"b":{"$expr":"Catch(7,Number)"}}	{"a":"x"}	{"b":7}	
+rename-skip-rest	{"$call":["Child",{"$expr":"Skip(Number)"},{"a":{"$expr":"Rename(\"b\")"}}]}	{"a":1,"c":2}	{"c":2,"b":1}	
+rename-skip-rest-target	{"$call":["Child",{"$expr":"Skip(Number)"},{"a":{"$expr":"Rename(\"b\")"}}]}	{"a":1,"b":2}	{"b":1}	
+rename-skip-rest-target-alone	{"$call":["Child",{"$expr":"Skip(Number)"},{"a":{"$expr":"Rename(\"b\")"}}]}	{"b":2}	{}	
 disc-branch-ok	{"p":{"$discriminated":["kind",{"dog":{"bark":{"$type":"Boolean"}},"fish":{"fins":{"$type":"Number"}}}]}}	{"p":{"bark":true,"kind":"dog"}}	{"p":{"bark":true,"kind":"dog"}}	
 disc-branch-error	{"p":{"$discriminated":["kind",{"dog":{"bark":{"$type":"Boolean"}},"fish":{"fins":{"$type":"Number"}}}]}}	{"p":{"fins":"x","kind":"fish"}}		"Validation failed for property \"p.fins\" with string \"x\" because the string is not of type number."
 disc-branch-missing-key	{"p":{"$discriminated":["kind",{"dog":{"bark":{"$type":"Boolean"}},"fish":{"fins":{"$type":"Number"}}}]}}	{"p":{"kind":"dog"}}		"Validation failed for property \"p.bark\" because the property is missing."

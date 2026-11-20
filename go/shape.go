@@ -90,14 +90,12 @@ func prepare(n *node, defs map[string]*node) {
 	}
 	n.plain = plainNode(n)
 	if n.kind == KindObject && n.consumed == nil {
+		// The declared keys and a claim's sources. A rename's target is
+		// not one: a value that already has it is not allowed, as in TS.
 		consumed := make(map[string]bool, len(n.objKeys))
 		for _, k := range n.objKeys {
 			consumed[k] = true
-			cn := n.objChildren[k]
-			if cn.renameTo != "" {
-				consumed[cn.renameTo] = true
-			}
-			for _, src := range cn.renameClaim {
+			for _, src := range n.objChildren[k].renameClaim {
 				consumed[src] = true
 			}
 		}
