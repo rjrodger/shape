@@ -492,6 +492,15 @@ function build() {
   add('r-clears', { a: E('Number'), b: E('Rename("a")') }, OBJS)
   add('r-open', { $open: { a: E('Rename("b")') } }, OBJS)
   add('r-keyexpr', { 'a: Rename("b")': 1 }, OBJS)
+  // A skipped target keeps a rename's value unless its checks change it; a
+  // taker sets the target even when absent.
+  add('r-skip-target', { a: E('Rename("b")'), b: E('Skip(Number)') }, OBJS)
+  add('r-skip-coerce', { a: E('Rename("b")'), b: E('Skip(Number).Coerce') }, OBJS.concat([{ a: 1, b: '2' }]))
+  add('r-ignore-target', { a: E('Rename("b")'), b: E('Ignore(Number)') }, OBJS.concat([{ a: 'x' }, { a: 'x', b: 'y' }]))
+  add('r-ignore-default-target', { a: E('Rename("b")'), b: E('Number.Ignore.Default(0)') }, OBJS)
+  add('r-catch-target', { a: E('Rename("b")'), b: E('Catch(7,Number)') }, OBJS)
+  add('r-skip-rest', CALL('Child', E('Skip(Number)'), { a: E('Rename("b")') }), OBJS.concat([{ a: 1, c: 2 }, { a: 1, c: 'x' }]))
+  add('r-ignore-rest', CALL('Child', E('Ignore(Number)'), { a: E('Rename("b")') }), OBJS.concat([{ a: 'x', b: 2 }, { a: 1, b: 'y' }, { a: 1, c: 'x' }]))
   add('d-null-chained', { a: E('Default(null).Default(5)') }, OBJS)
   // A Catch takes the composition inside with the node's other checks.
   add('c-catch-all', E('Catch(0,All(Number))'), SCALARS)

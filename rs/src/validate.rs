@@ -783,27 +783,41 @@ fn validate_object(
         if let (Some(orig), Cur::Mut(map)) = (orig.as_ref(), &mut oc) {
             let mut val = orig.get(k).cloned().unwrap_or(Value::Undefined);
             // A rename's claim: the value is missing and a claimed source
-            // has it, so it is picked up from there.
+            // has it, so it is picked up from there, from the object as it
+            // now is: a source an earlier claim took is gone.
+            let mut claimed = false;
             if val.is_undefined() {
-                if let Some(src) = cn.rename_claim.iter().find(|src| orig.contains_key(*src)) {
-                    val = orig.get(src).cloned().unwrap_or(Value::Undefined);
+                let src = cn
+                    .rename_claim
+                    .iter()
+                    .find(|src| map.get(*src).is_some_and(|v| !v.is_undefined()));
+                if let Some(src) = src {
+                    val = map.get(src).cloned().unwrap_or(Value::Undefined);
+                    claimed = true;
                     if !cn.rename_keep {
                         map.shift_remove(src);
                     }
                 }
             }
             let present = !val.is_undefined();
+            let takes = takes(cn);
+            // A skipped key its checks leave as it was is not put back (see
+            // below); only then is the value before them needed.
+            let before = (cn.skippable && !takes && present && !claimed).then(|| val.clone());
             if w.paths {
                 w.push(PathPart::Key(child_key(n, idx, k)));
             }
             let keep = validate_node(cn, Cur::Mut(&mut val), k, false, w, verr);
             w.pop();
             // What the child produced goes under its key, over what a rename
-            // before it put there; one that produced nothing from an absent
-            // value leaves that, and one an Ignore dropped is left out.
-            if keep {
+            // before it put there, as TypeScript puts it back. A skipped key
+            // its checks left as it was is not put back, so that stays; one
+            // that produced nothing from an absent value leaves it too; and
+            // one a taker set to nothing, absent or dropped, is left out.
+            let left = before.is_some_and(|b| b == val);
+            if keep && !left {
                 map.insert(k.clone(), val.clone());
-            } else if present {
+            } else if !keep && (present || takes) {
                 map.shift_remove(k);
             }
             // A rename then sets its target to the value, undefined (left
@@ -922,11 +936,14 @@ fn validate_object(
             w.push(PathPart::Key(Arc::from(k.as_str())));
             if let (Some(orig), Cur::Mut(map)) = (orig.as_ref(), &mut oc) {
                 let mut val = orig.get(&k).cloned().unwrap_or(Value::Undefined);
+                let before = (rest.skippable && !takes(rest)).then(|| val.clone());
                 let keep = validate_node(rest, Cur::Mut(&mut val), &k, false, w, verr);
                 w.pop();
-                if keep {
+                // As a declared key: one its checks left as it was under a
+                // skipping shape is not put back.
+                if keep && !before.is_some_and(|b| b == val) {
                     map.insert(k, val);
-                } else {
+                } else if !keep {
                     map.shift_remove(&k);
                 }
                 continue;
@@ -945,6 +962,12 @@ fn validate_object(
         }
     }
     true
+}
+
+/// Whether a node's checks include a taker (Ignore, Catch, Transform), which
+/// always sets the value, as TypeScript's `uval` does.
+fn takes(n: &Node) -> bool {
+    n.befores.iter().any(|b| b.inner.is_some())
 }
 
 fn validate_array(

@@ -148,6 +148,15 @@ rename-swap	{"a":{"$expr":"Rename(\"b\")"},"b":{"$expr":"Rename(\"a\")"}}	{"a":1
 rename-swap-one	{"a":{"$expr":"Rename(\"b\")"},"b":{"$expr":"Rename(\"a\")"}}	{"a":1}	{}	
 rename-clears-target	{"a":{"$expr":"Number"},"b":{"$expr":"Rename(\"a\")"}}	{"a":2}	{}	
 rename-open-target	{"$open":{"a":{"$expr":"Rename(\"b\")"}}}	{"a":1,"b":2}	{"b":2}	
+rename-skip-target	{"a":{"$expr":"Rename(\"b\")"},"b":{"$expr":"Skip(Number)"}}	{"a":1,"b":2}	{"b":1}	
+rename-skip-target-alone	{"a":{"$expr":"Rename(\"b\")"},"b":{"$expr":"Skip(Number)"}}	{"b":2}	{}	
+rename-skip-target-coerced	{"a":{"$expr":"Rename(\"b\")"},"b":{"$expr":"Skip(Number).Coerce"}}	{"a":1,"b":"2"}	{"b":2}	
+rename-ignore-target-absent	{"a":{"$expr":"Rename(\"b\")"},"b":{"$expr":"Ignore(Number)"}}	{"a":"x"}	{}	
+rename-ignore-default-target	{"a":{"$expr":"Rename(\"b\")"},"b":{"$expr":"Number.Ignore.Default(0)"}}	{"a":"x"}	{"b":0}	
+rename-catch-target	{"a":{"$expr":"Rename(\"b\")"},"b":{"$expr":"Catch(7,Number)"}}	{"a":"x"}	{"b":7}	
+rename-skip-rest	{"$call":["Child",{"$expr":"Skip(Number)"},{"a":{"$expr":"Rename(\"b\")"}}]}	{"a":1,"c":2}	{"c":2,"b":1}	
+rename-skip-rest-target	{"$call":["Child",{"$expr":"Skip(Number)"},{"a":{"$expr":"Rename(\"b\")"}}]}	{"a":1,"b":2}	{"b":1}	
+rename-skip-rest-target-alone	{"$call":["Child",{"$expr":"Skip(Number)"},{"a":{"$expr":"Rename(\"b\")"}}]}	{"b":2}	{}	
 disc-branch-ok	{"p":{"$discriminated":["kind",{"dog":{"bark":{"$type":"Boolean"}},"fish":{"fins":{"$type":"Number"}}}]}}	{"p":{"bark":true,"kind":"dog"}}	{"p":{"bark":true,"kind":"dog"}}	
 disc-branch-error	{"p":{"$discriminated":["kind",{"dog":{"bark":{"$type":"Boolean"}},"fish":{"fins":{"$type":"Number"}}}]}}	{"p":{"fins":"x","kind":"fish"}}		"Validation failed for property \"p.fins\" with string \"x\" because the string is not of type number."
 disc-branch-missing-key	{"p":{"$discriminated":["kind",{"dog":{"bark":{"$type":"Boolean"}},"fish":{"fins":{"$type":"Number"}}}]}}	{"p":{"kind":"dog"}}		"Validation failed for property \"p.bark\" because the property is missing."

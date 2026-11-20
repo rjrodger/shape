@@ -717,8 +717,9 @@ func validateObject(n *node, in any, path []string, pathArr []any, parent any, c
 			// A plain leaf of its kind is its own produced value; a copy
 			// already holds it, and is written only as the full path would
 			// have written it, after an earlier child's rename to this key.
+			// A skipped one is not put back (see left below).
 			if cn.plain && plainOK(cn, v) {
-				if !match && out != nil {
+				if !match && out != nil && !cn.skippable {
 					out[k] = v
 				}
 				continue
@@ -731,11 +732,17 @@ func validateObject(n *node, in any, path []string, pathArr []any, parent any, c
 			kpathArr = append(pathArr, n.objKeysAny[i])
 		}
 
-		// Rename.claim: if the value is missing and claim source has it, pick up.
+		// Rename.claim: if the value is missing and claim source has it, pick
+		// it up, from the object as it now is: a source an earlier claim took
+		// is gone, as in TS.
 		claimed := false
 		if !has && cn.renameTo != "" && len(cn.renameClaim) > 0 {
+			now := obj
+			if out != nil {
+				now = out
+			}
 			for _, src := range cn.renameClaim {
-				if sv, sh := obj[src]; sh {
+				if sv, sh := now[src]; sh {
 					v = sv
 					has, claimed = true, true
 					if !cn.renameKeep && !match {
@@ -750,6 +757,13 @@ func validateObject(n *node, in any, path []string, pathArr []any, parent any, c
 		if !has {
 			produced = validateNode(cn, undefinedVal, kpath, kpathArr, k, parentOf, ctx, match, verr)
 			if absentOmits(cn, produced) {
+				// A taker sets even an absent value, here to nothing, which
+				// clears what a rename before it put under the key, as TS's
+				// does.
+				if takes(cn) && !match {
+					ensure()
+					delete(out, k)
+				}
 				renameNothing(cn, k, match, ensure, &out)
 				continue
 			}
@@ -768,7 +782,11 @@ func validateObject(n *node, in any, path []string, pathArr []any, parent any, c
 			continue
 		}
 		// A claimed value is put under the key as well, as TS's claim does.
-		if !has || claimed || out != nil || !sameValue(produced, v) {
+		// A skipped key its checks left as it was is not put back, as TS's
+		// skip leaves the parent alone: what a rename before it put there
+		// stays.
+		left := cn.skippable && has && !claimed && !takes(cn) && sameValue(produced, v)
+		if !left && (!has || claimed || out != nil || !sameValue(produced, v)) {
 			ensure()
 			out[k] = produced
 		}
@@ -825,6 +843,12 @@ func validateObject(n *node, in any, path []string, pathArr []any, parent any, c
 				delete(out, k)
 				continue
 			}
+			// A skipped rest key its checks left as it was is not put back,
+			// as TS's skip leaves the parent alone: what a rename put under
+			// the key, or took from it, stays.
+			if n.objRest.skippable && !takes(n.objRest) && sameValue(produced, obj[k]) {
+				continue
+			}
 			if !match && (out != nil || !sameValue(produced, obj[k])) {
 				ensure()
 				out[k] = produced
@@ -839,6 +863,17 @@ func validateObject(n *node, in any, path []string, pathArr []any, parent any, c
 		return obj
 	}
 	return out
+}
+
+// takes reports whether a node's checks include a taker (Ignore, Catch,
+// Transform), which always sets the value, as TS's uval does.
+func takes(n *node) bool {
+	for _, b := range n.befores {
+		if b.inner != nil {
+			return true
+		}
+	}
+	return false
 }
 
 // renameNothing applies a Rename whose value is absent or dropped, as TS's

@@ -2129,6 +2129,12 @@ mod tests {
             run(&dropping, r#"{"a":1,"c":"x","d":"y","e":2}"#),
             r#"{"e":2,"b":1}"#
         );
+        // A rest key a skipping shape leaves as it was stays as it was.
+        let skipping = Schema::new(Child(
+            Skip(Token::Number),
+            obj([("a", Spec::from(Rename("b", Any())))]),
+        ));
+        assert_eq!(run(&skipping, r#"{"a":1,"c":2}"#), r#"{"c":2,"b":1}"#);
         // An absent object that renames is made and walked for a verdict too.
         let nested = Schema::new(obj([("o", obj([("a", Spec::from(Rename("b", Any())))]))]));
         assert!(nested.valid(&j("{}")));
@@ -2153,6 +2159,32 @@ mod tests {
             ))
         };
         assert_eq!(run(&claim(false), r#"{"older":1}"#), r#"{"b":1}"#);
+        // A source an earlier claim took is gone for a later one.
+        let two = Schema::new(obj([
+            (
+                "a",
+                Spec::from(RenameWith(
+                    "b",
+                    RenameOptions {
+                        keep: false,
+                        claim: vec!["c".into()],
+                    },
+                    Any(),
+                )),
+            ),
+            (
+                "d",
+                Spec::from(RenameWith(
+                    "e",
+                    RenameOptions {
+                        keep: false,
+                        claim: vec!["c".into()],
+                    },
+                    Any(),
+                )),
+            ),
+        ]));
+        assert_eq!(run(&two, r#"{"c":1}"#), r#"{"b":1}"#);
         assert_eq!(
             run(&claim(true), r#"{"old":1}"#),
             r#"{"old":1,"a":1,"b":1}"#

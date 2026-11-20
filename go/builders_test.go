@@ -581,6 +581,19 @@ func TestRename(t *testing.T) {
 	if out := mustValid(t, swap, map[string]any{"a": 1}).(map[string]any); len(out) != 0 {
 		t.Fatalf("expected nothing left, got %v", out)
 	}
+	// A source an earlier claim took is gone for a later one.
+	two := MustShape(map[string]any{
+		"a": RenameWith("b", RenameOptions{Claim: []string{"c"}}),
+		"d": RenameWith("e", RenameOptions{Claim: []string{"c"}}),
+	})
+	if out := mustValid(t, two, map[string]any{"c": 1.0}).(map[string]any); len(out) != 1 || out["b"] != 1.0 {
+		t.Fatalf("expected b alone, got %v", out)
+	}
+	// A skipped rest key is not put back over what a rename put there.
+	rest := MustShape(Child(Skip(Number), map[string]any{"a": Rename("b")}))
+	if out := mustValid(t, rest, map[string]any{"a": 1.0, "b": 2.0}).(map[string]any); len(out) != 1 || out["b"] != 1.0 {
+		t.Fatalf("expected b from a, got %v", out)
+	}
 	// A claimed value is put under the key as well when kept.
 	kept := MustShape(map[string]any{"a": RenameWith("b", RenameOptions{Keep: true, Claim: []string{"c"}}, Number)})
 	if out := mustValid(t, kept, map[string]any{"c": 1.0}).(map[string]any); out["a"] != 1.0 || out["b"] != 1.0 || out["c"] != 1.0 {
