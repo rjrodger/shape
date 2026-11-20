@@ -172,7 +172,7 @@ dependencies = [
 
 [[package]]
 name = "shape-schema"
-version = "0.5.3"
+version = "0.5.4"
 dependencies = [
  "indexmap",
  "num-bigint",
