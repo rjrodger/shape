@@ -529,9 +529,8 @@ class State {
   // within it shares.
   trials: any = undefined
 
-  // The last parent object seen and whether it was frozen (see next).
+  // The last parent object seen (see next).
   lastParent: any = undefined
-  lastFrozen: boolean = false
 
   constructor(
     root: any,
@@ -594,15 +593,12 @@ class State {
     this.cI = this.pI
     this.sI = this.pI + 1
 
-    // A frozen parent is copied so its children can be written; siblings
-    // share a parent, so the check runs once per parent object.
+    // A parent that cannot take new keys is copied before its first child
+    // runs (see thawParent); siblings share a parent, so the check runs once
+    // per parent object.
     const parent = this.parents[this.pI]
     if (parent !== this.lastParent) {
-      this.lastParent = parent
-      this.lastFrozen = Object.isFrozen(parent)
-    }
-    if (this.lastFrozen) {
-      this.parents[this.pI] = { ...parent }
+      this.lastParent = null != parent && !Object.isExtensible(parent) ? this.thawParent(parent) : parent
     }
     this.parent = this.parents[this.pI]
 
@@ -632,6 +628,51 @@ class State {
     if (this.isRoot && !this.match) {
       this.root = this.val
     }
+  }
+
+  // A parent that cannot take new keys (frozen, sealed) is copied once,
+  // before its first child runs. The child and its later siblings take the
+  // copy, an error about the parent names it, and it takes the parent's
+  // place wherever the parent still is: under its key, or the key a Rename
+  // of it moved it to, or as the result. Only a validation that produces
+  // writes the parent's place.
+  thawParent(p: any): any {
+    const c = thaw(p)
+    let j = this.pI
+    for (; S.number !== typeof this.nodes[j]; j++) {
+      if (this.parents[j] === p) {
+        this.parents[j] = c
+      }
+    }
+    for (const e of this.err) {
+      if (e.value === p) {
+        e.value = c
+      }
+    }
+    // The back pointer that ends the block is one past the parent's slot.
+    const at = (this.nodes[j] as number) - 1
+    const gp = this.parents[at]
+    if (!this.match) {
+      if (0 === at) {
+        // A check after the root's own may have replaced the result.
+        if (this.root === p) {
+          this.root = c
+        }
+      }
+      else {
+        const key = this.keys[at]
+        if (gp[key] === p) {
+          gp[key] = c
+        }
+        for (const b of (this.nodes[at] as Node<any>).b) {
+          const to = S.Rename === b.n ? (b.a as string[])[0] : undefined
+          if (undefined !== to && gp[to] === p) {
+            gp[to] = c
+          }
+        }
+      }
+    }
+    return c
   }
 
   // UNCOMMENT TO DEBUG - DO NOT REMOVE
@@ -4262,15 +4303,27 @@ const Refer = function <V = any>(this: any, inopts: any, shape?: Node<V> | V): N
 }
 
 
+// A writable copy of an object or array that cannot take new keys (see
+// State.thawParent), so the input stays as it was: an array by its
+// elements, an object by its own enumerable keys (a key named __proto__
+// stays a key), keeping its prototype.
+function thaw(v: any): any {
+  if (isarr(v)) {
+    return v.slice()
+  }
+  const c = { ...v }
+  const proto = Object.getPrototypeOf(v)
+  return Object.prototype === proto ? c : Object.setPrototypeOf(c, proto)
+}
+
+
 // A key a Rename's claim took is the object's: a closed object does not
 // report it, and an open one's rest shape does not take it. The object
 // settled both before its keys were validated, so the claim undoes them:
 // the key leaves the closed error, which goes once no key is left, and the
-// rest entry queued for it after the declared keys checks nothing. The
-// object is the one its children were given: a frozen one is copied for
-// each of them (see next).
+// rest entry queued for it after the declared keys checks nothing.
 function claimKey(s: State, cn: string) {
-  const obj = s.lastParent
+  const obj = s.parent
   for (let eI = 0; eI < s.err.length; eI++) {
     const e = s.err[eI]
     if (S.closed === e.why && e.value === obj && isarr(e.use.k)) {
