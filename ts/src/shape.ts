@@ -633,8 +633,9 @@ class State {
   // A parent that cannot take new keys (frozen, sealed) is copied once,
   // before its first child runs. The child and its later siblings take the
   // copy, an error about the parent names it, and it takes the parent's
-  // place: under its key, or the key a Rename of it moved it to, or as the
-  // result. Only a validation that produces writes the parent's place.
+  // place wherever the parent still is: under its key, or the key a Rename
+  // of it moved it to, or as the result. Only a validation that produces
+  // writes the parent's place.
   thawParent(p: any): any {
     const c = thaw(p)
     let j = this.pI
@@ -653,7 +654,10 @@ class State {
     const gp = this.parents[at]
     if (!this.match) {
       if (0 === at) {
-        this.root = c
+        // A check after the root's own may have replaced the result.
+        if (this.root === p) {
+          this.root = c
+        }
       }
       else {
         const key = this.keys[at]

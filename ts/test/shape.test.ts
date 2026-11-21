@@ -2930,6 +2930,12 @@ Validation failed for index "1" with number "1" because the number is not of typ
     deepEqual([...el], [{ x: 1 }])
     deepEqual(el.a, { x: 1 })
 
+    // A check after a frozen object's own that replaces it keeps its
+    // replacement, at the root and below.
+    const swap = (v: any, u: any) => { u.val = 'replacement'; return true }
+    deepEqual(Shape(After(swap, { a: Default(1) }))(Object.freeze({})), 'replacement')
+    deepEqual(Shape({ o: After(swap, { a: Default(1) }) })(deepFreeze({ o: {} })), { o: 'replacement' })
+
     // An error is the error a writable input gets, and match() checks a
     // frozen input without writing it.
     throws(() => Shape({ a: Number })(Object.freeze({ a: 'x' })), 'property "a" with string "x"')
