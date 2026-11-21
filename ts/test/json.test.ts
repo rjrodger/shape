@@ -370,6 +370,11 @@ describe('json', () => {
           json = s.json()
         }
         catch (e: any) {
+          // A claim's rows, which the expression form cannot write, are
+          // about validating; they do not count against the few.
+          if (/cannot express the options of Rename/.test(e.message)) {
+            continue
+          }
           assert.match(e.message, /cannot express (the options of Refer|an object default|the default object)/, row.name)
           cannot++
           continue

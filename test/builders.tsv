@@ -157,6 +157,33 @@ rename-catch-target	{"a":{"$expr":"Rename(\"b\")"},"b":{"$expr":"Catch(7,Number)
 rename-skip-rest	{"$call":["Child",{"$expr":"Skip(Number)"},{"a":{"$expr":"Rename(\"b\")"}}]}	{"a":1,"c":2}	{"c":2,"b":1}	
 rename-skip-rest-target	{"$call":["Child",{"$expr":"Skip(Number)"},{"a":{"$expr":"Rename(\"b\")"}}]}	{"a":1,"b":2}	{"b":1}	
 rename-skip-rest-target-alone	{"$call":["Child",{"$expr":"Skip(Number)"},{"a":{"$expr":"Rename(\"b\")"}}]}	{"b":2}	{}	
+claim-taken	{"b":{"$call":["Rename",{"name":"b","claim":["a"]},{"$type":"Number"}]}}	{"a":2}	{"b":2}	
+claim-taken-unknown	{"b":{"$call":["Rename",{"name":"b","claim":["a"]},{"$type":"Number"}]}}	{"a":2,"z":1}		"Validation failed for object \"{a:2,z:1}\" because the property \"z\" is not allowed."
+claim-taken-unknowns	{"b":{"$call":["Rename",{"name":"b","claim":["a"]},{"$type":"Number"}]}}	{"a":2,"y":1,"z":1}		"Validation failed for object \"{a:2,y:1,z:1}\" because the properties \"y, z\" are not allowed."
+claim-not-taken	{"b":{"$call":["Rename",{"name":"b","claim":["a"]},{"$type":"Number"}]}}	{"a":2,"b":1}		"Validation failed for object \"{a:2,b:1}\" because the property \"a\" is not allowed."
+claim-nothing	{"b":{"$call":["Rename",{"name":"b","claim":["a"]},{"$type":"Number"}]}}	{}		"Validation failed for property \"b\" because the property is missing."
+claim-nothing-default	{"b":{"$call":["Rename",{"name":"b","claim":["a"]},5]}}	{}	{"b":5}	
+claim-bad	{"b":{"$call":["Rename",{"name":"b","claim":["a"]},{"$type":"Number"}]}}	{"a":"x"}		"Validation failed for property \"b\" with string \"x\" because the string is not of type number."
+claim-keep	{"b":{"$call":["Rename",{"name":"b","claim":["a"],"keep":true},{"$type":"Number"}]}}	{"a":3}	{"a":3,"b":3}	
+claim-keep-unknown	{"b":{"$call":["Rename",{"name":"b","claim":["a"],"keep":true},{"$type":"Number"}]}}	{"a":3,"z":1}		"Validation failed for object \"{a:3,z:1}\" because the property \"z\" is not allowed."
+claim-nested	{"o":{"b":{"$call":["Rename",{"name":"b","claim":["a"]},{"$type":"Number"}]}}}	{"o":{"a":2}}	{"o":{"b":2}}	
+claim-nested-unknown	{"o":{"b":{"$call":["Rename",{"name":"b","claim":["a"]},{"$type":"Number"}]}}}	{"o":{"a":2,"z":1}}		"Validation failed for property \"o\" with object \"{a:2,z:1}\" because the property \"z\" is not allowed."
+claim-elements	[{"b":{"$call":["Rename",{"name":"b","claim":["a"]},{"$type":"Number"}]}}]	[{"a":2},{"a":3,"z":1}]		"Validation failed for property \"1\" with object \"{a:3,z:1}\" because the property \"z\" is not allowed."
+claim-open	{"$open":{"b":{"$call":["Rename",{"name":"b","claim":["a"]},{"$type":"Number"}]}}}	{"a":2,"z":1}	{"z":1,"b":2}	
+claim-rest	{"$call":["Child",{"$type":"Number"},{"b":{"$call":["Rename",{"name":"b","claim":["a"]},{"$type":"Number"}]}}]}	{"a":"x","z":1}		"Validation failed for property \"b\" with string \"x\" because the string is not of type number."
+claim-rest-keep	{"$call":["Child",{"$type":"Number"},{"b":{"$call":["Rename",{"name":"b","claim":["a"],"keep":true},{"$type":"Number"}]}}]}	{"a":"x","z":1}		"Validation failed for property \"b\" with string \"x\" because the string is not of type number."
+claim-first-of-two	{"b":{"$call":["Rename",{"name":"b","claim":["a","c"]},{"$type":"Number"}]}}	{"a":1,"c":2}		"Validation failed for object \"{a:1,c:2}\" because the property \"c\" is not allowed."
+claim-second-of-two	{"b":{"$call":["Rename",{"name":"b","claim":["a","c"]},{"$type":"Number"}]}}	{"c":2}	{"b":2}	
+claim-declared	{"a":{"$type":"Number"},"b":{"$call":["Rename",{"name":"b","claim":["a"]},{"$type":"Number"}]}}	{"a":2,"z":1}		"Validation failed for object \"{a:2,z:1}\" because the property \"z\" is not allowed."
+claim-once	{"b":{"$call":["Rename",{"name":"b","claim":["c"]},{"$type":"Number"}]},"e":{"$call":["Rename",{"name":"e","claim":["c"]},{"$type":"Number"}]}}	{"c":1}		"Validation failed for property \"e\" because the property is missing."
+claim-rename-target	{"a":{"$call":["Rename","x",1]},"b":{"$call":["Rename",{"name":"b","claim":["x"]},{"$type":"Number"}]}}	{}	{"b":1}	
+claim-rename-target-bad	{"a":{"$call":["Rename","x",{"$type":"Number"}]},"b":{"$call":["Rename",{"name":"b","claim":["x"]},{"$type":"Number"}]}}	{"a":"q"}		"Validation failed for property \"a\" with string \"q\" because the string is not of type number.\nValidation failed for property \"b\" with string \"q\" because the string is not of type number."
+claim-kept-claimed-again	{"b":{"$call":["Rename",{"name":"b","claim":["a"],"keep":true},{"$type":"Number"}]},"e":{"$call":["Rename",{"name":"e","claim":["a"]},{"$type":"Number"}]}}	{"a":2}	{"b":2,"e":2}	
+claim-recreated	{"b":{"$call":["Rename",{"name":"b","claim":["a"]},{"$type":"Number"}]},"c":{"$call":["Rename","a",{"$type":"Number"}]},"d":{"$call":["Rename",{"name":"d","claim":["a"]},{"$type":"Number"}]}}	{"a":2,"c":3}	{"b":2,"d":3}	
+fault-closed	{"$call":["Fault","bad keys at $PATH",{"o":{"b":{"$type":"Number"}}}]}	{"o":{"b":1,"z":1}}		"Validation failed for property \"o\" with object \"{b:1,z:1}\" because the property \"z\" is not allowed."
+fault-closed-nested	{"o":{"$call":["Fault","bad keys at $PATH",{"b":{"$type":"Number"}}]}}	{"o":{"b":1,"z":1}}		"bad keys at o"
+claim-fault	{"$call":["Fault","bad keys",{"b":{"$call":["Rename",{"name":"b","claim":["a"]},{"$type":"Number"}]}}]}	{"a":2}	{"b":2}	
+claim-fault-unknown	{"$call":["Fault","bad keys",{"b":{"$call":["Rename",{"name":"b","claim":["a"]},{"$type":"Number"}]}}]}	{"a":2,"z":1}		"bad keys"
 disc-branch-ok	{"p":{"$discriminated":["kind",{"dog":{"bark":{"$type":"Boolean"}},"fish":{"fins":{"$type":"Number"}}}]}}	{"p":{"bark":true,"kind":"dog"}}	{"p":{"bark":true,"kind":"dog"}}	
 disc-branch-error	{"p":{"$discriminated":["kind",{"dog":{"bark":{"$type":"Boolean"}},"fish":{"fins":{"$type":"Number"}}}]}}	{"p":{"fins":"x","kind":"fish"}}		"Validation failed for property \"p.fins\" with string \"x\" because the string is not of type number."
 disc-branch-missing-key	{"p":{"$discriminated":["kind",{"dog":{"bark":{"$type":"Boolean"}},"fish":{"fins":{"$type":"Number"}}}]}}	{"p":{"kind":"dog"}}		"Validation failed for property \"p.bark\" because the property is missing."

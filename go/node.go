@@ -85,12 +85,15 @@ type node struct {
 	exactVals []any
 	hasExact  bool
 
-	// The keys an object node accepts (its declared keys and claim sources;
-	// not a rename's target), computed once when the schema is compiled, and the
-	// declared keys boxed once for the path array (boxing a string
-	// allocates, and it happened per key per call).
+	// The keys an object node accepts (its declared keys; not a rename's
+	// target, nor a claim's key until a claim takes it), computed once when
+	// the schema is compiled, and the declared keys boxed once for the path
+	// array (boxing a string allocates, and it happened per key per call).
 	consumed   map[string]bool
 	objKeysAny []any
+	// claims marks an object a child of which claims keys with a Rename:
+	// which keys it does not accept is known once its children have run.
+	claims bool
 	// The declared children in objKeys order, and the keys objChildren
 	// holds that objKeys does not (none in a tree the builders make, so
 	// the walk no longer ranges over the map to look for them). Computed

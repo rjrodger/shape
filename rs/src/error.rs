@@ -88,6 +88,15 @@ impl ValidationError {
         self.issues.push(err);
     }
 
+    /// Adds an error ahead of the stored ones from index `at` on.
+    pub(crate) fn insert(&mut self, at: usize, err: FieldError) {
+        if self.terse {
+            self.n += 1;
+            return;
+        }
+        self.issues.insert(at, err);
+    }
+
     pub fn has_any(&self) -> bool {
         self.n > 0 || !self.issues.is_empty()
     }

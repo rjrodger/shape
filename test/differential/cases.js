@@ -501,6 +501,39 @@ function build() {
   add('r-catch-target', { a: E('Rename("b")'), b: E('Catch(7,Number)') }, OBJS)
   add('r-skip-rest', CALL('Child', E('Skip(Number)'), { a: E('Rename("b")') }), OBJS.concat([{ a: 1, c: 2 }, { a: 1, c: 'x' }]))
   add('r-ignore-rest', CALL('Child', E('Ignore(Number)'), { a: E('Rename("b")') }), OBJS.concat([{ a: 'x', b: 2 }, { a: 1, b: 'y' }, { a: 1, c: 'x' }]))
+  // A Rename's claim: the keys it reads when its own is absent. A claimed
+  // key is the object's only when the claim takes its value; otherwise it is
+  // an unknown key, rejected by a closed object and given to an open one's
+  // rest shape.
+  const CL = (o, spec = E('Number')) => CALL('Rename', { name: 'b', claim: ['a'], ...o }, spec)
+  const CLAIMS = [
+    {}, { a: 2 }, { a: 'x' }, { a: null }, { a: 2, z: 1 }, { a: 2, y: 1, z: 1 }, { b: 1 },
+    { a: 2, b: 1 }, { a: 2, b: 1, z: 1 }, { z: 1 }, { b: 'x' }, { a: 2, b: 'x' },
+  ]
+  add('cl-root', { b: CL() }, CLAIMS)
+  add('cl-keep', { b: CL({ keep: true }) }, CLAIMS)
+  add('cl-nested', { o: { b: CL() } }, [{}, { o: 1 }].concat(CLAIMS.map(o => ({ o }))))
+  add('cl-deep', { p: { o: { b: CL() } } }, CLAIMS.map(o => ({ p: { o } })))
+  add('cl-elements', [{ b: CL() }], [[]].concat(CLAIMS.map(o => [o]), [[{ a: 2 }, { a: 3, z: 1 }]]))
+  add('cl-open', { $open: { b: CL() } }, CLAIMS)
+  add('cl-open-keep', { $open: { b: CL({ keep: true }) } }, CLAIMS)
+  add('cl-rest', CALL('Child', E('Number'), { b: CL() }), CLAIMS.concat([{ a: 'x', z: 'q' }, { a: 2, z: 'q' }]))
+  add('cl-rest-keep', CALL('Child', E('Number'), { b: CL({ keep: true }) }), CLAIMS.concat([{ a: 'x', z: 'q' }]))
+  add('cl-two', { b: CL({ claim: ['a', 'c'] }) }, CLAIMS.concat([{ a: 1, c: 2 }, { c: 2 }, { a: 1, c: 2, z: 3 }, { b: 1, c: 2 }]))
+  add('cl-same', { b: CL({ claim: ['c'] }), e: CALL('Rename', { name: 'e', claim: ['c'] }, E('Number')) },
+    [{}, { c: 1 }, { c: 1, z: 2 }, { b: 1, c: 2 }, { c: 2, e: 1 }, { b: 1, c: 2, e: 3 }])
+  add('cl-declared', { a: E('Number'), b: CL() }, CLAIMS)
+  add('cl-other-key', { k: CL() }, CLAIMS.concat([{ k: 1 }, { a: 2, k: 1 }, { a: 2, b: 3 }]))
+  add('cl-default-chain', { a: CALL('Rename', 'x', 1), b: CL({ claim: ['x'] }) },
+    [{}, { a: 5 }, { x: 3 }, { a: 5, x: 3 }, { a: 'q' }])
+  add('cl-sibling-error', { b: CL(), o: { c: E('Number') } }, [{ a: 2, o: { c: 1 } }, { a: 2, o: { c: 1, z: 1 } }, { a: 2, o: { c: 'x' } }])
+  add('cl-min', CALL('Min', 2, { b: CL() }), [{ a: 2 }, { a: 2, z: 1 }, { a: 2, b: 1 }])
+  add('cl-any', { b: CL({}, E('Any')) }, CLAIMS)
+  add('cl-keep-then-claim', { b: CL({ keep: true }), e: CALL('Rename', { name: 'e', claim: ['a'] }, E('Number')) }, CLAIMS)
+  add('cl-recreated', { b: CL(), c: CALL('Rename', 'a', E('Number')), d: CALL('Rename', { name: 'd', claim: ['a'] }, E('Number')) },
+    CLAIMS.concat([{ a: 2, c: 3 }, { c: 3 }, { a: 2, c: 'x' }, { a: 2, c: 3, z: 1 }]))
+  add('cl-fault', CALL('Fault', 'bad keys', { b: CL() }), CLAIMS)
+  add('cl-fault-nested', { o: CALL('Fault', 'bad $PATH', { b: CL() }) }, CLAIMS.map(o => ({ o })))
   add('d-null-chained', { a: E('Default(null).Default(5)') }, OBJS)
   // A Catch takes the composition inside with the node's other checks.
   add('c-catch-all', E('Catch(0,All(Number))'), SCALARS)

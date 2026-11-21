@@ -2129,6 +2129,35 @@ mod tests {
             run(&dropping, r#"{"a":1,"c":"x","d":"y","e":2}"#),
             r#"{"e":2,"b":1}"#
         );
+        // A claimed key is the object's only once the claim takes its value,
+        // and a verdict agrees with validating: a key a claim removed is
+        // gone for a later claim, and a claimed declared key passes on a
+        // read-only walk of an aligned input.
+        let claim_a = |to: &str| {
+            let opts = RenameOptions {
+                keep: false,
+                claim: vec!["a".into()],
+            };
+            Spec::from(RenameWith(to, opts, Token::Number))
+        };
+        let claim = Schema::new(obj([("b", claim_a("b"))]));
+        assert!(claim.valid(&j(r#"{"a":2}"#)));
+        assert!(!claim.valid(&j(r#"{"a":2,"z":1}"#)));
+        assert!(!claim.valid(&j(r#"{"a":2,"b":1}"#)));
+        let once = Schema::new(obj([("b", claim_a("b")), ("e", claim_a("e"))]));
+        assert!(!once.valid(&j(r#"{"a":2}"#)));
+        let declared = Schema::new(obj([("a", Spec::from(Token::Number)), ("b", claim_a("b"))]));
+        assert!(declared.valid(&j(r#"{"a":2}"#)));
+        assert_eq!(run(&declared, r#"{"a":2}"#), r#"{"b":2}"#);
+        // A key a rename put back after a claim took it is there to claim, for
+        // a verdict too.
+        let again = Schema::new(obj([
+            ("b", claim_a("b")),
+            ("c", Spec::from(Rename("a", Token::Number))),
+            ("d", claim_a("d")),
+        ]));
+        assert!(again.valid(&j(r#"{"a":2,"c":3}"#)));
+        assert_eq!(run(&again, r#"{"a":2,"c":3}"#), r#"{"b":2,"d":3}"#);
         // A rest key a skipping shape leaves as it was stays as it was.
         let skipping = Schema::new(Child(
             Skip(Token::Number),

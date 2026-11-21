@@ -464,7 +464,10 @@ func validateStructure(n *node, state *State, absent bool, path []string, pathAr
 			return state.Value
 		}
 	case KindObject:
-		out = validateObject(n, state.Value, path, pathArr, parent, ctx, match, verr)
+		// A claim reads the object as the keys before it left it, so a match
+		// checks an object that claims by producing it into its own copy, as
+		// validating does.
+		out = validateObject(n, state.Value, path, pathArr, parent, ctx, match && !n.claims, verr)
 		if out == nil {
 			return state.Value
 		}
@@ -699,13 +702,17 @@ func validateObject(n *node, in any, path []string, pathArr []any, parent any, c
 	// which is the order TS emits them in. When the input has no more keys
 	// than the spec declares, the scan waits until the declared keys have
 	// been counted, since an input made only of declared keys has nothing to
-	// report; the error still goes in at the index this object's errors
+	// report, and it waits for the keys a claim takes (taken), which are the
+	// object's; the error still goes in at the index this object's errors
 	// start, ahead of its children's.
 	errStart := len(verr.Issues)
-	deferScan := !n.open && len(obj) <= len(n.objKeys)
+	deferScan := !n.open && (n.claims || len(obj) <= len(n.objKeys))
 	if !n.open && !deferScan {
-		reportUnknown(n, obj, path, pathArr, ctx, match, verr, -1)
+		reportUnknown(n, obj, path, pathArr, ctx, match, verr, -1, nil)
 	}
+	// The keys claims took, which are the object's (see reportUnknown and
+	// the rest keys).
+	var taken map[string]bool
 
 	present := 0
 	noPath := skipPath(ctx)
@@ -745,7 +752,14 @@ func validateObject(n *node, in any, path []string, pathArr []any, parent any, c
 				if sv, sh := now[src]; sh {
 					v = sv
 					has, claimed = true, true
-					if !cn.renameKeep && !match {
+					if taken == nil {
+						taken = map[string]bool{}
+					}
+					taken[src] = true
+					// A match removes it from the copy, which it writes
+					// as validating does, so that a later claim finds the
+					// object as validating leaves it.
+					if !cn.renameKeep {
 						ensure()
 						delete(out, src)
 					}
@@ -802,7 +816,7 @@ func validateObject(n *node, in any, path []string, pathArr []any, parent any, c
 	}
 
 	if deferScan && present < len(obj) {
-		reportUnknown(n, obj, path, pathArr, ctx, match, verr, errStart)
+		reportUnknown(n, obj, path, pathArr, ctx, match, verr, errStart, taken)
 	}
 
 	// A child held under a key the declared list does not name (none in a
@@ -826,9 +840,11 @@ func validateObject(n *node, in any, path []string, pathArr []any, parent any, c
 	if n.open && n.objRest != nil {
 		// Sorted: Go map iteration is random and the message order is compared
 		// exactly, so an unsorted walk makes the error order flaky.
+		// A key a claim took is the object's, not the rest shape's.
 		rest := make([]string, 0, len(obj))
 		for k := range obj {
-			if _, declared := n.objChildren[k]; !declared {
+			_, declared := n.objChildren[k]
+			if _, own := taken[k]; !declared && !own {
 				rest = append(rest, k)
 			}
 		}
@@ -904,17 +920,17 @@ func absentOmits(cn *node, produced any) bool {
 }
 
 // reportUnknown records the one error naming every key of obj the closed
-// object n does not consume, sorted because Go map iteration is random and
-// the message order is compared exactly. The error is appended, or put in at
-// index at when the scan ran after the children (see validateObject). TS
-// renders this as:
+// object n does not consume and no claim took, sorted because Go map
+// iteration is random and the message order is compared exactly. The error
+// is appended, or put in at index at when the scan ran after the children
+// (see validateObject). TS renders this as:
 //
 //	Validation failed for property "<parent>" because the property "<k>" is not allowed.
 //	... because the properties "<k>, <k>" are not allowed.
-func reportUnknown(n *node, obj map[string]any, path []string, pathArr []any, ctx *Context, match bool, verr *ValidationError, at int) {
+func reportUnknown(n *node, obj map[string]any, path []string, pathArr []any, ctx *Context, match bool, verr *ValidationError, at int, taken map[string]bool) {
 	var unknown []string
 	for k := range obj {
-		if !n.consumed[k] {
+		if _, own := taken[k]; !n.consumed[k] && !own {
 			unknown = append(unknown, k)
 		}
 	}
@@ -928,6 +944,10 @@ func reportUnknown(n *node, obj map[string]any, path []string, pathArr []any, ct
 	err.plural = len(unknown) > 1
 	if !err.terse {
 		err.Text = defaultErrText(err)
+		// A Fault's message stands in for the default, as in TS.
+		if n.faultMsg != "" {
+			err.Text = expandErrText(n.faultMsg, err.Path, obj)
+		}
 	}
 	if at < 0 {
 		verr.add(err)

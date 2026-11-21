@@ -3791,10 +3791,9 @@ function trial(shape: any, val: any, state: State, tctx: any): boolean {
   }
   t.left--
   // Each trial starts as a fresh copy of the context would: what a trial
-  // writes there (its errors, definitions and renames) stays its own.
+  // writes there (its errors and definitions) stays its own.
   tctx.err = []
   tctx.ref = state.ctx.ref
-  tctx.Rename = state.ctx.Rename
   return shape.match(clone(val), tctx)
 }
 
@@ -4263,6 +4262,60 @@ const Refer = function <V = any>(this: any, inopts: any, shape?: Node<V> | V): N
 }
 
 
+// A key a Rename's claim took is the object's: a closed object does not
+// report it, and an open one's rest shape does not take it. The object
+// settled both before its keys were validated, so the claim undoes them:
+// the key leaves the closed error, which goes once no key is left, and the
+// rest entry queued for it after the declared keys checks nothing. The
+// object is the one its children were given: a frozen one is copied for
+// each of them (see next).
+function claimKey(s: State, cn: string) {
+  const obj = s.lastParent
+  for (let eI = 0; eI < s.err.length; eI++) {
+    const e = s.err[eI]
+    if (S.closed === e.why && e.value === obj && isarr(e.use.k)) {
+      const k = e.use.k.filter((x: string) => x !== cn)
+      if (0 === k.length) {
+        s.err.splice(eI, 1)
+      }
+      else if (k.length < e.use.k.length) {
+        const was = closedText(e.use.k)
+        if (e.text.endsWith(was)) {
+          e.text = e.text.substring(0, e.text.length - was.length) + closedText(k)
+        }
+        e.use = { ...e.use, k }
+      }
+      break
+    }
+  }
+
+  const rest = s.ancestors[s.dI].c
+  if (undefined !== rest) {
+    for (let j = s.cI + 1; S.number !== typeof s.nodes[j]; j++) {
+      if (s.keys[j] === cn && s.nodes[j] === rest && s.parents[j] === obj) {
+        s.nodes[j] = (CLAIMED ??= nodize(Skip(Any())))
+        s.vals[j] = undefined
+        break
+      }
+    }
+  }
+}
+
+
+// What the rest entry of a claimed key becomes: absent and skipped, it
+// checks and writes nothing.
+let CLAIMED: Node<any> | undefined = undefined
+
+
+// The clause a closed object's error ends with (see makeErrImpl). A claim's
+// object declares a key, so it names its keys as properties.
+function closedText(k: string[]): string {
+  return 1 < k.length ?
+    'the properties "' + k.join(', ') + '" are not allowed.' :
+    'the property "' + k[0] + '" is not allowed.'
+}
+
+
 // TODO: no mutate is State.match
 // Rename a property.
 const Rename = function <V = any>(this: any, inopts: any, shape?: Node<V> | V): Node<V> {
@@ -4279,71 +4332,27 @@ const Rename = function <V = any>(this: any, inopts: any, shape?: Node<V> | V): 
 
   {
 
-    // If there is a claim, grab the value so that validations
-    // can be applied to it.
+    // A claim: while this key is absent, the value of the first claim key
+    // the object holds, which this key's node then validates. A claim reads
+    // the object as it stands, so a key an earlier claim removed is gone.
+    // The claimed key is the object's (see claimKey), and is removed unless
+    // kept. With no claim key there, the key is absent as it would be.
     let before: any = (val: any, update: Update, s: State) => {
       if (undefined === val && 0 < claim.length) {
-        s.ctx.Rename = (s.ctx.Rename || {})
-        s.ctx.Rename.fromDflt = (s.ctx.Rename.fromDflt || {})
-
         for (let cn of claim) {
-          let fromDflt = s.ctx.Rename.fromDflt[cn] || {}
-
-          // Only use claim if it was not a default value.
-          if (undefined !== ownval(s.parent, cn) && !fromDflt.yes) {
-            update.val = ownval(s.parent, cn)
+          const cv = ownval(s.parent, cn)
+          if (undefined !== cv) {
+            update.val = cv
             if (!s.match) {
-              setprop(s.parent, name, update.val)
+              setprop(s.parent, name, cv)
             }
-            update.node = fromDflt.node
-
-            // Old errors on the claimed value are no longer valid. Matched by
-            // key: the stale closed/required error for the claimed key is what
-            // must be dropped once the claim supplies a value. Use in-place
-            // compaction instead of splice to avoid O(n²) shifting. The keep
-            // branch is only taken when an unrelated error coexists during a
-            // claim — a rare experimental combination not exercised by the suite.
-            let writeIdx = 0
-            for (let eI = 0; eI < s.err.length; eI++) {
-              /* node:coverage disable */
-              if (s.err[eI].key !== fromDflt.key) {
-                s.err[writeIdx++] = s.err[eI]
-              }
-              /* node:coverage enable */
-            }
-            s.err.length = writeIdx
-
             if (!keep) {
               delete s.parent[cn]
             }
-            else {
-              let j = s.cI + 1
-
-              // Add the default to the end of the node set to ensure it
-              // is properly validated. Shift all four arrays simultaneously
-              // instead of four separate splice calls.
-              for (let si = s.nI; si > j; si--) {
-                s.nodes[si] = s.nodes[si - 1]
-                s.vals[si] = s.vals[si - 1]
-                s.parents[si] = s.parents[si - 1]
-                s.keys[si] = s.keys[si - 1]
-              }
-              s.nodes[j] = nodize(fromDflt.dval)
-              s.vals[j] = undefined
-              s.parents[j] = s.parent
-              s.keys[j] = cn
-              s.nI++
-              s.pI++
-            }
-
+            claimKey(s, cn)
             break
           }
         }
-
-        if (undefined === update.val) {
-          update.val = s.node.v
-        }
-
       }
       return true
     }
@@ -4366,15 +4375,6 @@ const Rename = function <V = any>(this: any, inopts: any, shape?: Node<V> | V): 
       ) {
         delete s.parent[s.key]
         update.done = true
-      }
-
-      s.ctx.Rename = (s.ctx.Rename || {})
-      s.ctx.Rename.fromDflt = (s.ctx.Rename.fromDflt || {})
-      s.ctx.Rename.fromDflt[name] = {
-        yes: s.fromDflt,
-        key: s.key,
-        dval: s.node.v,
-        node: s.node
       }
 
       return true

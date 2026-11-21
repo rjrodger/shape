@@ -252,9 +252,14 @@ pub struct Node {
     pub obj_children: IndexMap<String, Node>,
     /// The shape of an unknown key (an open object); none for a closed one.
     pub obj_rest: Option<Box<Node>>,
-    /// The keys a closed object accepts: its declared keys and the sources
-    /// its renames claim, not their targets. Set when the tree is prepared.
+    /// The keys a closed object accepts: its declared keys, not their
+    /// renames' targets, nor a claim's keys until a claim takes them. Set
+    /// when the tree is prepared.
     pub consumed: std::collections::HashSet<String>,
+    /// A child claims keys with a rename, so which keys the object does not
+    /// accept is known once its children have run. Set when the tree is
+    /// prepared.
+    pub claims: bool,
     /// The declared keys in order, shared with the paths that name them.
     /// Set when the tree is prepared.
     pub obj_keys: Vec<Arc<str>>,
