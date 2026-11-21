@@ -5,7 +5,8 @@
 **TS**—`Shape(spec, options?)` returns a validator function that also carries
 methods. A bad spec (`Min('x')`, `Pick` of an unknown property) throws here, at
 compile time. The validator **mutates** the value it is given to inject
-defaults.
+defaults. An object or array that cannot take new keys, such as a frozen one,
+is copied first, and the copy is what it returns.
 
 ```js
 const { Shape } = require('shape')

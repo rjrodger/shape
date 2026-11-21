@@ -82,7 +82,8 @@ Some differences are inherent to Go and are unlikely ever to close.
 
 - **Sharing with the input.** TypeScript produces in place: `valid()`,
   `error()` and the producing call write defaults into the input object
-  itself (the documented behaviour of the canonical implementation). Go never
+  itself (the documented behaviour of the canonical implementation), and
+  copy first an object or array that cannot take new keys. Go never
   changes its input; `Validate` copies an object or array on the first write
   that changes it and otherwise returns it as it is, so its result may share
   structure with the input where nothing changed. The produced *value* is the

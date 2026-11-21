@@ -2892,6 +2892,69 @@ Validation failed for index "1" with number "1" because the number is not of typ
   })
 
 
+  // An object or array that cannot take new keys is copied once, before its
+  // keys are written, and the copy is the result: it gets every write a
+  // writable input would, and the input stays as it was.
+  test('frozen-writes', () => {
+    const deepFreeze = (v: any): any => {
+      if (null != v && 'object' === typeof v) {
+        Object.values(v).forEach(deepFreeze)
+        Object.freeze(v)
+      }
+      return v
+    }
+    const same = (spec: any, input: any, out: any) => {
+      const frozen = deepFreeze(structuredClone(input))
+      deepEqual(Shape(spec)(frozen), out)
+      deepEqual(frozen, input)
+      assert.equal(Object.isFrozen(frozen), true)
+      assert.equal(Shape(spec).valid(deepFreeze(structuredClone(input))), true)
+      deepEqual(Shape(spec)(structuredClone(input)), out)
+    }
+
+    same({ a: Rename('b') }, { a: 1 }, { b: 1 })
+    same({ a: Number, c: Default(5) }, { a: 1 }, { a: 1, c: 5 })
+    same({ b: Rename({ name: 'b', claim: ['a'] }, Number) }, { a: 2 }, { b: 2 })
+    same({ o: { a: Rename('b'), c: Default(5) } }, { o: { a: 1 } }, { o: { b: 1, c: 5 } })
+    same([{ a: Rename('b') }], [{ a: 1 }, { a: 2 }], [{ b: 1 }, { b: 2 }])
+    same({ l: [Number], d: Default('x') }, { l: [1, 2] }, { l: [1, 2], d: 'x' })
+    same([Number, Default(9)], [1], [1, 9])
+    same(Open({ c: Default(5) }), { z: 1 }, { z: 1, c: 5 })
+    same(Child(Number, { c: Default(5) }), { z: 1 }, { z: 1, c: 5 })
+
+    // A frozen object a Rename moved takes its copy where it went, and
+    // under its key too where the Rename keeps it, an array element as well.
+    same({ a: Rename('b', { x: Default(1) }) }, { a: {} }, { b: { x: 1 } })
+    same({ a: Rename({ name: 'b', keep: true }, { x: Default(1) }) }, { a: {} }, { a: { x: 1 }, b: { x: 1 } })
+    const el: any = Shape([Rename('a', { x: Default(1) })])(deepFreeze([{}]))
+    deepEqual([...el], [{ x: 1 }])
+    deepEqual(el.a, { x: 1 })
+
+    // An error is the error a writable input gets, and match() checks a
+    // frozen input without writing it.
+    throws(() => Shape({ a: Number })(Object.freeze({ a: 'x' })), 'property "a" with string "x"')
+    const input = deepFreeze({ o: { a: 1 } })
+    assert.equal(Shape({ o: { a: Rename('b'), c: Default(5) } }).match(input), true)
+    deepEqual(input, { o: { a: 1 } })
+    assert.equal(Shape({ o: { a: String } }).match(input), false)
+
+    // A sealed object takes no new key either.
+    const sealed = Object.seal({ a: 1 })
+    deepEqual(Shape({ a: Rename('b') })(sealed), { b: 1 })
+    deepEqual(sealed, { a: 1 })
+
+    // The copy keeps the prototype, and a key named __proto__ stays a key.
+    class Foo { a = 1 }
+    const foo = Shape({ a: Number, c: Default(5) })(Object.freeze(new Foo()))
+    assert.ok(foo instanceof Foo)
+    deepEqual({ ...foo }, { a: 1, c: 5 })
+    const own: any = Shape(Open({ c: Default(5) }))(Object.freeze(JSON.parse('{"__proto__":{"p":1}}')))
+    assert.ok(Object.prototype.hasOwnProperty.call(own, '__proto__'))
+    assert.equal(own.p, undefined)
+    assert.equal(own.c, 5)
+  })
+
+
   test('context-skipping', () => {
     let g0 = Shape({
       a: Number,

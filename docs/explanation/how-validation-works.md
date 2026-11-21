@@ -49,7 +49,9 @@ When an optional value is missing, its default is injected into the output.
 - **TS** does this by **mutating the input** object in place. Cloning arbitrary
   JavaScript values is [famously fiddly](https://www.digitalocean.com/community/tutorials/copying-objects-in-javascript),
   so Shape leaves that choice to you—pass a fresh object if you must preserve
-  the original.
+  the original. An object or array that cannot take new keys, such as a
+  frozen or sealed one, is the exception: Shape copies it before writing its
+  keys and returns the copy, so the input stays as it was.
 - **Go** never changes its input: `Validate` returns the input's own object or
   array where nothing changed and a copy where something did (a default
   injected, a key renamed or dropped), so the result may share structure with
