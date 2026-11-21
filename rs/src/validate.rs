@@ -5,7 +5,7 @@ use crate::error::*;
 use crate::node::{Counted, Kind, ListMode, Node, Validator};
 use crate::stringify::{nof_count_text, stringify_node};
 use crate::value::{is_integer, Map, Value};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 /// A cursor onto the value under validation: mutable when producing, shared
@@ -790,6 +790,17 @@ fn validate_object(
         }
     };
 
+    // A claim reads the object as the keys before it left it, so a
+    // read-only walk of an object that claims writes a copy, as validating
+    // writes the object.
+    let mut copy: Map;
+    if n.claims {
+        if let Cur::Ref(map) = oc {
+            copy = map.clone();
+            oc = Cur::Mut(&mut copy);
+        }
+    }
+
     // An object that renames takes each value as the input held it, as
     // TypeScript captures them before any child runs: a rename writes into
     // the object while the children after it still read the input.
@@ -799,10 +810,9 @@ fn validate_object(
         }
         _ => None,
     };
-    // The keys claims took, each true once its claim removed it: the
-    // object's own, and gone for a later claim even where a read-only walk
-    // leaves them in place.
-    let mut taken: HashMap<String, bool> = HashMap::new();
+    // The keys claims took, which are the object's (see the unknown keys
+    // and the rest keys).
+    let mut taken: HashSet<String> = HashSet::new();
 
     for (idx, (k, cn)) in n.obj_children.iter().enumerate() {
         if let (Some(orig), Cur::Mut(map)) = (orig.as_ref(), &mut oc) {
@@ -819,7 +829,7 @@ fn validate_object(
                 if let Some(src) = src {
                     val = map.get(src).cloned().unwrap_or(Value::Undefined);
                     claimed = true;
-                    taken.insert(src.clone(), !cn.rename_keep);
+                    taken.insert(src.clone());
                     if !cn.rename_keep {
                         map.shift_remove(src);
                     }
@@ -895,24 +905,6 @@ fn validate_object(
             }
         }
 
-        // A rename's claim on a read-only walk (a writing one renames above):
-        // the value is missing and a claimed source has it, so it is read
-        // from there.
-        let claimed: Option<&Value> = match &oc {
-            Cur::Ref(map) if !map.get(k).is_some_and(|v| !v.is_undefined()) => {
-                let found = cn.rename_claim.iter().find_map(|src| {
-                    map.get(src)
-                        .filter(|v| !v.is_undefined() && taken.get(src) != Some(&true))
-                        .map(|v| (src, v))
-                });
-                found.map(|(src, v)| {
-                    taken.insert(src.clone(), !cn.rename_keep);
-                    v
-                })
-            }
-            _ => None,
-        };
-
         // The shared key is only taken when the path is kept.
         if w.paths {
             w.push(PathPart::Key(child_key(n, idx, k)));
@@ -929,13 +921,11 @@ fn validate_object(
             Cur::Ref(map) => {
                 // A read-only walk of an aligned input finds the child by
                 // index; the map cannot have changed under it.
-                let found = claimed.or_else(|| {
-                    if aligned {
-                        map.get_index(idx).map(|(_, v)| v)
-                    } else {
-                        guess(map, idx, k)
-                    }
-                });
+                let found = if aligned {
+                    map.get_index(idx).map(|(_, v)| v)
+                } else {
+                    guess(map, idx, k)
+                };
                 match found {
                     Some(child) if !child.is_undefined() => Cur::Ref(child),
                     _ => {
@@ -957,10 +947,7 @@ fn validate_object(
     }
 
     if let Some((unknown, value, at)) = pending {
-        let unknown: Vec<String> = unknown
-            .into_iter()
-            .filter(|k| !taken.contains_key(k))
-            .collect();
+        let unknown: Vec<String> = unknown.into_iter().filter(|k| !taken.contains(k)).collect();
         if !unknown.is_empty() {
             report_unknown(n, &unknown, &value, parent_is_array, w, verr, Some(at));
         }
@@ -977,7 +964,7 @@ fn validate_object(
             .iter()
             .filter(|(k, v)| {
                 // A key a claim took is the object's, not the rest shape's.
-                !v.is_undefined() && !n.obj_children.contains_key(*k) && !taken.contains_key(*k)
+                !v.is_undefined() && !n.obj_children.contains_key(*k) && !taken.contains(*k)
             })
             .map(|(k, _)| k.clone())
             .collect();

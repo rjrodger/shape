@@ -613,6 +613,17 @@ func TestRename(t *testing.T) {
 	if !declared.Valid(map[string]any{"a": 2.0}) {
 		t.Fatal("expected a claimed declared key to pass")
 	}
+	// A key a rename put back after a claim took it is there to claim, for
+	// a verdict too, and a match leaves the input as it was.
+	again := MustShape(map[string]any{
+		"b": RenameWith("b", RenameOptions{Claim: []string{"a"}}, Number),
+		"c": Rename("a", Number),
+		"d": RenameWith("d", RenameOptions{Claim: []string{"a"}}, Number),
+	})
+	in := map[string]any{"a": 2.0, "c": 3.0}
+	if !again.Valid(in) || len(in) != 2 || in["a"] != 2.0 || in["c"] != 3.0 {
+		t.Fatalf("expected a recreated key claimed and the input left alone, got %v", in)
+	}
 	// A claimed value is put under the key as well when kept.
 	kept := MustShape(map[string]any{"a": RenameWith("b", RenameOptions{Keep: true, Claim: []string{"c"}}, Number)})
 	if out := mustValid(t, kept, map[string]any{"c": 1.0}).(map[string]any); out["a"] != 1.0 || out["b"] != 1.0 || out["c"] != 1.0 {

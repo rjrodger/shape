@@ -530,6 +530,8 @@ function build() {
   add('cl-min', CALL('Min', 2, { b: CL() }), [{ a: 2 }, { a: 2, z: 1 }, { a: 2, b: 1 }])
   add('cl-any', { b: CL({}, E('Any')) }, CLAIMS)
   add('cl-keep-then-claim', { b: CL({ keep: true }), e: CALL('Rename', { name: 'e', claim: ['a'] }, E('Number')) }, CLAIMS)
+  add('cl-recreated', { b: CL(), c: CALL('Rename', 'a', E('Number')), d: CALL('Rename', { name: 'd', claim: ['a'] }, E('Number')) },
+    CLAIMS.concat([{ a: 2, c: 3 }, { c: 3 }, { a: 2, c: 'x' }, { a: 2, c: 3, z: 1 }]))
   add('cl-fault', CALL('Fault', 'bad keys', { b: CL() }), CLAIMS)
   add('cl-fault-nested', { o: CALL('Fault', 'bad $PATH', { b: CL() }) }, CLAIMS.map(o => ({ o })))
   add('d-null-chained', { a: E('Default(null).Default(5)') }, OBJS)

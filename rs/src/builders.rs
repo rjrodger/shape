@@ -2149,6 +2149,15 @@ mod tests {
         let declared = Schema::new(obj([("a", Spec::from(Token::Number)), ("b", claim_a("b"))]));
         assert!(declared.valid(&j(r#"{"a":2}"#)));
         assert_eq!(run(&declared, r#"{"a":2}"#), r#"{"b":2}"#);
+        // A key a rename put back after a claim took it is there to claim, for
+        // a verdict too.
+        let again = Schema::new(obj([
+            ("b", claim_a("b")),
+            ("c", Spec::from(Rename("a", Token::Number))),
+            ("d", claim_a("d")),
+        ]));
+        assert!(again.valid(&j(r#"{"a":2,"c":3}"#)));
+        assert_eq!(run(&again, r#"{"a":2,"c":3}"#), r#"{"b":2,"d":3}"#);
         // A rest key a skipping shape leaves as it was stays as it was.
         let skipping = Schema::new(Child(
             Skip(Token::Number),

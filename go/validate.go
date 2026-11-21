@@ -464,7 +464,10 @@ func validateStructure(n *node, state *State, absent bool, path []string, pathAr
 			return state.Value
 		}
 	case KindObject:
-		out = validateObject(n, state.Value, path, pathArr, parent, ctx, match, verr)
+		// A claim reads the object as the keys before it left it, so a match
+		// checks an object that claims by producing it into its own copy, as
+		// validating does.
+		out = validateObject(n, state.Value, path, pathArr, parent, ctx, match && !n.claims, verr)
 		if out == nil {
 			return state.Value
 		}
@@ -707,7 +710,8 @@ func validateObject(n *node, in any, path []string, pathArr []any, parent any, c
 	if !n.open && !deferScan {
 		reportUnknown(n, obj, path, pathArr, ctx, match, verr, -1, nil)
 	}
-	// The keys claims took, each true once its claim removed it.
+	// The keys claims took, which are the object's (see reportUnknown and
+	// the rest keys).
 	var taken map[string]bool
 
 	present := 0
@@ -745,16 +749,17 @@ func validateObject(n *node, in any, path []string, pathArr []any, parent any, c
 				now = out
 			}
 			for _, src := range cn.renameClaim {
-				// A match leaves a removed key in place; it is gone all
-				// the same.
-				if sv, sh := now[src]; sh && !taken[src] {
+				if sv, sh := now[src]; sh {
 					v = sv
 					has, claimed = true, true
 					if taken == nil {
 						taken = map[string]bool{}
 					}
-					taken[src] = !cn.renameKeep
-					if !cn.renameKeep && !match {
+					taken[src] = true
+					// A match removes it from the copy, which it writes
+					// as validating does, so that a later claim finds the
+					// object as validating leaves it.
+					if !cn.renameKeep {
 						ensure()
 						delete(out, src)
 					}

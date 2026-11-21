@@ -4266,11 +4266,14 @@ const Refer = function <V = any>(this: any, inopts: any, shape?: Node<V> | V): N
 // report it, and an open one's rest shape does not take it. The object
 // settled both before its keys were validated, so the claim undoes them:
 // the key leaves the closed error, which goes once no key is left, and the
-// rest entry queued for it after the declared keys checks nothing.
+// rest entry queued for it after the declared keys checks nothing. The
+// object is the one its children were given: a frozen one is copied for
+// each of them (see next).
 function claimKey(s: State, cn: string) {
+  const obj = s.lastParent
   for (let eI = 0; eI < s.err.length; eI++) {
     const e = s.err[eI]
-    if (S.closed === e.why && e.value === s.parent && isarr(e.use.k)) {
+    if (S.closed === e.why && e.value === obj && isarr(e.use.k)) {
       const k = e.use.k.filter((x: string) => x !== cn)
       if (0 === k.length) {
         s.err.splice(eI, 1)
@@ -4289,7 +4292,7 @@ function claimKey(s: State, cn: string) {
   const rest = s.ancestors[s.dI].c
   if (undefined !== rest) {
     for (let j = s.cI + 1; S.number !== typeof s.nodes[j]; j++) {
-      if (s.keys[j] === cn && s.nodes[j] === rest && s.parents[j] === s.parent) {
+      if (s.keys[j] === cn && s.nodes[j] === rest && s.parents[j] === obj) {
         s.nodes[j] = (CLAIMED ??= nodize(Skip(Any())))
         s.vals[j] = undefined
         break

@@ -1018,6 +1018,17 @@ describe('builder', () => {
     deepEqual(fault({ a: 2 }), { b: 2 })
     throws(() => fault({ a: 2, z: 1 }), /^bad keys$/)
 
+    // A key a rename put back after a claim took it is there to claim.
+    const again = Shape({ b: R(), c: Rename('a', Number), d: Rename({ name: 'd', claim: ['a'] }, Number) })
+    deepEqual(again({ a: 2, c: 3 }), { b: 2, d: 3 })
+    assert.equal(again.valid({ a: 2, c: 3 }), true)
+
+    // A frozen object is copied for each of its keys; its claimed key is
+    // still its own.
+    assert.equal(g.valid(Object.freeze({ a: 2 })), true)
+    throws(() => g(Object.freeze({ a: 2, z: 1 })), 'because the property "z" is not allowed')
+    assert.equal(Shape(Open({ b: R() })).valid(Object.freeze({ a: 2, z: 'q' })), true)
+
     // Validating writes nothing into the context.
     const ctx: any = {}
     g({ a: 2 }, ctx)
