@@ -87,7 +87,7 @@ or an extra error — the ways the implementations actually drift.
 
 The corpus only covers rows someone wrote. `test/differential/` generates
 thousands of `(spec, input)` pairs, runs each through all three implementations
-and diffs the JSON Schema export, verdict, produced value and exact error text,
+and diffs the JSON Schema export, verdict, verdict-only call, produced value and exact error text,
 each port against the canonical build:
 
 ```sh

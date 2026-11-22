@@ -179,6 +179,7 @@ claim-once	{"b":{"$call":["Rename",{"name":"b","claim":["c"]},{"$type":"Number"}
 claim-rename-target	{"a":{"$call":["Rename","x",1]},"b":{"$call":["Rename",{"name":"b","claim":["x"]},{"$type":"Number"}]}}	{}	{"b":1}	
 claim-rename-target-bad	{"a":{"$call":["Rename","x",{"$type":"Number"}]},"b":{"$call":["Rename",{"name":"b","claim":["x"]},{"$type":"Number"}]}}	{"a":"q"}		"Validation failed for property \"a\" with string \"q\" because the string is not of type number.\nValidation failed for property \"b\" with string \"q\" because the string is not of type number."
 claim-kept-claimed-again	{"b":{"$call":["Rename",{"name":"b","claim":["a"],"keep":true},{"$type":"Number"}]},"e":{"$call":["Rename",{"name":"e","claim":["a"]},{"$type":"Number"}]}}	{"a":2}	{"b":2,"e":2}	
+claim-default	{"a":5,"b":{"$call":["Rename",{"name":"b","claim":["a"]},{"$type":"Number"}]}}	{}	{"b":5}	
 claim-recreated	{"b":{"$call":["Rename",{"name":"b","claim":["a"]},{"$type":"Number"}]},"c":{"$call":["Rename","a",{"$type":"Number"}]},"d":{"$call":["Rename",{"name":"d","claim":["a"]},{"$type":"Number"}]}}	{"a":2,"c":3}	{"b":2,"d":3}	
 fault-closed	{"$call":["Fault","bad keys at $PATH",{"o":{"b":{"$type":"Number"}}}]}	{"o":{"b":1,"z":1}}		"Validation failed for property \"o\" with object \"{b:1,z:1}\" because the property \"z\" is not allowed."
 fault-closed-nested	{"o":{"$call":["Fault","bad keys at $PATH",{"b":{"$type":"Number"}}]}}	{"o":{"b":1,"z":1}}		"bad keys at o"

@@ -1030,6 +1030,26 @@ describe('builder', () => {
     throws(() => g(Object.freeze({ a: 2, z: 1 })), 'because the property "z" is not allowed')
     assert.equal(Shape(Open({ b: R() })).valid(Object.freeze({ a: 2, z: 'q' })), true)
 
+    // match() writes nothing and agrees with validating: there a claim
+    // reads what the keys before it wrote into a copy of the object.
+    const x = { a: 2 }
+    assert.equal(g.match(x), true)
+    deepEqual(x, { a: 2 })
+    assert.equal(g.match({ a: 2, z: 1 }), false)
+    assert.equal(g.match({ a: 2, b: 1 }), false)
+    assert.equal(once.match({ a: 2 }), false)
+    assert.equal(kept.match({ a: 2 }), true)
+    assert.equal(again.match({ a: 2, c: 3 }), true)
+    const dflt = Shape({ c: Default(5), b: Rename({ name: 'b', claim: ['c'] }, Number) })
+    deepEqual(dflt({}), { b: 5 })
+    assert.equal(dflt.match({}), true)
+    const away = Shape({ a: Rename('x', Number), b: R() })
+    throws(() => away({ a: 1 }), 'property "b" because the property is missing')
+    assert.equal(away.match({ a: 1 }), false)
+    const renamed = { o: { a: 1 } }
+    assert.equal(Shape({ o: { a: Rename('b') } }).match(renamed), true)
+    deepEqual(renamed, { o: { a: 1 } })
+
     // Validating writes nothing into the context.
     const ctx: any = {}
     g({ a: 2 }, ctx)

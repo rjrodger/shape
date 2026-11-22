@@ -29,6 +29,7 @@ type diffResult struct {
 	Reimport any    `json:"reimport,omitempty"`
 	JSON     any    `json:"json,omitempty"`
 	ReJSON   any    `json:"rejson,omitempty"`
+	Match    *bool  `json:"match,omitempty"`
 	OK       *bool  `json:"ok,omitempty"`
 	Out      any    `json:"out,omitempty"`
 	Err      string `json:"err,omitempty"`
@@ -108,6 +109,10 @@ func runDiffCase(c diffCase) (res diffResult) {
 	if in == nil {
 		in = Null
 	}
+
+	// The verdict-only call, which must agree with validating.
+	m := s.Match(in)
+	res.Match = &m
 
 	out, verr := s.Validate(in)
 	if verr != nil {

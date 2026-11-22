@@ -54,7 +54,7 @@ const cases = Object.fromEntries(
 const ts = loadJsonl(process.argv[3])
 const go = loadJsonl(process.argv[4])
 
-const buckets = { build: [], schema: [], reimport: [], json: [], rejson: [], verdict: [], output: [], errtext: [] }
+const buckets = { build: [], schema: [], reimport: [], json: [], rejson: [], verdict: [], match: [], output: [], errtext: [] }
 
 for (const name of Object.keys(ts)) {
   const t = ts[name]
@@ -85,6 +85,10 @@ for (const name of Object.keys(ts)) {
 
   if (t.ok !== g.ok) { buckets.verdict.push(row); continue }
 
+  // The verdict-only call agrees with validating in each language, and so
+  // across them.
+  if (t.match !== t.ok || g.match !== g.ok) { buckets.match.push(row); continue }
+
   if (t.ok) {
     if (J(t.out) !== J(g.out)) buckets.output.push(row)
   }
@@ -100,6 +104,7 @@ const side = (r, kind) => 'json' === kind ? 'JSON ' + J(r.json)
   : 'rejson' === kind ? 'REJSON ' + J(r.rejson)
   : 'schema' === kind ? 'SCHEMA ' + J(r.schema)
   : 'reimport' === kind ? 'REIMPORT ' + J(r.reimport)
+  : 'match' === kind ? 'MATCH ' + J(r.match) + ' where validating ' + (r.ok ? 'passes' : 'fails')
   : r.ok ? 'PASS ' + J(r.out)
     : undefined !== r.build ? 'BUILD ' + r.build
       : 'FAIL ' + JSON.stringify(r.err)
@@ -113,6 +118,7 @@ const LABEL = {
   rejson: 'different JSON for the shape built from it',
   reimport: 'different export after JSON Schema import',
   verdict: 'pass-vs-fail disagreement',
+  match: 'a verdict-only call that differs from validating',
   output: 'different produced value',
   errtext: 'different error text',
 }

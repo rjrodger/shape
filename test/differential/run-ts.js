@@ -65,6 +65,20 @@ for (const c of cases) {
     }
   }
 
+  // The verdict-only call, which must agree with validating and leave its
+  // input as it was.
+  try {
+    const before = JSON.stringify(c.input)
+    const input = structuredClone(c.input)
+    rec.match = schema.match(input)
+    if (JSON.stringify(input) !== before) {
+      rec.match = 'WROTE ITS INPUT: ' + JSON.stringify(input)
+    }
+  }
+  catch (e) {
+    rec.match = 'THROW: ' + e.message
+  }
+
   try {
     const out = schema(structuredClone(c.input))
     rec.ok = true
