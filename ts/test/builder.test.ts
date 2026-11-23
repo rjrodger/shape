@@ -1049,6 +1049,28 @@ describe('builder', () => {
     const renamed = { o: { a: 1 } }
     assert.equal(Shape({ o: { a: Rename('b') } }).match(renamed), true)
     deepEqual(renamed, { o: { a: 1 } })
+    const elements: any = ['x']
+    assert.equal(Shape([Rename('a', String)]).match(elements), true)
+    deepEqual(Object.keys(elements), ['0'])
+
+    // A claim a Refer brings, which the object does not show, takes its key
+    // from a copy the match makes on its first write.
+    const refer = (o: any) => Shape({ def: Define('R', R()), o })
+    const twice = refer(Open({ b: Refer({ name: 'R', fill: true }), c: Refer({ name: 'R', fill: true }) }))
+    throws(() => twice({ def: 2, o: { a: 1 } }), 'property "o.c" because the property is missing')
+    const tin = { def: 2, o: { a: 1 } }
+    assert.equal(twice.match(tin), false)
+    deepEqual(tin, { def: 2, o: { a: 1 } })
+    const closed = refer({ b: Refer({ name: 'R', fill: true }) })
+    deepEqual(closed({ def: 2, o: { a: 1 } }), { b: 2, o: { b: 1 } })
+    assert.equal(closed.match({ def: 2, o: { a: 1 } }), true)
+
+    // A claim reads an own key that is not enumerable, in a match as well.
+    const hidden = () => Object.defineProperty({}, 'a', { value: 1, writable: true, configurable: true })
+    deepEqual(g(hidden()), { b: 1 })
+    const hin = hidden()
+    assert.equal(g.match(hin), true)
+    deepEqual(Object.getOwnPropertyNames(hin), ['a'])
 
     // Validating writes nothing into the context.
     const ctx: any = {}

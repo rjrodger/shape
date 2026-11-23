@@ -636,10 +636,31 @@ class State {
     }
   }
 
-  // Whether this node may write its parent: always when producing, and
-  // in a match only into a copy of its own, so the input stays as it was.
-  writes(): boolean {
-    return !this.match || (undefined !== this.copies && this.copies.has(this.parent))
+  // The parent a Rename writes. A validation that produces writes the
+  // parent; a match writes a copy of its own, so the input stays as it was,
+  // and makes it on the first write where none was made ahead (see
+  // claimingCopy), as a Refer can bring a claim the object did not show:
+  // the node and its later siblings take the copy, and an error about the
+  // object names it. The root has no parent to write.
+  writable(): any {
+    const p = this.parent
+    if (!this.match || null == p || (undefined !== this.copies && this.copies.has(p))) {
+      return p
+    }
+    const c = copyOf(p)
+    for (let j = this.cI; S.number !== typeof this.nodes[j]; j++) {
+      if (this.parents[j] === p) {
+        this.parents[j] = c
+      }
+    }
+    for (const e of this.err) {
+      if (e.value === p) {
+        e.value = c
+      }
+    }
+    (this.copies ??= new Set()).add(c)
+    this.lastParent = c
+    return this.parent = c
   }
 
   // A parent that cannot take new keys (frozen, sealed) is copied once,
@@ -4332,8 +4353,10 @@ function claimsIn(nodes: Node<any>[]): boolean {
 }
 
 
-// The copy of its own a match gives an object a child of which claims keys
-// (see State.writes): its queued keys take it, and it is the object's value.
+// The copy of its own a match gives an object a child of which claims keys,
+// ahead of its keys, so that a claim reads what the keys before it wrote
+// (see State.writable): its queued keys take it, and it is the object's
+// value.
 function claimingCopy(s: State, val: any, start: number): any {
   const c = copyOf(val)
   for (let j = start; j < s.nI; j++) {
@@ -4346,8 +4369,8 @@ function claimingCopy(s: State, val: any, start: number): any {
 
 
 // A writable copy of an object or array, which the input stays as it was
-// beside: an array by its elements, an object by its own enumerable keys (a
-// key named __proto__ stays a key), keeping its prototype. One that cannot
+// beside: an array by its elements, an object by its own keys (a key named
+// __proto__ stays a key), keeping its prototype. One that cannot
 // take new keys is copied before its children write it (see
 // State.thawParent), and a match copies one whose children claim keys (see
 // claimingCopy).
@@ -4355,9 +4378,13 @@ function copyOf(v: any): any {
   if (isarr(v)) {
     return v.slice()
   }
-  const c = { ...v }
-  const proto = Object.getPrototypeOf(v)
-  return Object.prototype === proto ? c : Object.setPrototypeOf(c, proto)
+  // Every own key, enumerable or not, as a claim reads any own key.
+  const c = Object.create(Object.getPrototypeOf(v))
+  for (const k of Reflect.ownKeys(v)) {
+    const enumerable = (Object.getOwnPropertyDescriptor(v, k) as PropertyDescriptor).enumerable
+    Object.defineProperty(c, k, { value: v[k], writable: true, configurable: true, enumerable })
+  }
+  return c
 }
 
 
@@ -4440,11 +4467,10 @@ const Rename = function <V = any>(this: any, inopts: any, shape?: Node<V> | V): 
           const cv = ownval(s.parent, cn)
           if (undefined !== cv) {
             update.val = cv
-            if (s.writes()) {
-              setprop(s.parent, name, cv)
-              if (!keep) {
-                delete s.parent[cn]
-              }
+            const p = s.writable()
+            setprop(p, name, cv)
+            if (!keep) {
+              delete p[cn]
             }
             claimKey(s, cn)
             break
@@ -4463,19 +4489,18 @@ const Rename = function <V = any>(this: any, inopts: any, shape?: Node<V> | V): 
     attach(node.b, before)
 
     let after: any = (val: any, update: Update, s: State) => {
-      // A match writes no object but a copy of its own (see writes).
-      if (s.writes()) {
-        setprop(s.parent, name, val)
+      // A match writes no object but a copy of its own (see writable).
+      const p = s.writable()
+      setprop(p, name, val)
 
-        if (!keep &&
-          s.key !== name &&
-          // Arrays require explicit deletion as validation is based on index
-          // and will be lost.
-          !(isarr(s.parent) && false !== keep)
-        ) {
-          delete s.parent[s.key]
-          update.done = true
-        }
+      if (!keep &&
+        s.key !== name &&
+        // Arrays require explicit deletion as validation is based on index
+        // and will be lost.
+        !(isarr(p) && false !== keep)
+      ) {
+        delete p[s.key]
+        update.done = true
       }
 
       return true
