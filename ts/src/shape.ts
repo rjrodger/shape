@@ -51,6 +51,8 @@ type Compiled = {
   // For each key, whether Object.prototype has a member of that name, so
   // only those keys pay for an own-property check.
   proto: boolean[],
+  // Whether a child claims keys with a Rename (see claimingCopy).
+  claims: boolean,
 }
 const COMPILED = new WeakMap<object, Compiled>()
 
@@ -532,6 +534,10 @@ class State {
   // The last parent object seen (see next).
   lastParent: any = undefined
 
+  // The objects a match writes: its own copies of the input's objects a
+  // child of which claims keys (see claimingCopy).
+  copies: Set<any> | undefined = undefined
+
   constructor(
     root: any,
     top: Node<any>,
@@ -630,6 +636,33 @@ class State {
     }
   }
 
+  // The parent a Rename writes. A validation that produces writes the
+  // parent; a match writes a copy of its own, so the input stays as it was,
+  // and makes it on the first write where none was made ahead (see
+  // claimingCopy), as a Refer can bring a claim the object did not show:
+  // the node and its later siblings take the copy, and an error about the
+  // object names it. The root has no parent to write.
+  writable(): any {
+    const p = this.parent
+    if (!this.match || null == p || (undefined !== this.copies && this.copies.has(p))) {
+      return p
+    }
+    const c = copyOf(p)
+    for (let j = this.cI; S.number !== typeof this.nodes[j]; j++) {
+      if (this.parents[j] === p) {
+        this.parents[j] = c
+      }
+    }
+    for (const e of this.err) {
+      if (e.value === p) {
+        e.value = c
+      }
+    }
+    (this.copies ??= new Set()).add(c)
+    this.lastParent = c
+    return this.parent = c
+  }
+
   // A parent that cannot take new keys (frozen, sealed) is copied once,
   // before its first child runs. The child and its later siblings take the
   // copy, an error about the parent names it, and it takes the parent's
@@ -637,7 +670,7 @@ class State {
   // of it moved it to, or as the result. Only a validation that produces
   // writes the parent's place.
   thawParent(p: any): any {
-    const c = thaw(p)
+    const c = copyOf(p)
     let j = this.pI
     for (; S.number !== typeof this.nodes[j]; j++) {
       if (this.parents[j] === p) {
@@ -1428,8 +1461,18 @@ function shapify<const S>(intop?: S, inopts?: ShapeOptions) {
                   vgen: VGEN,
                   known: new Set(n.k),
                   proto: n.k.map((k: string) => PROTO_KEYS.has(k)),
+                  claims: claimsIn(n.k.map((k: string) => n.v[k])),
                 })
               }
+              }
+
+              // A claim reads the object as the keys before it left it, so
+              // a match writes an object a child of which claims keys into
+              // a copy of its own, as validating writes the object.
+              // The keys say where the node stays uncompiled.
+              if (s.match &&
+                (undefined === compiled ? claimsIn(n.k.map((k: string) => n.v[k])) : compiled.claims)) {
+                val = claimingCopy(s, val, start)
               }
 
               let extra: string[] | null = null
@@ -1524,7 +1567,7 @@ function shapify<const S>(intop?: S, inopts?: ShapeOptions) {
               for (let ekI = 0; ekI < elementKeys.length; ekI++) {
                 elementNodes.push(n.v[ekI] = nodize(n.v[ekI], 1 + s.dI))
               }
-              compiled = { keys: elementKeys, nodes: elementNodes, fast: [], vgen: VGEN, known: null, proto: [] }
+              compiled = { keys: elementKeys, nodes: elementNodes, fast: [], vgen: VGEN, known: null, proto: [], claims: false }
               COMPILED.set(n, compiled)
             }
             const elementKeys = compiled.keys
@@ -1685,7 +1728,8 @@ function shapify<const S>(intop?: S, inopts?: ShapeOptions) {
       // Explicit ignoreVal overrides Skip
       // let ignoreVal = s.node.p ? false === s.ignoreVal ? false : true : !!s.ignoreVal
       let ignoreVal = skip ? false === s.ignoreVal ? false : true : !!s.ignoreVal
-      let setParent = !s.match && null != s.parent && !done && !ignoreVal
+      let setParent = (!s.match || (undefined !== s.copies && s.copies.has(s.parent))) &&
+        null != s.parent && !done && !ignoreVal
 
       if (setParent) {
         setprop(s.parent, s.key, s.val)
@@ -4303,17 +4347,44 @@ const Refer = function <V = any>(this: any, inopts: any, shape?: Node<V> | V): N
 }
 
 
-// A writable copy of an object or array that cannot take new keys (see
-// State.thawParent), so the input stays as it was: an array by its
-// elements, an object by its own enumerable keys (a key named __proto__
-// stays a key), keeping its prototype.
-function thaw(v: any): any {
+// Whether any of these nodes claims keys with a Rename.
+function claimsIn(nodes: Node<any>[]): boolean {
+  return nodes.some((cn: Node<any>) => cn.b.some((b: any) => S.Rename === b.n && 0 < b.c))
+}
+
+
+// The copy of its own a match gives an object a child of which claims keys,
+// ahead of its keys, so that a claim reads what the keys before it wrote
+// (see State.writable): its queued keys take it, and it is the object's
+// value.
+function claimingCopy(s: State, val: any, start: number): any {
+  const c = copyOf(val)
+  for (let j = start; j < s.nI; j++) {
+    s.parents[j] = c
+  }
+  (s.copies ??= new Set()).add(c)
+  s.updateVal(c)
+  return c
+}
+
+
+// A writable copy of an object or array, which the input stays as it was
+// beside: an array by its elements, an object by its own keys (a key named
+// __proto__ stays a key), keeping its prototype. One that cannot
+// take new keys is copied before its children write it (see
+// State.thawParent), and a match copies one whose children claim keys (see
+// claimingCopy).
+function copyOf(v: any): any {
   if (isarr(v)) {
     return v.slice()
   }
-  const c = { ...v }
-  const proto = Object.getPrototypeOf(v)
-  return Object.prototype === proto ? c : Object.setPrototypeOf(c, proto)
+  // Every own key, enumerable or not, as a claim reads any own key.
+  const c = Object.create(Object.getPrototypeOf(v))
+  for (const k of Reflect.ownKeys(v)) {
+    const enumerable = (Object.getOwnPropertyDescriptor(v, k) as PropertyDescriptor).enumerable
+    Object.defineProperty(c, k, { value: v[k], writable: true, configurable: true, enumerable })
+  }
+  return c
 }
 
 
@@ -4396,11 +4467,10 @@ const Rename = function <V = any>(this: any, inopts: any, shape?: Node<V> | V): 
           const cv = ownval(s.parent, cn)
           if (undefined !== cv) {
             update.val = cv
-            if (!s.match) {
-              setprop(s.parent, name, cv)
-            }
+            const p = s.writable()
+            setprop(p, name, cv)
             if (!keep) {
-              delete s.parent[cn]
+              delete p[cn]
             }
             claimKey(s, cn)
             break
@@ -4412,21 +4482,24 @@ const Rename = function <V = any>(this: any, inopts: any, shape?: Node<V> | V): 
     defprop(before, S.name, { value: 'Rename:' + name })
     before.n = S.Rename
     before.a = [name]
+    // How many keys it claims (see claimsIn).
+    before.c = claim.length
     // Options the string form has no word for.
     before.o = (undefined !== keep || 0 < claim.length) ? opts : undefined
     attach(node.b, before)
 
     let after: any = (val: any, update: Update, s: State) => {
-      setprop(s.parent, name, val)
+      // A match writes no object but a copy of its own (see writable).
+      const p = s.writable()
+      setprop(p, name, val)
 
-      if (!s.match &&
-        !keep &&
+      if (!keep &&
         s.key !== name &&
         // Arrays require explicit deletion as validation is based on index
         // and will be lost.
-        !(isarr(s.parent) && false !== keep)
+        !(isarr(p) && false !== keep)
       ) {
-        delete s.parent[s.key]
+        delete p[s.key]
         update.done = true
       }
 

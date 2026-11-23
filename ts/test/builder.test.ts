@@ -1030,6 +1030,48 @@ describe('builder', () => {
     throws(() => g(Object.freeze({ a: 2, z: 1 })), 'because the property "z" is not allowed')
     assert.equal(Shape(Open({ b: R() })).valid(Object.freeze({ a: 2, z: 'q' })), true)
 
+    // match() writes nothing and agrees with validating: there a claim
+    // reads what the keys before it wrote into a copy of the object.
+    const x = { a: 2 }
+    assert.equal(g.match(x), true)
+    deepEqual(x, { a: 2 })
+    assert.equal(g.match({ a: 2, z: 1 }), false)
+    assert.equal(g.match({ a: 2, b: 1 }), false)
+    assert.equal(once.match({ a: 2 }), false)
+    assert.equal(kept.match({ a: 2 }), true)
+    assert.equal(again.match({ a: 2, c: 3 }), true)
+    const dflt = Shape({ c: Default(5), b: Rename({ name: 'b', claim: ['c'] }, Number) })
+    deepEqual(dflt({}), { b: 5 })
+    assert.equal(dflt.match({}), true)
+    const away = Shape({ a: Rename('x', Number), b: R() })
+    throws(() => away({ a: 1 }), 'property "b" because the property is missing')
+    assert.equal(away.match({ a: 1 }), false)
+    const renamed = { o: { a: 1 } }
+    assert.equal(Shape({ o: { a: Rename('b') } }).match(renamed), true)
+    deepEqual(renamed, { o: { a: 1 } })
+    const elements: any = ['x']
+    assert.equal(Shape([Rename('a', String)]).match(elements), true)
+    deepEqual(Object.keys(elements), ['0'])
+
+    // A claim a Refer brings, which the object does not show, takes its key
+    // from a copy the match makes on its first write.
+    const refer = (o: any) => Shape({ def: Define('R', R()), o })
+    const twice = refer(Open({ b: Refer({ name: 'R', fill: true }), c: Refer({ name: 'R', fill: true }) }))
+    throws(() => twice({ def: 2, o: { a: 1 } }), 'property "o.c" because the property is missing')
+    const tin = { def: 2, o: { a: 1 } }
+    assert.equal(twice.match(tin), false)
+    deepEqual(tin, { def: 2, o: { a: 1 } })
+    const closed = refer({ b: Refer({ name: 'R', fill: true }) })
+    deepEqual(closed({ def: 2, o: { a: 1 } }), { b: 2, o: { b: 1 } })
+    assert.equal(closed.match({ def: 2, o: { a: 1 } }), true)
+
+    // A claim reads an own key that is not enumerable, in a match as well.
+    const hidden = () => Object.defineProperty({}, 'a', { value: 1, writable: true, configurable: true })
+    deepEqual(g(hidden()), { b: 1 })
+    const hin = hidden()
+    assert.equal(g.match(hin), true)
+    deepEqual(Object.getOwnPropertyNames(hin), ['a'])
+
     // Validating writes nothing into the context.
     const ctx: any = {}
     g({ a: 2 }, ctx)

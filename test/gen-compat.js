@@ -331,6 +331,7 @@ const files = {
     ['claim-kept-claimed-again', { b: CL({ keep: true }), e: CALL('Rename', { name: 'e', claim: ['a'] }, N) }, { a: 2 }],
     // A claim reads the object as the keys before it left it: a key a rename
     // put back after an earlier claim took it is there to claim again.
+    ['claim-default', { a: 5, b: CL() }, {}],
     ['claim-recreated', { b: CL(), c: CALL('Rename', 'a', N), d: CALL('Rename', { name: 'd', claim: ['a'] }, N) }, { a: 2, c: 3 }],
     ['fault-closed', CALL('Fault', 'bad keys at $PATH', { o: { b: N } }), { o: { b: 1, z: 1 } }],
     ['fault-closed-nested', { o: CALL('Fault', 'bad keys at $PATH', { b: N }) }, { o: { b: 1, z: 1 } }],

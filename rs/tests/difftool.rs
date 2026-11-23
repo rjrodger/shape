@@ -25,6 +25,8 @@ struct DiffResult {
     json: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     rejson: Option<serde_json::Value>,
+    #[serde(rename = "match", skip_serializing_if = "Option::is_none")]
+    verdict: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     ok: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -41,6 +43,7 @@ fn run_case(name: &str, spec: &serde_json::Value, input: &serde_json::Value) -> 
         reimport: None,
         json: None,
         rejson: None,
+        verdict: None,
         ok: None,
         out: None,
         err: None,
@@ -77,6 +80,9 @@ fn run_case(name: &str, spec: &serde_json::Value, input: &serde_json::Value) -> 
             });
         }
     }
+
+    // The verdict-only call, which must agree with validating.
+    res.verdict = Some(schema.valid(&Value::from(input.clone())));
 
     match schema.validate(Value::from(input.clone())) {
         Ok(out) => {
@@ -117,6 +123,7 @@ fn differential() {
                     reimport: None,
                     json: None,
                     rejson: None,
+                    verdict: None,
                     ok: None,
                     out: None,
                     err: None,

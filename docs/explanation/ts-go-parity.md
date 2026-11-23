@@ -37,8 +37,9 @@ nothing and a `Rest()` that validated nothing passed it.
 generates thousands of `(spec, input)` pairs, runs every one through all
 three implementations, and diffs the JSON Schema export, the declarative JSON
 export, the export of the shape that JSON reads back as, the verdict, the
-produced value and the exact error text, each port against the canonical
-build:
+verdict of the call that wants only one (which must agree with validating),
+the produced value and the exact error text, each port against the
+canonical build:
 
 ```sh
 make diff        # sampled report, both ports

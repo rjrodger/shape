@@ -1019,7 +1019,16 @@ func composeList(n *node, state *State, absent bool, verr *ValidationError) bool
 		return true
 	}
 	before := verr.count()
-	state.Value = evaluateList(n, state, verr)
+	// The checks after the composition read what it produces, which a match
+	// alone leaves as it came, so a match produces it then, into copies of
+	// its own, as validating does.
+	if state.Match && (len(n.befores) > 0 || len(n.afters) > 0) {
+		state.Match = false
+		state.Value = evaluateList(n, state, verr)
+		state.Match = true
+	} else {
+		state.Value = evaluateList(n, state, verr)
+	}
 	return verr.count() == before
 }
 

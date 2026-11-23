@@ -423,6 +423,12 @@ function build() {
   // Values the Nof admits: a failing one names the object branch in a form
   // the ports render apart (see the parity page).
   add('c-chained-nof-produces', CALL('Min', 1, CALL('Nof', 1, { x: 1 }, T)), [{}, { x: 5 }, 'ab', 'a'])
+  // A check after a composition reads what the composition produces, also
+  // when only a verdict is wanted.
+  add('c-chained-all-produces', CALL('Min', 1, CALL('All', { x: 1 })), [{}, { x: 5 }, { y: 1 }, 'a'])
+  // Only values the Nof admits: its count message renders object branches
+  // as the parity notes say TypeScript and the ports differ.
+  add('c-chained-nof-trial-produces', CALL('Min', 1, CALL('Nof', 1, { x: 1 }, { y: T })), [{}, { x: 5 }, { y: 'a' }])
   // A composition a Check or a type token gave a kind of its own.
   add('c-typed-check', E('All(Min(2)).Check(/^a/)'), SCALARS)
   add('c-typed-check-optional', { a: E('All(Min(2)).Check(/^a/).Optional') }, OBJS)
@@ -530,6 +536,9 @@ function build() {
   add('cl-min', CALL('Min', 2, { b: CL() }), [{ a: 2 }, { a: 2, z: 1 }, { a: 2, b: 1 }])
   add('cl-any', { b: CL({}, E('Any')) }, CLAIMS)
   add('cl-keep-then-claim', { b: CL({ keep: true }), e: CALL('Rename', { name: 'e', claim: ['a'] }, E('Number')) }, CLAIMS)
+  // A claim of a key a default filled, which a verdict sees as validating
+  // does.
+  add('cl-default', { a: 5, b: CL() }, CLAIMS)
   add('cl-recreated', { b: CL(), c: CALL('Rename', 'a', E('Number')), d: CALL('Rename', { name: 'd', claim: ['a'] }, E('Number')) },
     CLAIMS.concat([{ a: 2, c: 3 }, { c: 3 }, { a: 2, c: 'x' }, { a: 2, c: 3, z: 1 }]))
   add('cl-fault', CALL('Fault', 'bad keys', { b: CL() }), CLAIMS)

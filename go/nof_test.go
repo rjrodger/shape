@@ -154,3 +154,26 @@ func TestNofJSONSchema(t *testing.T) {
 		}
 	}
 }
+
+// A check after a composition reads what the composition produces, and a
+// match agrees with validating: the branch that fills a default fills it for
+// the check, into copies of the match's own.
+func TestComposeMatchReadsProduced(t *testing.T) {
+	for _, s := range []*Schema{
+		MustShape(Min(1, Nof(1, map[string]any{"x": 1.0}, String))),
+		MustShape(Min(1, Nof(1, map[string]any{"x": 1.0}, map[string]any{"y": String}))),
+		MustShape(Min(1, All(map[string]any{"x": 1.0}))),
+	} {
+		in := map[string]any{}
+		if _, err := s.Validate(in); err != nil {
+			t.Fatalf("%s: validating: %v", s.String(), err)
+		}
+		if !s.Match(in) || len(in) != 0 {
+			t.Fatalf("%s: match: %v, input %v", s.String(), s.Match(in), in)
+		}
+	}
+	// A check that fails on what the composition produces fails the match too.
+	if MustShape(Min(2, All(map[string]any{"x": 1.0}))).Match(map[string]any{}) {
+		t.Fatal("expected Min(2) to fail on {x: 1}")
+	}
+}
