@@ -292,6 +292,7 @@ fn prepare(n: &mut Node, defs: &mut HashMap<String, Arc<Node>>, reach: &Reach) -
         n.claims = n
             .obj_children
             .values()
+            .chain(n.obj_rest.as_deref())
             .any(|c| !c.rename_claim.is_empty() || Reach::brings(c, &reach.claims));
         n.renames = n
             .obj_children

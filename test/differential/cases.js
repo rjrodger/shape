@@ -654,6 +654,27 @@ function build() {
   // A node a Refer puts in place that injects null for an absent value.
   add('rr-null-default', { d: CALL('Define', 'N', E('Default(null,String)')), o: { a: FILL('N') } },
     [{ d: 'q', o: {} }, { d: 'q', o: { a: 'x' } }, { d: 'q', o: { a: null } }, { o: {} }])
+  // A key's own Skip governs an absent value whatever node a Refer puts in
+  // its place: nothing is required or injected. A Skip of the node it puts
+  // there does not.
+  const SKIP_IN = [{ d: 'q', o: {} }, { d: 'q', o: { a: 'y' } }, { d: 'q', o: { a: 1 } }]
+  for (const [name, ex] of [['null', 'Default(null,String)'], ['default', 'Default("z",String)'],
+    ['optional', 'Optional(String)'], ['required', 'String']]) {
+    add('rr-skip-' + name, { d: CALL('Define', 'N', E(ex)), o: { a: CALL('Refer', { name: 'N', fill: true }, E('Skip(Any)')) } }, SKIP_IN)
+  }
+  add('rr-to-skip', { d: CALL('Define', 'N', E('Skip(String)')), o: { a: FILL('N') } }, SKIP_IN)
+  // A claim runs at its place among its node's checks: after a Coerce, so
+  // the claimed value is not converted, and after an Ignore, so a value it
+  // drops is claimed for; for a rest key too, which can claim a later one.
+  const CLAIM_BAD = [{ a: 1, k: 'bad' }, { a: 1 }, { k: 'bad' }, { a: 1, k: 2 }, { a: 'x', k: 'bad' }]
+  add('cl-after-ignore', { k: RN({ name: 'b', claim: ['a'] }, E('Ignore(Number)')) }, CLAIM_BAD)
+  add('cl-after-coerce', { b: RN({ name: 'b', claim: ['a'] }, E('Number.Coerce')) }, [{ a: '1' }, { a: 1 }, { b: '2' }, { a: 'x' }])
+  add('cl-rest-after-ignore', CALL('Child', RN({ name: 'a', claim: ['a'] }, E('Ignore(Number)'))),
+    [{ a: 1, b: 'bad' }, { a: 1, b: 2 }, { b: 'bad' }, { a: 'x', b: 'bad' }, { a: 1 }])
+  add('cl-rest-takes-later', CALL('Child', RN({ name: 'x', claim: ['z'] }, E('Ignore(Number)'))),
+    [{ a: 'bad', z: 5 }, { a: 1, z: 5 }, { a: 'bad' }, { z: 'bad' }])
+  add('rr-claim-coerce', { def: DEF(RN({ name: 'b', claim: ['a'] }, E('Number.Coerce'))), o: { b: FILL() } },
+    [{ def: 2, o: { a: '1' } }, { def: 2, o: { a: 1 } }, { def: '2', o: { a: '1' } }, { def: 2, o: { b: '3' } }])
 
   // Key expressions.
   add('ke-1', { 'a: Min(2)': 0 }, OBJS)

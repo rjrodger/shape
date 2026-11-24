@@ -1021,6 +1021,8 @@ impl Node {
             base.rename_to = self.rename_to.take();
             base.rename_keep = self.rename_keep;
             base.rename_claim = std::mem::take(&mut self.rename_claim);
+            // The node's befores lead, so its claim keeps its place.
+            base.claim_at = self.claim_at;
             base.define_name = self.define_name.take();
             base.refer_name = self.refer_name.take();
             base.refer_fill = self.refer_fill;
@@ -1419,6 +1421,9 @@ impl Node {
         self.rename_to = Some(name);
         self.rename_keep = opts.keep;
         self.rename_claim = opts.claim;
+        if !self.rename_claim.is_empty() {
+            self.claim_at = self.befores.len();
+        }
         self
     }
 
@@ -1442,6 +1447,10 @@ impl Node {
 
     pub fn Coerce(mut self) -> Node {
         self.befores.insert(0, coerce_validator());
+        // A check put ahead of a claim moves it on, as in TypeScript.
+        if !self.rename_claim.is_empty() {
+            self.claim_at += 1;
+        }
         self
     }
 
@@ -2032,6 +2041,73 @@ mod tests {
         let mut hushed = Required(Token::String);
         hushed.silent = true;
         assert_eq!(run(&at_a(hushed), &a("5")), a("5"));
+    }
+
+    /// A claim runs at its place among its node's checks, so a Coerce
+    /// wrapped round it, or chained after it, does not convert the claimed
+    /// value, as in TypeScript.
+    #[test]
+    fn claim_after_coerce() {
+        let claim = || {
+            RenameWith(
+                "b",
+                RenameOptions {
+                    keep: false,
+                    claim: vec!["a".into()],
+                },
+                Token::Number,
+            )
+        };
+        let bad = "ERR Validation failed for property \"b\" with string \"1\" because the string is not of type number.";
+        for n in [Coerce(claim()), claim().Coerce()] {
+            let s = Schema::new(obj([("b", Spec::from(n))]));
+            assert_eq!(run(&s, r#"{"a":"1"}"#), bad);
+            assert_eq!(run(&s, r#"{"b":"2"}"#), r#"{"b":2}"#);
+        }
+    }
+
+    /// A key's own Skip governs an absent value, whatever node a Refer puts
+    /// in its place; and an open object whose rest shape refers to a
+    /// claiming node claims for a value it dropped.
+    #[test]
+    fn refer_under_skip_and_rest() {
+        let fill = ReferOptions {
+            strict: false,
+            fill: true,
+        };
+        for def in [
+            Default(Value::Null, Token::String),
+            Default("z", Token::String),
+            Node::from(Token::String),
+        ] {
+            let s = Schema::new(obj([
+                ("d", Spec::from(Define("N", def))),
+                (
+                    "o",
+                    obj([("a", Spec::from(ReferWith("N", fill.clone(), Skip(Any()))))]),
+                ),
+            ]));
+            assert_eq!(run(&s, r#"{"d":"x","o":{}}"#), r#"{"d":"x","o":{}}"#);
+        }
+        let claim = RenameWith(
+            "x",
+            RenameOptions {
+                keep: false,
+                claim: vec!["z".into()],
+            },
+            Ignore(Token::Number),
+        );
+        let s = Schema::new(obj([
+            ("d", Spec::from(Define("C", claim))),
+            (
+                "o",
+                Spec::from(Child(Any().Refer("C"), Spec::Obj(Vec::new()))),
+            ),
+        ]));
+        assert_eq!(
+            run(&s, r#"{"d":1,"o":{"b":"bad","z":5}}"#),
+            r#"{"o":{"x":5},"x":1}"#
+        );
     }
 
     #[test]

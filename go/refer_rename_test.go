@@ -55,3 +55,45 @@ func TestReferClaimsMarked(t *testing.T) {
 		t.Fatal("an object whose Refers bring no claim is not marked")
 	}
 }
+
+// A key's own Skip governs an absent value, whatever node a Refer puts in
+// its place: nothing is required of it and nothing is injected for it.
+func TestReferUnderSkip(t *testing.T) {
+	for _, def := range []any{Default(nil, String), Default("z", String), String} {
+		s := MustShape(map[string]any{
+			"d": Define("N", def),
+			"o": map[string]any{"a": ReferWith("N", ReferOptions{Fill: true}, Skip())},
+		})
+		out := mustOK(t, s, map[string]any{"d": "x", "o": map[string]any{}})
+		if want := map[string]any{"d": "x", "o": map[string]any{}}; !reflect.DeepEqual(out, want) {
+			t.Fatalf("got %v, want %v", out, want)
+		}
+	}
+}
+
+// A claim runs at its place among its node's checks: a Coerce put ahead of
+// it, wrapped round it or chained after it, does not convert the claimed
+// value, as in TS.
+func TestClaimAfterCoerce(t *testing.T) {
+	claim := func() *Node { return RenameWith("b", RenameOptions{Claim: []string{"a"}}, Number) }
+	for _, n := range []*Node{Coerce(claim()), claim().Coerce()} {
+		mustErr(t, MustShape(map[string]any{"b": n}), map[string]any{"a": "1"}, `with string "1" because the string is not of type number`)
+	}
+	mustOK(t, MustShape(map[string]any{"b": Coerce(claim())}), map[string]any{"b": "2"})
+}
+
+// An open object whose rest shape refers to a claiming node is marked as
+// one that claims, and the rest key claims for a value it dropped.
+func TestRestReferClaims(t *testing.T) {
+	s := MustShape(map[string]any{
+		"d": Define("C", RenameWith("x", RenameOptions{Claim: []string{"z"}}, Ignore(Number))),
+		"o": Child(Refer("C"), map[string]any{}),
+	})
+	if !s.root.objChildren["o"].claims {
+		t.Fatal("a rest shape that refers to a claim is not marked")
+	}
+	out := mustOK(t, s, map[string]any{"d": 1.0, "o": map[string]any{"b": "bad", "z": 5.0}})
+	if want := map[string]any{"x": 1.0, "o": map[string]any{"x": 5.0}}; !reflect.DeepEqual(out, want) {
+		t.Fatalf("got %v, want %v", out, want)
+	}
+}

@@ -256,9 +256,9 @@ pub struct Node {
     /// renames' targets, nor a claim's keys until a claim takes them. Set
     /// when the tree is prepared.
     pub consumed: std::collections::HashSet<String>,
-    /// A child claims keys with a rename, or can through a `Refer`, so
-    /// which keys the object does not accept is known once its children
-    /// have run. Set when the tree is prepared.
+    /// A child or the rest shape claims keys with a rename, or can through
+    /// a `Refer`, so which keys the object does not accept is known once its
+    /// children have run. Set when the tree is prepared.
     pub claims: bool,
     /// A child or the rest shape renames, or can through a `Refer`, so the
     /// object takes each value as the input held it. Set when the tree is
@@ -323,6 +323,10 @@ pub struct Node {
     pub rename_to: Option<String>,
     pub rename_keep: bool,
     pub rename_claim: Vec<String>,
+    /// Where a rename's claim runs among the befores, as TypeScript attaches
+    /// it as a check: after the checks the renamed shape had, and the ones a
+    /// later builder put ahead of them (`Coerce`).
+    pub claim_at: usize,
 
     /// Free-form metadata from `x$$` sidecar keys.
     pub meta: IndexMap<String, Value>,

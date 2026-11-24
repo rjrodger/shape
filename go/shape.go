@@ -100,6 +100,10 @@ func prepare(n *node, defs map[string]*node) {
 					n.claims = true
 				}
 			}
+			// The rest shape claims for the keys it takes as well.
+			if n.objRest != nil && len(n.objRest.renameClaim) > 0 {
+				n.claims = true
+			}
 			n.consumed = consumed
 			n.objKeysAny = make([]any, len(n.objKeys))
 			n.objChildList = make([]*node, len(n.objKeys))
@@ -175,6 +179,9 @@ func referClaims(root *node) {
 			if claims[cn.referName] {
 				n.claims = true
 			}
+		}
+		if n.objRest != nil && claims[n.objRest.referName] {
+			n.claims = true
 		}
 	})
 }

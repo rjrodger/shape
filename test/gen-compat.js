@@ -355,6 +355,13 @@ const files = {
     ['refer-claim-bad', { def: RDEF(CL()), o: { b: RFILL } }, { def: 2, o: { a: 'x' } }],
     ['refer-claim-twice', { def: RDEF(CL()), o: { $open: { b: RFILL, c: RFILL } } }, { def: 2, o: { a: 1 } }],
     ['refer-claim-rest', { def: RDEF(CL()), o: CALL('Child', N, { b: RFILL }) }, { def: 2, o: { a: 1, z: 2 } }],
+    ['refer-claim-coerce', { def: RDEF(CL({}, { $expr: 'Number.Coerce' })), o: { b: RFILL } }, { def: 2, o: { a: '1' } }],
+    // A claim runs at its place among its node's checks: after a Coerce, and
+    // after an Ignore that dropped the value, for a rest key too.
+    ['claim-after-coerce', { b: CL({}, { $expr: 'Number.Coerce' }) }, { a: '1' }],
+    ['claim-after-ignore', { k: CALL('Rename', { name: 'b', claim: ['a'] }, { $expr: 'Ignore(Number)' }) }, { a: 1, k: 'bad' }],
+    ['claim-rest-after-ignore', CALL('Child', CALL('Rename', { name: 'a', claim: ['a'] }, { $expr: 'Ignore(Number)' })), { a: 1, b: 'bad' }],
+    ['claim-rest-takes-later', CALL('Child', CALL('Rename', { name: 'x', claim: ['z'] }, { $expr: 'Ignore(Number)' })), { a: 'bad', z: 5 }],
     // A rest shape renames every key it takes; a rename to the key's own
     // name sets it all the same.
     ['rename-rest-shape', CALL('Child', CALL('Rename', 'x', N)), { a: 1, z: 2 }],

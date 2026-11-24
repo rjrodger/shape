@@ -138,7 +138,7 @@ func validateNode(n *node, in any, path []string, pathArr []any, key string, par
 }
 
 // validateNodeAt is validateNode for a child an object gives a site, as
-// it does a child that refers (see referSite).
+// it does a child that claims or refers (see referSite).
 func validateNodeAt(n *node, in any, path []string, pathArr []any, key string, parent any, ctx *Context, match bool, verr *ValidationError, site *referSite) any {
 	if n == nil {
 		return in
@@ -176,6 +176,9 @@ func validateNodeAt(n *node, in any, path []string, pathArr []any, key string, p
 	state.absent = absent
 	state.dropped = false
 	state.checkName = ""
+	// Whether the key skips is its own node's to say, whatever node a Refer
+	// puts in its place, as TS reads it before the checks run.
+	skip := n.skippable
 
 	// Run before-validators. They may replace the value or the node, and a
 	// failing one ends the structural checks (TS handleValidate sets
@@ -191,9 +194,14 @@ func validateNodeAt(n *node, in any, path []string, pathArr []any, key string, p
 	// Rename) leaves that node's checks to run, from its first, each once:
 	// TS restarts its loop on the new node, and a Refer back to a node whose
 	// befores have begun does not run them again.
+	//
+	// A Rename's claim runs at its place among them (see node.claimAt), the
+	// place after the last included, as the check TS attaches there does:
+	// while the value is absent, it takes the value of the first key it
+	// claims that the object holds (see referSite).
 	done := false
 	var ran map[beforeAt]bool
-	for bI := -1; bI < len(n.befores); bI++ {
+	for bI := -1; bI < len(n.befores) || (site != nil && bI == len(n.befores)); bI++ {
 		if bI < 0 && (n.listMode == listNone || isolated(n.befores)) {
 			continue
 		}
@@ -208,6 +216,13 @@ func validateNodeAt(n *node, in any, path []string, pathArr []any, key string, p
 				done = true
 			}
 			in = state.Value
+			continue
+		}
+		if site != nil && len(n.renameClaim) > 0 && bI == n.claimAt && site.now != nil &&
+			state.absent && state.Value == nil && site.claim(n) {
+			in, state.Value, state.absent, state.dropped, absent = site.val, site.val, false, false, false
+		}
+		if bI == len(n.befores) {
 			continue
 		}
 		b := n.befores[bI]
@@ -230,12 +245,6 @@ func validateNodeAt(n *node, in any, path []string, pathArr []any, key string, p
 				}
 			}
 			bI = -2
-			// The node put in this one's place claims for an absent value
-			// now, as its Rename's check, its first, does in TS: the value
-			// of the first key it claims that the object holds.
-			if site != nil && site.now != nil && state.absent && state.Value == nil && site.claim(n) {
-				in, state.Value, state.absent, absent = site.val, site.val, false, false
-			}
 		}
 		if !ok && absentSkips(state, update) {
 			continue
@@ -248,7 +257,7 @@ func validateNodeAt(n *node, in any, path []string, pathArr []any, key string, p
 		}
 	}
 	if !done {
-		state.Value = validateStructure(n, state, absent, path, pathArr, key, parent, ctx, match, verr)
+		state.Value = validateStructure(n, state, absent, skip, path, pathArr, key, parent, ctx, match, verr)
 	}
 	if len(state.Node.afters) > 0 {
 		runAfters(state, verr)
@@ -307,7 +316,7 @@ func nullPasses(state *State) bool {
 // validateStructure runs the structural checks — composition, nullable, Never,
 // the missing-value rules and the kind check — and returns the produced value.
 // The afters run afterwards whatever it reported, as they do in TS.
-func validateStructure(n *node, state *State, absent bool, path []string, pathArr []any, key string, parent any, ctx *Context, match bool, verr *ValidationError) any {
+func validateStructure(n *node, state *State, absent, skip bool, path []string, pathArr []any, key string, parent any, ctx *Context, match bool, verr *ValidationError) any {
 
 	// Nullable: an explicit null is accepted as the value, whatever a
 	// composition made of it (see composeList). Absent is still governed by
@@ -362,11 +371,12 @@ func validateStructure(n *node, state *State, absent bool, path []string, pathAr
 	// below — where, e.g., null against a String is a type error, not a required
 	// error (mirrors TS undefined-vs-null semantics).
 	if state.Value == nil && absent && n.kind != KindRegexp {
-		if n.required {
-			addRequired(state, n, verr)
+		// A key that skips neither requires a value nor takes a default.
+		if skip {
 			return nil
 		}
-		if n.skippable {
+		if n.required {
+			addRequired(state, n, verr)
 			return nil
 		}
 
@@ -579,7 +589,7 @@ func validateArray(n *node, in any, path []string, pathArr []any, parent any, ct
 		for i := len(arr); i < tupleLen; i++ {
 			cn := n.arrChildren[i]
 			v := validateNode(cn, undefinedVal, append(path, strconv.Itoa(i)), append(pathArr, i), strconv.Itoa(i), p.parent(), ctx, match, verr)
-			if match || absentOmits(cn, v) {
+			if match || absentOmits(cn, cn, v) {
 				continue
 			}
 			p.ensure()
@@ -768,32 +778,15 @@ func validateObject(n *node, in any, path []string, pathArr []any, parent any, c
 			kpathArr = append(pathArr, n.objKeysAny[i])
 		}
 
-		// Rename.claim: if the value is missing and claim source has it, pick
-		// it up, from the object as it now is: a source an earlier claim took
-		// is gone, as in TS.
-		claimed := false
-		if !has && cn.renameTo != "" && len(cn.renameClaim) > 0 {
-			now := obj
-			if out != nil {
-				now = out
-			}
-			for _, src := range cn.renameClaim {
-				if sv, sh := now[src]; sh {
-					v = sv
-					has, claimed = true, true
-					take(src, cn.renameKeep)
-					break
-				}
-			}
-		}
-
-		// A child that refers is given a site (see referSite): the node its
-		// Refer puts in its place may claim, or rename, and the object does
-		// both for it as for a node of its own.
+		// A child that claims, or refers, is given a site (see referSite):
+		// its claim, or that of the node its Refer puts in its place, reads
+		// the object as it now is, so a source an earlier claim took is
+		// gone, as in TS; and the object renames for the node the child
+		// ended on.
 		var site *referSite
-		if cn.referName != "" {
+		if len(cn.renameClaim) > 0 || cn.referName != "" {
 			site = &referSite{}
-			if !has && n.claims {
+			if n.claims {
 				site.now = obj
 				if out != nil {
 					site.now = out
@@ -801,25 +794,25 @@ func validateObject(n *node, in any, path []string, pathArr []any, parent any, c
 			}
 		}
 
+		in := v
 		if !has {
-			produced = validateNodeAt(cn, undefinedVal, kpath, kpathArr, k, parentOf, ctx, match, verr, site)
-			if site != nil && site.claimed {
-				v = site.val
-				has, claimed = true, true
-				take(site.src, site.keep)
-			} else if fn := endNode(cn, site); absentOmits(fn, produced) {
-				// A taker sets even an absent value, here to nothing, which
-				// clears what a rename before it put under the key, as TS's
-				// does.
-				if takes(fn) && !match {
-					ensure()
-					delete(out, k)
-				}
-				renameNothing(fn, k, match, ensure, &out)
-				continue
+			in = undefinedVal
+		}
+		produced = validateNodeAt(cn, in, kpath, kpathArr, k, parentOf, ctx, match, verr, site)
+		claimed := site != nil && site.claimed
+		if claimed {
+			v, has = site.val, true
+			take(site.src, site.keep)
+		} else if fn := endNode(cn, site); !has && absentOmits(cn, fn, produced) {
+			// A taker sets even an absent value, here to nothing, which
+			// clears what a rename before it put under the key, as TS's
+			// does.
+			if takes(fn) && !match {
+				ensure()
+				delete(out, k)
 			}
-		} else {
-			produced = validateNodeAt(cn, v, kpath, kpathArr, k, parentOf, ctx, match, verr, site)
+			renameNothing(fn, k, match, ensure, &out)
+			continue
 		}
 
 		if match {
@@ -882,13 +875,28 @@ func validateObject(n *node, in any, path []string, pathArr []any, parent any, c
 		sort.Strings(rest)
 
 		for _, k := range rest {
-			// The rest shape renames each key it takes, as a declared key's
-			// node does, through a Refer too (see referSite).
+			// A key a claim of an earlier rest key took is the object's, as
+			// TS's claim leaves the rest entry queued for it checking nothing.
+			if taken[k] {
+				continue
+			}
+			// The rest shape claims, and renames, for each key it takes, as
+			// a declared key's node does, through a Refer too (see
+			// referSite).
 			var site *referSite
-			if n.objRest.referName != "" {
+			if len(n.objRest.renameClaim) > 0 || n.objRest.referName != "" {
 				site = &referSite{}
+				if n.claims {
+					site.now = obj
+					if out != nil {
+						site.now = out
+					}
+				}
 			}
 			produced := validateNodeAt(n.objRest, obj[k], append(path, k), append(pathArr, k), k, parentOf, ctx, match, verr, site)
+			if site != nil && site.claimed {
+				take(site.src, site.keep)
+			}
 			if match {
 				continue
 			}
@@ -933,11 +941,11 @@ func takes(n *node) bool {
 	return false
 }
 
-// referSite is what an object gives a child that refers, as the node a
-// Refer puts in the child's place has its checks run where the child
-// stands in TS, its Rename's among them: the object as it stands, which a
-// claim of that node reads where the child's value is absent and the
-// object claims (nil otherwise), what the claim took, and the node the
+// referSite is what an object gives a child that claims or refers, as the
+// checks of the child's node, and of the node a Refer puts in its place,
+// run where the child stands in TS, a Rename's claim among them: the
+// object as it stands, which a claim reads while the value is absent and
+// the object claims (nil otherwise), what the claim took, and the node the
 // child ended on, whose Rename the object then applies.
 type referSite struct {
 	now map[string]any
@@ -1021,17 +1029,18 @@ func renameNothing(cn *node, k string, match bool, ensure func(), out *map[strin
 	}
 }
 
-// absentOmits reports whether what a node produced for an absent value is
-// left out of its parent rather than put in place. A skipped node puts
-// nothing; otherwise a nil means nothing was injected (a required error, or
-// an optional value with no default), matching TS. The exception is a null
-// default, a null literal's own or one Default(null, ...) gave: TS injects
-// it, so the key is present and null.
-func absentOmits(cn *node, produced any) bool {
+// absentOmits reports whether what a key produced for an absent value is
+// left out of its parent rather than put in place. A key whose own node cn
+// skips puts nothing, whatever node a Refer put in its place; otherwise a
+// nil means nothing was injected (a required error, or an optional value
+// with no default), matching TS. The exception is a null default, a null
+// literal's own or one Default(null, ...) gave to the node the key ended on
+// (fn): TS injects it, so the key is present and null.
+func absentOmits(cn, fn *node, produced any) bool {
 	if isUndef(produced) || (cn.skippable && (produced == nil || cn.silent)) {
 		return true
 	}
-	return produced == nil && !(cn.hasDefault && !cn.required && (cn.kind == KindNull || cn.defaultNull))
+	return produced == nil && !(fn.hasDefault && !fn.required && (fn.kind == KindNull || fn.defaultNull))
 }
 
 // reportUnknown records the one error naming every key of obj the closed

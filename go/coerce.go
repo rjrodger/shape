@@ -149,14 +149,22 @@ func Coerce(spec ...any) *Node {
 	} else {
 		nb = buildize(spec[0])
 	}
-	nb.n.befores = append([]validator{coerceValidator()}, nb.n.befores...)
-	bumpValidatorGen()
+	prependCoerce(nb.n)
 	return nb
 }
 
 // Coerce (chained).
 func (n *Node) Coerce() *Node {
-	n.n.befores = append([]validator{coerceValidator()}, n.n.befores...)
-	bumpValidatorGen()
+	prependCoerce(n.n)
 	return n
+}
+
+// prependCoerce puts the conversion ahead of the node's checks, a claim's
+// among them, as TS does.
+func prependCoerce(n *node) {
+	n.befores = append([]validator{coerceValidator()}, n.befores...)
+	if len(n.renameClaim) > 0 {
+		n.claimAt++
+	}
+	bumpValidatorGen()
 }
