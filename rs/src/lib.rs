@@ -62,7 +62,7 @@ pub use stringify::stringify_node;
 pub use value::{Map, Value};
 
 use context::Trials;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use validate::{validate_node, Cur, Walk};
 
@@ -95,7 +95,14 @@ impl Schema {
     pub fn with_options(spec: impl Into<Spec>, opts: &Options) -> Schema {
         let mut root = normalize::normalize_with(spec.into(), opts);
         let mut defs = HashMap::new();
-        let pure = prepare(&mut root, &mut defs);
+        let pure = prepare(&mut root, &mut defs, &Reach::default());
+        // What a Refer can bring is known once every definition is: where
+        // one brings a rename, the tree is prepared again, and so are the
+        // definitions taken from it.
+        let reach = Reach::of(&defs);
+        if !reach.renames.is_empty() {
+            prepare(&mut root, &mut defs, &reach);
+        }
         Schema {
             root,
             defs: Arc::new(defs),
@@ -216,13 +223,53 @@ impl Schema {
 /// Prepare a node outside a schema, as Argu compiles its slots.
 pub(crate) fn prepare_node(n: &mut Node) {
     let mut defs = HashMap::new();
-    prepare(n, &mut defs);
+    prepare(n, &mut defs, &Reach::default());
+}
+
+/// The names under which a `Refer` can put a node that renames in its
+/// place, and those under which it can put one that claims: the node
+/// defined under the name does, or refers on to a name whose node does.
+#[derive(Default)]
+struct Reach {
+    renames: HashSet<String>,
+    claims: HashSet<String>,
+}
+
+impl Reach {
+    fn of(defs: &HashMap<String, Arc<Node>>) -> Reach {
+        let mut reach = Reach::default();
+        loop {
+            let mut grew = false;
+            for (name, d) in defs {
+                if !reach.renames.contains(name)
+                    && (d.rename_to.is_some() || Reach::brings(d, &reach.renames))
+                {
+                    reach.renames.insert(name.clone());
+                    grew = true;
+                }
+                if !reach.claims.contains(name)
+                    && (!d.rename_claim.is_empty() || Reach::brings(d, &reach.claims))
+                {
+                    reach.claims.insert(name.clone());
+                    grew = true;
+                }
+            }
+            if !grew {
+                return reach;
+            }
+        }
+    }
+
+    /// Whether a `Refer` of the node can bring what the names say.
+    fn brings(n: &Node, names: &HashSet<String>) -> bool {
+        n.refer_name.as_ref().is_some_and(|r| names.contains(r))
+    }
 }
 
 /// Walk a compiled tree once: every object node gets the set of keys it
 /// accepts and its keys to share with the paths, and every `Define`d node
 /// is collected by name. Reports whether the tree has no validator at all.
-fn prepare(n: &mut Node, defs: &mut HashMap<String, Arc<Node>>) -> bool {
+fn prepare(n: &mut Node, defs: &mut HashMap<String, Arc<Node>>, reach: &Reach) -> bool {
     let mut pure = n.befores.is_empty() && n.afters.is_empty();
     n.plain = pure
         && !n.silent
@@ -242,30 +289,38 @@ fn prepare(n: &mut Node, defs: &mut HashMap<String, Arc<Node>>) -> bool {
         // claimed key is the object's only once a claim takes it (see
         // validate_object), as in TypeScript.
         n.consumed = n.obj_children.keys().cloned().collect();
-        n.claims = n.obj_children.values().any(|c| !c.rename_claim.is_empty());
+        n.claims = n
+            .obj_children
+            .values()
+            .any(|c| !c.rename_claim.is_empty() || Reach::brings(c, &reach.claims));
+        n.renames = n
+            .obj_children
+            .values()
+            .chain(n.obj_rest.as_deref())
+            .any(|c| c.rename_to.is_some() || Reach::brings(c, &reach.renames));
     }
     for cn in n.obj_children.values_mut() {
-        pure &= prepare(cn, defs);
+        pure &= prepare(cn, defs, reach);
     }
     if let Some(r) = n.obj_rest.as_deref_mut() {
-        pure &= prepare(r, defs);
+        pure &= prepare(r, defs, reach);
     }
     for cn in n.arr_children.iter_mut() {
-        pure &= prepare(cn, defs);
+        pure &= prepare(cn, defs, reach);
     }
     if let Some(c) = n.arr_child.as_deref_mut() {
-        pure &= prepare(c, defs);
+        pure &= prepare(c, defs, reach);
     }
     if let Some(r) = n.arr_rest.as_deref_mut() {
-        pure &= prepare(r, defs);
+        pure &= prepare(r, defs, reach);
     }
     for sn in n.list.iter_mut() {
-        pure &= prepare(sn, defs);
+        pure &= prepare(sn, defs, reach);
     }
     // A Contains counts with a shape of its own, prepared when it was
     // built; what that shape defines is the schema's to refer to as well.
     for c in counted(&n.befores) {
-        prepare(&mut c.shape.clone(), defs);
+        prepare(&mut c.shape.clone(), defs, reach);
     }
     if let Some(name) = &n.define_name {
         defs.insert(name.clone(), Arc::new(n.clone()));

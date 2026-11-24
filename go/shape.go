@@ -63,6 +63,7 @@ func (s *Schema) isNoUser() bool {
 func (s *Schema) reread(g uint64) {
 	defs := map[string]*node{}
 	prepare(s.root, defs)
+	referClaims(s.root)
 	s.defs.Store(&defsTable{m: defs})
 	s.pure.Store(!hasValidators(s.root))
 	s.noUser.Store(!hasUserValidators(s.root))
@@ -82,56 +83,100 @@ func (s *Schema) defsMap() map[string]*node {
 // keys it accepts, and every Define'd node is collected by name. Both were
 // derived on every validation before.
 func prepare(n *node, defs map[string]*node) {
+	eachNode(n, func(n *node) {
+		if n.defineName != "" {
+			defs[n.defineName] = n
+		}
+		n.plain = plainNode(n)
+		if n.kind == KindObject && n.consumed == nil {
+			// The declared keys. Neither a rename's target nor a claim's
+			// key is one: a value that already has a target is not
+			// allowed, and a claimed key is the object's only once a claim
+			// takes it (see validateObject), as in TS.
+			consumed := make(map[string]bool, len(n.objKeys))
+			for _, k := range n.objKeys {
+				consumed[k] = true
+				if len(n.objChildren[k].renameClaim) > 0 {
+					n.claims = true
+				}
+			}
+			n.consumed = consumed
+			n.objKeysAny = make([]any, len(n.objKeys))
+			n.objChildList = make([]*node, len(n.objKeys))
+			for i, k := range n.objKeys {
+				n.objKeysAny[i] = k
+				n.objChildList[i] = n.objChildren[k]
+			}
+			for k := range n.objChildren {
+				if !contains(n.objKeys, k) {
+					n.objExtra = append(n.objExtra, k)
+				}
+			}
+			// Sorted: the map's order is random and an error order is
+			// compared exactly.
+			sort.Strings(n.objExtra)
+		}
+	})
+}
+
+// eachNode calls f on n and on every node under it: its children and rest
+// shapes, the branches of its composition, and the shapes its checks put
+// values to.
+func eachNode(n *node, f func(*node)) {
 	if n == nil {
 		return
 	}
-	if n.defineName != "" {
-		defs[n.defineName] = n
+	f(n)
+	for _, cn := range n.objChildren {
+		eachNode(cn, f)
 	}
-	n.plain = plainNode(n)
-	if n.kind == KindObject && n.consumed == nil {
-		// The declared keys. Neither a rename's target nor a claim's key
-		// is one: a value that already has a target is not allowed, and a
-		// claimed key is the object's only once a claim takes it (see
-		// validateObject), as in TS.
-		consumed := make(map[string]bool, len(n.objKeys))
-		for _, k := range n.objKeys {
-			consumed[k] = true
-			if len(n.objChildren[k].renameClaim) > 0 {
+	eachNode(n.objRest, f)
+	for _, cn := range n.arrChildren {
+		eachNode(cn, f)
+	}
+	eachNode(n.arrChild, f)
+	eachNode(n.arrRest, f)
+	for _, sn := range n.list {
+		eachNode(sn, f)
+	}
+	for _, cn := range checkNodes(n.afters, checkNodes(n.befores, nil)) {
+		eachNode(cn, f)
+	}
+}
+
+// referClaims marks an object a child of which can claim through a Refer
+// as one a child of which claims (see node.claims): the node a Refer of
+// the child's name puts in its place claims, or refers on to a name whose
+// node does. Every Define of a name counts, since a Refer takes the one
+// the call met last.
+func referClaims(root *node) {
+	defined := map[string][]*node{}
+	eachNode(root, func(n *node) {
+		if n.defineName != "" {
+			defined[n.defineName] = append(defined[n.defineName], n)
+		}
+	})
+	claims := map[string]bool{}
+	for grew := true; grew; {
+		grew = false
+		for name, ns := range defined {
+			for _, d := range ns {
+				if !claims[name] && (len(d.renameClaim) > 0 || claims[d.referName]) {
+					claims[name], grew = true, true
+				}
+			}
+		}
+	}
+	if len(claims) == 0 {
+		return
+	}
+	eachNode(root, func(n *node) {
+		for _, cn := range n.objChildList {
+			if claims[cn.referName] {
 				n.claims = true
 			}
 		}
-		n.consumed = consumed
-		n.objKeysAny = make([]any, len(n.objKeys))
-		n.objChildList = make([]*node, len(n.objKeys))
-		for i, k := range n.objKeys {
-			n.objKeysAny[i] = k
-			n.objChildList[i] = n.objChildren[k]
-		}
-		for k := range n.objChildren {
-			if !contains(n.objKeys, k) {
-				n.objExtra = append(n.objExtra, k)
-			}
-		}
-		// Sorted: the map's order is random and an error order is compared
-		// exactly.
-		sort.Strings(n.objExtra)
-	}
-	for _, cn := range n.objChildren {
-		prepare(cn, defs)
-	}
-	prepare(n.objRest, defs)
-	for _, cn := range n.arrChildren {
-		prepare(cn, defs)
-	}
-	prepare(n.arrChild, defs)
-	prepare(n.arrRest, defs)
-	for _, sn := range n.list {
-		prepare(sn, defs)
-	}
-	for _, cn := range checkNodes(n.afters, checkNodes(n.befores, nil)) {
-		prepare(cn, defs)
-	}
+	})
 }
 
 // checkNodes appends the shapes the checks put values to themselves (see

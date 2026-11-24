@@ -127,7 +127,68 @@ pub(crate) fn validate_node(
         parent_is_array,
         w,
         verr,
+        None,
     )
+}
+
+/// What an object gives a child that refers, as the node a `Refer` puts in
+/// the child's place has its checks run where the child stands in
+/// TypeScript, its rename's among them: the object as it stands, which a
+/// claim of that node reads where the child's value is absent and the
+/// object claims (none otherwise), the key the claim took with whether the
+/// claiming node keeps it, and the node the child ended on (none for its
+/// own), whose rename the object then applies.
+pub(crate) struct Site<'m> {
+    now: Option<&'m Map>,
+    took: Option<(String, bool)>,
+    last: Option<Arc<Node>>,
+}
+
+/// `validate_node` for an object's child that refers (see `Site`): whether
+/// to keep the slot, what a claim took, and the node the child ended on.
+/// Out of line, as few children refer, it leaves the object's walk as it
+/// was.
+#[inline(never)]
+fn validate_child(
+    n: &Node,
+    val: &mut Value,
+    key: &str,
+    w: &mut Walk<'_>,
+    verr: &mut ValidationError,
+    now: Option<&Map>,
+) -> (bool, Option<(String, bool)>, Option<Arc<Node>>) {
+    let mut site = Site {
+        now,
+        took: None,
+        last: None,
+    };
+    let keep = validate_node_with(
+        n,
+        &n.befores,
+        &n.afters,
+        n.silent,
+        Cur::Mut(val),
+        key,
+        false,
+        w,
+        verr,
+        Some(&mut site),
+    );
+    (keep, site.took, site.last)
+}
+
+/// What a claim of the node a `Refer` put in place took is the object's,
+/// and goes unless the claiming node keeps it. Reports whether it took a
+/// key.
+fn take(map: &mut Map, taken: &mut HashSet<String>, took: Option<(String, bool)>) -> bool {
+    let Some((src, kept)) = took else {
+        return false;
+    };
+    if !kept {
+        map.shift_remove(&src);
+    }
+    taken.insert(src);
+    true
 }
 
 /// `validate_node` with the checks and the silence given apart from the
@@ -144,8 +205,9 @@ pub(crate) fn validate_node_with(
     parent_is_array: bool,
     w: &mut Walk<'_>,
     verr: &mut ValidationError,
+    mut site: Option<&mut Site<'_>>,
 ) -> bool {
-    let absent = cur.get().is_undefined();
+    let mut absent = cur.get().is_undefined();
     // A before may replace the value or the node; a replacement value under a
     // shared cursor lives here.
     let mut over: Option<Value> = None;
@@ -256,6 +318,22 @@ pub(crate) fn validate_node_with(
                 slot = 0;
                 list_kept = true;
             }
+            // The node put in this one's place claims for an absent value
+            // now, as its rename's check, its first, does in TypeScript:
+            // the value of the first key it claims that the object holds.
+            if let Some(s) = site.as_deref_mut() {
+                let undefined = over.as_ref().unwrap_or_else(|| cur.get()).is_undefined();
+                let found = s.now.filter(|_| undefined).and_then(|m| {
+                    nn.rename_claim
+                        .iter()
+                        .find_map(|src| m.get(src).filter(|v| !v.is_undefined()).map(|v| (src, v)))
+                });
+                if let Some((src, v)) = found {
+                    s.took = Some((src.clone(), nn.rename_keep));
+                    cur.set(v.clone());
+                    absent = false;
+                }
+            }
             node_over = Some(nn);
         }
         let cur_node: &Node = node_over.as_deref().unwrap_or(n);
@@ -334,6 +412,9 @@ pub(crate) fn validate_node_with(
         }
     }
 
+    if let Some(s) = site {
+        s.last = node_over.clone();
+    }
     // A value a check set undefined, as Ignore drops one, leaves the slot
     // out, as TypeScript's undefined does.
     kept && !dropped
@@ -805,9 +886,7 @@ fn validate_object(
     // TypeScript captures them before any child runs: a rename writes into
     // the object while the children after it still read the input.
     let orig: Option<Map> = match &oc {
-        Cur::Mut(map) if n.obj_children.values().any(|c| c.rename_to.is_some()) => {
-            Some((**map).clone())
-        }
+        Cur::Mut(map) if n.renames => Some((**map).clone()),
         _ => None,
     };
     // The keys claims took, which are the object's (see the unknown keys
@@ -835,7 +914,7 @@ fn validate_object(
                     }
                 }
             }
-            let present = !val.is_undefined();
+            let mut present = !val.is_undefined();
             let takes = takes(cn);
             // A skipped key its checks leave as it was is not put back (see
             // below); only then is the value before them needed.
@@ -843,7 +922,20 @@ fn validate_object(
             if w.paths {
                 w.push(PathPart::Key(child_key(n, idx, k)));
             }
-            let keep = validate_node(cn, Cur::Mut(&mut val), k, false, w, verr);
+            // A child that refers is given a site (see Site): the node its
+            // Refer puts in its place may claim, or rename, and the object
+            // does both for it as for a node of its own.
+            let (keep, last) = if cn.refer_name.is_some() {
+                let now = (!present && n.claims).then_some(&**map);
+                let (keep, took, last) = validate_child(cn, &mut val, k, w, verr, now);
+                present |= take(map, &mut taken, took);
+                (keep, last)
+            } else {
+                (
+                    validate_node(cn, Cur::Mut(&mut val), k, false, w, verr),
+                    None,
+                )
+            };
             w.pop();
             // What the child produced goes under its key, over what a rename
             // before it put there, as TypeScript puts it back. A skipped key
@@ -856,18 +948,7 @@ fn validate_object(
             } else if !keep && (present || takes) {
                 map.shift_remove(k);
             }
-            // A rename then sets its target to the value, undefined (left
-            // out) where there is none, and takes the key away unless kept.
-            if let Some(to) = cn.rename_to.as_ref().filter(|to| *to != k) {
-                if keep {
-                    map.insert(to.clone(), val);
-                } else {
-                    map.shift_remove(to);
-                }
-                if !cn.rename_keep {
-                    map.shift_remove(k);
-                }
-            }
+            rename_in(map, last.as_deref().unwrap_or(cn), k, keep, val);
             continue;
         }
 
@@ -973,15 +1054,26 @@ fn validate_object(
             if let (Some(orig), Cur::Mut(map)) = (orig.as_ref(), &mut oc) {
                 let mut val = orig.get(&k).cloned().unwrap_or(Value::Undefined);
                 let before = (rest.skippable && !takes(rest)).then(|| val.clone());
-                let keep = validate_node(rest, Cur::Mut(&mut val), &k, false, w, verr);
+                // The rest shape renames each key it takes, as a declared
+                // key's node does, through a Refer too (see Site).
+                let (keep, last) = if rest.refer_name.is_some() {
+                    let (keep, _, last) = validate_child(rest, &mut val, &k, w, verr, None);
+                    (keep, last)
+                } else {
+                    (
+                        validate_node(rest, Cur::Mut(&mut val), &k, false, w, verr),
+                        None,
+                    )
+                };
                 w.pop();
                 // As a declared key: one its checks left as it was under a
                 // skipping shape is not put back.
                 if keep && !before.is_some_and(|b| b == val) {
-                    map.insert(k, val);
+                    map.insert(k.clone(), val.clone());
                 } else if !keep {
                     map.shift_remove(&k);
                 }
+                rename_in(map, last.as_deref().unwrap_or(rest), &k, keep, val);
                 continue;
             }
             let child = match &mut oc {
@@ -1004,6 +1096,24 @@ fn validate_object(
 /// always sets the value, as TypeScript's `uval` does.
 fn takes(n: &Node) -> bool {
     n.befores.iter().any(|b| b.inner.is_some())
+}
+
+/// A rename of the node key `k` ended on sets its target to the value,
+/// undefined (left out) where there is none, whatever an earlier rename put
+/// there, and takes the key away unless kept. A rename to the key's own
+/// name sets it all the same, as TypeScript's does.
+fn rename_in(map: &mut Map, fnode: &Node, k: &str, keep: bool, val: Value) {
+    let Some(to) = fnode.rename_to.as_ref() else {
+        return;
+    };
+    if keep {
+        map.insert(to.clone(), val);
+    } else {
+        map.shift_remove(to);
+    }
+    if to != k && !fnode.rename_keep {
+        map.shift_remove(k);
+    }
 }
 
 fn validate_array(

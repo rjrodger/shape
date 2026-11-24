@@ -597,6 +597,64 @@ function build() {
   add('dr-1', { a: E('Define("d",Number)'), b: E('Refer("d")') },
     [{ a: 1, b: 2 }, { a: 1, b: 'x' }, { a: 'x', b: 2 }, {}])
 
+  // A Rename reached through a Refer: the node the Refer puts in a key's
+  // place renames the key, claims for it, and is judged absent, as a node
+  // of the key's own is. The Define renames its own key too.
+  const RN = (o, spec = E('Number')) => CALL('Rename', o, spec)
+  const RCL = (o) => RN({ name: 'b', claim: ['a'], ...o })
+  const FILL = (name = 'R') => CALL('Refer', { name, fill: true })
+  const DEF = (spec) => CALL('Define', 'R', spec)
+  const RR_IN = [
+    { def: 2, o: { a: 1 } }, { def: 2, o: { a: 1, z: 1 } }, { def: 2, o: { b: 1 } }, { def: 2, o: {} },
+    { def: 2, o: { a: 'x' } }, { def: 2, o: { a: 1, b: 2, c: 3 } }, { def: 2, o: { a: 1, x: 5 } },
+    { def: 2, o: { x: 5 } }, { def: 2 }, { o: { a: 1 } }, {}, { def: 'q', o: { a: 1 } },
+    { def: 2, o: { a: null } }, { def: 2, o: { a: 1, b: 2 } },
+  ]
+  add('rr-plain', { def: DEF(RN('x')), o: { a: FILL() } }, RR_IN)
+  add('rr-plain-lax', { def: DEF(RN('x')), o: { a: CALL('Refer', 'R') } }, RR_IN)
+  add('rr-keep', { def: DEF(RN({ name: 'x', keep: true })), o: { a: FILL() } }, RR_IN)
+  add('rr-open', { def: DEF(RN('x')), o: { $open: { a: FILL() } } }, RR_IN)
+  add('rr-rest', { def: DEF(RN('x')), o: CALL('Child', E('Number'), { a: FILL() }) }, RR_IN)
+  add('rr-two', { def: DEF(RN('x')), o: { a: FILL(), b: FILL() } }, RR_IN)
+  add('rr-elements', { def: DEF(RN('x')), o: [FILL()] },
+    [{ def: 2, o: [] }, { def: 2, o: [1] }, { def: 2, o: [1, 2] }, { def: 2, o: ['x'] }])
+  add('rr-same-key', { def: DEF(RN('a')), o: { a: FILL() } }, RR_IN)
+  add('rr-optional', { def: DEF(RN('x', E('Optional(Number)'))), o: { a: FILL() } }, RR_IN)
+  add('rr-default', { def: DEF(RN('x', 7)), o: { a: FILL() } }, RR_IN)
+  add('rr-declared-target', { def: DEF(RN('x')), o: { a: FILL(), x: E('Optional(Number)') } }, RR_IN)
+  add('rr-required-target', { def: DEF(RN('x')), o: { a: FILL(), x: E('Number') } }, RR_IN)
+  add('rr-swap', { d1: CALL('Define', 'A', RN('b')), d2: CALL('Define', 'B', RN('a')), o: { a: FILL('A'), b: FILL('B') } },
+    [{ d1: 1, d2: 2, o: { a: 1, b: 2 } }, { d1: 1, d2: 2, o: { a: 1 } }, { d1: 1, d2: 2, o: { b: 2 } }, { d1: 1, d2: 2, o: {} }])
+  add('rr-chain', { def: DEF(RN('x')), e: CALL('Define', 'S', FILL()), o: { a: FILL('S') } },
+    RR_IN.map(i => ({ ...i, e: 3 })))
+  add('rr-nested-define', { o: { def: DEF(RN('x')), p: { a: FILL() } } },
+    [{ o: { def: 1, p: { a: 2 } } }, { o: { def: 1, p: {} } }, { o: { p: { a: 2 } } }])
+  add('rr-claim', { def: DEF(RCL()), o: { b: FILL() } }, RR_IN)
+  add('rr-claim-lax', { def: DEF(RCL()), o: { b: CALL('Refer', 'R') } }, RR_IN)
+  add('rr-claim-keep', { def: DEF(RCL({ keep: true })), o: { b: FILL() } }, RR_IN)
+  add('rr-claim-twice', { def: DEF(RCL()), o: { $open: { b: FILL(), c: FILL() } } }, RR_IN)
+  add('rr-claim-open', { def: DEF(RCL()), o: { $open: { b: FILL() } } }, RR_IN)
+  add('rr-claim-rest', { def: DEF(RCL()), o: CALL('Child', E('Number'), { b: FILL() }) }, RR_IN)
+  add('rr-claim-other', { def: DEF(RCL()), o: { k: FILL() } }, RR_IN)
+  add('rr-claim-chain', { def: DEF(RCL()), e: CALL('Define', 'S', FILL()), o: { b: FILL('S') } },
+    RR_IN.map(i => ({ ...i, e: 3 })))
+  // A rest shape renames every key it takes, itself or through a Refer.
+  const REST_IN = [{}, { a: 1 }, { a: 1, z: 2 }, { z: 2 }, { a: 'x' }, { a: 1, x: 3 }]
+  add('rr-rest-shape', { def: DEF(RN('x')), o: CALL('Child', FILL(), {}) }, REST_IN.map(o => ({ def: 2, o })))
+  add('r-rest-shape', CALL('Child', RN('x')), REST_IN)
+  add('r-rest-shape-keep', CALL('Child', RN({ name: 'x', keep: true })), REST_IN)
+  add('r-rest-shape-skip', CALL('Child', RN('x', E('Skip(Number)'))), REST_IN)
+  // A rename to the key's own name sets it all the same: a skipped value
+  // goes back over what an earlier rename put there, and an absent one
+  // leaves that out.
+  const SELF_IN = [{ a: 1, x: 3 }, { a: 1 }, { x: 3 }, {}, { a: 1, x: 'q' }]
+  add('r-self-skip', { a: E('Rename("x")'), x: E('Rename("x",Skip(Number))') }, SELF_IN)
+  add('r-self-any', { a: E('Rename("x")'), x: E('Rename("x")') }, SELF_IN)
+  add('r-self-optional', { a: E('Rename("x")'), x: E('Rename("x",Optional(Number))') }, SELF_IN)
+  // A node a Refer puts in place that injects null for an absent value.
+  add('rr-null-default', { d: CALL('Define', 'N', E('Default(null,String)')), o: { a: FILL('N') } },
+    [{ d: 'q', o: {} }, { d: 'q', o: { a: 'x' } }, { d: 'q', o: { a: null } }, { o: {} }])
+
   // Key expressions.
   add('ke-1', { 'a: Min(2)': 0 }, OBJS)
   add('ke-2', { 'a: String': '' }, OBJS)

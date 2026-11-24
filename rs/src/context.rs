@@ -95,6 +95,7 @@ impl Default for Trials {
 }
 
 impl Context {
+    #[inline]
     pub fn new() -> Context {
         Context::default()
     }

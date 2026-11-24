@@ -134,6 +134,12 @@ func typeMarkFor(k Kind) int {
 // validateNode is the recursive validation engine. It returns the produced
 // value (defaults injected, child shapes validated) and writes errors via verr.
 func validateNode(n *node, in any, path []string, pathArr []any, key string, parent any, ctx *Context, match bool, verr *ValidationError) any {
+	return validateNodeAt(n, in, path, pathArr, key, parent, ctx, match, verr, nil)
+}
+
+// validateNodeAt is validateNode for a child an object gives a site, as
+// it does a child that refers (see referSite).
+func validateNodeAt(n *node, in any, path []string, pathArr []any, key string, parent any, ctx *Context, match bool, verr *ValidationError, site *referSite) any {
 	if n == nil {
 		return in
 	}
@@ -224,6 +230,12 @@ func validateNode(n *node, in any, path []string, pathArr []any, key string, par
 				}
 			}
 			bI = -2
+			// The node put in this one's place claims for an absent value
+			// now, as its Rename's check, its first, does in TS: the value
+			// of the first key it claims that the object holds.
+			if site != nil && site.now != nil && state.absent && state.Value == nil && site.claim(n) {
+				in, state.Value, state.absent, absent = site.val, site.val, false, false
+			}
 		}
 		if !ok && absentSkips(state, update) {
 			continue
@@ -246,6 +258,9 @@ func validateNode(n *node, in any, path []string, pathArr []any, key string, par
 	out := state.Value
 	if state.dropped {
 		out = undefinedVal
+	}
+	if site != nil {
+		site.last = state.Node
 	}
 	if ctx != nil {
 		ctx.popState()
@@ -713,6 +728,20 @@ func validateObject(n *node, in any, path []string, pathArr []any, parent any, c
 	// The keys claims took, which are the object's (see reportUnknown and
 	// the rest keys).
 	var taken map[string]bool
+	// take makes a key a claim took the object's, and removes it unless the
+	// claiming node keeps it. A match removes it from the copy, which it
+	// writes as validating does, so that a later claim finds the object as
+	// validating leaves it.
+	take := func(src string, keep bool) {
+		if taken == nil {
+			taken = map[string]bool{}
+		}
+		taken[src] = true
+		if !keep {
+			ensure()
+			delete(out, src)
+		}
+	}
 
 	present := 0
 	noPath := skipPath(ctx)
@@ -752,47 +781,57 @@ func validateObject(n *node, in any, path []string, pathArr []any, parent any, c
 				if sv, sh := now[src]; sh {
 					v = sv
 					has, claimed = true, true
-					if taken == nil {
-						taken = map[string]bool{}
-					}
-					taken[src] = true
-					// A match removes it from the copy, which it writes
-					// as validating does, so that a later claim finds the
-					// object as validating leaves it.
-					if !cn.renameKeep {
-						ensure()
-						delete(out, src)
-					}
+					take(src, cn.renameKeep)
 					break
 				}
 			}
 		}
 
+		// A child that refers is given a site (see referSite): the node its
+		// Refer puts in its place may claim, or rename, and the object does
+		// both for it as for a node of its own.
+		var site *referSite
+		if cn.referName != "" {
+			site = &referSite{}
+			if !has && n.claims {
+				site.now = obj
+				if out != nil {
+					site.now = out
+				}
+			}
+		}
+
 		if !has {
-			produced = validateNode(cn, undefinedVal, kpath, kpathArr, k, parentOf, ctx, match, verr)
-			if absentOmits(cn, produced) {
+			produced = validateNodeAt(cn, undefinedVal, kpath, kpathArr, k, parentOf, ctx, match, verr, site)
+			if site != nil && site.claimed {
+				v = site.val
+				has, claimed = true, true
+				take(site.src, site.keep)
+			} else if fn := endNode(cn, site); absentOmits(fn, produced) {
 				// A taker sets even an absent value, here to nothing, which
 				// clears what a rename before it put under the key, as TS's
 				// does.
-				if takes(cn) && !match {
+				if takes(fn) && !match {
 					ensure()
 					delete(out, k)
 				}
-				renameNothing(cn, k, match, ensure, &out)
+				renameNothing(fn, k, match, ensure, &out)
 				continue
 			}
 		} else {
-			produced = validateNode(cn, v, kpath, kpathArr, k, parentOf, ctx, match, verr)
+			produced = validateNodeAt(cn, v, kpath, kpathArr, k, parentOf, ctx, match, verr, site)
 		}
 
 		if match {
 			continue
 		}
+		// The node the child ended on renames.
+		fn := endNode(cn, site)
 		// A value an Ignore dropped leaves the key out.
 		if isUndef(produced) {
 			ensure()
 			delete(out, k)
-			renameNothing(cn, k, match, ensure, &out)
+			renameNothing(fn, k, match, ensure, &out)
 			continue
 		}
 		// A claimed value is put under the key as well, as TS's claim does.
@@ -804,15 +843,7 @@ func validateObject(n *node, in any, path []string, pathArr []any, parent any, c
 			ensure()
 			out[k] = produced
 		}
-
-		// Apply Rename: if child has renameTo, move into target key.
-		if cn.renameTo != "" && cn.renameTo != k {
-			ensure()
-			out[cn.renameTo] = produced
-			if !cn.renameKeep {
-				delete(out, k)
-			}
-		}
+		renameValue(fn, k, produced, left, ensure, &out)
 	}
 
 	if deferScan && present < len(obj) {
@@ -851,24 +882,34 @@ func validateObject(n *node, in any, path []string, pathArr []any, parent any, c
 		sort.Strings(rest)
 
 		for _, k := range rest {
-			produced := validateNode(n.objRest, obj[k], append(path, k), append(pathArr, k), k, parentOf, ctx, match, verr)
+			// The rest shape renames each key it takes, as a declared key's
+			// node does, through a Refer too (see referSite).
+			var site *referSite
+			if n.objRest.referName != "" {
+				site = &referSite{}
+			}
+			produced := validateNodeAt(n.objRest, obj[k], append(path, k), append(pathArr, k), k, parentOf, ctx, match, verr, site)
+			if match {
+				continue
+			}
+			fn := endNode(n.objRest, site)
 			// An open object whose rest shape is an Ignore drops the keys
 			// that do not validate.
-			if !match && isUndef(produced) {
+			if isUndef(produced) {
 				ensure()
 				delete(out, k)
+				renameNothing(fn, k, match, ensure, &out)
 				continue
 			}
 			// A skipped rest key its checks left as it was is not put back,
 			// as TS's skip leaves the parent alone: what a rename put under
 			// the key, or took from it, stays.
-			if n.objRest.skippable && !takes(n.objRest) && sameValue(produced, obj[k]) {
-				continue
-			}
-			if !match && (out != nil || !sameValue(produced, obj[k])) {
+			left := n.objRest.skippable && !takes(n.objRest) && sameValue(produced, obj[k])
+			if !left && (out != nil || !sameValue(produced, obj[k])) {
 				ensure()
 				out[k] = produced
 			}
+			renameValue(fn, k, produced, left, ensure, &out)
 		}
 	}
 
@@ -892,11 +933,85 @@ func takes(n *node) bool {
 	return false
 }
 
+// referSite is what an object gives a child that refers, as the node a
+// Refer puts in the child's place has its checks run where the child
+// stands in TS, its Rename's among them: the object as it stands, which a
+// claim of that node reads where the child's value is absent and the
+// object claims (nil otherwise), what the claim took, and the node the
+// child ended on, whose Rename the object then applies.
+type referSite struct {
+	now map[string]any
+	// The key a claim took, its value, and whether the claiming node
+	// keeps the key.
+	src     string
+	val     any
+	keep    bool
+	claimed bool
+	last    *node
+}
+
+// claim takes the value of the first key rn claims that the object holds,
+// and says whether there was one. Out of line, as it is rare, it keeps the
+// walk's frame small.
+//
+//go:noinline
+func (s *referSite) claim(rn *node) bool {
+	for _, src := range rn.renameClaim {
+		if sv, sh := s.now[src]; sh {
+			if isNull(sv) {
+				sv = nil
+			}
+			s.src, s.val, s.keep, s.claimed = src, sv, rn.renameKeep, true
+			return true
+		}
+	}
+	return false
+}
+
+// endNode is the node a child ended on: the one a Refer put in its place,
+// where it was given a site (see referSite), and otherwise its own.
+func endNode(cn *node, site *referSite) *node {
+	if site != nil {
+		return site.last
+	}
+	return cn
+}
+
+// renameValue applies a Rename to the value key k produced: the target
+// takes it, whatever an earlier rename put there, and the key goes unless
+// kept. A rename to the key's own name sets it all the same, as TS's does,
+// so a value a skip left as it was (left) goes back over what an earlier
+// rename put there.
+func renameValue(fn *node, k string, produced any, left bool, ensure func(), out *map[string]any) {
+	switch fn.renameTo {
+	case "":
+		return
+	case k:
+		if left {
+			ensure()
+			(*out)[k] = produced
+		}
+		return
+	}
+	ensure()
+	(*out)[fn.renameTo] = produced
+	if !fn.renameKeep {
+		delete(*out, k)
+	}
+}
+
 // renameNothing applies a Rename whose value is absent or dropped, as TS's
 // does: the target is set undefined, which leaves it out, whatever an
-// earlier rename put there, and the key goes too unless kept.
+// earlier rename put there, and the key goes too unless kept. A rename to
+// the key's own name leaves out what an earlier rename put there (where
+// nothing was copied, the input has no such key, and a nil map deletes
+// nothing).
 func renameNothing(cn *node, k string, match bool, ensure func(), out *map[string]any) {
-	if cn.renameTo == "" || cn.renameTo == k || match {
+	if cn.renameTo == "" || match {
+		return
+	}
+	if cn.renameTo == k {
+		delete(*out, k)
 		return
 	}
 	ensure()

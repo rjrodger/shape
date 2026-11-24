@@ -91,8 +91,9 @@ type node struct {
 	// array (boxing a string allocates, and it happened per key per call).
 	consumed   map[string]bool
 	objKeysAny []any
-	// claims marks an object a child of which claims keys with a Rename:
-	// which keys it does not accept is known once its children have run.
+	// claims marks an object a child of which claims keys with a Rename,
+	// or can through a Refer (see referClaims): which keys it does not
+	// accept is known once its children have run.
 	claims bool
 	// The declared children in objKeys order, and the keys objChildren
 	// holds that objKeys does not (none in a tree the builders make, so

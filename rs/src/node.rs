@@ -256,10 +256,14 @@ pub struct Node {
     /// renames' targets, nor a claim's keys until a claim takes them. Set
     /// when the tree is prepared.
     pub consumed: std::collections::HashSet<String>,
-    /// A child claims keys with a rename, so which keys the object does not
-    /// accept is known once its children have run. Set when the tree is
-    /// prepared.
+    /// A child claims keys with a rename, or can through a `Refer`, so
+    /// which keys the object does not accept is known once its children
+    /// have run. Set when the tree is prepared.
     pub claims: bool,
+    /// A child or the rest shape renames, or can through a `Refer`, so the
+    /// object takes each value as the input held it. Set when the tree is
+    /// prepared.
+    pub renames: bool,
     /// The declared keys in order, shared with the paths that name them.
     /// Set when the tree is prepared.
     pub obj_keys: Vec<Arc<str>>,

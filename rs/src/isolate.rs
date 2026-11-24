@@ -57,6 +57,7 @@ impl Inner {
             state.parent_is_array,
             &mut w,
             &mut sub,
+            None,
         );
         if !kept {
             val = Value::Undefined;

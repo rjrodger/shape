@@ -53,6 +53,10 @@ const JS_DEPENDENT = { dependentSchemas: { a: { properties: { b: { type: 'number
 const CALL = (name, ...args) => ({ $call: [name, ...args] })
 // A Rename that claims key a for b, by default, as a Number.
 const CL = (o = {}, spec = N) => CALL('Rename', { name: 'b', claim: ['a'], ...o }, spec)
+// The node defined as R, which renames its own key too, and a Refer that
+// puts it in a key's place even when the key is absent.
+const RDEF = (spec) => CALL('Define', 'R', spec)
+const RFILL = CALL('Refer', { name: 'R', fill: true })
 const ABASE = { a: 1, b: T, c: true }
 
 // Cases grouped by file. Each case: [name, spec, input].
@@ -337,6 +341,25 @@ const files = {
     ['fault-closed-nested', { o: CALL('Fault', 'bad keys at $PATH', { b: N }) }, { o: { b: 1, z: 1 } }],
     ['claim-fault', CALL('Fault', 'bad keys', { b: CL() }), { a: 2 }],
     ['claim-fault-unknown', CALL('Fault', 'bad keys', { b: CL() }), { a: 2, z: 1 }],
+    // A Rename the node a Refer puts in a key's place carries renames the
+    // key, and claims for it, as one of the key's own does.
+    ['refer-rename', { def: RDEF(CALL('Rename', 'x', N)), o: { a: { $expr: 'Refer("R")' } } }, { def: 2, o: { a: 1 } }],
+    ['refer-rename-keep', { def: RDEF(CALL('Rename', { name: 'x', keep: true }, N)), o: { a: { $expr: 'Refer("R")' } } }, { def: 2, o: { a: 1 } }],
+    ['refer-rename-target', { def: RDEF(CALL('Rename', 'x', N)), o: { a: { $expr: 'Refer("R")' } } }, { def: 2, o: { a: 1, x: 5 } }],
+    ['refer-rename-open', { def: RDEF(CALL('Rename', 'x', N)), o: { $open: { a: { $expr: 'Refer("R")' } } } }, { def: 2, o: { a: 1, z: 3 } }],
+    ['refer-rename-chain', { def: RDEF(CALL('Rename', 'x', N)), e: CALL('Define', 'S', { $expr: 'Refer("R")' }), o: { a: { $expr: 'Refer("S")' } } }, { def: 2, e: 3, o: { a: 1 } }],
+    ['refer-rename-rest-shape', { def: RDEF(CALL('Rename', { name: 'x', keep: true }, N)), o: CALL('Child', { $expr: 'Refer("R")' }, {}) }, { def: 2, o: { a: 1 } }],
+    ['refer-claim', { def: RDEF(CL()), o: { b: RFILL } }, { def: 2, o: { a: 1 } }],
+    ['refer-claim-unknown', { def: RDEF(CL()), o: { b: RFILL } }, { def: 2, o: { a: 1, z: 1 } }],
+    ['refer-claim-keep', { def: RDEF(CL({ keep: true })), o: { b: RFILL } }, { def: 2, o: { a: 1 } }],
+    ['refer-claim-bad', { def: RDEF(CL()), o: { b: RFILL } }, { def: 2, o: { a: 'x' } }],
+    ['refer-claim-twice', { def: RDEF(CL()), o: { $open: { b: RFILL, c: RFILL } } }, { def: 2, o: { a: 1 } }],
+    ['refer-claim-rest', { def: RDEF(CL()), o: CALL('Child', N, { b: RFILL }) }, { def: 2, o: { a: 1, z: 2 } }],
+    // A rest shape renames every key it takes; a rename to the key's own
+    // name sets it all the same.
+    ['rename-rest-shape', CALL('Child', CALL('Rename', 'x', N)), { a: 1, z: 2 }],
+    ['rename-self-skip', { a: { $expr: 'Rename("x")' }, x: { $expr: 'Rename("x",Skip(Number))' } }, { a: 1, x: 3 }],
+    ['rename-self-absent', { a: { $expr: 'Rename("x")' }, x: { $expr: 'Rename("x")' } }, { a: 1 }],
     ['disc-branch-ok', { p: DISC }, { p: { bark: true, kind: 'dog' } }],
     ['disc-branch-error', { p: DISC }, { p: { fins: 'x', kind: 'fish' } }],
     ['disc-branch-missing-key', { p: DISC }, { p: { kind: 'dog' } }],
