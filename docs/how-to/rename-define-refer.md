@@ -42,6 +42,9 @@ belongs to the object. A claim key it leaves is unknown, like any key the
 object does not declare: a closed object rejects `{ userId: 7, id: 8 }`, and
 an open one hands `id` to its rest shape.
 
+As an open object's rest shape, `Rename` moves every key the rest shape
+takes: `Child(Rename('x', Number))` turns `{ a: 1 }` into `{ x: 1 }`.
+
 ## Define and refer to a shape
 
 `Define(name, shape)` records a shape under a name during validation;
@@ -67,6 +70,20 @@ s := shape.MustShape(shape.Define("node", map[string]any{
     "value":    shape.Number,
     "children": []any{shape.Refer("node")},
 }))
+```
+
+The shape a `Refer` substitutes acts where the `Refer` stands. A `Rename`
+in it renames that key, and its claim reads the object that holds the key:
+
+```js
+const { Shape, Define, Refer, Rename } = require('shape')
+
+const shape = Shape({
+  id: Define('ident', Rename({ name: 'userId' }, Number)),
+  owner: { id: Refer('ident') },
+})
+
+shape({ id: 7, owner: { id: 8 } })   // → { owner: { userId: 8 }, userId: 7 }
 ```
 
 ## Fill from a reference even when absent

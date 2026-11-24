@@ -91,8 +91,9 @@ type node struct {
 	// array (boxing a string allocates, and it happened per key per call).
 	consumed   map[string]bool
 	objKeysAny []any
-	// claims marks an object a child of which claims keys with a Rename:
-	// which keys it does not accept is known once its children have run.
+	// claims marks an object a child or the rest shape of which claims
+	// keys with a Rename, or can through a Refer (see referClaims): which
+	// keys it does not accept is known once its children have run.
 	claims bool
 	// The declared children in objKeys order, and the keys objChildren
 	// holds that objKeys does not (none in a tree the builders make, so
@@ -118,6 +119,10 @@ type node struct {
 	renameTo   string
 	renameKeep bool
 	renameClaim []string
+	// claimAt is where a Rename's claim runs among the node's befores, as
+	// TS attaches it as a check: after the checks the renamed shape had,
+	// and the ones a later builder put ahead of them (Coerce).
+	claimAt int
 
 	// Skip / Ignore flags drive optionality and silent behaviour.
 	// Already covered by skippable + silent.

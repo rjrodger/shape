@@ -163,7 +163,19 @@ pub fn decode_spec(v: &serde_json::Value) -> Result<Spec, Unsupported> {
                                 }))
                             }
                             "Rest" => Ok(Spec::from(shape::Rest(decode_spec(&arr[1])?, spec))),
-                            "Child" => Ok(Spec::from(shape::Child(decode_spec(&arr[1])?, spec))),
+                            "Child" => {
+                                // Bare, an open object with the empty default
+                                // it stands for, as the string form reads it.
+                                let spec = if arr.len() > 2 {
+                                    spec
+                                } else {
+                                    Spec::from(shape::Default(
+                                        Value::Obj(Default::default()),
+                                        Spec::Obj(Vec::new()),
+                                    ))
+                                };
+                                Ok(Spec::from(shape::Child(decode_spec(&arr[1])?, spec)))
+                            }
                             "Min" => Ok(Spec::from(shape::Min(Value::from(arr[1].clone()), spec))),
                             "Partial" => Ok(Spec::from(shape::Partial(decode_spec(&arr[1])?))),
                             "Extend" => Ok(Spec::from(shape::Extend(decode_spec(&arr[1])?, spec))),
