@@ -873,6 +873,98 @@ fn checks() {
         r#"{"a":"Key","b":"Key(2,\"/\")","c":"Key(1)","d":"Key.Required","e":"Key.Min(1)"}"#,
         &[v(r#"{"a":"x"}"#), v("{}")],
     );
+    // A rename reads where it was attached among the checks, as TypeScript
+    // writes it.
+    round_trip(
+        obj([
+            ("a", Rename("x", Min(2, Token::Number))),
+            ("b", Min(2, Rename("y", Token::Number))),
+            ("c", Rename("z", Ignore(Token::Number))),
+            ("d", Ignore(Rename("w", Token::Number))),
+            ("e", Rename("v", Token::Number).Coerce()),
+            ("f", Rename("u", Catch(0, Token::Number))),
+        ]),
+        concat!(
+            r#"{"a: Number.Min(2).Rename(\"x\")":0,"b: Number.Rename(\"y\").Min(2)":0,"#,
+            r#""c: Skip.Ignore.Rename(\"z\")":0,"d: Skip.Rename(\"w\").Ignore":0,"#,
+            r#""e: Number.Coerce.Rename(\"v\")":0,"f: Number.Catch(0).Rename(\"u\")":0}"#
+        ),
+        &[
+            v(r#"{"a":3,"b":3,"c":1,"d":1,"e":"2","f":"x"}"#),
+            v(r#"{"a":1,"b":1,"e":2}"#),
+            v(r#"{"a":2,"b":2,"c":"s","d":"s","e":"x"}"#),
+        ],
+    );
+}
+
+/// A key expression's example goes to its innermost call, so an object or
+/// an array whose Child or Rest takes a shape with a call of its own is
+/// written with `$$`, which applies the chain to the node as it stands.
+#[test]
+fn child_calls() {
+    let empty = || Spec::Obj(Vec::new());
+    round_trip(
+        obj([
+            ("o", Child(Min(2, Token::Number), empty())),
+            (
+                "p",
+                Child(Min(2, Token::Number), obj([("a", Token::String)])),
+            ),
+        ]),
+        r#"{"o":{"$$":"Child(Number.Min(2))"},"p":{"a: String":"","$$":"Child(Number.Min(2))"}}"#,
+        &[
+            v(r#"{"o":{"x":3},"p":{"a":"s","x":3}}"#),
+            v(r#"{"o":{"x":1},"p":{"a":"s"}}"#),
+            v(r#"{"o":{},"p":{"a":"s","x":1}}"#),
+        ],
+    );
+    round_trip(
+        obj([
+            ("o", Child(Exact([1, 2]), empty())),
+            ("p", Child(Nof(1, [Token::Number, Token::String]), empty())),
+        ]),
+        r#"{"o":{"$$":"Child(Required.Exact(1,2))"},"p":{"$$":"Child(Nof(1,Number,String))"}}"#,
+        &[
+            v(r#"{"o":{"x":1},"p":{"x":"s"}}"#),
+            v(r#"{"o":{"x":3}}"#),
+            v(r#"{"p":{"x":true}}"#),
+        ],
+    );
+    round_trip(
+        obj([("a", Rest(Min(2, Token::Number), Spec::Arr(Vec::new())))]),
+        r#"{"a":{"$$":"Rest(Number.Min(2),$$0)","$$0":[]}}"#,
+        &[v(r#"{"a":[3]}"#), v(r#"{"a":[1]}"#)],
+    );
+    // A shape that refers to itself reads back as itself.
+    round_trip(
+        Define(
+            "t",
+            obj([
+                ("v", Spec::from(Value::Num(1.0))),
+                ("more", Spec::from(Child(Any().Refer("t"), empty()))),
+            ]),
+        ),
+        r#"{"v":1,"more":{"$$":"Child(Any.Refer(\"t\"))"},"$$":"Define(\"t\")"}"#,
+        &[
+            v(r#"{"v":2,"more":{"a":{"v":3}}}"#),
+            v(r#"{"v":2,"more":{"a":{"v":"x"}}}"#),
+        ],
+    );
+    // A call ahead of the Child takes the example, and a shape with no call
+    // has none to take, so both keep the key form.
+    round_trip(
+        obj([
+            ("o", Min(1, Child(Min(2, Token::Number), empty()))),
+            ("p", Child(Email(Token::String), empty())),
+        ]),
+        r#"{"o: Min(1).Child(Number.Min(2))":{},"p: Child(String.Email)":{}}"#,
+        &[
+            v(r#"{"o":{"x":3},"p":{"y":"a@b.co"}}"#),
+            v(r#"{"o":{}}"#),
+            v(r#"{"o":{"x":1}}"#),
+            v(r#"{"o":{"x":2},"p":{"y":"no"}}"#),
+        ],
+    );
 }
 
 #[test]

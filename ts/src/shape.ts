@@ -5600,7 +5600,7 @@ function jsonKeyForm(n: Node<any>): { chain: string, example: any } | null {
 
   if (S.object === t) {
     const o = jsonObject(n)
-    if (0 < keys(o.refs).length) {
+    if (0 < keys(o.refs).length || !jsonKeyable(o.calls)) {
       return null
     }
     return { chain: o.chain || '', example: o.children }
@@ -5608,7 +5608,7 @@ function jsonKeyForm(n: Node<any>): { chain: string, example: any } | null {
 
   if (S.array === t) {
     const a = jsonArray(n)
-    if (0 < keys(a.refs).length || a.closed) {
+    if (0 < keys(a.refs).length || a.closed || !jsonKeyable(a.calls)) {
       return null
     }
     return { chain: a.chain || '', example: a.elements }
@@ -5618,9 +5618,21 @@ function jsonKeyForm(n: Node<any>): { chain: string, example: any } | null {
 }
 
 
+// Whether a container's chain can take its example in key form. The example
+// goes to the innermost call, the first to close (see keyExprNode), so where
+// that call is in the shape a Child or Rest takes, Child(Number.Min(2)) with
+// {} would read as Child(Number.Min(2, {})). Such a node is written as a
+// carrier, which applies its chain to the node as it stands.
+function jsonKeyable(calls: JsonCall[]): boolean {
+  const first = calls.find((c) => 0 < c.a.length)
+  return undefined === first || (S.Child !== first.n && S.Rest !== first.n) ||
+    !first.a.some((a) => 'x' in a && a.x.includes('('))
+}
+
+
 // The children of an object in key form, and the chain that applies to
 // the object (null when there is none).
-function jsonObject(n: Node<any>): { children: any, chain: string | null, refs: any } {
+function jsonObject(n: Node<any>): { children: any, calls: JsonCall[], chain: string | null, refs: any } {
   const children: any = {}
   const refs: any = {}
   const kk = 0 < n.k.length ? n.k : keys(n.v)
@@ -5674,7 +5686,7 @@ function jsonObject(n: Node<any>): { children: any, chain: string | null, refs: 
 
   const chain = 0 === calls.length ? null : jsonChainText(null, calls, refs)
 
-  return { children, chain, refs }
+  return { children, calls, chain, refs }
 }
 
 

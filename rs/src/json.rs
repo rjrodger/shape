@@ -121,16 +121,35 @@ fn no_afters(afters: &[Validator]) -> R<()> {
 }
 
 /// The checks a node carries, as calls, in the order they run; the check at
-/// `skip` is the head of the expression and is left out.
+/// `skip` is the head of the expression and is left out. A rename reads at
+/// its place among them (see `Node::claim_at`), where TypeScript attaches it
+/// as a check.
 fn validator_calls(n: &Node, skip: Option<usize>) -> R<Vec<Call>> {
     let mut calls = Vec::new();
     for (i, v) in n.befores.iter().enumerate() {
+        if i == n.claim_at {
+            rename_call(n, &mut calls)?;
+        }
         if Some(i) != skip {
             validator_call(v, &mut calls, n)?;
         }
     }
+    if n.claim_at >= n.befores.len() {
+        rename_call(n, &mut calls)?;
+    }
     no_afters(&n.afters)?;
     Ok(calls)
+}
+
+/// The node's rename, where it has one, as a call.
+fn rename_call(n: &Node, calls: &mut Vec<Call>) -> R<()> {
+    if let Some(to) = &n.rename_to {
+        if n.rename_keep || !n.rename_claim.is_empty() {
+            return cannot("the options of Rename");
+        }
+        calls.push(call1("Rename", json_text(to)));
+    }
+    Ok(())
 }
 
 /// A check of `n`, as calls.
@@ -231,8 +250,7 @@ fn required_calls(n: &Node, head_required: bool) -> Vec<Call> {
 }
 
 /// The flags of the node, as calls. An empty literal head says Empty by
-/// itself. A rename reads first among the checks, as it does when written
-/// first.
+/// itself.
 fn flag_calls(n: &Node, literal_head: bool) -> R<Vec<Call>> {
     let mut calls = Vec::new();
     if n.kind == Kind::String
@@ -243,12 +261,6 @@ fn flag_calls(n: &Node, literal_head: bool) -> R<Vec<Call>> {
     }
     if n.nullable {
         calls.push(call("Nullable"));
-    }
-    if let Some(to) = &n.rename_to {
-        if n.rename_keep || !n.rename_claim.is_empty() {
-            return cannot("the options of Rename");
-        }
-        calls.push(call1("Rename", json_text(to)));
     }
     if n.refer_name.is_some() && (n.refer_fill || n.refer_strict) {
         return cannot("the options of Refer");
@@ -502,19 +514,35 @@ fn key_form(n: &Node) -> R<Option<(String, Value)>> {
     }
     if n.kind == Kind::Object {
         let o = object(n)?;
-        if !o.refs.is_empty() {
+        if !o.refs.is_empty() || !keyable(&o.calls) {
             return Ok(None);
         }
         return Ok(Some((o.chain, Value::Obj(o.children))));
     }
     if n.kind == Kind::Array {
         let a = array(n)?;
-        if !a.refs.is_empty() || a.closed {
+        if !a.refs.is_empty() || a.closed || !keyable(&a.calls) {
             return Ok(None);
         }
         return Ok(Some((a.chain, Value::Arr(a.elements))));
     }
     Ok(None)
+}
+
+/// Whether a container's chain can take its example in key form. The
+/// example goes to the innermost call, the first to close (see
+/// `key_expr_node`), so where that call is in the shape a Child or Rest
+/// takes, `Child(Number.Min(2))` with `{}` would read as
+/// `Child(Number.Min(2, {}))`. Such a node is written as a carrier, which
+/// applies its chain to the node as it stands.
+fn keyable(calls: &[Call]) -> bool {
+    match calls.iter().find(|c| !c.args.is_empty()) {
+        Some(c) if c.name == "Child" || c.name == "Rest" => !c
+            .args
+            .iter()
+            .any(|a| matches!(a, Arg::Text(t) if t.contains('('))),
+        _ => true,
+    }
 }
 
 /// Whether a name has to be quoted in a key expression.
@@ -527,12 +555,13 @@ fn needs_quote(k: &str) -> bool {
 
 struct ObjectParts {
     children: Map,
+    calls: Vec<Call>,
     chain: String,
     refs: Vec<(String, Value)>,
 }
 
 /// The children of an object in key form, and the chain that applies to the
-/// object (empty when there is none).
+/// object (empty when there is none), with its calls.
 fn object(n: &Node) -> R<ObjectParts> {
     let mut children = Map::new();
     let mut refs: Vec<(String, Value)> = Vec::new();
@@ -609,6 +638,7 @@ fn object(n: &Node) -> R<ObjectParts> {
 
     Ok(ObjectParts {
         children,
+        calls,
         chain,
         refs,
     })

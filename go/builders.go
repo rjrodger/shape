@@ -262,7 +262,7 @@ func Default(dval any, spec ...any) *Node {
 				// Rename, Define and Refer are checks in TS, which the node
 				// built over the default keeps with the others.
 				base.renameTo, base.renameKeep, base.renameClaim = nb.n.renameTo, nb.n.renameKeep, nb.n.renameClaim
-				// The shape's befores lead, so its claim keeps its place.
+				// The shape's befores lead, so its Rename keeps its place.
 				base.claimAt = nb.n.claimAt
 				base.defineName = nb.n.defineName
 				base.referName, base.referFill, base.referStrict = nb.n.referName, nb.n.referFill, nb.n.referStrict
@@ -1770,9 +1770,9 @@ func RenameWith(name string, opts RenameOptions, spec ...any) *Node {
 	}
 	nb.n.renameTo = name
 	nb.n.renameKeep = opts.Keep
+	nb.n.claimAt = len(nb.n.befores)
 	if len(opts.Claim) > 0 {
 		nb.n.renameClaim = append([]string{}, opts.Claim...)
-		nb.n.claimAt = len(nb.n.befores)
 	}
 	return nb
 }

@@ -9,6 +9,8 @@ tuple-fixed-bad	[{"$type":"Number"},{"$type":"String"}]	[1,2]		"Validation faile
 array-rest	{"$expr":"Rest(Number)"}	[1,2,3]	[1,2,3]	
 array-rest-bad-element	{"$expr":"Rest(Number)"}	[1,"x"]		"Validation failed for index \"1\" with string \"x\" because the string is not of type number."
 array-rest-first-bad	{"$expr":"Rest(Number)"}	["x"]		"Validation failed for index \"0\" with string \"x\" because the string is not of type number."
+rest-bound	{"a":{"$call":["Rest",{"$expr":"Min(2,Number)"},[]]}}	{"a":[3,4]}	{"a":[3,4]}	
+rest-bound-bad	{"a":{"$call":["Rest",{"$expr":"Min(2,Number)"},[]]}}	{"a":[3,1]}		"Value \"1\" for property \"a.1\" must be a minimum of 2 (was 1)."
 array-rest-null-element	{"$expr":"Rest(Number)"}	[1,null]		"Validation failed for index \"1\" with value \"null\" because the value is not of type number."
 array-rest-string	{"$expr":"Rest(String)"}	["a","b"]	["a","b"]	
 array-rest-string-bad	{"$expr":"Rest(String)"}	["a",2]		"Validation failed for index \"1\" with number \"2\" because the number is not of type string."

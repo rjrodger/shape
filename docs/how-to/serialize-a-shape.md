@@ -100,6 +100,15 @@ Shape(Open({ a: 1 })).json()
 // { a: 1, $$: 'Open' }
 ```
 
+An object or an array whose `Child` or `Rest` takes a shape with a call of
+its own is written this way too. A key expression's example goes to its
+innermost call, which would be the call inside that shape:
+
+```js
+Shape({ o: Child(Min(2, Number), {}) }).json()
+// { o: { $$: 'Child(Number.Min(2))' } }
+```
+
 **A `$$0`, `$$1`, ... key beside it carries a shape the expression cannot
 spell inline**—an object or an array in an argument position:
 

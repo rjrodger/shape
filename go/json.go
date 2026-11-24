@@ -139,16 +139,35 @@ func jsonNoAfters(afters []validator) {
 }
 
 // jsonValidatorCalls is the checks a node carries, as calls, in the order
-// they run; the check `skip` is the head of the expression and left out.
+// they run; the check `skip` is the head of the expression and left out. A
+// Rename reads at its place among them (see node.claimAt), where TS
+// attaches it as a check.
 func jsonValidatorCalls(n *node, skip *validator) []jsonCall {
 	var calls []jsonCall
 	for i := range n.befores {
+		if i == n.claimAt {
+			calls = jsonRenameCall(n, calls)
+		}
 		if skip != &n.befores[i] {
 			calls = jsonValidatorCall(&n.befores[i], calls, n)
 		}
 	}
+	if n.claimAt >= len(n.befores) {
+		calls = jsonRenameCall(n, calls)
+	}
 	jsonNoAfters(n.afters)
 	return calls
+}
+
+// jsonRenameCall appends the node's Rename, where it has one, as a call.
+func jsonRenameCall(n *node, calls []jsonCall) []jsonCall {
+	if n.renameTo == "" {
+		return calls
+	}
+	if n.renameKeep || len(n.renameClaim) > 0 {
+		jsonFault("the options of Rename")
+	}
+	return append(calls, jsonCall{n: "Rename", a: []jsonArg{jx(jsonText(n.renameTo))}})
 }
 
 // jsonValidatorCall appends a check of n as calls.
@@ -240,8 +259,7 @@ func jsonRequiredCalls(n *node, headRequired bool) []jsonCall {
 }
 
 // jsonFlagCalls is the flags of the node, as calls. An empty literal head
-// says Empty by itself. Rename is a flag here, and reads first among the
-// checks, as it does when written first.
+// says Empty by itself.
 func jsonFlagCalls(n *node, literalHead bool) []jsonCall {
 	var calls []jsonCall
 	if n.kind == KindString && n.empty && !(literalHead && n.defaultValue == "") {
@@ -249,12 +267,6 @@ func jsonFlagCalls(n *node, literalHead bool) []jsonCall {
 	}
 	if n.nullable {
 		calls = append(calls, jsonCall{n: "Nullable"})
-	}
-	if n.renameTo != "" {
-		if n.renameKeep || len(n.renameClaim) > 0 {
-			jsonFault("the options of Rename")
-		}
-		calls = append(calls, jsonCall{n: "Rename", a: []jsonArg{jx(jsonText(n.renameTo))}})
 	}
 	if n.referName != "" && (n.referFill || n.referStrict) {
 		jsonFault("the options of Refer")
@@ -509,15 +521,15 @@ func jsonKeyForm(n *node) (chain string, example any, ok bool) {
 		return chain, sc.example, true
 	}
 	if n.kind == KindObject {
-		children, chain, refs := jsonObject(n)
-		if len(refs) > 0 {
+		children, calls, chain, refs := jsonObject(n)
+		if len(refs) > 0 || !jsonKeyable(calls) {
 			return "", nil, false
 		}
 		return chain, children, true
 	}
 	if n.kind == KindArray {
 		a := jsonArray(n)
-		if len(a.refs) > 0 || a.closed {
+		if len(a.refs) > 0 || a.closed || !jsonKeyable(a.calls) {
 			return "", nil, false
 		}
 		return a.chain, a.elements, true
@@ -525,11 +537,35 @@ func jsonKeyForm(n *node) (chain string, example any, ok bool) {
 	return "", nil, false
 }
 
+// jsonKeyable is whether a container's chain can take its example in key
+// form. The example goes to the innermost call, the first to close (see
+// normalize.go), so where that call is in the shape a Child or Rest takes,
+// Child(Number.Min(2)) with {} would read as Child(Number.Min(2, {})). Such
+// a node is written as a carrier, which applies its chain to the node as it
+// stands.
+func jsonKeyable(calls []jsonCall) bool {
+	for _, c := range calls {
+		if len(c.a) == 0 {
+			continue
+		}
+		if c.n != "Child" && c.n != "Rest" {
+			return true
+		}
+		for _, a := range c.a {
+			if !a.side && strings.Contains(a.x, "(") {
+				return false
+			}
+		}
+		return true
+	}
+	return true
+}
+
 var jsonQuoteRE = regexp.MustCompile(`[\s"\\]`)
 
 // jsonObject is the children of an object in key form, and the chain that
-// applies to the object (empty when there is none).
-func jsonObject(n *node) (children map[string]any, chain string, refs map[string]any) {
+// applies to the object (empty when there is none), with its calls.
+func jsonObject(n *node) (children map[string]any, calls []jsonCall, chain string, refs map[string]any) {
 	children = map[string]any{}
 	refs = map[string]any{}
 
@@ -566,7 +602,7 @@ func jsonObject(n *node) (children map[string]any, chain string, refs map[string
 		}
 	}
 
-	calls := append(jsonRequiredCalls(n, false), jsonFlagCalls(n, false)...)
+	calls = append(jsonRequiredCalls(n, false), jsonFlagCalls(n, false)...)
 	calls = append(calls, jsonValidatorCalls(n, nil)...)
 	switch {
 	case n.objRest == nil:
@@ -585,7 +621,7 @@ func jsonObject(n *node) (children map[string]any, chain string, refs map[string
 	if len(calls) > 0 {
 		chain = jsonChainText("", calls, refs)
 	}
-	return children, chain, refs
+	return children, calls, chain, refs
 }
 
 type jsonArrayParts struct {
@@ -671,7 +707,7 @@ func nodeJSON(n *node) any {
 		if hv != nil {
 			return jsonHeaded(n, hv, "an object")
 		}
-		children, chain, refs := jsonObject(n)
+		children, _, chain, refs := jsonObject(n)
 		if chain != "" {
 			children[jsonMark] = chain
 			for k, v := range refs {

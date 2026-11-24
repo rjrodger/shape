@@ -240,6 +240,46 @@ func TestJSONKinds(t *testing.T) {
 		M("a", "x", "b", "y", "c", "q", "d", 1.0), M("a", "x", "b", 1.0))
 	roundTrip(t, M("a", Key(), "b", Key(2, "/"), "c", Key(1), "d", Required(Key()), "e", Key().Min(1)),
 		`{"a":"Key","b":"Key(2,\"/\")","c":"Key(1)","d":"Key.Required","e":"Key.Min(1)"}`, M("a", "x"), M())
+	// A Rename reads where it was attached among the checks, as TS writes it.
+	roundTrip(t, M("a", Rename("x", Min(2, Number)), "b", Min(2, Rename("y", Number)), "c", Rename("z", Ignore(Number)),
+		"d", Ignore(Rename("w", Number)), "e", Rename("v", Number).Coerce(), "f", Rename("u", Catch(0.0, Number))),
+		`{"a: Number.Min(2).Rename(\"x\")":0,"b: Number.Rename(\"y\").Min(2)":0,"c: Skip.Ignore.Rename(\"z\")":0,`+
+			`"d: Skip.Rename(\"w\").Ignore":0,"e: Number.Coerce.Rename(\"v\")":0,"f: Number.Catch(0).Rename(\"u\")":0}`,
+		M("a", 3.0, "b", 3.0, "c", 1.0, "d", 1.0, "e", "2", "f", "x"), M("a", 1.0, "b", 1.0, "e", 2.0),
+		M("a", 2.0, "b", 2.0, "c", "s", "d", "s", "e", "x"))
+}
+
+// A key expression's example goes to its innermost call, so an object or an
+// array whose Child or Rest takes a shape with a call of its own is written
+// with $$, which applies the chain to the node as it stands.
+func TestJSONChildCalls(t *testing.T) {
+	M := func(kv ...any) map[string]any {
+		m := map[string]any{}
+		for i := 0; i < len(kv); i += 2 {
+			m[kv[i].(string)] = kv[i+1]
+		}
+		return m
+	}
+	A := func(v ...any) []any { return v }
+	roundTrip(t, M("o", Child(Min(2, Number), M()), "p", Child(Min(2, Number), M("a", String))),
+		`{"o":{"$$":"Child(Number.Min(2))"},"p":{"a: String":"","$$":"Child(Number.Min(2))"}}`,
+		M("o", M("x", 3.0), "p", M("a", "s", "x", 3.0)), M("o", M("x", 1.0), "p", M("a", "s")),
+		M("o", M(), "p", M("a", "s", "x", 1.0)))
+	roundTrip(t, M("o", Child(Exact(1.0, 2.0), M()), "p", Child(Nof(1, Number, String), M())),
+		`{"o":{"$$":"Child(Required.Exact(1,2))"},"p":{"$$":"Child(Nof(1,Number,String))"}}`,
+		M("o", M("x", 1.0), "p", M("x", "s")), M("o", M("x", 3.0)), M("p", M("x", true)))
+	roundTrip(t, M("a", Rest(Min(2, Number), A())), `{"a":{"$$":"Rest(Number.Min(2),$$0)","$$0":[]}}`,
+		M("a", A(3.0)), M("a", A(1.0)))
+	// A shape that refers to itself reads back as itself.
+	roundTrip(t, Define("t", M("v", 1.0, "more", Child(Refer("t"), M()))),
+		`{"v":1,"more":{"$$":"Child(Any.Refer(\"t\"))"},"$$":"Define(\"t\")"}`,
+		M("v", 2.0, "more", M("a", M("v", 3.0))), M("v", 2.0, "more", M("a", M("v", "x"))))
+	// A call ahead of the Child takes the example, and a shape with no call
+	// has none to take, so both keep the key form.
+	roundTrip(t, M("o", Min(1, Child(Min(2, Number), M())), "p", Child(Email(String), M())),
+		`{"o: Min(1).Child(Number.Min(2))":{},"p: Child(String.Email)":{}}`,
+		M("o", M("x", 3.0), "p", M("y", "a@b.co")), M("o", M()), M("o", M("x", 1.0)),
+		M("o", M("x", 2.0), "p", M("y", "no")))
 }
 
 func TestJSONNames(t *testing.T) {

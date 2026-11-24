@@ -264,6 +264,38 @@ describe('json', () => {
     // Order is kept: Coerce goes ahead of the bound it converts for.
     roundTrip({ a: Min(2, Number).Coerce() }, { 'a: Number.Coerce.Min(2)': 0 }, { a: '3' }, { a: '1' })
     roundTrip({ a: Min(1, Max(3, Number)) }, { 'a: Number.Max(3).Min(1)': 0 }, { a: 2 }, { a: 4 })
+    // A Rename reads where it was attached among the checks.
+    roundTrip({
+      a: Rename('x', Min(2, Number)), b: Min(2, Rename('y', Number)), c: Rename('z', Ignore(Number)),
+      d: Ignore(Rename('w', Number)), e: Rename('v', Number).Coerce(), f: Rename('u', Catch(0, Number)),
+    }, {
+      'a: Number.Min(2).Rename("x")': 0, 'b: Number.Rename("y").Min(2)': 0, 'c: Skip.Ignore.Rename("z")': 0,
+      'd: Skip.Rename("w").Ignore': 0, 'e: Number.Coerce.Rename("v")': 0, 'f: Number.Catch(0).Rename("u")': 0,
+    }, { a: 3, b: 3, c: 1, d: 1, e: '2', f: 'x' }, { a: 1, b: 1, e: 2 }, { a: 2, b: 2, c: 's', d: 's', e: 'x' })
+  })
+
+
+  // A key expression's example goes to its innermost call, so an object or
+  // an array whose Child or Rest takes a shape with a call of its own is
+  // written with $$, which applies the chain to the node as it stands.
+  test('child-calls', () => {
+    roundTrip({ o: Child(Min(2, Number), {}), p: Child(Min(2, Number), { a: String }) },
+      { o: { $$: 'Child(Number.Min(2))' }, p: { 'a: String': '', $$: 'Child(Number.Min(2))' } },
+      { o: { x: 3 }, p: { a: 's', x: 3 } }, { o: { x: 1 }, p: { a: 's' } }, { o: {}, p: { a: 's', x: 1 } })
+    roundTrip({ o: Child(Exact(1, 2), {}), p: Child(Nof(1, Number, String), {}) },
+      { o: { $$: 'Child(Required.Exact(1,2))' }, p: { $$: 'Child(Nof(1,Number,String))' } },
+      { o: { x: 1 }, p: { x: 's' } }, { o: { x: 3 } }, { p: { x: true } })
+    roundTrip({ a: Rest(Min(2, Number), []) }, { a: { $$: 'Rest(Number.Min(2),$$0)', $$0: [] } },
+      { a: [3] }, { a: [1] })
+    // A shape that refers to itself reads back as itself.
+    roundTrip(Define('t', { v: 1, more: Child(Refer('t'), {}) }),
+      { v: 1, more: { $$: 'Child(Any.Refer("t"))' }, $$: 'Define("t")' },
+      { v: 2, more: { a: { v: 3 } } }, { v: 2, more: { a: { v: 'x' } } })
+    // A call ahead of the Child takes the example, and a shape with no call
+    // has none to take, so both keep the key form.
+    roundTrip({ o: Min(1, Child(Min(2, Number), {})), p: Child(Email(String), {}) },
+      { 'o: Min(1).Child(Number.Min(2))': {}, 'p: Child(String.Email)': {} },
+      { o: { x: 3 }, p: { y: 'a@b.co' } }, { o: {} }, { o: { x: 1 } }, { o: { x: 2 }, p: { y: 'no' } })
   })
 
 
