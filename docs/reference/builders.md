@@ -150,6 +150,10 @@ descendant—before the node proceeds.
 A bound outside the isolation still applies to what comes out:
 `Min(2, Catch(0, Number))` against `"x"` reports that `0` is under the bound of 2.
 
+A `Rename` stays with the key: `Catch(0, Rename("x", Number))` given
+`{a: "s"}` produces `{x: 0}`. A claim runs ahead of the isolation and the
+rename after it, as both act on the object that holds the key.
+
 ## Composition
 
 | Builder | Effect |
@@ -312,7 +316,7 @@ key expression, whose example is the shape:
 | `Refer(name, spec?)` | Substitute the named shape at validation time, where the `Refer` stands: a `Rename` in it renames that key, and claims for it. |
 | `Refer({name, fill})` / `ReferWith(name, opts)` | `fill` substitutes even when the value is absent (do not use for self-recursion). |
 | `Refer({name, strict})` / `ReferOptions{Strict}` | A name no `Define` supplies is an error, rather than a `Refer` that does nothing. |
-| `Rename({name, keep?, claim?}, spec?)` / `RenameWith` | Move the property to `name` after validation. `keep` retains the original key; `claim` lists alternate source keys, the first of which the value holds stands in while the property is absent. The target is not a key a closed object accepts, so a value that already has it fails; nor is a claim key the claim leaves. As an open object's rest shape, it renames every key the rest shape takes. |
+| `Rename({name, keep?, claim?}, spec?)` / `RenameWith` | Move the property to `name` after validation. `keep` retains the original key; `claim` lists alternate source keys, the first of which the value holds stands in while the property is absent. The target is not a key a closed object accepts, so a value that already has it fails; nor is a claim key the claim leaves. As an open object's rest shape, it renames every key the rest shape takes. Where no object holds the value, at the root or in a composition's branch, it renames and claims nothing. |
 
 ## Misc
 

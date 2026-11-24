@@ -2066,6 +2066,32 @@ mod tests {
         }
     }
 
+    /// A taker validates the value on its own and leaves a rename's claim
+    /// with the node, ahead of it, whatever checks the claim followed, and
+    /// the rename after it, as in TypeScript.
+    #[test]
+    fn rename_around_taker() {
+        let c = || {
+            RenameWith(
+                "b",
+                RenameOptions {
+                    keep: false,
+                    claim: vec!["a".into()],
+                },
+                Min(2, Token::Number),
+            )
+        };
+        let catch = Schema::new(obj([("b", Spec::from(Catch(0, c())))]));
+        assert_eq!(run(&catch, r#"{"a":3}"#), r#"{"b":3}"#);
+        assert_eq!(run(&catch, r#"{"a":1}"#), r#"{"b":0}"#);
+        let ignore = Schema::new(obj([("b", Spec::from(Ignore(c())))]));
+        assert_eq!(run(&ignore, r#"{"a":"s"}"#), "{}");
+        let tenfold = |v: Value, _: &mut State<'_>| Value::Num(v.as_f64().unwrap_or(0.0) * 10.0);
+        let renamed = RenameWith("x", RenameOptions::default(), Token::Number);
+        let transform = Schema::new(obj([("a", Spec::from(Transform(tenfold, renamed)))]));
+        assert_eq!(run(&transform, r#"{"a":2}"#), r#"{"x":20}"#);
+    }
+
     /// A key's own Skip governs an absent value, whatever node a Refer puts
     /// in its place; and an open object whose rest shape refers to a
     /// claiming node claims for a value it dropped.

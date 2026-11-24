@@ -651,6 +651,33 @@ function build() {
   add('r-self-skip', { a: E('Rename("x")'), x: E('Rename("x",Skip(Number))') }, SELF_IN)
   add('r-self-any', { a: E('Rename("x")'), x: E('Rename("x")') }, SELF_IN)
   add('r-self-optional', { a: E('Rename("x")'), x: E('Rename("x",Optional(Number))') }, SELF_IN)
+  // Where no object holds the value, at the root or in a composition's
+  // branch, a Rename renames and claims nothing. A taker validates the value
+  // on its own and leaves a Rename with the key: the claim runs ahead of the
+  // taker and the rename after it.
+  const ROOT_IN = [1, 'x', null, {}, { a: 1 }, [1]]
+  add('rn-root', RN('x'), ROOT_IN)
+  add('rn-root-any', E('Rename("x")'), ROOT_IN)
+  add('rn-root-keep', RN({ name: 'x', keep: true }), ROOT_IN)
+  add('rn-root-claim', RN({ name: 'x', claim: ['a'] }, E('Optional(Number)')), ROOT_IN)
+  add('rn-root-default', RN('x', 5), ROOT_IN)
+  add('rn-root-object', RN('x', { a: E('Number') }), ROOT_IN)
+  add('rn-root-define', DEF(RN('x')), ROOT_IN)
+  add('rn-all-branch', { a: CALL('All', RN('x')) }, [{ a: 1 }, { a: 'x' }, {}])
+  add('rn-all-root', CALL('All', RN('x')), ROOT_IN)
+  add('rn-nof-branch', { a: CALL('Nof', 1, RN('x'), E('String')) }, [{ a: 1 }, { a: 's' }, { a: true }, {}])
+  add('rn-nof-two', { a: CALL('Nof', 1, RN('x'), RN('y', E('String'))) }, [{ a: 1 }, { a: 's' }])
+  add('rn-when-branch', { a: CALL('When', E('Number'), RN('x'), E('String')) }, [{ a: 1 }, { a: 's' }, { a: true }])
+  add('rn-catch', { a: E('Catch(0,Rename("x",Number))') }, [{ a: 1 }, { a: 's' }, {}])
+  add('rn-catch-min', { a: E('Catch(0,Rename("x",Min(2,Number)))') }, [{ a: 3 }, { a: 1 }, { a: 's' }, {}])
+  add('rn-catch-root', E('Catch(0,Rename("x",Number))'), ROOT_IN)
+  add('rn-ignore', { a: E('Ignore(Rename("x",Number))') }, [{ a: 1 }, { a: 's' }, {}])
+  add('rn-ignore-min', { a: E('Ignore(Rename("x",Min(2,Number)))') }, [{ a: 3 }, { a: 1 }, { a: 's' }, {}])
+  add('rn-ignore-root', E('Ignore(Rename("x",Number))'), ROOT_IN)
+  add('rn-ignore-target', { a: E('Ignore(Rename("b",Number))'), b: E('Optional(Number)') },
+    [{ a: 1 }, { a: 's' }, { a: 's', b: 2 }, { b: 2 }])
+  add('rn-claim-over-catch', { b: RN({ name: 'b', claim: ['a'] }, E('Catch(0,Number)')) }, [{ a: 3 }, { a: 's' }, { b: 2 }, {}])
+  add('rn-keep-over-catch', { a: RN({ name: 'x', keep: true }, E('Catch(0,Number)')) }, [{ a: 3 }, { a: 's' }, {}])
   // A node a Refer puts in place that injects null for an absent value.
   add('rr-null-default', { d: CALL('Define', 'N', E('Default(null,String)')), o: { a: FILL('N') } },
     [{ d: 'q', o: {} }, { d: 'q', o: { a: 'x' } }, { d: 'q', o: { a: null } }, { o: {} }])

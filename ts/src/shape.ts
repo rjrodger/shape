@@ -3060,11 +3060,29 @@ const Ipv6 = bare<string>()(function Ipv6 <V = string>(this: any, shape?: Node<V
 
 type Inner = { b: Validate[], a: Validate[] }
 
+// A Rename's checks are not taken: a rename acts on the key in the object
+// that holds it, which the probe, validating the value on its own, does not
+// have. They stay with the node, the claim ahead of the taker and the rename
+// after the release (see attachTaker), as the ports keep them.
+const keptCheck = (v: any) => S.Rename === v.n
+
 function takeInner(node: Node<any>): Inner {
-  const inner = { b: node.b, a: node.a }
-  node.b = []
-  node.a = []
+  const inner = {
+    b: node.b.filter((v: any) => !keptCheck(v)),
+    a: node.a.filter((v: any) => !keptCheck(v)),
+  }
+  node.b = node.b.filter(keptCheck)
+  node.a = node.a.filter(keptCheck)
   return inner
+}
+
+
+// The taker runs after the checks the node kept; the release runs ahead of
+// them, so a rename that took the key away is not undone.
+function attachTaker(node: Node<any>, taker: any) {
+  attach(node.b, taker)
+  VGEN++
+  node.a.unshift(release)
 }
 
 
@@ -3128,8 +3146,7 @@ const Catch = function <F, V = any>(this: any, fallback: F, shape?: Node<V> | V)
   catcher.a = [fallback]
   catcher.s = (n: Node<any>) => innerDesc(inner, n) + S.Catch + '(' + jsonText(fallback) + ')'
   catcher.inner = inner
-  attach(node.b, catcher)
-  attach(node.a, release)
+  attachTaker(node, catcher)
 
   return node
 }
@@ -3158,8 +3175,7 @@ const Transform = function <V = any, R = any>(
   transformer.n = S.Transform
   transformer.s = (n: Node<any>) => innerDesc(inner, n) + S.Transform
   transformer.inner = inner
-  attach(node.b, transformer)
-  attach(node.a, release)
+  attachTaker(node, transformer)
 
   return node
 }
@@ -3485,8 +3501,7 @@ const Ignore = function <V = any>(this: any, shape?: Node<V> | V): Node<V | unde
   ignorer.n = S.Ignore
   ignorer.s = (n: Node<any>) => innerDesc(inner, n).replace(/\.$/, '')
   ignorer.inner = inner
-  attach(node.b, ignorer)
-  attach(node.a, release)
+  attachTaker(node, ignorer)
 
   return node
 }
@@ -4462,7 +4477,7 @@ const Rename = function <V = any>(this: any, inopts: any, shape?: Node<V> | V): 
     // The claimed key is the object's (see claimKey), and is removed unless
     // kept. With no claim key there, the key is absent as it would be.
     let before: any = (val: any, update: Update, s: State) => {
-      if (undefined === val && 0 < claim.length) {
+      if (undefined === val && 0 < claim.length && null != s.parent) {
         for (let cn of claim) {
           const cv = ownval(s.parent, cn)
           if (undefined !== cv) {
@@ -4490,7 +4505,12 @@ const Rename = function <V = any>(this: any, inopts: any, shape?: Node<V> | V): 
 
     let after: any = (val: any, update: Update, s: State) => {
       // A match writes no object but a copy of its own (see writable).
+      // With no object to write (the root, a composition's branch), there
+      // is no key to rename.
       const p = s.writable()
+      if (null == p) {
+        return true
+      }
       setprop(p, name, val)
 
       if (!keep &&

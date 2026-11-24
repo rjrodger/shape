@@ -97,3 +97,25 @@ func TestRestReferClaims(t *testing.T) {
 		t.Fatalf("got %v, want %v", out, want)
 	}
 }
+
+// A taker validates the value on its own and leaves a Rename's claim with
+// the node, ahead of it, whatever checks the claim followed, and the rename
+// after it, as in TS.
+func TestRenameAroundTaker(t *testing.T) {
+	c := func() *Node { return RenameWith("b", RenameOptions{Claim: []string{"a"}}, Min(2, Number)) }
+	for _, tc := range []struct {
+		s    *Schema
+		in   map[string]any
+		want map[string]any
+	}{
+		{MustShape(map[string]any{"b": Catch(0.0, c())}), map[string]any{"a": 3.0}, map[string]any{"b": 3.0}},
+		{MustShape(map[string]any{"b": Catch(0.0, c())}), map[string]any{"a": 1.0}, map[string]any{"b": 0.0}},
+		{MustShape(map[string]any{"b": Ignore(c())}), map[string]any{"a": "s"}, map[string]any{}},
+		{MustShape(map[string]any{"a": Transform(func(v any, _ *State) any { return v.(float64) * 10 }, Rename("x", Number))}),
+			map[string]any{"a": 2.0}, map[string]any{"x": 20.0}},
+	} {
+		if out := mustOK(t, tc.s, tc.in); !reflect.DeepEqual(out, tc.want) {
+			t.Fatalf("%v: got %v, want %v", tc.in, out, tc.want)
+		}
+	}
+}
