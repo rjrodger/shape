@@ -1079,6 +1079,52 @@ describe('builder', () => {
   })
 
 
+  test('builder-rename-no-parent', () => {
+    const { Catch, Ignore, Transform } = Shape as any
+
+    // At the root no object holds the value: a Rename renames nothing and
+    // claims nothing, and the value is validated as it is.
+    const root = Shape(Rename('x', Number))
+    deepEqual(root(1), 1)
+    throws(() => root('s'), /^Validation failed for string "s" because the string is not of type number\.$/)
+    assert.equal(root.match(1), true)
+    assert.equal(root.valid(1), true)
+    deepEqual(root.error(1), [])
+    deepEqual(Shape(Rename({ name: 'x', keep: true }, Number))(1), 1)
+    deepEqual(Shape(Rename({ name: 'x', claim: ['a'] }, Optional(Number)))(), 0)
+    deepEqual(Shape(Define('R', Rename('x', Number)))(2), 2)
+
+    // A composition's branch is validated on its own, so a Rename in one
+    // renames nothing; a Rename of the composition's own node does.
+    deepEqual(Shape({ a: All(Rename('x', Number)) })({ a: 1 }), { a: 1 })
+    deepEqual(Shape({ a: Nof(1, Rename('x', Number), String) })({ a: 1 }), { a: 1 })
+    deepEqual(Shape({ a: Rename('x', All(Number)) })({ a: 1 }), { x: 1 })
+
+    // A taker validates the value on its own and leaves a Rename with the
+    // key: the claim runs ahead of it, the rename after it.
+    const c = Shape({ a: Catch(0, Rename('x', Min(2, Number))) })
+    deepEqual(c({ a: 3 }), { x: 3 })
+    deepEqual(c({ a: 1 }), { x: 0 })
+    deepEqual(c({}), { x: 0 })
+    assert.equal(c.match({ a: 3 }), true)
+    const ig = Shape({ a: Ignore(Rename('x', Number)) })
+    deepEqual(ig({ a: 1 }), { x: 1 })
+    deepEqual(ig({ a: 's' }), {})
+    deepEqual(Shape({ a: Transform((v: number) => v * 10, Rename('x', Number)) })({ a: 2 }), { x: 20 })
+    deepEqual(Shape(Catch(0, Rename('x', Number)))(3), 3)
+    const C = Rename({ name: 'b', claim: ['a'] }, Min(2, Number))
+    const cc = Shape({ b: Catch(0, C) })
+    deepEqual(cc({ a: 3 }), { b: 3 })
+    deepEqual(cc({ a: 1 }), { b: 0 })
+    deepEqual(Shape({ b: Ignore(Rename({ name: 'b', claim: ['a'] }, Min(2, Number))) })({ a: 's' }), {})
+
+    // The checks a taker left with the node read back as they were written.
+    const j = Shape(Catch(0, Rename('x', Min(2, Number)))).json()
+    deepEqual(j, 'Number.Rename("x").Min(2).Catch(0)')
+    deepEqual(Shape.build(j).json(), j)
+  })
+
+
   test('builder-exact', () => {
     let g0 = Shape({ a: Exact(null) })
     matchObject(g0({ a: null }), { a: null })

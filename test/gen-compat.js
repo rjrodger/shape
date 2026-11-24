@@ -367,6 +367,14 @@ const files = {
     ['rename-rest-shape', CALL('Child', CALL('Rename', 'x', N)), { a: 1, z: 2 }],
     ['rename-self-skip', { a: { $expr: 'Rename("x")' }, x: { $expr: 'Rename("x",Skip(Number))' } }, { a: 1, x: 3 }],
     ['rename-self-absent', { a: { $expr: 'Rename("x")' }, x: { $expr: 'Rename("x")' } }, { a: 1 }],
+    // Where no object holds the value, a Rename renames and claims nothing;
+    // a taker leaves a Rename with the key.
+    ['rename-root', CALL('Rename', 'x', N), 1],
+    ['rename-root-bad', CALL('Rename', 'x', N), 's'],
+    ['rename-root-claim', CALL('Rename', { name: 'x', claim: ['a'] }, N), 1],
+    ['rename-in-all', { a: CALL('All', CALL('Rename', 'x', N)) }, { a: 1 }],
+    ['rename-in-catch', { a: { $expr: 'Catch(0,Rename("x",Min(2,Number)))' } }, { a: 1 }],
+    ['rename-in-ignore', { a: { $expr: 'Ignore(Rename("x",Number))' } }, { a: 's' }],
     ['disc-branch-ok', { p: DISC }, { p: { bark: true, kind: 'dog' } }],
     ['disc-branch-error', { p: DISC }, { p: { fins: 'x', kind: 'fish' } }],
     ['disc-branch-missing-key', { p: DISC }, { p: { kind: 'dog' } }],

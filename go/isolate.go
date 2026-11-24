@@ -22,6 +22,10 @@ func takeInner(n *node) inner {
 	in := inner{n.befores, n.afters}
 	n.befores = nil
 	n.afters = nil
+	// A Rename's claim stays with the node, ahead of the taker, as TS
+	// keeps it out of the probe: it acts on the object that holds the key,
+	// which the probe, validating the value on its own, does not have.
+	n.claimAt = 0
 	bumpValidatorGen()
 	return in
 }

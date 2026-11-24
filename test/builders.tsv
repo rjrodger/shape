@@ -205,6 +205,12 @@ claim-rest-takes-later	{"$call":["Child",{"$call":["Rename",{"name":"x","claim":
 rename-rest-shape	{"$call":["Child",{"$call":["Rename","x",{"$type":"Number"}]}]}	{"a":1,"z":2}	{"x":2}	
 rename-self-skip	{"a":{"$expr":"Rename(\"x\")"},"x":{"$expr":"Rename(\"x\",Skip(Number))"}}	{"a":1,"x":3}	{"x":3}	
 rename-self-absent	{"a":{"$expr":"Rename(\"x\")"},"x":{"$expr":"Rename(\"x\")"}}	{"a":1}	{}	
+rename-root	{"$call":["Rename","x",{"$type":"Number"}]}	1	1	
+rename-root-bad	{"$call":["Rename","x",{"$type":"Number"}]}	"s"		"Validation failed for string \"s\" because the string is not of type number."
+rename-root-claim	{"$call":["Rename",{"name":"x","claim":["a"]},{"$type":"Number"}]}	1	1	
+rename-in-all	{"a":{"$call":["All",{"$call":["Rename","x",{"$type":"Number"}]}]}}	{"a":1}	{"a":1}	
+rename-in-catch	{"a":{"$expr":"Catch(0,Rename(\"x\",Min(2,Number)))"}}	{"a":1}	{"x":0}	
+rename-in-ignore	{"a":{"$expr":"Ignore(Rename(\"x\",Number))"}}	{"a":"s"}	{}	
 disc-branch-ok	{"p":{"$discriminated":["kind",{"dog":{"bark":{"$type":"Boolean"}},"fish":{"fins":{"$type":"Number"}}}]}}	{"p":{"bark":true,"kind":"dog"}}	{"p":{"bark":true,"kind":"dog"}}	
 disc-branch-error	{"p":{"$discriminated":["kind",{"dog":{"bark":{"$type":"Boolean"}},"fish":{"fins":{"$type":"Number"}}}]}}	{"p":{"fins":"x","kind":"fish"}}		"Validation failed for property \"p.fins\" with string \"x\" because the string is not of type number."
 disc-branch-missing-key	{"p":{"$discriminated":["kind",{"dog":{"bark":{"$type":"Boolean"}},"fish":{"fins":{"$type":"Number"}}}]}}	{"p":{"kind":"dog"}}		"Validation failed for property \"p.bark\" because the property is missing."
