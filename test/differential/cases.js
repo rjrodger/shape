@@ -678,6 +678,32 @@ function build() {
     [{ a: 1 }, { a: 's' }, { a: 's', b: 2 }, { b: 2 }])
   add('rn-claim-over-catch', { b: RN({ name: 'b', claim: ['a'] }, E('Catch(0,Number)')) }, [{ a: 3 }, { a: 's' }, { b: 2 }, {}])
   add('rn-keep-over-catch', { a: RN({ name: 'x', keep: true }, E('Catch(0,Number)')) }, [{ a: 3 }, { a: 's' }, {}])
+  // A Rename's place among the node's checks: its JSON writes it there.
+  const RN_IN = [{ a: 3 }, { a: 1 }, { a: 's' }, { a: '2' }, {}]
+  add('rn-order-min', { a: RN('x', E('Min(2,Number)')) }, RN_IN)
+  add('rn-order-under-min', { a: E('Min(2,Rename("x",Number))') }, RN_IN)
+  add('rn-order-email', { a: E('Rename("x",String.Email)') }, [{ a: 'a@b.co' }, { a: 'no' }, {}])
+  add('rn-order-ignore', { a: E('Rename("x",Ignore(Number))') }, RN_IN)
+  add('rn-order-ignore-chain', { a: E('Ignore(Number).Rename("x")') }, RN_IN)
+  add('rn-order-catch', { a: E('Rename("x",Catch(0,Number))') }, RN_IN)
+  add('rn-order-coerce', { a: E('Rename("x",Number).Coerce') }, RN_IN)
+  add('rn-order-claim', { b: RN({ name: 'b', claim: ['a'] }, E('Min(2,Number)')) }, [{ a: 3 }, { a: 1 }, { b: 2 }, {}])
+  // A Child or Rest whose shape has a call of its own, under a key: the key
+  // form would hand its example to that call, so its JSON is a carrier.
+  const CHILD_IN = [{ o: { x: 3 } }, { o: { x: 1 } }, { o: { x: 's' } }, { o: {} }, {}]
+  add('json-child-bound', { o: CALL('Child', E('Min(2,Number)'), {}) }, CHILD_IN)
+  add('json-child-bound-props', { o: CALL('Child', E('Min(2,Number)'), { a: E('String') }) },
+    [{ o: { a: 's', x: 3 } }, { o: { a: 's', x: 1 } }, { o: { a: 's' } }])
+  add('json-child-exact', { o: CALL('Child', E('Exact(1,2)'), {}) }, CHILD_IN.concat([{ o: { x: 1 } }]))
+  add('json-child-nof', { o: CALL('Child', CALL('Nof', 1, N, T), {}) }, CHILD_IN.concat([{ o: { x: true } }]))
+  add('json-child-refer', { d: DEF(N), o: CALL('Child', E('Refer("R")'), {}) },
+    [{ d: 1, o: { x: 3 } }, { d: 1, o: { x: 's' } }, { o: {} }])
+  add('json-child-after-bound', { o: CALL('Min', 1, CALL('Child', E('Min(2,Number)'), {})) }, CHILD_IN)
+  // A parenthesis in a string or a regexp is no call: the key form stands.
+  add('json-child-literal', { o: CALL('Child', E('"("'), {}) }, [{ o: { x: '(' } }, { o: { x: 'y' } }, { o: {} }])
+  add('json-child-regexp', { o: CALL('Child', E('/a(b)/'), {}) }, [{ o: { x: 'ab' } }, { o: { x: 'z' } }, { o: {} }])
+  add('json-rest-bound', { a: CALL('Rest', E('Min(2,Number)'), []) }, [{ a: [3, 4] }, { a: [3, 1] }, { a: [] }, {}])
+  add('json-rest-refer', { d: DEF(N), a: CALL('Rest', E('Refer("R")'), [T]) }, [{ d: 1, a: ['s', 2] }, { d: 1, a: ['s', 's'] }])
   // A node a Refer puts in place that injects null for an absent value.
   add('rr-null-default', { d: CALL('Define', 'N', E('Default(null,String)')), o: { a: FILL('N') } },
     [{ d: 'q', o: {} }, { d: 'q', o: { a: 'x' } }, { d: 'q', o: { a: null } }, { o: {} }])

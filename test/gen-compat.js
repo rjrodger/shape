@@ -108,6 +108,12 @@ const files = {
     ['child-ignore-drops-bad', { $expr: 'Child(Ignore(Number))' }, { a: 'x', b: 1 }],
     ['child-ignore-keeps-good', { $expr: 'Child(Ignore(Number))' }, { a: 1, b: 2 }],
     ['child-ignore-bound', { $expr: 'Child(Ignore(Min(2,Number)))' }, { a: 1, b: 3 }],
+    // A child shape with a call of its own, under a key: its JSON reads
+    // back as the same shape.
+    ['child-bound', { o: CALL('Child', { $expr: 'Min(2,Number)' }, {}) }, { o: { a: 3 } }],
+    ['child-bound-bad', { o: CALL('Child', { $expr: 'Min(2,Number)' }, {}) }, { o: { a: 1 } }],
+    ['child-refer', { def: RDEF(N), o: CALL('Child', { $expr: 'Refer("R")' }, {}) }, { def: 2, o: { a: 1 } }],
+    ['child-refer-bad', { def: RDEF(N), o: CALL('Child', { $expr: 'Refer("R")' }, {}) }, { def: 2, o: { a: 'x' } }],
   ],
   arrays: [
     ['array-of-number', [N], [1, 2, 3]],
@@ -120,6 +126,9 @@ const files = {
     ['array-rest', { $expr: 'Rest(Number)' }, [1, 2, 3]],
     ['array-rest-bad-element', { $expr: 'Rest(Number)' }, [1, 'x']],
     ['array-rest-first-bad', { $expr: 'Rest(Number)' }, ['x']],
+    // A rest shape with a call of its own, under a key, reads back as it.
+    ['rest-bound', { a: CALL('Rest', { $expr: 'Min(2,Number)' }, []) }, { a: [3, 4] }],
+    ['rest-bound-bad', { a: CALL('Rest', { $expr: 'Min(2,Number)' }, []) }, { a: [3, 1] }],
     ['array-rest-null-element', { $expr: 'Rest(Number)' }, [1, null]],
     ['array-rest-string', { $expr: 'Rest(String)' }, ['a', 'b']],
     ['array-rest-string-bad', { $expr: 'Rest(String)' }, ['a', 2]],

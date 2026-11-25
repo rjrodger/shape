@@ -1021,8 +1021,10 @@ impl Node {
             base.rename_to = self.rename_to.take();
             base.rename_keep = self.rename_keep;
             base.rename_claim = std::mem::take(&mut self.rename_claim);
-            // The node's befores lead, so its claim keeps its place.
+            // The node's befores lead, so its rename and claim keep their
+            // places.
             base.claim_at = self.claim_at;
+            base.rename_at = self.rename_at;
             base.define_name = self.define_name.take();
             base.refer_name = self.refer_name.take();
             base.refer_fill = self.refer_fill;
@@ -1421,6 +1423,7 @@ impl Node {
         self.rename_to = Some(name);
         self.rename_keep = opts.keep;
         self.rename_claim = opts.claim;
+        self.rename_at = self.befores.len();
         if !self.rename_claim.is_empty() {
             self.claim_at = self.befores.len();
         }
@@ -1447,7 +1450,11 @@ impl Node {
 
     pub fn Coerce(mut self) -> Node {
         self.befores.insert(0, coerce_validator());
-        // A check put ahead of a claim moves it on, as in TypeScript.
+        // A check put ahead of a rename, and of its claim, moves them on, as
+        // in TypeScript.
+        if self.rename_to.is_some() {
+            self.rename_at += 1;
+        }
         if !self.rename_claim.is_empty() {
             self.claim_at += 1;
         }

@@ -327,6 +327,9 @@ pub struct Node {
     /// it as a check: after the checks the renamed shape had, and the ones a
     /// later builder put ahead of them (`Coerce`).
     pub claim_at: usize,
+    /// Where the rename stands among them, by the same rule, which json
+    /// writes.
+    pub rename_at: usize,
 
     /// Free-form metadata from `x$$` sidecar keys.
     pub meta: IndexMap<String, Value>,

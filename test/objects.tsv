@@ -27,3 +27,7 @@ closed-value-with-html	{"a":1}	{"a<b":"&"}		"Validation failed for object \"{a<b
 child-ignore-drops-bad	{"$expr":"Child(Ignore(Number))"}	{"a":"x","b":1}	{"b":1}	
 child-ignore-keeps-good	{"$expr":"Child(Ignore(Number))"}	{"a":1,"b":2}	{"a":1,"b":2}	
 child-ignore-bound	{"$expr":"Child(Ignore(Min(2,Number)))"}	{"a":1,"b":3}	{"b":3}	
+child-bound	{"o":{"$call":["Child",{"$expr":"Min(2,Number)"},{}]}}	{"o":{"a":3}}	{"o":{"a":3}}	
+child-bound-bad	{"o":{"$call":["Child",{"$expr":"Min(2,Number)"},{}]}}	{"o":{"a":1}}		"Value \"1\" for property \"o.a\" must be a minimum of 2 (was 1)."
+child-refer	{"def":{"$call":["Define","R",{"$type":"Number"}]},"o":{"$call":["Child",{"$expr":"Refer(\"R\")"},{}]}}	{"def":2,"o":{"a":1}}	{"def":2,"o":{"a":1}}	
+child-refer-bad	{"def":{"$call":["Define","R",{"$type":"Number"}]},"o":{"$call":["Child",{"$expr":"Refer(\"R\")"},{}]}}	{"def":2,"o":{"a":"x"}}		"Validation failed for property \"o.a\" with string \"x\" because the string is not of type number."

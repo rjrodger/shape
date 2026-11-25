@@ -101,6 +101,17 @@ func TestRestReferClaims(t *testing.T) {
 // A taker validates the value on its own and leaves a Rename's claim with
 // the node, ahead of it, whatever checks the claim followed, and the rename
 // after it, as in TS.
+// A claim kept from an earlier Rename runs where that Rename put it, ahead
+// of the checks after it, wherever a later Rename stands: the bound sees
+// the claimed value, as in TS.
+func TestKeptClaimKeepsItsPlace(t *testing.T) {
+	s := MustShape(map[string]any{"b": Rename("y", Min(2, RenameWith("x", RenameOptions{Claim: []string{"a"}}, Number)))})
+	_, err := s.Validate(map[string]any{"a": 1.0})
+	if want := `Value "1" for property "b" must be a minimum of 2 (was 1).`; err == nil || err.Error() != want {
+		t.Fatalf("got %v, want %s", err, want)
+	}
+}
+
 func TestRenameAroundTaker(t *testing.T) {
 	c := func() *Node { return RenameWith("b", RenameOptions{Claim: []string{"a"}}, Min(2, Number)) }
 	for _, tc := range []struct {

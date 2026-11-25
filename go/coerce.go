@@ -159,10 +159,13 @@ func (n *Node) Coerce() *Node {
 	return n
 }
 
-// prependCoerce puts the conversion ahead of the node's checks, a claim's
-// among them, as TS does.
+// prependCoerce puts the conversion ahead of the node's checks, a Rename's
+// and its claim's among them, as TS does.
 func prependCoerce(n *node) {
 	n.befores = append([]validator{coerceValidator()}, n.befores...)
+	if n.renameTo != "" {
+		n.renameAt++
+	}
 	if len(n.renameClaim) > 0 {
 		n.claimAt++
 	}

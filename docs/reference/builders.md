@@ -369,7 +369,12 @@ default instead:
 ```
 
 Either way the example survives, and the expression keeps whatever kind it
-declared. `Skip` still means no injection at all, and a bare literal expression
+declared.
+
+The innermost call is the first to close, so in
+`{ 'o: Child(Number.Min(2))': {} }` it is `Min(2)` that takes the example,
+not `Child`. Give such a shape with `$$` instead, as `json()` writes it:
+`{ o: { $$: 'Child(Number.Min(2))' } }`. `Skip` still means no injection at all, and a bare literal expression
 (`{ 'a: 5': 3 }`) has no builder to hand the example to, so its own value stands.
 
 ## Ordering within a node

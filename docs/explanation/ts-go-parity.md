@@ -171,6 +171,19 @@ Some differences are inherent to Go and are unlikely ever to close.
   `Min(2, Nof(1, Boolean, Integer))` given `1.5` reports the bound alone;
   TypeScript reports the `Nof`'s error as well.
 
+- **A `Rename` inside an array.** TypeScript renames an element by setting a
+  property on the array: a named one, which the array's JSON leaves out, or
+  an index, which can lengthen it. An explicit `keep: false` deletes the
+  element, leaving a hole. Go and Rust rename only an object's properties and
+  leave an array as it is. Their options cannot tell `keep: false` from no
+  `keep` at all, so `json()` writes such a `Rename` as `Rename(name)`, where
+  TypeScript refuses it.
+
+- **Two `Rename`s on one node.** TypeScript applies both, so
+  `{ a: Rename('y', Rename('x', Number)) }` given `{ a: 3 }` produces
+  `{ x: 3, y: 3 }`. Go and Rust keep the last, producing `{ y: 3 }`, and
+  `json()` writes that one alone.
+
 - **Structs are a Go-only convenience.** A struct is read into the same
   `map[string]any` model that TypeScript's plain objects occupy, on the way in
   (as a value, by its `json` tags) and on the way out (`ValidateInto`), and a

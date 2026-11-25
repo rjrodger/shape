@@ -121,16 +121,35 @@ fn no_afters(afters: &[Validator]) -> R<()> {
 }
 
 /// The checks a node carries, as calls, in the order they run; the check at
-/// `skip` is the head of the expression and is left out.
+/// `skip` is the head of the expression and is left out. A rename reads at
+/// its place among them (see `Node::rename_at`), where TypeScript attaches
+/// it as a check.
 fn validator_calls(n: &Node, skip: Option<usize>) -> R<Vec<Call>> {
     let mut calls = Vec::new();
     for (i, v) in n.befores.iter().enumerate() {
+        if i == n.rename_at {
+            rename_call(n, &mut calls)?;
+        }
         if Some(i) != skip {
             validator_call(v, &mut calls, n)?;
         }
     }
+    if n.rename_at >= n.befores.len() {
+        rename_call(n, &mut calls)?;
+    }
     no_afters(&n.afters)?;
     Ok(calls)
+}
+
+/// The node's rename, where it has one, as a call.
+fn rename_call(n: &Node, calls: &mut Vec<Call>) -> R<()> {
+    if let Some(to) = &n.rename_to {
+        if n.rename_keep || !n.rename_claim.is_empty() {
+            return cannot("the options of Rename");
+        }
+        calls.push(call1("Rename", json_text(to)));
+    }
+    Ok(())
 }
 
 /// A check of `n`, as calls.
@@ -231,8 +250,7 @@ fn required_calls(n: &Node, head_required: bool) -> Vec<Call> {
 }
 
 /// The flags of the node, as calls. An empty literal head says Empty by
-/// itself. A rename reads first among the checks, as it does when written
-/// first.
+/// itself.
 fn flag_calls(n: &Node, literal_head: bool) -> R<Vec<Call>> {
     let mut calls = Vec::new();
     if n.kind == Kind::String
@@ -243,12 +261,6 @@ fn flag_calls(n: &Node, literal_head: bool) -> R<Vec<Call>> {
     }
     if n.nullable {
         calls.push(call("Nullable"));
-    }
-    if let Some(to) = &n.rename_to {
-        if n.rename_keep || !n.rename_claim.is_empty() {
-            return cannot("the options of Rename");
-        }
-        calls.push(call1("Rename", json_text(to)));
     }
     if n.refer_name.is_some() && (n.refer_fill || n.refer_strict) {
         return cannot("the options of Refer");
@@ -472,16 +484,31 @@ fn other_kind(n: &Node) -> bool {
         )
 }
 
-/// The key form of a property, the chain of `"name: chain"` with its
-/// example, or none where the node has no key form (a list, a regexp, a
-/// shape needing sidecars, a default the example cannot be).
-fn key_form(n: &Node) -> R<Option<(String, Value)>> {
+/// The forms of a property: its key form, the chain of `"name: chain"` with
+/// its example, where it has one; and, for a container, its value form where
+/// the key form does not serve, made from the same parts, so that nothing is
+/// serialized twice (a nested container would be, at every level). With
+/// neither, the value form is `node_json`'s to make (a list, a regexp, a
+/// scalar).
+enum Forms {
+    None,
+    /// The key form; `plain` where the example, a container's with no chain,
+    /// is its value form too.
+    Key {
+        chain: String,
+        example: Value,
+        plain: bool,
+    },
+    Value(Value),
+}
+
+fn forms(n: &Node) -> R<Forms> {
     // A composition has no key form, whatever kind a type token gave it.
     if head_validator(n).is_some()
         || n.list_mode != ListMode::None
         || (token_of(n.kind).is_some() && !n.required && other_kind(n))
     {
-        return Ok(None);
+        return Ok(Forms::None);
     }
     if token_of(n.kind).is_some() {
         let sc = scalar(n)?;
@@ -498,23 +525,59 @@ fn key_form(n: &Node) -> R<Option<(String, Value)>> {
         // A call that needs a sidecar leaves the scalar no key form.
         let mut refs = Vec::new();
         let chain = chain_text(&head, &sc.calls, &mut refs);
-        return Ok(refs.is_empty().then_some((chain, sc.example)));
+        return Ok(if refs.is_empty() {
+            Forms::Key {
+                chain,
+                example: sc.example,
+                plain: false,
+            }
+        } else {
+            Forms::None
+        });
     }
     if n.kind == Kind::Object {
         let o = object(n)?;
-        if !o.refs.is_empty() {
-            return Ok(None);
+        if !o.refs.is_empty() || !keyable(&o.calls) {
+            return Ok(Forms::Value(object_value(o)));
         }
-        return Ok(Some((o.chain, Value::Obj(o.children))));
+        let plain = o.chain.is_empty();
+        return Ok(Forms::Key {
+            chain: o.chain,
+            example: Value::Obj(o.children),
+            plain,
+        });
     }
     if n.kind == Kind::Array {
         let a = array(n)?;
-        if !a.refs.is_empty() || a.closed {
-            return Ok(None);
+        if !a.refs.is_empty() || a.closed || !keyable(&a.calls) {
+            return Ok(Forms::Value(array_value(a)));
         }
-        return Ok(Some((a.chain, Value::Arr(a.elements))));
+        let plain = a.chain.is_empty();
+        return Ok(Forms::Key {
+            chain: a.chain,
+            example: Value::Arr(a.elements),
+            plain,
+        });
     }
-    Ok(None)
+    Ok(Forms::None)
+}
+
+/// Whether a container's chain can take its example in key form. The
+/// example goes to the innermost call, the first to close (see
+/// `key_expr_node`), so where that call is in the shape a Child or Rest
+/// takes, `Child(Number.Min(2))` with `{}` would read as
+/// `Child(Number.Min(2, {}))`. Such a node is written as a carrier, which
+/// applies its chain to the node as it stands. A parenthesis in a string or
+/// a regexp is no call.
+fn keyable(calls: &[Call]) -> bool {
+    match calls.iter().find(|c| !c.args.is_empty()) {
+        Some(c) if c.name == "Child" || c.name == "Rest" => !c.args.iter().any(|a| {
+            matches!(a, Arg::Text(t) if crate::expr::token_re()
+                .captures_iter(t)
+                .any(|m| &m[1] == "("))
+        }),
+        _ => true,
+    }
 }
 
 /// Whether a name has to be quoted in a key expression.
@@ -527,12 +590,13 @@ fn needs_quote(k: &str) -> bool {
 
 struct ObjectParts {
     children: Map,
+    calls: Vec<Call>,
     chain: String,
     refs: Vec<(String, Value)>,
 }
 
 /// The children of an object in key form, and the chain that applies to the
-/// object (empty when there is none).
+/// object (empty when there is none), with its calls.
 fn object(n: &Node) -> R<ObjectParts> {
     let mut children = Map::new();
     let mut refs: Vec<(String, Value)> = Vec::new();
@@ -551,10 +615,9 @@ fn object(n: &Node) -> R<ObjectParts> {
         if k.starts_with(MARK) {
             return cannot(format!("the property name {}", json_text(k)));
         }
-        let kf = key_form(c)?;
         let is_key_expr = crate::expr::split_key_expr(k).is_some();
-        match kf {
-            Some((chain, example)) if !chain.is_empty() => {
+        match forms(c)? {
+            Forms::Key { chain, example, .. } if !chain.is_empty() => {
                 let name = if needs_quote(k) {
                     json_text(k)
                 } else {
@@ -565,7 +628,7 @@ fn object(n: &Node) -> R<ObjectParts> {
             // A name that reads as a key expression is quoted, and so needs a
             // chain; Optional says nothing about a node that is optional
             // already.
-            Some((_, example)) if is_key_expr => {
+            Forms::Key { example, .. } if is_key_expr => {
                 children.insert(format!("{}: Optional", json_text(k)), example);
             }
             _ if is_key_expr => {
@@ -573,6 +636,14 @@ fn object(n: &Node) -> R<ObjectParts> {
                     "the property name {} of a value with no key form",
                     json_text(k)
                 ));
+            }
+            Forms::Key {
+                example,
+                plain: true,
+                ..
+            }
+            | Forms::Value(example) => {
+                children.insert(k.clone(), example);
             }
             _ => {
                 children.insert(k.clone(), node_json(c)?);
@@ -609,6 +680,7 @@ fn object(n: &Node) -> R<ObjectParts> {
 
     Ok(ObjectParts {
         children,
+        calls,
         chain,
         refs,
     })
@@ -673,6 +745,41 @@ fn array(n: &Node) -> R<ArrayParts> {
     })
 }
 
+/// The value form of an object from its parts: the children, with the chain
+/// under `"$$"` and its sidecars beside it.
+fn object_value(o: ObjectParts) -> Value {
+    let mut children = o.children;
+    if !o.chain.is_empty() {
+        children.insert(MARK.to_string(), Value::Str(o.chain));
+        for (k, v) in o.refs {
+            children.insert(k, v);
+        }
+    }
+    Value::Obj(children)
+}
+
+/// The value form of an array from its parts. The calls take the array as
+/// their shape; a single position is closed first, as a one element array
+/// is an element shape.
+fn array_value(a: ArrayParts) -> Value {
+    if a.chain.is_empty() && !a.closed {
+        return Value::Arr(a.elements);
+    }
+    let name = format!("{}0", MARK);
+    let mut refs = vec![(name.clone(), Value::Arr(a.elements))];
+    let shape = if a.closed {
+        format!("Closed({})", name)
+    } else {
+        name
+    };
+    let text = if a.calls.is_empty() {
+        shape
+    } else {
+        wrap_text(&a.calls, &shape, &mut refs)
+    };
+    carrier(text, refs)
+}
+
 /// A node whose head is a call that makes it (Key on an object or an array):
 /// the head, then the rest of the chain. Exact reads its arguments as
 /// values, so an object or an array with it cannot be written.
@@ -728,40 +835,14 @@ pub fn node_json(n: &Node) -> R<Value> {
             if let Some(i) = hv {
                 return headed(n, i, "an object");
             }
-            let o = object(n)?;
-            let mut children = o.children;
-            if !o.chain.is_empty() {
-                children.insert(MARK.to_string(), Value::Str(o.chain));
-                for (k, v) in o.refs {
-                    children.insert(k, v);
-                }
-            }
-            Ok(Value::Obj(children))
+            Ok(object_value(object(n)?))
         }
 
         Kind::Array => {
             if let Some(i) = hv {
                 return headed(n, i, "an array");
             }
-            let a = array(n)?;
-            if a.chain.is_empty() && !a.closed {
-                return Ok(Value::Arr(a.elements));
-            }
-            // The calls take the array as their shape; a single position is
-            // closed first, as a one element array is an element shape.
-            let name = format!("{}0", MARK);
-            let mut refs = vec![(name.clone(), Value::Arr(a.elements))];
-            let shape = if a.closed {
-                format!("Closed({})", name)
-            } else {
-                name
-            };
-            let text = if a.calls.is_empty() {
-                shape
-            } else {
-                wrap_text(&a.calls, &shape, &mut refs)
-            };
-            Ok(carrier(text, refs))
+            Ok(array_value(array(n)?))
         }
 
         Kind::List => {
