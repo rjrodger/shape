@@ -296,6 +296,23 @@ describe('json', () => {
     roundTrip({ o: Min(1, Child(Min(2, Number), {})), p: Child(Email(String), {}) },
       { 'o: Min(1).Child(Number.Min(2))': {}, 'p: Child(String.Email)': {} },
       { o: { x: 3 }, p: { y: 'a@b.co' } }, { o: {} }, { o: { x: 1 } }, { o: { x: 2 }, p: { y: 'no' } })
+    // A parenthesis in a string or a regexp is no call.
+    roundTrip(Shape({ 'a: b': Child('(', {}), c: Child(/a(b)/, {}) }, { keyexpr: { active: false } }),
+      { '"a: b": Child("(")': {}, 'c: Child(/a(b)/)': {} },
+      { 'a: b': { x: '(' } }, { c: { x: 'ab' } }, { c: { x: 'z' } })
+    // A container is serialized once, so a deep one takes no longer than its
+    // depth: here, forty levels, at each of which a carrier stands in for
+    // the key form, and forty of plain objects.
+    let deep: any = { leaf: 1 }
+    let plain: any = { leaf: 1 }
+    for (let i = 0; i < 40; i++) {
+      deep = { next: Child(Min(2, Number), deep) }
+      plain = { next: plain }
+    }
+    for (const spec of [deep, plain]) {
+      const j = Shape(spec).json()
+      deepEqual(build(JSON.parse(JSON.stringify(j))).json(), j)
+    }
   })
 
 

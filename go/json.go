@@ -140,19 +140,19 @@ func jsonNoAfters(afters []validator) {
 
 // jsonValidatorCalls is the checks a node carries, as calls, in the order
 // they run; the check `skip` is the head of the expression and left out. A
-// Rename reads at its place among them (see node.claimAt), where TS
+// Rename reads at its place among them (see node.renameAt), where TS
 // attaches it as a check.
 func jsonValidatorCalls(n *node, skip *validator) []jsonCall {
 	var calls []jsonCall
 	for i := range n.befores {
-		if i == n.claimAt {
+		if i == n.renameAt {
 			calls = jsonRenameCall(n, calls)
 		}
 		if skip != &n.befores[i] {
 			calls = jsonValidatorCall(&n.befores[i], calls, n)
 		}
 	}
-	if n.claimAt >= len(n.befores) {
+	if n.renameAt >= len(n.befores) {
 		calls = jsonRenameCall(n, calls)
 	}
 	jsonNoAfters(n.afters)
@@ -491,15 +491,25 @@ func jsonOtherKind(n *node) bool {
 	return hasDefaultValue(n) && !own
 }
 
-// jsonKeyForm is the key form of a property, "name: chain" with its
-// example, or false where the node has no key form (a list, a regexp, a
-// shape needing sidecars).
-func jsonKeyForm(n *node) (chain string, example any, ok bool) {
+// jsonForms is the forms of a property: its key form, "name: chain" with
+// its example, where it has one (keyed); and, for a container, its value
+// form where the key form does not serve, made from the same parts, so that
+// nothing is serialized twice (a nested container would be, at every
+// level). With neither, the value form is nodeJSON's to make (a list, a
+// regexp, a scalar).
+type jsonForms struct {
+	chain   string
+	example any
+	keyed   bool
+	value   any
+}
+
+func jsonFormsOf(n *node) jsonForms {
 	// A composition has no key form, whatever kind a type token gave it, and
 	// nor has a default the example cannot be.
 	_, isTok := jsonToken[n.kind]
 	if jsonHeadValidator(n) != nil || n.listMode != listNone || (isTok && !n.required && jsonOtherKind(n)) {
-		return "", nil, false
+		return jsonForms{}
 	}
 	if isTok {
 		sc := jsonScalar(n)
@@ -516,25 +526,33 @@ func jsonKeyForm(n *node) (chain string, example any, ok bool) {
 		refs := map[string]any{}
 		chain := jsonChainText(head, sc.calls, refs)
 		if len(refs) > 0 {
-			return "", nil, false
+			return jsonForms{}
 		}
-		return chain, sc.example, true
+		return jsonForms{chain: chain, example: sc.example, keyed: true}
 	}
 	if n.kind == KindObject {
 		children, calls, chain, refs := jsonObject(n)
 		if len(refs) > 0 || !jsonKeyable(calls) {
-			return "", nil, false
+			return jsonForms{value: jsonObjectValue(children, chain, refs)}
 		}
-		return chain, children, true
+		f := jsonForms{chain: chain, example: children, keyed: true}
+		if chain == "" {
+			f.value = children
+		}
+		return f
 	}
 	if n.kind == KindArray {
 		a := jsonArray(n)
 		if len(a.refs) > 0 || a.closed || !jsonKeyable(a.calls) {
-			return "", nil, false
+			return jsonForms{value: jsonArrayValue(a)}
 		}
-		return a.chain, a.elements, true
+		f := jsonForms{chain: a.chain, example: a.elements, keyed: true}
+		if a.chain == "" {
+			f.value = a.elements
+		}
+		return f
 	}
-	return "", nil, false
+	return jsonForms{}
 }
 
 // jsonKeyable is whether a container's chain can take its example in key
@@ -542,7 +560,7 @@ func jsonKeyForm(n *node) (chain string, example any, ok bool) {
 // normalize.go), so where that call is in the shape a Child or Rest takes,
 // Child(Number.Min(2)) with {} would read as Child(Number.Min(2, {})). Such
 // a node is written as a carrier, which applies its chain to the node as it
-// stands.
+// stands. A parenthesis in a string or a regexp is no call.
 func jsonKeyable(calls []jsonCall) bool {
 	for _, c := range calls {
 		if len(c.a) == 0 {
@@ -552,8 +570,10 @@ func jsonKeyable(calls []jsonCall) bool {
 			return true
 		}
 		for _, a := range c.a {
-			if !a.side && strings.Contains(a.x, "(") {
-				return false
+			for _, m := range exprTokenRE.FindAllStringSubmatch(a.x, -1) {
+				if m[1] == "(" {
+					return false
+				}
 			}
 		}
 		return true
@@ -581,22 +601,24 @@ func jsonObject(n *node) (children map[string]any, calls []jsonCall, chain strin
 			jsonFault("the property name " + jsonText(k))
 		}
 		c := n.objChildren[k]
-		kchain, example, keyable := jsonKeyForm(c)
+		f := jsonFormsOf(c)
 		quoted := jsonQuoteRE.MatchString(k) || k == "" || isKeyExpr(k)
 		switch {
-		case keyable && kchain != "":
+		case f.keyed && f.chain != "":
 			name := k
 			if quoted {
 				name = jsonText(k)
 			}
-			children[name+": "+kchain] = example
-		case keyable && isKeyExpr(k):
+			children[name+": "+f.chain] = f.example
+		case f.keyed && isKeyExpr(k):
 			// A name that reads as a key expression is quoted, and so needs a
 			// chain; Optional says nothing about a node that is optional
 			// already.
-			children[jsonText(k)+": Optional"] = example
+			children[jsonText(k)+": Optional"] = f.example
 		case isKeyExpr(k):
 			jsonFault("the property name " + jsonText(k) + " of a value with no key form")
+		case f.value != nil:
+			children[k] = f.value
 		default:
 			children[k] = nodeJSON(c)
 		}
@@ -665,6 +687,38 @@ func jsonArray(n *node) jsonArrayParts {
 	return a
 }
 
+// jsonObjectValue is the value form of an object from its parts: the
+// children, with the chain under "$$" and its sidecars beside it.
+func jsonObjectValue(children map[string]any, chain string, refs map[string]any) any {
+	if chain != "" {
+		children[jsonMark] = chain
+		for k, v := range refs {
+			children[k] = v
+		}
+	}
+	return children
+}
+
+// jsonArrayValue is the value form of an array from its parts. The calls
+// take the array as their shape; a single position is closed first, as a
+// one element array is an element shape.
+func jsonArrayValue(a jsonArrayParts) any {
+	if a.chain == "" && !a.closed {
+		return a.elements
+	}
+	refs := map[string]any{}
+	name := jsonMark + "0"
+	refs[name] = a.elements
+	shape := name
+	if a.closed {
+		shape = "Closed(" + name + ")"
+	}
+	if len(a.calls) == 0 {
+		return jsonCarrier(shape, refs)
+	}
+	return jsonCarrier(jsonWrapText(a.calls, shape, refs), refs)
+}
+
 // jsonHeaded is a node whose head is a call that makes it (Key on an array):
 // the head, then the rest of the chain. Exact reads its arguments as values,
 // so an object or an array with it cannot be written.
@@ -708,35 +762,13 @@ func nodeJSON(n *node) any {
 			return jsonHeaded(n, hv, "an object")
 		}
 		children, _, chain, refs := jsonObject(n)
-		if chain != "" {
-			children[jsonMark] = chain
-			for k, v := range refs {
-				children[k] = v
-			}
-		}
-		return children
+		return jsonObjectValue(children, chain, refs)
 
 	case KindArray:
 		if hv != nil {
 			return jsonHeaded(n, hv, "an array")
 		}
-		a := jsonArray(n)
-		if a.chain == "" && !a.closed {
-			return a.elements
-		}
-		// The calls take the array as their shape; a single position is
-		// closed first, as a one element array is an element shape.
-		refs := map[string]any{}
-		name := jsonMark + "0"
-		refs[name] = a.elements
-		shape := name
-		if a.closed {
-			shape = "Closed(" + name + ")"
-		}
-		if len(a.calls) == 0 {
-			return jsonCarrier(shape, refs)
-		}
-		return jsonCarrier(jsonWrapText(a.calls, shape, refs), refs)
+		return jsonArrayValue(jsonArray(n))
 
 	case KindList:
 		refs := map[string]any{}

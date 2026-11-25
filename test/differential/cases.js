@@ -699,6 +699,9 @@ function build() {
   add('json-child-refer', { d: DEF(N), o: CALL('Child', E('Refer("R")'), {}) },
     [{ d: 1, o: { x: 3 } }, { d: 1, o: { x: 's' } }, { o: {} }])
   add('json-child-after-bound', { o: CALL('Min', 1, CALL('Child', E('Min(2,Number)'), {})) }, CHILD_IN)
+  // A parenthesis in a string or a regexp is no call: the key form stands.
+  add('json-child-literal', { o: CALL('Child', E('"("'), {}) }, [{ o: { x: '(' } }, { o: { x: 'y' } }, { o: {} }])
+  add('json-child-regexp', { o: CALL('Child', E('/a(b)/'), {}) }, [{ o: { x: 'ab' } }, { o: { x: 'z' } }, { o: {} }])
   add('json-rest-bound', { a: CALL('Rest', E('Min(2,Number)'), []) }, [{ a: [3, 4] }, { a: [3, 1] }, { a: [] }, {}])
   add('json-rest-refer', { d: DEF(N), a: CALL('Rest', E('Refer("R")'), [T]) }, [{ d: 1, a: ['s', 2] }, { d: 1, a: ['s', 's'] }])
   // A node a Refer puts in place that injects null for an absent value.

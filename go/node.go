@@ -119,11 +119,14 @@ type node struct {
 	renameTo   string
 	renameKeep bool
 	renameClaim []string
-	// claimAt is where a Rename stands among the node's befores, as TS
-	// attaches it as a check: after the checks the renamed shape had, and
-	// the ones a later builder put ahead of them (Coerce). Its claim runs
-	// there, and json writes it there.
+	// claimAt is where a Rename's claim runs among the node's befores, as
+	// TS attaches it as a check: after the checks the renamed shape had,
+	// and the ones a later builder put ahead of them (Coerce).
 	claimAt int
+	// renameAt is where the Rename stands among them, by the same rule,
+	// which json writes: the last Rename's, where a claim kept from an
+	// earlier one keeps its own place.
+	renameAt int
 
 	// Skip / Ignore flags drive optionality and silent behaviour.
 	// Already covered by skippable + silent.

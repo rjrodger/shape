@@ -965,6 +965,39 @@ fn child_calls() {
             v(r#"{"o":{"x":2},"p":{"y":"no"}}"#),
         ],
     );
+    // A parenthesis in a string or a regexp is no call.
+    let opts = Options {
+        key_expr: false,
+        ..Default::default()
+    };
+    let lit = Schema::with_options(
+        obj([
+            ("a: b", Spec::from(Child("(", empty()))),
+            (
+                "c",
+                Spec::from(Child(regex::Regex::new("a(b)").unwrap(), empty())),
+            ),
+        ]),
+        &opts,
+    );
+    assert_eq!(
+        json_of(&lit),
+        canon(r#"{"\"a: b\": Child(\"(\")":{},"c: Child(/a(b)/)":{}}"#)
+    );
+    // A container is serialized once, so a deep one takes no longer than its
+    // depth: forty levels of carriers, and forty of plain objects.
+    let mut deep = obj([("leaf", 1)]);
+    let mut plain = obj([("leaf", 1)]);
+    for _ in 0..40 {
+        deep = obj([("next", Spec::from(Child(Min(2, Token::Number), deep)))]);
+        plain = obj([("next", plain)]);
+    }
+    for spec in [deep, plain] {
+        let got = json_of(&Schema::new(spec));
+        let parsed: serde_json::Value = serde_json::from_str(&got).unwrap();
+        let b = Schema::new(build(&Value::from(parsed)).unwrap());
+        assert_eq!(json_of(&b), got, "not a fixed point");
+    }
 }
 
 #[test]

@@ -280,6 +280,31 @@ func TestJSONChildCalls(t *testing.T) {
 		`{"o: Min(1).Child(Number.Min(2))":{},"p: Child(String.Email)":{}}`,
 		M("o", M("x", 3.0), "p", M("y", "a@b.co")), M("o", M()), M("o", M("x", 1.0)),
 		M("o", M("x", 2.0), "p", M("y", "no")))
+	// A parenthesis in a string or a regexp is no call.
+	lit, err := ShapeWith(M("a: b", Child("(", M()), "c", Child(regexp.MustCompile("a(b)"), M())),
+		ShapeOptions{KeyExpr: KeyExprOptions{Disable: true}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := jsonOf(t, lit), canonJSON(t, `{"\"a: b\": Child(\"(\")":{},"c: Child(/a(b)/)":{}}`); got != want {
+		t.Fatalf("json:\n got %s\nwant %s", got, want)
+	}
+	// A container is serialized once, so a deep one takes no longer than its
+	// depth: forty levels of carriers, and forty of plain objects.
+	deep, plain := any(M("leaf", 1.0)), any(M("leaf", 1.0))
+	for i := 0; i < 40; i++ {
+		deep = M("next", Child(Min(2, Number), deep))
+		plain = M("next", plain)
+	}
+	for _, spec := range []any{deep, plain} {
+		got := jsonOf(t, MustShape(spec))
+		var parsed any
+		_ = json.Unmarshal([]byte(got), &parsed)
+		b, err := Build(parsed)
+		if err != nil || jsonOf(t, b) != got {
+			t.Fatalf("not a fixed point: %v\n%s", err, got)
+		}
+	}
 }
 
 func TestJSONNames(t *testing.T) {

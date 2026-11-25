@@ -1876,6 +1876,34 @@ function shapify<const S>(intop?: S, inopts?: ShapeOptions) {
 }
 
 
+// The tokens of an expression's text.
+function exprTokens(src: string): string[] {
+  const tokens: string[] = []
+
+  //         A       O                          BC      D L   E         F  M   H        N        I        JK
+  let tre = /\s*,?\s*(-?\d+\.\d+(?:[eE][+-]?\d+)?|[)(\.]|"(\\.|[^"\\])*"|\/(\\.|[^\/\\])*\/[a-z]?|[^)(,.\s]+)\s*/g
+  // A: prefixing space and/or comma
+  // B-J: the next token is submatch 1, containing a set of alternates
+  // O: a number with a fraction (1.5), which is one token, not 1 . 5
+  // C: class parens-dot
+  // D: quoted string
+  // L: backslash escape within string
+  // E: unescaped char (not a quote or backslash)
+  // F: regexp
+  // M: literal dot
+  // H: not a regexp escape or end slash
+  // N: regexp end and flags
+  // I: not a char token (thus a builder name)
+  // K: suffix space
+
+  let t = null
+  while (t = tre.exec(src)) {
+    tokens.push(t[1])
+  }
+  return tokens
+}
+
+
 // Parse a builder expression into actual Builders.
 // Function call syntax; Depth first; literals must be JSON values;
 // Commas are optional. Top level builders are applied in order.
@@ -1922,28 +1950,7 @@ function expr(
     g = undefined != spec.val ? nodize(spec.val, (spec.d || 0) + 1, spec.meta) : undefined
 
     top = true
-    spec.tokens = []
-
-    //         A       O                          BC      D L   E         F  M   H        N        I        JK
-    let tre = /\s*,?\s*(-?\d+\.\d+(?:[eE][+-]?\d+)?|[)(\.]|"(\\.|[^"\\])*"|\/(\\.|[^\/\\])*\/[a-z]?|[^)(,.\s]+)\s*/g
-    // A: prefixing space and/or comma
-    // B-J: the next token is submatch 1, containing a set of alternates
-    // O: a number with a fraction (1.5), which is one token, not 1 . 5
-    // C: class parens-dot
-    // D: quoted string
-    // L: backslash escape within string
-    // E: unescaped char (not a quote or backslash)
-    // F: regexp
-    // M: literal dot
-    // H: not a regexp escape or end slash
-    // N: regexp end and flags
-    // I: not a char token (thus a builder name)
-    // K: suffix space
-
-    let t = null
-    while (t = tre.exec(spec.src)) {
-      spec.tokens.push(t[1])
-    }
+    spec.tokens = exprTokens(spec.src)
 
     // The object of a carrier with no properties of its own (see build): a
     // head that names a node is that node, and any other call takes the
@@ -5577,16 +5584,20 @@ function jsonOtherKind(n: Node<any>): boolean {
 }
 
 
-// The key form of a property, "name: chain" with its example, or null where
-// the node has no key form (a list, a regexp, a shape needing sidecars, a
-// default the example cannot be).
-function jsonKeyForm(n: Node<any>): { chain: string, example: any } | null {
+// The forms of a property: its key form, "name: chain" with its example,
+// where it has one; and, for a container, its value form where the key form
+// does not serve, made from the same parts, so that nothing is serialized
+// twice (a nested container would be, at every level). With neither, the
+// value form is nodeJson's to make (a list, a regexp, a scalar).
+type JsonForms = { key?: { chain: string, example: any }, value?: any }
+
+function jsonForms(n: Node<any>): JsonForms {
   const t = n.t
 
   // A composition has no key form, whatever kind a type token gave it.
   if (undefined !== jsonHeadValidator(n) || undefined !== n.u.list ||
     (undefined !== JSON_TOKEN[t] && !n.r && jsonOtherKind(n))) {
-    return null
+    return {}
   }
 
   if (undefined !== JSON_TOKEN[t]) {
@@ -5595,26 +5606,32 @@ function jsonKeyForm(n: Node<any>): { chain: string, example: any } | null {
     const head = null !== sc.token ? sc.token : n.p ? S.Skip : n.r ? S.Required : null
     const refs: any = {}
     const chain = jsonChainText(head, sc.calls, refs) || ''
-    return 0 < keys(refs).length ? null : { chain, example: sc.example }
+    return 0 < keys(refs).length ? {} : { key: { chain, example: sc.example } }
   }
 
   if (S.object === t) {
     const o = jsonObject(n)
     if (0 < keys(o.refs).length || !jsonKeyable(o.calls)) {
-      return null
+      return { value: jsonObjectValue(o) }
     }
-    return { chain: o.chain || '', example: o.children }
+    return {
+      key: { chain: o.chain || '', example: o.children },
+      value: null === o.chain ? o.children : undefined,
+    }
   }
 
   if (S.array === t) {
     const a = jsonArray(n)
     if (0 < keys(a.refs).length || a.closed || !jsonKeyable(a.calls)) {
-      return null
+      return { value: jsonArrayValue(a) }
     }
-    return { chain: a.chain || '', example: a.elements }
+    return {
+      key: { chain: a.chain || '', example: a.elements },
+      value: null === a.chain ? a.elements : undefined,
+    }
   }
 
-  return null
+  return {}
 }
 
 
@@ -5622,11 +5639,12 @@ function jsonKeyForm(n: Node<any>): { chain: string, example: any } | null {
 // goes to the innermost call, the first to close (see keyExprNode), so where
 // that call is in the shape a Child or Rest takes, Child(Number.Min(2)) with
 // {} would read as Child(Number.Min(2, {})). Such a node is written as a
-// carrier, which applies its chain to the node as it stands.
+// carrier, which applies its chain to the node as it stands. A parenthesis
+// in a string or a regexp is no call.
 function jsonKeyable(calls: JsonCall[]): boolean {
   const first = calls.find((c) => 0 < c.a.length)
   return undefined === first || (S.Child !== first.n && S.Rest !== first.n) ||
-    !first.a.some((a) => 'x' in a && a.x.includes('('))
+    !first.a.some((a) => 'x' in a && exprTokens(a.x).includes('('))
 }
 
 
@@ -5649,13 +5667,14 @@ function jsonObject(n: Node<any>): { children: any, calls: JsonCall[], chain: st
       jsonFault('the property name ' + JSON.stringify(k))
     }
     const c = jsonNode(n.v[k])
-    const kf = jsonKeyForm(c)
+    const f = jsonForms(c)
+    const kf = f.key
     const quoted = /[\s"\\]/.test(k) || '' === k || isKeyExpr(k)
 
-    if (null != kf && '' !== kf.chain) {
+    if (undefined !== kf && '' !== kf.chain) {
       children[(quoted ? JSON.stringify(k) : k) + ': ' + kf.chain] = kf.example
     }
-    else if (null != kf && isKeyExpr(k)) {
+    else if (undefined !== kf && isKeyExpr(k)) {
       // A name that reads as a key expression is quoted, and so needs a
       // chain; Optional says nothing about a node that is optional already.
       children[JSON.stringify(k) + ': ' + S.Optional] = kf.example
@@ -5664,7 +5683,7 @@ function jsonObject(n: Node<any>): { children: any, calls: JsonCall[], chain: st
       jsonFault('the property name ' + JSON.stringify(k) + ' of a value with no key form')
     }
     else {
-      setprop(children, k, nodeJson(c))
+      setprop(children, k, undefined !== f.value ? f.value : nodeJson(c))
     }
   }
 
@@ -5722,6 +5741,32 @@ function jsonArray(n: Node<any>): { elements: any[], calls: JsonCall[], chain: s
   const chain = 0 === calls.length ? null : jsonChainText(null, calls, refs)
 
   return { elements, calls, chain, refs, closed }
+}
+
+
+// The value form of an object from its parts: the children, with the chain
+// under "$$" and its sidecars beside it.
+function jsonObjectValue(o: { children: any, chain: string | null, refs: any }): any {
+  if (null !== o.chain) {
+    o.children[JSON_MARK] = o.chain
+    Object.assign(o.children, o.refs)
+  }
+  return o.children
+}
+
+
+// The value form of an array from its parts. The calls take the array as
+// their shape; a single position is closed first, as a one element array is
+// an element shape.
+function jsonArrayValue(a: { elements: any[], calls: JsonCall[], chain: string | null, closed: boolean }): any {
+  if (null === a.chain && !a.closed) {
+    return a.elements
+  }
+  const refs: any = {}
+  const name = JSON_MARK + '0'
+  refs[name] = a.elements
+  const shape = a.closed ? S.Closed + '(' + name + ')' : name
+  return jsonCarrier(0 === a.calls.length ? shape : jsonWrapText(a.calls, shape, refs), refs)
 }
 
 
@@ -5835,29 +5880,14 @@ function nodeJson(n: Node<any>): any {
     if (undefined !== hv) {
       return jsonHeaded(n, hv, 'an object')
     }
-    const o = jsonObject(n)
-    if (null !== o.chain) {
-      o.children[JSON_MARK] = o.chain
-      Object.assign(o.children, o.refs)
-    }
-    return o.children
+    return jsonObjectValue(jsonObject(n))
   }
 
   if (S.array === t) {
     if (undefined !== hv) {
       return jsonHeaded(n, hv, 'an array')
     }
-    const a = jsonArray(n)
-    if (null === a.chain && !a.closed) {
-      return a.elements
-    }
-    // The calls take the array as their shape; a single position is closed
-    // first, as a one element array is an element shape.
-    const refs: any = {}
-    const name = JSON_MARK + '0'
-    refs[name] = a.elements
-    const shape = a.closed ? S.Closed + '(' + name + ')' : name
-    return jsonCarrier(0 === a.calls.length ? shape : jsonWrapText(a.calls, shape, refs), refs)
+    return jsonArrayValue(jsonArray(n))
   }
 
   if (S.list === t) {

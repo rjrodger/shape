@@ -323,11 +323,13 @@ pub struct Node {
     pub rename_to: Option<String>,
     pub rename_keep: bool,
     pub rename_claim: Vec<String>,
-    /// Where a rename stands among the befores, as TypeScript attaches it as
-    /// a check: after the checks the renamed shape had, and the ones a later
-    /// builder put ahead of them (`Coerce`). Its claim runs there, and json
-    /// writes it there.
+    /// Where a rename's claim runs among the befores, as TypeScript attaches
+    /// it as a check: after the checks the renamed shape had, and the ones a
+    /// later builder put ahead of them (`Coerce`).
     pub claim_at: usize,
+    /// Where the rename stands among them, by the same rule, which json
+    /// writes.
+    pub rename_at: usize,
 
     /// Free-form metadata from `x$$` sidecar keys.
     pub meta: IndexMap<String, Value>,

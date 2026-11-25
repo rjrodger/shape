@@ -51,7 +51,7 @@ pub fn expr_apply(src: &str, carrier: Spec) -> Result<Node, ExprError> {
     Ok(normalize(val))
 }
 
-fn token_re() -> &'static Regex {
+pub(crate) fn token_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
         Regex::new(

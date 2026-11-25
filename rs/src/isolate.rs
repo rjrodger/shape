@@ -71,6 +71,7 @@ fn take_inner(n: &mut Node) -> Arc<Inner> {
     // its checks out of the probe: it acts on the object that holds the
     // key, which the probe, validating the value on its own, does not have.
     n.claim_at = 0;
+    n.rename_at = 0;
     Arc::new(Inner {
         befores: std::mem::take(&mut n.befores),
         afters: std::mem::take(&mut n.afters),
