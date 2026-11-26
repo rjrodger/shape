@@ -333,13 +333,17 @@ pub struct Node {
 /// the keys it claims while the value is undefined. `at` is where it stands
 /// among the node's befores, as TypeScript attaches it as a check: after the
 /// checks the renamed shape had, and the ones a later builder put ahead of
-/// them (`Coerce`). Its claim runs there, and json writes it there.
+/// them (`Coerce`). Its claim runs there, and json writes it there. `after`
+/// is how many afters the node had then: TypeScript attaches its write among
+/// them, so it writes the value as those leave it, whatever an After given
+/// later makes of it.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct RenameOp {
     pub to: String,
     pub keep: bool,
     pub claim: Vec<String>,
     pub at: usize,
+    pub after: usize,
 }
 
 impl Node {
@@ -353,6 +357,15 @@ impl Node {
     /// Whether any of the node's renames claims keys.
     pub fn claims_keys(&self) -> bool {
         self.rename_ops.iter().any(|r| !r.claim.is_empty())
+    }
+
+    /// Whether the node's renames need the site an object gives a child
+    /// (see `validate::Site`): to claim keys, or to keep the value for a
+    /// rename an After follows.
+    pub fn rename_site(&self) -> bool {
+        self.rename_ops
+            .iter()
+            .any(|r| !r.claim.is_empty() || r.after < self.afters.len())
     }
 
     /// Whether the object accepts keys it does not declare.

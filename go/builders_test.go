@@ -555,6 +555,14 @@ func TestContainersOnAnyShape(t *testing.T) {
 	}
 	// Closed clears the child shape a tuple had.
 	mustInvalid(t, at(Closed(Child(Boolean, []any{Number, String}))), o([]any{1.0, "x", true}), "not allowed")
+	// A date literal holds a value, and keeps its kind and default; the
+	// Date token holds none, and becomes an object.
+	d := time.Date(2024, 1, 2, 3, 4, 5, 0, time.UTC)
+	mustValid(t, MustShape(Required(d).Child(Number)), d)
+	if out := mustValid(t, at(Child(Number, d)), map[string]any{}); !reflect.DeepEqual(out, o(d)) {
+		t.Fatalf("date literal: got %v", out)
+	}
+	mustInvalid(t, at(Child(Number, Date)), o(d), "object")
 }
 
 // --- NaN ---------------------------------------------------------------

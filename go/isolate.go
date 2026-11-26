@@ -24,8 +24,9 @@ func takeInner(n *node) inner {
 	n.afters = nil
 	// A Rename stays with the node, ahead of the taker, as TS keeps its
 	// checks out of the probe: it acts on the object that holds the key,
-	// which the probe, validating the value on its own, does not have.
-	n.renames = movedRenames(n.renames, func(int) int { return 0 })
+	// which the probe, validating the value on its own, does not have. The
+	// afters go inside too, so it writes what the probe produced.
+	n.renames = movedRenames(n.renames, func(r *renameOp) { r.at, r.after = 0, 0 })
 	bumpValidatorGen()
 	return in
 }

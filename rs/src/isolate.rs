@@ -70,8 +70,10 @@ fn take_inner(n: &mut Node) -> Arc<Inner> {
     // A rename stays with the node, ahead of the taker, as TypeScript keeps
     // its checks out of the probe: it acts on the object that holds the
     // key, which the probe, validating the value on its own, does not have.
+    // The afters go inside too, so it writes what the probe produced.
     for r in &mut n.rename_ops {
         r.at = 0;
+        r.after = 0;
     }
     Arc::new(Inner {
         befores: std::mem::take(&mut n.befores),

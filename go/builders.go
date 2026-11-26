@@ -1525,9 +1525,10 @@ func Child(child any, spec ...any) *Node {
 
 // Child (chained). As TS sets the node's child shape: an object's unknown
 // properties, an array's elements (a tuple's past its positions) take it. A
-// node with no value of its own (an Any, Never, a composition) becomes an
-// object with the empty default TS gives it, which its JSON Schema carries;
-// one with a value (a string, a number, null, a regexp) keeps its kind.
+// node with no value of its own (an Any, Never, a composition, the Date
+// token) becomes an object with the empty default TS gives it, which its
+// JSON Schema carries; one with a value (a string, a number, null, a
+// regexp, a date literal) keeps its kind.
 func (n *Node) Child(child any) *Node {
 	cn, err := normalize(child)
 	if err != nil {
@@ -1546,6 +1547,9 @@ func (n *Node) Child(child any) *Node {
 		}
 	case KindString, KindNumber, KindInteger, KindBoolean, KindNull, KindNaN, KindRegexp:
 	default:
+		if n.n.kind == KindDate && n.n.hasLiteral {
+			break
+		}
 		n.n.kind = KindObject
 		n.n.objRest = cn
 		n.n.open = true
@@ -1776,6 +1780,7 @@ func RenameWith(name string, opts RenameOptions, spec ...any) *Node {
 		keep:  opts.Keep,
 		claim: append([]string(nil), opts.Claim...),
 		at:    len(nb.n.befores),
+		after: len(nb.n.afters),
 	})
 	return nb
 }
