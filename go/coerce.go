@@ -163,11 +163,6 @@ func (n *Node) Coerce() *Node {
 // and its claim's among them, as TS does.
 func prependCoerce(n *node) {
 	n.befores = append([]validator{coerceValidator()}, n.befores...)
-	if n.renameTo != "" {
-		n.renameAt++
-	}
-	if len(n.renameClaim) > 0 {
-		n.claimAt++
-	}
+	n.renames = movedRenames(n.renames, func(at int) int { return at + 1 })
 	bumpValidatorGen()
 }

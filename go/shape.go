@@ -96,12 +96,12 @@ func prepare(n *node, defs map[string]*node) {
 			consumed := make(map[string]bool, len(n.objKeys))
 			for _, k := range n.objKeys {
 				consumed[k] = true
-				if len(n.objChildren[k].renameClaim) > 0 {
+				if n.objChildren[k].claimsKeys() {
 					n.claims = true
 				}
 			}
 			// The rest shape claims for the keys it takes as well.
-			if n.objRest != nil && len(n.objRest.renameClaim) > 0 {
+			if n.objRest != nil && n.objRest.claimsKeys() {
 				n.claims = true
 			}
 			n.consumed = consumed
@@ -165,7 +165,7 @@ func referClaims(root *node) {
 		grew = false
 		for name, ns := range defined {
 			for _, d := range ns {
-				if !claims[name] && (len(d.renameClaim) > 0 || claims[d.referName]) {
+				if !claims[name] && (d.claimsKeys() || claims[d.referName]) {
 					claims[name], grew = true, true
 				}
 			}
@@ -207,7 +207,7 @@ func plainNode(n *node) bool {
 		return false
 	}
 	return len(n.befores) == 0 && len(n.afters) == 0 &&
-		n.renameTo == "" && len(n.renameClaim) == 0 && !n.silent && n.listMode == listNone
+		len(n.renames) == 0 && !n.silent && n.listMode == listNone
 }
 
 // hasUserValidators reports whether any validator of the tree is the

@@ -227,10 +227,11 @@ pub(crate) fn validate_node_with(
     // Rename) leaves that node's checks to run, from its first, each once:
     // TS restarts its loop on the new node.
     //
-    // A rename's claim runs at its place among them (see `Node::claim_at`),
-    // the place after the last included, as the check TypeScript attaches
-    // there does: while the value is undefined, it takes the value of the
-    // first key it claims that the object holds (see `Site`).
+    // A rename's claim runs at its place among them (see `RenameOp`), the
+    // place after the last included, as the check TypeScript attaches there
+    // does: while the value is undefined, it takes the value of the first
+    // key it claims that the object holds (see `Site`). The renames that
+    // stand at one place claim in their order, until one takes a value.
     let mut ran: Option<Vec<(*const Node, usize)>> = None;
     let mut slot = 0;
     let mut list_kept = true;
@@ -292,16 +293,24 @@ pub(crate) fn validate_node_with(
         }
         let idx = slot - 2;
         if let Some(s) = site.as_deref_mut() {
-            if idx == cur_node.claim_at && !cur_node.rename_claim.is_empty() {
+            let mut here = cur_node
+                .rename_ops
+                .iter()
+                .filter(|r| r.at == idx && !r.claim.is_empty())
+                .peekable();
+            if here.peek().is_some() {
                 let undefined = over.as_ref().unwrap_or_else(|| cur.get()).is_undefined();
                 let found = s.now.filter(|_| undefined).and_then(|m| {
-                    cur_node
-                        .rename_claim
-                        .iter()
-                        .find_map(|src| m.get(src).filter(|v| !v.is_undefined()).map(|v| (src, v)))
+                    here.find_map(|r| {
+                        r.claim.iter().find_map(|src| {
+                            m.get(src)
+                                .filter(|v| !v.is_undefined())
+                                .map(|v| (src, v, r.keep))
+                        })
+                    })
                 });
-                if let Some((src, v)) = found {
-                    s.took = Some((src.clone(), cur_node.rename_keep));
+                if let Some((src, v, keep)) = found {
+                    s.took = Some((src.clone(), keep));
                     cur.set(v.clone());
                     absent = false;
                     dropped = false;
@@ -933,7 +942,7 @@ fn validate_object(
             // the object as it now is, so a source an earlier claim took is
             // gone; and the object renames for the node the child ended on.
             let mut claimed = false;
-            let (keep, last) = if !cn.rename_claim.is_empty() || cn.refer_name.is_some() {
+            let (keep, last) = if cn.refer_name.is_some() || cn.claims_keys() {
                 let now = n.claims.then_some(&**map);
                 let (keep, took, last) = validate_child(cn, &mut val, k, w, verr, now);
                 claimed = take(map, &mut taken, took);
@@ -1073,7 +1082,7 @@ fn validate_object(
                 // as a declared key's node does, through a Refer too (see
                 // Site).
                 let mut claimed = false;
-                let (keep, last) = if !rest.rename_claim.is_empty() || rest.refer_name.is_some() {
+                let (keep, last) = if rest.refer_name.is_some() || rest.claims_keys() {
                     let now = n.claims.then_some(&**map);
                     let (keep, took, last) = validate_child(rest, &mut val, &k, w, verr, now);
                     claimed = take(map, &mut taken, took);
@@ -1117,21 +1126,21 @@ fn takes(n: &Node) -> bool {
     n.befores.iter().any(|b| b.inner.is_some())
 }
 
-/// A rename of the node key `k` ended on sets its target to the value,
-/// undefined (left out) where there is none, whatever an earlier rename put
-/// there, and takes the key away unless kept. A rename to the key's own
-/// name sets it all the same, as TypeScript's does.
+/// The renames of the node key `k` ended on, in their order, as TypeScript
+/// runs each: one sets its target to the value, undefined (left out) where
+/// there is none, whatever an earlier rename put there, and takes the key
+/// away unless kept. A rename to the key's own name sets it all the same,
+/// as TypeScript's does, over what an earlier rename took away.
 fn rename_in(map: &mut Map, fnode: &Node, k: &str, keep: bool, val: Value) {
-    let Some(to) = fnode.rename_to.as_ref() else {
-        return;
-    };
-    if keep {
-        map.insert(to.clone(), val);
-    } else {
-        map.shift_remove(to);
-    }
-    if to != k && !fnode.rename_keep {
-        map.shift_remove(k);
+    for r in &fnode.rename_ops {
+        if keep {
+            map.insert(r.to.clone(), val.clone());
+        } else {
+            map.shift_remove(&r.to);
+        }
+        if r.to != k && !r.keep {
+            map.shift_remove(k);
+        }
     }
 }
 

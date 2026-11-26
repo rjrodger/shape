@@ -264,11 +264,9 @@ func Default(dval any, spec ...any) *Node {
 				base.empty, base.nullable, base.silent = nb.n.empty, nb.n.nullable, nb.n.silent
 				base.faultMsg, base.argFault = nb.n.faultMsg, nb.n.argFault
 				// Rename, Define and Refer are checks in TS, which the node
-				// built over the default keeps with the others.
-				base.renameTo, base.renameKeep, base.renameClaim = nb.n.renameTo, nb.n.renameKeep, nb.n.renameClaim
-				// The shape's befores lead, so its Rename and claim keep
-				// their places.
-				base.claimAt, base.renameAt = nb.n.claimAt, nb.n.renameAt
+				// built over the default keeps with the others. The shape's
+				// befores lead, so its Renames keep their places.
+				base.renames = nb.n.renames
 				base.defineName = nb.n.defineName
 				base.referName, base.referFill, base.referStrict = nb.n.referName, nb.n.referFill, nb.n.referStrict
 				for k, v := range nb.n.meta {
@@ -1228,7 +1226,7 @@ func countSpan(lo, hi float64, yes []int, k, open int) int {
 func countBounds(n *node) (lo, hi float64, interval bool) {
 	lo, hi = 0, math.Inf(1)
 	interval = (n.kind == KindAny || n.kind == KindNumber || n.kind == KindInteger) &&
-		len(n.afters) == 0 && !n.silent && n.renameTo == ""
+		len(n.afters) == 0 && !n.silent && len(n.renames) == 0
 	for _, cv := range n.befores {
 		switch cv.name {
 		case "Min":
@@ -1443,7 +1441,7 @@ func nofKinds(list []*node) []string {
 	kinds := make([]string, len(list))
 	for i, sn := range list {
 		k := kindOfType[sn.kind]
-		if k == "" || sn.nullable || sn.silent || sn.renameTo != "" || contains(kinds[:i], k) ||
+		if k == "" || sn.nullable || sn.silent || len(sn.renames) > 0 || contains(kinds[:i], k) ||
 			!keepsKind(sn.befores) || !keepsKind(sn.afters) {
 			return nil
 		}
@@ -1769,13 +1767,16 @@ func RenameWith(name string, opts RenameOptions, spec ...any) *Node {
 	} else {
 		nb = buildize(spec[0])
 	}
-	nb.n.renameTo = name
-	nb.n.renameKeep = opts.Keep
-	nb.n.renameAt = len(nb.n.befores)
-	if len(opts.Claim) > 0 {
-		nb.n.renameClaim = append([]string{}, opts.Claim...)
-		nb.n.claimAt = len(nb.n.befores)
-	}
+	// Each Rename applies, after those the shape already had, as TS
+	// attaches each as checks of its own. The list is made anew, as nodes
+	// share it.
+	rs := nb.n.renames
+	nb.n.renames = append(rs[:len(rs):len(rs)], renameOp{
+		to:    name,
+		keep:  opts.Keep,
+		claim: append([]string(nil), opts.Claim...),
+		at:    len(nb.n.befores),
+	})
 	return nb
 }
 

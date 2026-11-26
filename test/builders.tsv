@@ -205,6 +205,16 @@ claim-rest-takes-later	{"$call":["Child",{"$call":["Rename",{"name":"x","claim":
 rename-rest-shape	{"$call":["Child",{"$call":["Rename","x",{"$type":"Number"}]}]}	{"a":1,"z":2}	{"x":2}	
 rename-self-skip	{"a":{"$expr":"Rename(\"x\")"},"x":{"$expr":"Rename(\"x\",Skip(Number))"}}	{"a":1,"x":3}	{"x":3}	
 rename-self-absent	{"a":{"$expr":"Rename(\"x\")"},"x":{"$expr":"Rename(\"x\")"}}	{"a":1}	{}	
+rename-twice	{"a":{"$expr":"Number.Rename(\"x\").Rename(\"y\")"}}	{"a":3}	{"x":3,"y":3}	
+rename-twice-absent	{"a":{"$expr":"Rename(\"x\",Optional(Number)).Rename(\"y\")"}}	{}	{"x":0,"y":0}	
+rename-twice-keep	{"a":{"$call":["Rename",{"name":"y","keep":true},{"$call":["Rename","x",{"$type":"Number"}]}]}}	{"a":3}	{"x":3,"y":3}	
+rename-twice-self	{"a":{"$expr":"Number.Rename(\"x\").Rename(\"a\")"}}	{"a":3}	{"x":3,"a":3}	
+rename-twice-declared	{"a":{"$expr":"Number.Rename(\"x\").Rename(\"y\")"},"y":{"$expr":"Optional(Number)"}}	{"a":3}	{"x":3,"y":0}	
+rename-twice-closed-target	{"a":{"$expr":"Number.Rename(\"x\").Rename(\"y\")"}}	{"a":3,"x":1}		"Validation failed for object \"{a:3,x:1}\" because the property \"x\" is not allowed."
+rename-twice-rest	{"$call":["Child",{"$expr":"Number.Rename(\"x\").Rename(\"y\")"}]}	{"a":3,"y":1}	{"x":1,"y":1}	
+rename-twice-claim	{"b":{"$call":["Rename","y",{"$call":["Rename",{"name":"b","claim":["a"]},{"$type":"Number"}]}]}}	{"a":3}	{"y":3}	
+rename-twice-claims	{"b":{"$call":["Rename",{"name":"c","claim":["z"]},{"$call":["Rename",{"name":"b","claim":["a"]},{"$type":"Number"}]}]}}	{"a":3,"z":1}		"Validation failed for object \"{a:3,z:1}\" because the property \"z\" is not allowed."
+rename-twice-around-catch	{"a":{"$expr":"Rename(\"y\",Catch(0,Rename(\"x\",Number)))"}}	{"a":"s"}	{"x":0,"y":0}	
 rename-root	{"$call":["Rename","x",{"$type":"Number"}]}	1	1	
 rename-root-bad	{"$call":["Rename","x",{"$type":"Number"}]}	"s"		"Validation failed for string \"s\" because the string is not of type number."
 rename-root-claim	{"$call":["Rename",{"name":"x","claim":["a"]},{"$type":"Number"}]}	1	1	

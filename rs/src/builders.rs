@@ -13,7 +13,7 @@ use crate::format::{
     with_format, FMT_DATE_TIME, FMT_EMAIL, FMT_IP, FMT_IPV4, FMT_IPV6, FMT_URL, FMT_UUID,
 };
 use crate::isolate::{catch_node, transform_node, TransformFn};
-use crate::node::{Counted, Kind, ListMode, Node, Token, Validator};
+use crate::node::{Counted, Kind, ListMode, Node, RenameOp, Token, Validator};
 use crate::normalize::{normalize, type_token_node};
 use crate::spec::Spec;
 use crate::value::{is_integer, js_date_string, js_number, json_render, json_text, Value};
@@ -317,7 +317,7 @@ const KIND_KEEPING: [&str; 16] = [
 fn keeps_kind(n: &Node) -> bool {
     !n.nullable
         && !n.is_ignore()
-        && n.rename_to.is_none()
+        && n.rename_ops.is_empty()
         && n.befores
             .iter()
             .chain(n.afters.iter())
@@ -412,7 +412,7 @@ fn count_bounds(n: &Node) -> (f64, f64, bool) {
     let mut interval = matches!(n.kind, Kind::Any | Kind::Number | Kind::Integer)
         && n.afters.is_empty()
         && !n.silent
-        && n.rename_to.is_none();
+        && n.rename_ops.is_empty();
     for v in &n.befores {
         match (v.name.as_str(), v.args.first().and_then(bound_arg)) {
             ("Min", Some(b)) => lo = above_of(lo, b.ceil()),
@@ -1017,14 +1017,9 @@ impl Node {
             base.fault_msg = self.fault_msg.take();
             base.arg_fault = self.arg_fault;
             // Rename, Define and Refer are checks in TypeScript, which the
-            // node built over the default keeps with the others.
-            base.rename_to = self.rename_to.take();
-            base.rename_keep = self.rename_keep;
-            base.rename_claim = std::mem::take(&mut self.rename_claim);
-            // The node's befores lead, so its rename and claim keep their
-            // places.
-            base.claim_at = self.claim_at;
-            base.rename_at = self.rename_at;
+            // node built over the default keeps with the others. The node's
+            // befores lead, so its renames keep their places.
+            base.rename_ops = std::mem::take(&mut self.rename_ops);
             base.define_name = self.define_name.take();
             base.refer_name = self.refer_name.take();
             base.refer_fill = self.refer_fill;
@@ -1448,13 +1443,15 @@ impl Node {
         if name.is_empty() {
             return fault_node("Shape: Rename needs a name");
         }
-        self.rename_to = Some(name);
-        self.rename_keep = opts.keep;
-        self.rename_claim = opts.claim;
-        self.rename_at = self.befores.len();
-        if !self.rename_claim.is_empty() {
-            self.claim_at = self.befores.len();
-        }
+        // Each rename applies, after those the shape already had, as
+        // TypeScript attaches each as checks of its own.
+        let at = self.befores.len();
+        self.rename_ops.push(RenameOp {
+            to: name,
+            keep: opts.keep,
+            claim: opts.claim,
+            at,
+        });
         self
     }
 
@@ -1478,13 +1475,10 @@ impl Node {
 
     pub fn Coerce(mut self) -> Node {
         self.befores.insert(0, coerce_validator());
-        // A check put ahead of a rename, and of its claim, moves them on, as
-        // in TypeScript.
-        if self.rename_to.is_some() {
-            self.rename_at += 1;
-        }
-        if !self.rename_claim.is_empty() {
-            self.claim_at += 1;
+        // A check put ahead of the renames, and of their claims, moves them
+        // on, as in TypeScript.
+        for r in &mut self.rename_ops {
+            r.at += 1;
         }
         self
     }

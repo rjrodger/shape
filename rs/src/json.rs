@@ -122,32 +122,34 @@ fn no_afters(afters: &[Validator]) -> R<()> {
 
 /// The checks a node carries, as calls, in the order they run; the check at
 /// `skip` is the head of the expression and is left out. A rename reads at
-/// its place among them (see `Node::rename_at`), where TypeScript attaches
-/// it as a check.
+/// its place among them (see `RenameOp`), where TypeScript attaches it as a
+/// check.
 fn validator_calls(n: &Node, skip: Option<usize>) -> R<Vec<Call>> {
     let mut calls = Vec::new();
     for (i, v) in n.befores.iter().enumerate() {
-        if i == n.rename_at {
-            rename_call(n, &mut calls)?;
-        }
+        rename_calls(n, i, &mut calls)?;
         if Some(i) != skip {
             validator_call(v, &mut calls, n)?;
         }
     }
-    if n.rename_at >= n.befores.len() {
-        rename_call(n, &mut calls)?;
-    }
+    rename_calls(n, n.befores.len(), &mut calls)?;
     no_afters(&n.afters)?;
     Ok(calls)
 }
 
-/// The node's rename, where it has one, as a call.
-fn rename_call(n: &Node, calls: &mut Vec<Call>) -> R<()> {
-    if let Some(to) = &n.rename_to {
-        if n.rename_keep || !n.rename_claim.is_empty() {
+/// The node's renames that stand at check `i`, in their order, as calls;
+/// at the end, those past it too.
+fn rename_calls(n: &Node, i: usize, calls: &mut Vec<Call>) -> R<()> {
+    let end = i == n.befores.len();
+    for r in n
+        .rename_ops
+        .iter()
+        .filter(|r| r.at == i || (end && r.at > i))
+    {
+        if r.keep || !r.claim.is_empty() {
             return cannot("the options of Rename");
         }
-        calls.push(call1("Rename", json_text(to)));
+        calls.push(call1("Rename", json_text(&r.to)));
     }
     Ok(())
 }
@@ -955,7 +957,7 @@ pub fn node_json(n: &Node) -> R<Value> {
                         && !n.nullable
                         && n.fault_msg.is_none()
                         && !n.meta.contains_key("description")
-                        && n.rename_to.is_none()
+                        && n.rename_ops.is_empty()
                     {
                         return Ok(Value::Null);
                     }

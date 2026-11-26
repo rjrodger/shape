@@ -316,7 +316,7 @@ key expression, whose example is the shape:
 | `Refer(name, spec?)` | Substitute the named shape at validation time, where the `Refer` stands: a `Rename` in it renames that key, and claims for it. |
 | `Refer({name, fill})` / `ReferWith(name, opts)` | `fill` substitutes even when the value is absent (do not use for self-recursion). |
 | `Refer({name, strict})` / `ReferOptions{Strict}` | A name no `Define` supplies is an error, rather than a `Refer` that does nothing. |
-| `Rename({name, keep?, claim?}, spec?)` / `RenameWith` | Move the property to `name` after validation. `keep` retains the original key; `claim` lists alternate source keys, the first of which the value holds stands in while the property is absent. The target is not a key a closed object accepts, so a value that already has it fails; nor is a claim key the claim leaves. As an open object's rest shape, it renames every key the rest shape takes. Where no object holds the value, at the root or in a composition's branch, it renames and claims nothing. |
+| `Rename({name, keep?, claim?}, spec?)` / `RenameWith` | Move the property to `name` after validation. `keep` retains the original key; `claim` lists alternate source keys, the first of which the value holds stands in while the property is absent. The target is not a key a closed object accepts, so a value that already has it fails; nor is a claim key the claim leaves. As an open object's rest shape, it renames every key the rest shape takes. Where no object holds the value, at the root or in a composition's branch, it renames and claims nothing. Two on one node both apply, in the order given: `Number.Rename("x").Rename("y")` given `{ a: 3 }` produces `{ x: 3, y: 3 }`. |
 
 ## Misc
 

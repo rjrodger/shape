@@ -195,7 +195,7 @@ func validateNodeAt(n *node, in any, path []string, pathArr []any, key string, p
 	// TS restarts its loop on the new node, and a Refer back to a node whose
 	// befores have begun does not run them again.
 	//
-	// A Rename's claim runs at its place among them (see node.claimAt), the
+	// A Rename's claim runs at its place among them (see renameOp), the
 	// place after the last included, as the check TS attaches there does:
 	// while the value is absent, it takes the value of the first key it
 	// claims that the object holds (see referSite).
@@ -218,8 +218,7 @@ func validateNodeAt(n *node, in any, path []string, pathArr []any, key string, p
 			in = state.Value
 			continue
 		}
-		if site != nil && len(n.renameClaim) > 0 && bI == n.claimAt && site.now != nil &&
-			state.absent && state.Value == nil && site.claim(n) {
+		if site != nil && site.now != nil && state.absent && state.Value == nil && site.claimAt(n, bI) {
 			in, state.Value, state.absent, state.dropped, absent = site.val, site.val, false, false, false
 		}
 		if bI == len(n.befores) {
@@ -791,7 +790,7 @@ func validateObject(n *node, in any, path []string, pathArr []any, parent any, c
 		// gone, as in TS; and the object renames for the node the child
 		// ended on.
 		var site *referSite
-		if len(cn.renameClaim) > 0 || cn.referName != "" {
+		if cn.referName != "" || cn.claimsKeys() {
 			site = &referSite{}
 			if n.claims {
 				site.now = obj
@@ -891,7 +890,7 @@ func validateObject(n *node, in any, path []string, pathArr []any, parent any, c
 			// a declared key's node does, through a Refer too (see
 			// referSite).
 			var site *referSite
-			if len(n.objRest.renameClaim) > 0 || n.objRest.referName != "" {
+			if n.objRest.referName != "" || n.objRest.claimsKeys() {
 				site = &referSite{}
 				if n.claims {
 					site.now = obj
@@ -965,19 +964,26 @@ type referSite struct {
 	last    *node
 }
 
-// claim takes the value of the first key rn claims that the object holds,
-// and says whether there was one. Out of line, as it is rare, it keeps the
-// walk's frame small.
+// claimAt runs the claims of n's Renames that stand at check i, in their
+// order, until one takes a value: the value of the first key it claims
+// that the object holds. It says whether one did. Out of line, as it is
+// rare, it keeps the walk's frame small.
 //
 //go:noinline
-func (s *referSite) claim(rn *node) bool {
-	for _, src := range rn.renameClaim {
-		if sv, sh := s.now[src]; sh {
-			if isNull(sv) {
-				sv = nil
+func (s *referSite) claimAt(n *node, i int) bool {
+	for j := range n.renames {
+		r := &n.renames[j]
+		if r.at != i {
+			continue
+		}
+		for _, src := range r.claim {
+			if sv, sh := s.now[src]; sh {
+				if isNull(sv) {
+					sv = nil
+				}
+				s.src, s.val, s.keep, s.claimed = src, sv, r.keep, true
+				return true
 			}
-			s.src, s.val, s.keep, s.claimed = src, sv, rn.renameKeep, true
-			return true
 		}
 	}
 	return false
@@ -992,47 +998,54 @@ func endNode(cn *node, site *referSite) *node {
 	return cn
 }
 
-// renameValue applies a Rename to the value key k produced: the target
-// takes it, whatever an earlier rename put there, and the key goes unless
-// kept. A rename to the key's own name sets it all the same, as TS's does,
-// so a value a skip left as it was (left) goes back over what an earlier
-// rename put there.
+// renameValue applies the Renames of fn to the value key k produced, in
+// their order, as TS runs each: the target takes it, whatever an earlier
+// rename put there, and the key goes unless kept. A rename to the key's
+// own name sets it all the same, as TS's does, so a value a skip left as
+// it was (left), or an earlier Rename took away, goes back over what was
+// put there.
 func renameValue(fn *node, k string, produced any, left bool, ensure func(), out *map[string]any) {
-	switch fn.renameTo {
-	case "":
-		return
-	case k:
-		if left {
-			ensure()
-			(*out)[k] = produced
+	gone := left
+	for i := range fn.renames {
+		r := &fn.renames[i]
+		if r.to == k {
+			if gone {
+				ensure()
+				(*out)[k] = produced
+				gone = false
+			}
+			continue
 		}
-		return
-	}
-	ensure()
-	(*out)[fn.renameTo] = produced
-	if !fn.renameKeep {
-		delete(*out, k)
+		ensure()
+		(*out)[r.to] = produced
+		if !r.keep {
+			delete(*out, k)
+			gone = true
+		}
 	}
 }
 
-// renameNothing applies a Rename whose value is absent or dropped, as TS's
-// does: the target is set undefined, which leaves it out, whatever an
-// earlier rename put there, and the key goes too unless kept. A rename to
-// the key's own name leaves out what an earlier rename put there (where
-// nothing was copied, the input has no such key, and a nil map deletes
-// nothing).
+// renameNothing applies the Renames of cn where the value is absent or
+// dropped, in their order, as TS's do: each target is set undefined,
+// which leaves it out, whatever an earlier rename put there, and the key
+// goes too unless kept. A rename to the key's own name leaves out what an
+// earlier rename put there (where nothing was copied, the input has no
+// such key, and a nil map deletes nothing).
 func renameNothing(cn *node, k string, match bool, ensure func(), out *map[string]any) {
-	if cn.renameTo == "" || match {
+	if match {
 		return
 	}
-	if cn.renameTo == k {
-		delete(*out, k)
-		return
-	}
-	ensure()
-	delete(*out, cn.renameTo)
-	if !cn.renameKeep {
-		delete(*out, k)
+	for i := range cn.renames {
+		r := &cn.renames[i]
+		if r.to == k {
+			delete(*out, k)
+			continue
+		}
+		ensure()
+		delete(*out, r.to)
+		if !r.keep {
+			delete(*out, k)
+		}
 	}
 }
 

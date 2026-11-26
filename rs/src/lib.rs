@@ -242,13 +242,13 @@ impl Reach {
             let mut grew = false;
             for (name, d) in defs {
                 if !reach.renames.contains(name)
-                    && (d.rename_to.is_some() || Reach::brings(d, &reach.renames))
+                    && (!d.rename_ops.is_empty() || Reach::brings(d, &reach.renames))
                 {
                     reach.renames.insert(name.clone());
                     grew = true;
                 }
                 if !reach.claims.contains(name)
-                    && (!d.rename_claim.is_empty() || Reach::brings(d, &reach.claims))
+                    && (d.claims_keys() || Reach::brings(d, &reach.claims))
                 {
                     reach.claims.insert(name.clone());
                     grew = true;
@@ -273,8 +273,7 @@ fn prepare(n: &mut Node, defs: &mut HashMap<String, Arc<Node>>, reach: &Reach) -
     let mut pure = n.befores.is_empty() && n.afters.is_empty();
     n.plain = pure
         && !n.silent
-        && n.rename_to.is_none()
-        && n.rename_claim.is_empty()
+        && n.rename_ops.is_empty()
         && n.regexp.is_none()
         && n.list_mode == ListMode::None
         && n.disc.is_none();
@@ -293,12 +292,12 @@ fn prepare(n: &mut Node, defs: &mut HashMap<String, Arc<Node>>, reach: &Reach) -
             .obj_children
             .values()
             .chain(n.obj_rest.as_deref())
-            .any(|c| !c.rename_claim.is_empty() || Reach::brings(c, &reach.claims));
+            .any(|c| c.claims_keys() || Reach::brings(c, &reach.claims));
         n.renames = n
             .obj_children
             .values()
             .chain(n.obj_rest.as_deref())
-            .any(|c| c.rename_to.is_some() || Reach::brings(c, &reach.renames));
+            .any(|c| !c.rename_ops.is_empty() || Reach::brings(c, &reach.renames));
     }
     for cn in n.obj_children.values_mut() {
         pure &= prepare(cn, defs, reach);
