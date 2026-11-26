@@ -349,6 +349,4 @@ checklist, and [`PLAN.md`](PLAN.md) for the original porting plan.
 
 ## Version
 
-```go
-const Version = "0.5.0"
-```
+`shape.Version` is the module version.
