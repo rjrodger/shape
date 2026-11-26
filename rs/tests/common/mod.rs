@@ -176,6 +176,7 @@ pub fn decode_spec(v: &serde_json::Value) -> Result<Spec, Unsupported> {
                                 };
                                 Ok(Spec::from(shape::Child(decode_spec(&arr[1])?, spec)))
                             }
+                            "Open" => Ok(Spec::from(shape::Open(decode_spec(&arr[1])?))),
                             "Min" => Ok(Spec::from(shape::Min(Value::from(arr[1].clone()), spec))),
                             "Partial" => Ok(Spec::from(shape::Partial(decode_spec(&arr[1])?))),
                             "Extend" => Ok(Spec::from(shape::Extend(decode_spec(&arr[1])?, spec))),

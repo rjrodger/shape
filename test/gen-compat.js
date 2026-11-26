@@ -114,6 +114,14 @@ const files = {
     ['child-bound-bad', { o: CALL('Child', { $expr: 'Min(2,Number)' }, {}) }, { o: { a: 1 } }],
     ['child-refer', { def: RDEF(N), o: CALL('Child', { $expr: 'Refer("R")' }, {}) }, { def: 2, o: { a: 1 } }],
     ['child-refer-bad', { def: RDEF(N), o: CALL('Child', { $expr: 'Refer("R")' }, {}) }, { def: 2, o: { a: 'x' } }],
+    // Open with no shape is an open Any. Child makes an Any an object of
+    // its child shape, the empty object by default; a value keeps its kind.
+    ['open-bare-any', { o: { $expr: 'Open' } }, { o: 1 }],
+    ['open-bare-absent', { o: { $expr: 'Open' } }, {}],
+    ['child-of-any-default', { o: CALL('Child', N, { $expr: 'Any' }) }, {}],
+    ['child-of-any-bad', { o: CALL('Child', N, { $expr: 'Any' }) }, { o: { a: 'x' } }],
+    ['child-of-string', { o: CALL('Child', N, T) }, { o: 'x' }],
+    ['child-of-string-bad', { o: CALL('Child', N, T) }, { o: 1 }],
   ],
   arrays: [
     ['array-of-number', [N], [1, 2, 3]],
@@ -141,6 +149,16 @@ const files = {
     ['rest-keeps-tuple-positions-bad', CALL('Rest', N, [T, N]), [1, 1]],
     ['rest-over-closed-one-tuple', CALL('Rest', N, { $closed: [T] }), ['a', 1]],
     ['rest-over-closed-one-tuple-bad', CALL('Rest', N, { $closed: [T] }), [1]],
+    // Open or Child gives a tuple a shape for the elements after its
+    // positions, and Closed takes it away again: Closed(Rest(Number, [])) is
+    // a tuple of one.
+    ['open-tuple-extra', { a: CALL('Open', [N, T]) }, { a: [1, 'x', true] }],
+    ['child-tuple-extra', { a: CALL('Child', B, [N, T]) }, { a: [1, 'x', true] }],
+    ['child-tuple-extra-bad', { a: CALL('Child', B, [N, T]) }, { a: [1, 'x', 2] }],
+    ['child-tuple-of-one-extra', { a: CALL('Child', B, { $closed: [N] }) }, { a: [1, true] }],
+    ['child-tuple-root', CALL('Child', B, [N, T]), [1, 'x', false]],
+    ['closed-rest-one', { a: { $closed: CALL('Rest', N, []) } }, { a: [1, 2] }],
+    ['closed-tuple-extra', { a: { $closed: CALL('Child', B, [N, T]) } }, { a: [1, 'x', true] }],
     ['array-ignore-drops-bad', [{ $expr: 'Ignore(Number)' }], [1, 'x']],
     ['array-ignore-keeps-good', [{ $expr: 'Ignore(Number)' }], [1, 2]],
     ['array-ignore-bound', [{ $expr: 'Ignore(Min(2,Number))' }], [1, 3]],
@@ -376,6 +394,19 @@ const files = {
     ['rename-rest-shape', CALL('Child', CALL('Rename', 'x', N)), { a: 1, z: 2 }],
     ['rename-self-skip', { a: { $expr: 'Rename("x")' }, x: { $expr: 'Rename("x",Skip(Number))' } }, { a: 1, x: 3 }],
     ['rename-self-absent', { a: { $expr: 'Rename("x")' }, x: { $expr: 'Rename("x")' } }, { a: 1 }],
+    // Two Renames on one node both apply, in the order given: each sets its
+    // name and takes the key away unless kept, and one to the key's own
+    // name puts it back.
+    ['rename-twice', { a: { $expr: 'Number.Rename("x").Rename("y")' } }, { a: 3 }],
+    ['rename-twice-absent', { a: { $expr: 'Rename("x",Optional(Number)).Rename("y")' } }, {}],
+    ['rename-twice-keep', { a: CALL('Rename', { name: 'y', keep: true }, CALL('Rename', 'x', N)) }, { a: 3 }],
+    ['rename-twice-self', { a: { $expr: 'Number.Rename("x").Rename("a")' } }, { a: 3 }],
+    ['rename-twice-declared', { a: { $expr: 'Number.Rename("x").Rename("y")' }, y: { $expr: 'Optional(Number)' } }, { a: 3 }],
+    ['rename-twice-closed-target', { a: { $expr: 'Number.Rename("x").Rename("y")' } }, { a: 3, x: 1 }],
+    ['rename-twice-rest', CALL('Child', { $expr: 'Number.Rename("x").Rename("y")' }), { a: 3, y: 1 }],
+    ['rename-twice-claim', { b: CALL('Rename', 'y', CL()) }, { a: 3 }],
+    ['rename-twice-claims', { b: CALL('Rename', { name: 'c', claim: ['z'] }, CL()) }, { a: 3, z: 1 }],
+    ['rename-twice-around-catch', { a: { $expr: 'Rename("y",Catch(0,Rename("x",Number)))' } }, { a: 's' }],
     // Where no object holds the value, a Rename renames and claims nothing;
     // a taker leaves a Rename with the key.
     ['rename-root', CALL('Rename', 'x', N), 1],

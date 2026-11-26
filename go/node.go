@@ -115,18 +115,10 @@ type node struct {
 	referFill   bool
 	referStrict bool
 
-	// Rename info.
-	renameTo   string
-	renameKeep bool
-	renameClaim []string
-	// claimAt is where a Rename's claim runs among the node's befores, as
-	// TS attaches it as a check: after the checks the renamed shape had,
-	// and the ones a later builder put ahead of them (Coerce).
-	claimAt int
-	// renameAt is where the Rename stands among them, by the same rule,
-	// which json writes: the last Rename's, where a claim kept from an
-	// earlier one keeps its own place.
-	renameAt int
+	// The node's Renames, in the order they were given: TS attaches each
+	// as checks of its own, so every one applies (see renameOp). A list
+	// that changes is made anew, as nodes share it.
+	renames []renameOp
 
 	// Skip / Ignore flags drive optionality and silent behaviour.
 	// Already covered by skippable + silent.
@@ -134,6 +126,55 @@ type node struct {
 	// meta carries free-form metadata attached via "x$$" sidecar keys when
 	// MetaOptions.Active is true.
 	meta map[string]any
+}
+
+// renameOp is one Rename: the name the value goes to, whether the key
+// keeps it, and the keys it claims while the value is absent. at is where
+// it stands among the node's befores, as TS attaches it as a check: after
+// the checks the renamed shape had, and the ones a later builder put ahead
+// of them (Coerce). Its claim runs there, and json writes it there. after
+// is how many afters the node had then: TS attaches its write among them,
+// so it writes the value as those leave it, whatever an After given later
+// makes of it.
+type renameOp struct {
+	to    string
+	keep  bool
+	claim []string
+	at    int
+	after int
+}
+
+// claimsKeys reports whether any of the node's Renames claims keys.
+func (n *node) claimsKeys() bool {
+	for i := range n.renames {
+		if len(n.renames[i].claim) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// renameSite reports whether the node's Renames need the site an object
+// gives a child (see referSite): to claim keys, or to keep the value for a
+// Rename an After follows.
+func (n *node) renameSite() bool {
+	for i := range n.renames {
+		if len(n.renames[i].claim) > 0 || n.renames[i].after < len(n.afters) {
+			return true
+		}
+	}
+	return false
+}
+
+// movedRenames is the node's Renames, each changed by f, as a new list, so
+// that a node sharing the old one keeps it.
+func movedRenames(rs []renameOp, f func(*renameOp)) []renameOp {
+	out := make([]renameOp, len(rs))
+	for i, r := range rs {
+		f(&r)
+		out[i] = r
+	}
+	return out
 }
 
 // Node is the publicly exposed compiled-spec wrapper. Builders return *Node so

@@ -4271,6 +4271,11 @@ const Closed = function <V = any>(this: any, shape?: Node<V> | V): Node<V> {
     node.v = [node.c]
   }
   node.c = undefined
+  // With no child shape left there is no rest either, so json writes none:
+  // Closed(Rest(Number, [])) is the tuple of one it validates as.
+  if (node.m?.rest) {
+    delete node.m.rest
+  }
 
   return node
 }
@@ -5735,6 +5740,11 @@ function jsonArray(n: Node<any>): { elements: any[], calls: JsonCall[], chain: s
   const calls = jsonRequiredCalls(n, false).concat(jsonFlagCalls(n, false), jsonValidatorCalls(n))
   if (n.m?.rest) {
     calls.push({ n: S.Rest, a: [jsonArg(n.c)] })
+  }
+  else if (0 < positions.length && undefined !== n.c) {
+    // A tuple that takes more elements than its positions says what they
+    // are, as Open([Number, String]) and Child(Boolean, [Number]) do.
+    calls.push(jsonIsOpen(n.c) ? { n: S.Open, a: [] } : { n: S.Child, a: [jsonArg(n.c)] })
   }
   calls.push(...jsonTailCalls(n))
 

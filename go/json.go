@@ -140,34 +140,35 @@ func jsonNoAfters(afters []validator) {
 
 // jsonValidatorCalls is the checks a node carries, as calls, in the order
 // they run; the check `skip` is the head of the expression and left out. A
-// Rename reads at its place among them (see node.renameAt), where TS
-// attaches it as a check.
+// Rename reads at its place among them (see renameOp), where TS attaches
+// it as a check.
 func jsonValidatorCalls(n *node, skip *validator) []jsonCall {
 	var calls []jsonCall
 	for i := range n.befores {
-		if i == n.renameAt {
-			calls = jsonRenameCall(n, calls)
-		}
+		calls = jsonRenameCalls(n, i, calls)
 		if skip != &n.befores[i] {
 			calls = jsonValidatorCall(&n.befores[i], calls, n)
 		}
 	}
-	if n.renameAt >= len(n.befores) {
-		calls = jsonRenameCall(n, calls)
-	}
+	calls = jsonRenameCalls(n, len(n.befores), calls)
 	jsonNoAfters(n.afters)
 	return calls
 }
 
-// jsonRenameCall appends the node's Rename, where it has one, as a call.
-func jsonRenameCall(n *node, calls []jsonCall) []jsonCall {
-	if n.renameTo == "" {
-		return calls
+// jsonRenameCalls appends the node's Renames that stand at check i, in
+// their order, as calls; at the end, those past it too.
+func jsonRenameCalls(n *node, i int, calls []jsonCall) []jsonCall {
+	for j := range n.renames {
+		r := &n.renames[j]
+		if r.at != i && (r.at < i || i < len(n.befores)) {
+			continue
+		}
+		if r.keep || len(r.claim) > 0 {
+			jsonFault("the options of Rename")
+		}
+		calls = append(calls, jsonCall{n: "Rename", a: []jsonArg{jx(jsonText(r.to))}})
 	}
-	if n.renameKeep || len(n.renameClaim) > 0 {
-		jsonFault("the options of Rename")
-	}
-	return append(calls, jsonCall{n: "Rename", a: []jsonArg{jx(jsonText(n.renameTo))}})
+	return calls
 }
 
 // jsonValidatorCall appends a check of n as calls.
@@ -676,8 +677,15 @@ func jsonArray(n *node) jsonArrayParts {
 
 	a.calls = append(jsonRequiredCalls(n, false), jsonFlagCalls(n, false)...)
 	a.calls = append(a.calls, jsonValidatorCalls(n, nil)...)
-	if n.arrRest != nil {
+	switch {
+	case n.arrRest != nil:
 		a.calls = append(a.calls, jsonCall{n: "Rest", a: []jsonArg{jsonArgOf(n.arrRest)}})
+	case len(n.arrChildren) > 0 && n.arrChild != nil && jsonIsOpen(n.arrChild):
+		// A tuple that takes more elements than its positions says what
+		// they are, as Open([Number, String]) and Child(Boolean, [Number]) do.
+		a.calls = append(a.calls, jsonCall{n: "Open"})
+	case len(n.arrChildren) > 0 && n.arrChild != nil:
+		a.calls = append(a.calls, jsonCall{n: "Child", a: []jsonArg{jsonArgOf(n.arrChild)}})
 	}
 	a.calls = append(a.calls, jsonTailCalls(n)...)
 
@@ -847,7 +855,7 @@ func nodeJSON(n *node) any {
 			jsonFault("the default of a null")
 		}
 		if !n.required && !n.skippable && len(n.befores) == 0 && len(n.afters) == 0 &&
-			!n.nullable && n.faultMsg == "" && n.meta["description"] == nil && n.renameTo == "" {
+			!n.nullable && n.faultMsg == "" && n.meta["description"] == nil && len(n.renames) == 0 {
 			return nil
 		}
 		switch {

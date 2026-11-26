@@ -128,6 +128,34 @@ describe('json', () => {
   })
 
 
+  test('tuple extras', () => {
+    // A tuple that Open or Child lets take more elements says what they are.
+    roundTrip({ a: Open([Number, String]), b: Child(Boolean, [Number, String]) },
+      { 'a: Open': ['Number', 'String'], 'b: Child(Boolean)': ['Number', 'String'] },
+      { a: [1, 'x', null], b: [1, 'x', true] }, { b: [1, 'x', 2] }, { a: [1, 2] })
+    roundTrip({ a: Open(Closed([Number])), b: Child(Boolean, Closed([Number])) },
+      {
+        a: { $$: 'Open(Closed($$0))', $$0: ['Number'] },
+        b: { $$: 'Child(Boolean,Closed($$0))', $$0: ['Number'] },
+      },
+      { a: [1, 'x'], b: [1, true] }, { b: [1, 2] })
+    // A child shape with a call of its own, or no expression, is a carrier.
+    roundTrip({ a: Child(Min(2, Number), [Number, String]), b: Child({ x: 1 }, [Number, String]) },
+      {
+        a: { $$: 'Child(Number.Min(2),$$0)', $$0: ['Number', 'String'] },
+        b: { $$: 'Child($$1,$$0)', $$0: ['Number', 'String'], $$1: { x: 1 } },
+      },
+      { a: [1, 'x', 3], b: [1, 'x', {}] }, { a: [1, 'x', 1] }, { b: [1, 'x', 1] })
+    roundTrip(Child(Boolean, [Number, String]), { $$: 'Child(Boolean,$$0)', $$0: ['Number', 'String'] },
+      [1, 'x', false], [1, 'x', 0])
+    // Closed takes the extras away again, a rest's too: Closed(Rest(Number,
+    // [])) is a tuple of one.
+    roundTrip({ a: Closed(Open([Number, String])), b: Closed(Rest(Number, [])) },
+      { a: ['Number', 'String'], b: { $$: 'Closed($$0)', $$0: ['Number'] } },
+      { a: [1, 'x'], b: [1] }, { a: [1, 'x', 2] }, { b: [1, 2] })
+  })
+
+
   test('lists', () => {
     roundTrip({ a: Nof(Min(1), { x: 1 }, [String]) },
       { a: { $$: 'Nof(Any.Min(1),$$0,$$1)', $$0: { x: 1 }, $$1: ['String'] } }, { a: { x: 2 } }, { a: ['y'] })

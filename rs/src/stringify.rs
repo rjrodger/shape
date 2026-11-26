@@ -43,6 +43,9 @@ pub fn stringify_node(n: &Node, inline: bool) -> String {
             // The Any token carries no default at all: it renders as "Any".
             let base = if n.has_default && !n.default.is_undefined() {
                 format!("Any({})", inline_value(&n.default))
+            } else if n.obj_rest.is_some() {
+                // An Any that Open opened, as TypeScript renders it.
+                "Open".to_string()
             } else {
                 "Any".to_string()
             };

@@ -130,3 +130,65 @@ func TestRenameAroundTaker(t *testing.T) {
 		}
 	}
 }
+
+// A Rename writes its target at its place among the node's afters, as TS
+// attaches it there: an After given later changes the value only after
+// the Rename wrote it, and a value it fills from nothing goes only to a
+// Rename after it. The outputs are TS's.
+func TestRenameAmongAfters(t *testing.T) {
+	inc := func(v any, u *Update, _ *State) bool {
+		if f, ok := v.(float64); ok {
+			u.Val, u.HasVal = f+1, true
+		}
+		return true
+	}
+	set5 := func(v any, u *Update, _ *State) bool {
+		if v == nil {
+			u.Val, u.HasVal = 5.0, true
+		}
+		return true
+	}
+	keep := RenameOptions{Keep: true}
+	claim := RenameOptions{Claim: []string{"a"}}
+	M := func(kv ...any) map[string]any {
+		m := map[string]any{}
+		for i := 0; i < len(kv); i += 2 {
+			m[kv[i].(string)] = kv[i+1]
+		}
+		return m
+	}
+	a3 := M("a", 3.0)
+	for i, tc := range []struct {
+		spec any
+		in   map[string]any
+		want map[string]any
+	}{
+		{M("a", After(inc, Rename("x", Number))), a3, M("x", 3.0)},
+		{M("a", Rename("y", After(inc, Rename("x", Number)))), a3, M("x", 3.0, "y", 4.0)},
+		{M("a", After(inc, RenameWith("x", keep, Number))), a3, M("a", 4.0, "x", 3.0)},
+		{M("a", Rename("a", After(inc, Rename("x", Number)))), a3, M("x", 3.0, "a", 4.0)},
+		{M("a", After(inc, Rename("a", Rename("x", Number)))), a3, M("x", 3.0, "a", 3.0)},
+		{M("a", Rename("y", After(set5, Rename("x")))), M(), M("y", 5.0)},
+		{M("a", Rename("y", After(set5, Rename("x")))), M("a", 1.0), M("x", 1.0, "y", 1.0)},
+		{Child(Rename("y", After(inc, Rename("x", Number)))), a3, M("x", 3.0, "y", 4.0)},
+		{M("a", Rename("x", After(inc, Number))), a3, M("x", 4.0)},
+		{M("a", Rename("z", After(inc, Rename("y", After(inc, Rename("x", Number)))))), a3, M("x", 3.0, "y", 4.0, "z", 5.0)},
+		{M("a", Rename("y", Catch(0.0, After(inc, Rename("x", Number))))), a3, M("x", 4.0, "y", 4.0)},
+		{M("a", RenameWith("y", keep, After(inc, RenameWith("x", keep, Number)))), a3, M("a", 4.0, "x", 3.0, "y", 4.0)},
+		{M("a", After(inc, Rename("x", Number)), "x", Optional(Number)), a3, M("x", 0.0)},
+		{M("b", After(inc, RenameWith("b", claim, Number))), a3, M("b", 4.0)},
+		{M("b", Rename("y", After(inc, RenameWith("b", claim, Number)))), a3, M("y", 4.0)},
+		{M("a", Rename("a", After(set5, Rename("x")))), M(), M("a", 5.0)},
+		{M("a", After(set5, Rename("a", Rename("x")))), M(), M()},
+		{M("a", After(set5, Rename("x"))), M(), M()},
+	} {
+		if out := mustOK(t, MustShape(tc.spec), tc.in); !reflect.DeepEqual(out, tc.want) {
+			t.Fatalf("case %d, %v: got %v, want %v", i, tc.in, out, tc.want)
+		}
+	}
+	// The node a Refer puts in place runs its own afters.
+	referred := MustShape(M("def", Define("R", After(inc, Number)), "o", M("a", ReferWith("R", ReferOptions{Fill: true}))))
+	if out := mustOK(t, referred, M("def", 2.0, "o", M("a", 3.0))); !reflect.DeepEqual(out, M("def", 3.0, "o", M("a", 4.0))) {
+		t.Fatalf("referred: got %v", out)
+	}
+}

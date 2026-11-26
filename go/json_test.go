@@ -182,6 +182,35 @@ func TestJSONArrays(t *testing.T) {
 	roundTrip(t, Rest(M("q", 1.0), A()), `{"$$":"Rest($$1,$$0)","$$0":[],"$$1":{"q":1}}`, A(M()), A(1.0))
 }
 
+func TestJSONTupleExtras(t *testing.T) {
+	M := func(kv ...any) map[string]any {
+		m := map[string]any{}
+		for i := 0; i < len(kv); i += 2 {
+			m[kv[i].(string)] = kv[i+1]
+		}
+		return m
+	}
+	A := func(v ...any) []any { return v }
+	// A tuple that Open or Child lets take more elements says what they are.
+	roundTrip(t, M("a", Open(A(Number, String)), "b", Child(Boolean, A(Number, String))),
+		`{"a: Open":["Number","String"],"b: Child(Boolean)":["Number","String"]}`,
+		M("a", A(1.0, "x", nil), "b", A(1.0, "x", true)), M("b", A(1.0, "x", 2.0)), M("a", A(1.0, 2.0)))
+	roundTrip(t, M("a", Open(Closed(A(Number))), "b", Child(Boolean, Closed(A(Number)))),
+		`{"a":{"$$":"Open(Closed($$0))","$$0":["Number"]},"b":{"$$":"Child(Boolean,Closed($$0))","$$0":["Number"]}}`,
+		M("a", A(1.0, "x"), "b", A(1.0, true)), M("b", A(1.0, 2.0)))
+	// A child shape with a call of its own, or no expression, is a carrier.
+	roundTrip(t, M("a", Child(Min(2, Number), A(Number, String)), "b", Child(M("x", 1.0), A(Number, String))),
+		`{"a":{"$$":"Child(Number.Min(2),$$0)","$$0":["Number","String"]},"b":{"$$":"Child($$1,$$0)","$$0":["Number","String"],"$$1":{"x":1}}}`,
+		M("a", A(1.0, "x", 3.0), "b", A(1.0, "x", M())), M("a", A(1.0, "x", 1.0)), M("b", A(1.0, "x", 1.0)))
+	roundTrip(t, Child(Boolean, A(Number, String)), `{"$$":"Child(Boolean,$$0)","$$0":["Number","String"]}`,
+		A(1.0, "x", false), A(1.0, "x", 0.0))
+	// Closed takes the extras away again, a rest's too: Closed(Rest(Number,
+	// [])) is a tuple of one.
+	roundTrip(t, M("a", Closed(Open(A(Number, String))), "b", Closed(Rest(Number, A()))),
+		`{"a":["Number","String"],"b":{"$$":"Closed($$0)","$$0":["Number"]}}`,
+		M("a", A(1.0, "x"), "b", A(1.0)), M("a", A(1.0, "x", 2.0)), M("b", A(1.0, 2.0)))
+}
+
 func TestJSONLists(t *testing.T) {
 	M := func(kv ...any) map[string]any {
 		m := map[string]any{}

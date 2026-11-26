@@ -702,6 +702,99 @@ function build() {
   // A parenthesis in a string or a regexp is no call: the key form stands.
   add('json-child-literal', { o: CALL('Child', E('"("'), {}) }, [{ o: { x: '(' } }, { o: { x: 'y' } }, { o: {} }])
   add('json-child-regexp', { o: CALL('Child', E('/a(b)/'), {}) }, [{ o: { x: 'ab' } }, { o: { x: 'z' } }, { o: {} }])
+  // Open, Closed and Child on a shape that is no object: none at all, an
+  // Any a check made, a scalar, an array.
+  const BARE_IN = [{}, { o: {} }, { o: { a: 1 } }, { o: { a: 'x' } }, { o: 1 }, { o: 'x' }, { o: null }, { o: [1] }, { o: ['x'] }]
+  add('bare-open', { o: E('Open') }, BARE_IN)
+  add('bare-open-min', { o: E('Open.Min(1)') }, BARE_IN)
+  add('bare-min-open', { o: E('Min(1).Open') }, BARE_IN)
+  add('bare-optional-open', { o: E('Optional(Open)') }, BARE_IN)
+  add('bare-required-open', { o: E('Required.Open') }, BARE_IN)
+  add('bare-open-root', E('Open'), [{}, { a: 1 }, 1, 'x', [1]])
+  add('bare-closed', { o: E('Closed') }, BARE_IN)
+  add('bare-closed-min', { o: E('Min(1).Closed') }, BARE_IN)
+  add('bare-min-child', { o: E('Min(1).Child(Number)') }, BARE_IN)
+  add('bare-child-min', { o: E('Child(Number).Min(1)') }, BARE_IN)
+  add('bare-child-of-min', { o: CALL('Child', N, E('Min(1)')) }, BARE_IN)
+  add('bare-child-of-any', { o: CALL('Child', N, E('Any')) }, BARE_IN)
+  add('bare-string-child', { o: E('String.Child(Number)') }, BARE_IN)
+  add('bare-child-of-string', { o: CALL('Child', N, T) }, BARE_IN)
+  add('bare-open-string', { o: { $open: T } }, BARE_IN)
+  add('bare-open-array', { o: { $open: [N] } }, BARE_IN)
+  add('bare-closed-array', { o: { $closed: [N] } }, BARE_IN)
+  const TUPLE_IN = [{ o: [1, 'x'] }, { o: [1, 'x', 2] }, { o: [1, 'x', 'y'] }, { o: [1] }, { o: ['x'] }, {}]
+  add('bare-open-tuple', { o: { $open: [N, T] } }, TUPLE_IN)
+  add('bare-closed-tuple', { o: { $closed: [N, T] } }, TUPLE_IN)
+  add('bare-child-of-array', { o: CALL('Child', N, [T]) }, BARE_IN)
+  add('bare-child-of-tuple', { o: CALL('Child', B, [N, T]) }, TUPLE_IN.concat([{ o: [1, 'x', true] }]))
+  add('bare-open-child', { o: { $open: CALL('Child', N, {}) } }, BARE_IN)
+  add('bare-closed-list', { o: { $closed: CALL('Child', N, [T]) } }, BARE_IN.concat([{ o: [1, 2] }]))
+  // A node with no value of its own becomes an object; one with a value
+  // keeps its kind.
+  add('bare-child-of-never', { o: CALL('Child', N, E('Never')) }, BARE_IN)
+  add('bare-child-of-date', { o: CALL('Child', N, D) }, BARE_IN)
+  add('bare-child-of-null', { o: CALL('Child', N, null) }, BARE_IN)
+  add('bare-child-of-regexp', { o: CALL('Child', N, E('/x/')) }, BARE_IN)
+  add('bare-child-of-boolean', { o: CALL('Child', N, B) }, BARE_IN.concat([{ o: true }]))
+  add('bare-child-of-object', { o: CALL('Child', N, O) }, BARE_IN)
+  add('bare-child-of-array-token', { o: CALL('Child', N, A) }, BARE_IN)
+  // With a Rest, the rest shape is the array's one child shape.
+  const BREST_IN = [{ o: ['x', 'y'] }, { o: [1] }, { o: [true] }, { o: [1, 2] }, { o: [] }, {}]
+  add('bare-open-rest', { o: { $open: CALL('Rest', N, [T]) } }, BREST_IN)
+  add('bare-child-of-rest', { o: CALL('Child', B, CALL('Rest', N, [T])) }, BREST_IN)
+  add('bare-closed-rest', { o: { $closed: CALL('Rest', N, []) } }, BREST_IN)
+  add('bare-closed-child-tuple', { o: { $closed: CALL('Child', B, [N, T]) } }, TUPLE_IN.concat([{ o: [1, 'x', true] }]))
+  // Two Renames on one node both apply, in the order they were attached:
+  // each sets its name and takes the key away unless kept.
+  const R2_IN = [
+    { a: 3 }, { a: 's' }, {}, { a: null }, { a: 3, x: 1 }, { a: 3, y: 1 }, { x: 1 }, { y: 1 },
+    { a: 3, x: 1, y: 2 }, { a: 3, z: 1 }, { b: 2 }, { a: 3, b: 2 },
+  ]
+  add('r2-plain', { a: RN('y', RN('x')) }, R2_IN)
+  add('r2-number', { a: RN('y', RN('x', N)) }, R2_IN)
+  add('r2-chained', { a: E('Number.Rename("x").Rename("y")') }, R2_IN)
+  add('r2-three', { a: RN('z', RN('y', RN('x'))) }, R2_IN)
+  add('r2-keep-inner', { a: RN('y', RN({ name: 'x', keep: true })) }, R2_IN)
+  add('r2-keep-outer', { a: RN({ name: 'y', keep: true }, RN('x')) }, R2_IN)
+  add('r2-keep-both', { a: RN({ name: 'y', keep: true }, RN({ name: 'x', keep: true })) }, R2_IN)
+  add('r2-same', { a: RN('x', RN('x')) }, R2_IN)
+  add('r2-self-outer', { a: RN('a', RN('x')) }, R2_IN)
+  add('r2-self-inner', { a: RN('x', RN('a')) }, R2_IN)
+  add('r2-optional', { a: RN('y', RN('x', E('Optional(Number)'))) }, R2_IN)
+  add('r2-skip', { a: RN('y', RN('x', E('Skip(Number)'))) }, R2_IN)
+  add('r2-default', { a: RN('y', RN('x', 5)) }, R2_IN)
+  add('r2-declared', { a: RN('y', RN('x')), x: E('Optional(Number)') }, R2_IN)
+  add('r2-declared-outer', { a: RN('y', RN('x')), y: E('Optional(Number)') }, R2_IN)
+  add('r2-required-target', { a: RN('y', RN('x')), y: N }, R2_IN)
+  add('r2-open', { $open: { a: RN('y', RN('x')) } }, R2_IN)
+  add('r2-rest', CALL('Child', RN('y', RN('x'))), R2_IN)
+  add('r2-root', RN('y', RN('x')), ROOT_IN)
+  add('r2-nested', { o: { a: RN('y', RN('x')) } }, R2_IN.map(o => ({ o })))
+  add('r2-catch', { a: E('Catch(0,Rename("y",Rename("x",Number)))') }, R2_IN)
+  add('r2-ignore', { a: E('Ignore(Rename("y",Rename("x",Number)))') }, R2_IN)
+  add('r2-order', { a: E('Rename("y",Min(2,Rename("x",Number)))') }, R2_IN.concat([{ a: 1 }]))
+  add('r2-coerce', { a: E('Rename("y",Rename("x",Number)).Coerce') }, R2_IN.concat([{ a: '4' }]))
+  add('r2-default-chained', { a: E('Rename("x").Rename("y").Default(5)') }, R2_IN)
+  // With claims: each Rename's claim runs at its place, while the value is
+  // absent, and sets its own name.
+  add('r2-claim-inner', { b: RN('y', RCL()) }, R2_IN)
+  add('r2-claim-outer', { b: RN({ name: 'b', claim: ['a'] }, RN('x')) }, R2_IN)
+  add('r2-claim-both', { b: RN({ name: 'c', claim: ['z'] }, RCL()) }, R2_IN)
+  add('r2-claim-both-keep', { b: RN({ name: 'c', claim: ['z'], keep: true }, RCL({ keep: true })) }, R2_IN)
+  add('r2-claim-open', { $open: { b: RN('y', RCL()) } }, R2_IN)
+  add('r2-claim-same', { b: RN({ name: 'c', claim: ['a'] }, RCL()) }, R2_IN)
+  // Through a Refer: the node it puts in the key's place renames, in place
+  // of the key's own.
+  add('r2-refer', { def: DEF(RN('x')), o: { a: RN('y', FILL()) } }, RR_IN)
+  add('r2-refer-two', { def: DEF(RN('y', RN('x'))), o: { a: FILL() } }, RR_IN)
+  add('r2-refer-claim', { def: DEF(RN('y', RCL())), o: { b: FILL() } }, RR_IN)
+  // A taker keeps the Renames it holds ahead of it; one given after it
+  // stands after it.
+  add('r2-around-catch', { a: E('Rename("y",Catch(0,Rename("x",Number)))') }, R2_IN)
+  add('r2-around-ignore', { a: E('Rename("y",Ignore(Rename("x",Min(2,Number))))') }, R2_IN.concat([{ a: 1 }]))
+  add('r2-default-spec', { a: E('Default(5,Rename("y",Rename("x")))') }, R2_IN)
+  add('r2-claim-rest', CALL('Child', RN('y', RCL())), R2_IN)
+  add('r2-claim-declared', { b: RN('y', RCL()), y: E('Optional(Number)') }, R2_IN)
   add('json-rest-bound', { a: CALL('Rest', E('Min(2,Number)'), []) }, [{ a: [3, 4] }, { a: [3, 1] }, { a: [] }, {}])
   add('json-rest-refer', { d: DEF(N), a: CALL('Rest', E('Refer("R")'), [T]) }, [{ d: 1, a: ['s', 2] }, { d: 1, a: ['s', 's'] }])
   // A node a Refer puts in place that injects null for an absent value.

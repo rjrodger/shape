@@ -13,7 +13,7 @@ use crate::format::{
     with_format, FMT_DATE_TIME, FMT_EMAIL, FMT_IP, FMT_IPV4, FMT_IPV6, FMT_URL, FMT_UUID,
 };
 use crate::isolate::{catch_node, transform_node, TransformFn};
-use crate::node::{Counted, Kind, ListMode, Node, Token, Validator};
+use crate::node::{Counted, Kind, ListMode, Node, RenameOp, Token, Validator};
 use crate::normalize::{normalize, type_token_node};
 use crate::spec::Spec;
 use crate::value::{is_integer, js_date_string, js_number, json_render, json_text, Value};
@@ -317,7 +317,7 @@ const KIND_KEEPING: [&str; 16] = [
 fn keeps_kind(n: &Node) -> bool {
     !n.nullable
         && !n.is_ignore()
-        && n.rename_to.is_none()
+        && n.rename_ops.is_empty()
         && n.befores
             .iter()
             .chain(n.afters.iter())
@@ -412,7 +412,7 @@ fn count_bounds(n: &Node) -> (f64, f64, bool) {
     let mut interval = matches!(n.kind, Kind::Any | Kind::Number | Kind::Integer)
         && n.afters.is_empty()
         && !n.silent
-        && n.rename_to.is_none();
+        && n.rename_ops.is_empty();
     for v in &n.befores {
         match (v.name.as_str(), v.args.first().and_then(bound_arg)) {
             ("Min", Some(b)) => lo = above_of(lo, b.ceil()),
@@ -1017,14 +1017,9 @@ impl Node {
             base.fault_msg = self.fault_msg.take();
             base.arg_fault = self.arg_fault;
             // Rename, Define and Refer are checks in TypeScript, which the
-            // node built over the default keeps with the others.
-            base.rename_to = self.rename_to.take();
-            base.rename_keep = self.rename_keep;
-            base.rename_claim = std::mem::take(&mut self.rename_claim);
-            // The node's befores lead, so its rename and claim keep their
-            // places.
-            base.claim_at = self.claim_at;
-            base.rename_at = self.rename_at;
+            // node built over the default keeps with the others. The node's
+            // befores lead, so its renames keep their places.
+            base.rename_ops = std::mem::take(&mut self.rename_ops);
             base.define_name = self.define_name.take();
             base.refer_name = self.refer_name.take();
             base.refer_fill = self.refer_fill;
@@ -1061,30 +1056,60 @@ impl Node {
         self
     }
 
+    /// As TypeScript sets the node's child shape to Any: an object takes any
+    /// property, an array any element past its tuple (a list, any element),
+    /// and an Any, which TypeScript opens too, still takes any value.
     pub fn Open(mut self) -> Node {
-        if self.kind == Kind::Object && self.obj_rest.is_none() {
-            self.obj_rest = Some(Box::new(Node::of(Kind::Any)));
+        let any = || Some(Box::new(Node::of(Kind::Any)));
+        match self.kind {
+            Kind::Object | Kind::Any => self.obj_rest = any(),
+            Kind::Array if self.arr_rest.is_some() => self.arr_rest = any(),
+            Kind::Array => self.arr_child = any(),
+            _ => {}
         }
         self
     }
 
+    /// As TypeScript clears the node's child shape: an object takes no
+    /// property it does not declare, and an array no element past its
+    /// tuple. A single-shape array becomes a fixed tuple of one.
     pub fn Closed(mut self) -> Node {
         self.obj_rest = None;
-        if self.kind == Kind::Array && self.arr_children.is_empty() {
-            // A single-shape array made fixed: a tuple of one.
-            self.arr_children = self.arr_child.take().map(|c| vec![*c]).unwrap_or_default();
+        if self.kind == Kind::Array {
+            let c = self.arr_child.take().or(self.arr_rest.take());
+            if self.arr_children.is_empty() {
+                self.arr_children = c.map(|c| vec![*c]).unwrap_or_default();
+            }
         }
         self
     }
 
+    /// As TypeScript sets the node's child shape: an object's unknown
+    /// properties, an array's elements (a tuple's past its positions) take
+    /// it. A node with no value of its own (an Any, Never, a composition,
+    /// the Date token) becomes an object with the empty default TypeScript
+    /// gives it; one with a value (a string, a number, null, a regexp, a
+    /// date literal) keeps its kind.
     pub fn Child(mut self, child: impl Into<Spec>) -> Node {
         let cn = Box::new(buildize(child));
         match self.kind {
+            Kind::Array if self.arr_rest.is_some() => self.arr_rest = Some(cn),
             Kind::Array => self.arr_child = Some(cn),
             Kind::Object => self.obj_rest = Some(cn),
+            Kind::String
+            | Kind::Number
+            | Kind::Integer
+            | Kind::Boolean
+            | Kind::Null
+            | Kind::NaN
+            | Kind::Regexp
+            | Kind::BigInt => {}
+            Kind::Date if self.literal.is_some() => {}
             _ => {
                 self.kind = Kind::Object;
                 self.obj_rest = Some(cn);
+                self.has_default = true;
+                self.default = Value::Obj(Default::default());
             }
         }
         self
@@ -1420,13 +1445,16 @@ impl Node {
         if name.is_empty() {
             return fault_node("Shape: Rename needs a name");
         }
-        self.rename_to = Some(name);
-        self.rename_keep = opts.keep;
-        self.rename_claim = opts.claim;
-        self.rename_at = self.befores.len();
-        if !self.rename_claim.is_empty() {
-            self.claim_at = self.befores.len();
-        }
+        // Each rename applies, after those the shape already had, as
+        // TypeScript attaches each as checks of its own.
+        let (at, after) = (self.befores.len(), self.afters.len());
+        self.rename_ops.push(RenameOp {
+            to: name,
+            keep: opts.keep,
+            claim: opts.claim,
+            at,
+            after,
+        });
         self
     }
 
@@ -1450,13 +1478,10 @@ impl Node {
 
     pub fn Coerce(mut self) -> Node {
         self.befores.insert(0, coerce_validator());
-        // A check put ahead of a rename, and of its claim, moves them on, as
-        // in TypeScript.
-        if self.rename_to.is_some() {
-            self.rename_at += 1;
-        }
-        if !self.rename_claim.is_empty() {
-            self.claim_at += 1;
+        // A check put ahead of the renames, and of their claims, moves them
+        // on, as in TypeScript.
+        for r in &mut self.rename_ops {
+            r.at += 1;
         }
         self
     }
@@ -2099,6 +2124,124 @@ mod tests {
         assert_eq!(run(&transform, r#"{"a":2}"#), r#"{"x":20}"#);
     }
 
+    /// A rename writes its target at its place among the node's afters, as
+    /// TypeScript attaches it there: an After given later changes the value
+    /// only after the rename wrote it, and a value it fills from nothing
+    /// goes only to a rename after it. The outputs are TypeScript's.
+    #[test]
+    fn renames_among_afters() {
+        fn inc(s: &mut State<'_>, u: &mut Update) -> bool {
+            u.val = s.value.as_f64().map(|n| Value::Num(n + 1.0));
+            true
+        }
+        fn set5(s: &mut State<'_>, u: &mut Update) -> bool {
+            if s.value.is_undefined() {
+                u.val = Some(Value::Num(5.0));
+            }
+            true
+        }
+        let keep = || RenameOptions {
+            keep: true,
+            claim: vec![],
+        };
+        let claim = || RenameOptions {
+            keep: false,
+            claim: vec!["a".into()],
+        };
+        let n = || Token::Number;
+        let at = |s: Node| Schema::new(obj([("a", Spec::from(s))]));
+        let same = |s: &Schema, input: &str, want: &str| {
+            let got: serde_json::Value = serde_json::from_str(&run(s, input)).unwrap();
+            let want: serde_json::Value = serde_json::from_str(want).unwrap();
+            assert_eq!(got, want, "{}", input);
+        };
+        let a3 = r#"{"a":3}"#;
+        same(&at(After(inc, Rename("x", n()))), a3, r#"{"x":3}"#);
+        same(
+            &at(Rename("y", After(inc, Rename("x", n())))),
+            a3,
+            r#"{"x":3,"y":4}"#,
+        );
+        same(
+            &at(After(inc, RenameWith("x", keep(), n()))),
+            a3,
+            r#"{"a":4,"x":3}"#,
+        );
+        same(
+            &at(Rename("a", After(inc, Rename("x", n())))),
+            a3,
+            r#"{"x":3,"a":4}"#,
+        );
+        same(
+            &at(After(inc, Rename("a", Rename("x", n())))),
+            a3,
+            r#"{"x":3,"a":3}"#,
+        );
+        let filled = at(Rename("y", After(set5, Rename("x", Any()))));
+        same(&filled, "{}", r#"{"y":5}"#);
+        same(&filled, r#"{"a":1}"#, r#"{"x":1,"y":1}"#);
+        let rest = Schema::new(Child(Rename("y", After(inc, Rename("x", n()))), Any()));
+        same(&rest, a3, r#"{"x":3,"y":4}"#);
+        same(&at(Rename("x", After(inc, n()))), a3, r#"{"x":4}"#);
+        let three = Rename("z", After(inc, Rename("y", After(inc, Rename("x", n())))));
+        same(&at(three), a3, r#"{"x":3,"y":4,"z":5}"#);
+        same(
+            &at(Rename("y", Catch(0, After(inc, Rename("x", n()))))),
+            a3,
+            r#"{"x":4,"y":4}"#,
+        );
+        same(
+            &at(RenameWith(
+                "y",
+                keep(),
+                After(inc, RenameWith("x", keep(), n())),
+            )),
+            a3,
+            r#"{"a":4,"x":3,"y":4}"#,
+        );
+        let declared = Schema::new(obj([
+            ("a", Spec::from(After(inc, Rename("x", n())))),
+            ("x", Spec::from(Optional(n()))),
+        ]));
+        same(&declared, a3, r#"{"x":0}"#);
+        let claimed = |s: Node| Schema::new(obj([("b", Spec::from(s))]));
+        same(
+            &claimed(After(inc, RenameWith("b", claim(), n()))),
+            a3,
+            r#"{"b":4}"#,
+        );
+        same(
+            &claimed(Rename("y", After(inc, RenameWith("b", claim(), n())))),
+            a3,
+            r#"{"y":4}"#,
+        );
+        same(
+            &at(Rename("a", After(set5, Rename("x", Any())))),
+            "{}",
+            r#"{"a":5}"#,
+        );
+        same(
+            &at(After(set5, Rename("a", Rename("x", Any())))),
+            "{}",
+            "{}",
+        );
+        same(&at(After(set5, Rename("x", Any()))), "{}", "{}");
+        // The node a Refer puts in place runs its own afters.
+        let fill = ReferOptions {
+            strict: false,
+            fill: true,
+        };
+        let referred = Schema::new(obj([
+            ("def", Spec::from(Define("R", After(inc, n())))),
+            ("o", obj([("a", ReferWith("R", fill, Any()))])),
+        ]));
+        same(
+            &referred,
+            r#"{"def":2,"o":{"a":3}}"#,
+            r#"{"def":3,"o":{"a":4}}"#,
+        );
+    }
+
     /// A key's own Skip governs an absent value, whatever node a Refer puts
     /// in its place; and an open object whose rest shape refers to a
     /// claiming node claims for a value it dropped.
@@ -2620,8 +2763,20 @@ mod tests {
         assert!(Closed(arr([Spec::from(1), Spec::from(2)]))
             .arr_child
             .is_none());
+        // A node with a value keeps its kind; one with none becomes an
+        // object with the empty default, as in TypeScript.
         let c = Child(Token::Number, Token::Number);
-        assert!(c.kind == Kind::Object && c.obj_rest.is_some());
+        assert!(c.kind == Kind::Number && c.obj_rest.is_none());
+        let c = Child(Token::Number, Any());
+        assert!(c.kind == Kind::Object && c.obj_rest.is_some() && c.has_default);
+        // A date literal holds a value, and keeps its kind and default; the
+        // Date token holds none.
+        let d = Value::Date(1_704_164_645_000);
+        let c = Required(d.clone()).Child(Token::Number);
+        assert!(c.kind == Kind::Date && c.obj_rest.is_none());
+        assert!(Schema::new(c).valid(&d));
+        assert_eq!(Child(Token::Number, d.clone()).default, d);
+        assert_eq!(Child(Token::Number, Token::Date).kind, Kind::Object);
         assert!(buildize(Token::Array)
             .Child(Token::Number)
             .arr_child

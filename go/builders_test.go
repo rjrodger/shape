@@ -512,6 +512,59 @@ func TestChildObject(t *testing.T) {
 	mustInvalid(t, s, map[string]any{"a": 2, "b": "x"}, "number")
 }
 
+// Open, Closed and Child set or clear the node's one child shape, as TS's
+// do, whatever the node is: an Any, a scalar, a list, a tuple, a rest.
+func TestContainersOnAnyShape(t *testing.T) {
+	at := func(n *Node) *Schema { return MustShape(map[string]any{"o": n}) }
+	o := func(v any) map[string]any { return map[string]any{"o": v} }
+	jsonIs := func(s *Schema, want string) {
+		t.Helper()
+		if got := jsonOf(t, s); got != canonJSON(t, want) {
+			t.Fatalf("json: got %s, want %s", got, want)
+		}
+	}
+	// With no shape, Open opens an Any, which takes any value.
+	open := at(Open())
+	mustValid(t, open, o(1.0))
+	jsonIs(open, `{"o":"Any.Open"}`)
+	// On a list, any element; on a tuple, any element past its positions;
+	// on a rest, any rest element.
+	mustValid(t, at(Open([]any{Number})), o([]any{"x"}))
+	mustValid(t, at(Open([]any{Number, String})), o([]any{1.0, "x", 2.0}))
+	rest := at(Rest(Number, []any{String}).Open())
+	mustValid(t, rest, o([]any{"x", "y"}))
+	jsonIs(rest, `{"o: Rest(Any)":[]}`)
+	// Child turns an Any into an object that defaults to {}, keeps a node
+	// with a value as it is, and replaces a rest.
+	child := at(Min(1).Child(Number))
+	if out := mustValid(t, child, map[string]any{}); !reflect.DeepEqual(out, o(map[string]any{})) {
+		t.Fatalf("absent: got %v", out)
+	}
+	if got := child.JSONSchema()["properties"].(map[string]any)["o"].(map[string]any)["default"]; !reflect.DeepEqual(got, map[string]any{}) {
+		t.Fatalf("schema default: got %v", got)
+	}
+	mustValid(t, at(Child(Number, String)), o("x"))
+	childRest := at(Child(Boolean, Rest(Number, []any{String})))
+	mustValid(t, childRest, o([]any{true}))
+	mustInvalid(t, childRest, o([]any{1.0}), "boolean")
+	jsonIs(childRest, `{"o: Rest(Boolean)":[]}`)
+	// An explicit nil is the null literal, as TS's null.
+	null := at(Child(Number, nil))
+	if out := mustValid(t, null, map[string]any{}); !reflect.DeepEqual(out, o(nil)) {
+		t.Fatalf("null: got %v", out)
+	}
+	// Closed clears the child shape a tuple had.
+	mustInvalid(t, at(Closed(Child(Boolean, []any{Number, String}))), o([]any{1.0, "x", true}), "not allowed")
+	// A date literal holds a value, and keeps its kind and default; the
+	// Date token holds none, and becomes an object.
+	d := time.Date(2024, 1, 2, 3, 4, 5, 0, time.UTC)
+	mustValid(t, MustShape(Required(d).Child(Number)), d)
+	if out := mustValid(t, at(Child(Number, d)), map[string]any{}); !reflect.DeepEqual(out, o(d)) {
+		t.Fatalf("date literal: got %v", out)
+	}
+	mustInvalid(t, at(Child(Number, Date)), o(d), "object")
+}
+
 // --- NaN ---------------------------------------------------------------
 
 func TestNumberRejectsNaN(t *testing.T) {

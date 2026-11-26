@@ -122,32 +122,34 @@ fn no_afters(afters: &[Validator]) -> R<()> {
 
 /// The checks a node carries, as calls, in the order they run; the check at
 /// `skip` is the head of the expression and is left out. A rename reads at
-/// its place among them (see `Node::rename_at`), where TypeScript attaches
-/// it as a check.
+/// its place among them (see `RenameOp`), where TypeScript attaches it as a
+/// check.
 fn validator_calls(n: &Node, skip: Option<usize>) -> R<Vec<Call>> {
     let mut calls = Vec::new();
     for (i, v) in n.befores.iter().enumerate() {
-        if i == n.rename_at {
-            rename_call(n, &mut calls)?;
-        }
+        rename_calls(n, i, &mut calls)?;
         if Some(i) != skip {
             validator_call(v, &mut calls, n)?;
         }
     }
-    if n.rename_at >= n.befores.len() {
-        rename_call(n, &mut calls)?;
-    }
+    rename_calls(n, n.befores.len(), &mut calls)?;
     no_afters(&n.afters)?;
     Ok(calls)
 }
 
-/// The node's rename, where it has one, as a call.
-fn rename_call(n: &Node, calls: &mut Vec<Call>) -> R<()> {
-    if let Some(to) = &n.rename_to {
-        if n.rename_keep || !n.rename_claim.is_empty() {
+/// The node's renames that stand at check `i`, in their order, as calls;
+/// at the end, those past it too.
+fn rename_calls(n: &Node, i: usize, calls: &mut Vec<Call>) -> R<()> {
+    let end = i == n.befores.len();
+    for r in n
+        .rename_ops
+        .iter()
+        .filter(|r| r.at == i || (end && r.at > i))
+    {
+        if r.keep || !r.claim.is_empty() {
             return cannot("the options of Rename");
         }
-        calls.push(call1("Rename", json_text(to)));
+        calls.push(call1("Rename", json_text(&r.to)));
     }
     Ok(())
 }
@@ -727,6 +729,18 @@ fn array(n: &Node) -> R<ArrayParts> {
             name: "Rest".to_string(),
             args: vec![arg_of(rest)?],
         });
+    } else if let (false, Some(c)) = (n.arr_children.is_empty(), &n.arr_child) {
+        // A tuple that takes more elements than its positions says what
+        // they are, as Open([Number, String]) and Child(Boolean, [Number]) do.
+        let (name, args) = if is_open_any(c) {
+            ("Open", vec![])
+        } else {
+            ("Child", vec![arg_of(c)?])
+        };
+        calls.push(Call {
+            name: name.to_string(),
+            args,
+        });
     }
     calls.extend(tail_calls(n));
 
@@ -916,6 +930,10 @@ pub fn node_json(n: &Node) -> R<Value> {
                     if n.has_default && !n.default.is_undefined() && !n.required {
                         head = format!("{}({})", head, literal(&n.default, "the default")?);
                     }
+                    // An Any that Open gave the open Any as its child shape.
+                    if n.obj_rest.as_deref().is_some_and(is_open_any) {
+                        head.push_str(".Open");
+                    }
                     head
                 }
                 // Never is required by itself: Optional(Never) and
@@ -939,7 +957,7 @@ pub fn node_json(n: &Node) -> R<Value> {
                         && !n.nullable
                         && n.fault_msg.is_none()
                         && !n.meta.contains_key("description")
-                        && n.rename_to.is_none()
+                        && n.rename_ops.is_empty()
                     {
                         return Ok(Value::Null);
                     }

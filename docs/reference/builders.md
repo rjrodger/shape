@@ -250,9 +250,9 @@ than a whole number of one or more is the default.
 
 | Builder | Effect |
 | ------- | ------ |
-| `Open(spec?)` | Allow unknown object properties. (An empty `{}` is already open.) |
-| `Closed(spec?)` | Forbid unknown properties; makes a single-shape array a fixed tuple-of-one. |
-| `Child(child, spec?)` | Default shape for every unknown object value (or array element). |
+| `Open(spec?)` | Allow unknown object properties. (An empty `{}` is already open.) On a tuple, the elements past the fixed positions may be anything: `Open([Number, String])` passes `[1, 'x', true]`. Bare, it is an open `Any`, which passes any value. |
+| `Closed(spec?)` | Forbid unknown properties; makes a single-shape array a fixed tuple-of-one, and takes away the elements a tuple allows past its positions, a rest's too: `Closed(Rest(Number, []))` is a tuple of one number. |
+| `Child(child, spec?)` | Default shape for every unknown object value (or array element, or tuple element past the fixed positions: `Child(Boolean, [Number, String])` passes `[1, 'x', true]`). Bare, or on `Any`, it makes an object, with the empty object as its default. A string, a number, a boolean, `null` or a regexp keeps its kind, and the child shape has nothing to apply to. |
 | `Rest(child, spec?)` | Tail shape for array elements past the fixed tuple positions: `Rest(Number, [String, Boolean])`. A single-shape array is an element shape, not a tuple, so a one-element prefix is `Rest(Number, Closed([String]))`, and `Rest(Number, [String])` is an array of numbers—the rest replaces a plain element shape. Bare `Rest(Number)` is the same as `[Number]`. |
 | `Contains(count, shape, spec?)` | The number of the array's items that match `shape` must be one the count admits: a whole number, for exactly that many, or a shape the number must satisfy (`Contains(Min(1), Number)` is at least one number). Bare, it is an array of anything; the items are left as they were. |
 | `Unique(spec?)` | No two of the array's items may be equal as JSON values: a number by its value, an array by its items in order, an object by its keys and their values in any order. Bare, it is an array of anything. |
@@ -316,7 +316,7 @@ key expression, whose example is the shape:
 | `Refer(name, spec?)` | Substitute the named shape at validation time, where the `Refer` stands: a `Rename` in it renames that key, and claims for it. |
 | `Refer({name, fill})` / `ReferWith(name, opts)` | `fill` substitutes even when the value is absent (do not use for self-recursion). |
 | `Refer({name, strict})` / `ReferOptions{Strict}` | A name no `Define` supplies is an error, rather than a `Refer` that does nothing. |
-| `Rename({name, keep?, claim?}, spec?)` / `RenameWith` | Move the property to `name` after validation. `keep` retains the original key; `claim` lists alternate source keys, the first of which the value holds stands in while the property is absent. The target is not a key a closed object accepts, so a value that already has it fails; nor is a claim key the claim leaves. As an open object's rest shape, it renames every key the rest shape takes. Where no object holds the value, at the root or in a composition's branch, it renames and claims nothing. |
+| `Rename({name, keep?, claim?}, spec?)` / `RenameWith` | Move the property to `name` after validation. `keep` retains the original key; `claim` lists alternate source keys, the first of which the value holds stands in while the property is absent. The target is not a key a closed object accepts, so a value that already has it fails; nor is a claim key the claim leaves. As an open object's rest shape, it renames every key the rest shape takes. Where no object holds the value, at the root or in a composition's branch, it renames and claims nothing. Two on one node both apply, in the order given: `Number.Rename("x").Rename("y")` given `{ a: 3 }` produces `{ x: 3, y: 3 }`. |
 
 ## Misc
 

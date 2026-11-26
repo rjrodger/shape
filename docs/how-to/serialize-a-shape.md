@@ -84,6 +84,14 @@ Shape({ a: String, b: Optional(5), c: Min(2, String) }).json()
 A property whose shape is a plain optional value needs no chain at all, so
 it is written as that value.
 
+A tuple that takes more elements than its positions says what they may be,
+with `Open` or `Child` in its chain:
+
+```js
+Shape({ a: Open([Number, String]), b: Child(Boolean, [Number, String]) }).json()
+// { 'a: Open': ['Number', 'String'], 'b: Child(Boolean)': ['Number', 'String'] }
+```
+
 **A value that has no key form is an expression string.** A composition, a
 regexp, a bare `Any`:
 

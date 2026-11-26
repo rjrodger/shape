@@ -96,24 +96,28 @@ func (n *Node) Optional() *Node {
 func Open(spec ...any) *Node {
 	var nb *Node
 	if len(spec) == 0 {
-		nb = buildize(map[string]any{})
+		nb = buildize(nil)
 	} else {
-		nb = buildize(spec[0])
+		nb = buildizeLiteral(spec[0])
 	}
-	nb.n.open = true
-	nb.n.openSet = true
-	if nb.n.kind == KindObject && nb.n.objRest == nil {
-		nb.n.objRest = &node{kind: KindAny}
-	}
-	return nb
+	return nb.Open()
 }
 
-// Open (chained).
+// Open (chained). As TS sets the node's child shape to Any: an object takes
+// any property, an array any element past its tuple (a list, any element),
+// and an Any, which TS opens too, still takes any value.
 func (n *Node) Open() *Node {
 	n.n.open = true
 	n.n.openSet = true
-	if n.n.kind == KindObject && n.n.objRest == nil {
+	switch n.n.kind {
+	case KindObject:
 		n.n.objRest = &node{kind: KindAny}
+	case KindArray:
+		if n.n.arrRest != nil {
+			n.n.arrRest = &node{kind: KindAny}
+		} else {
+			n.n.arrChild = &node{kind: KindAny}
+		}
 	}
 	return n
 }
@@ -124,27 +128,27 @@ func Closed(spec ...any) *Node {
 	if len(spec) == 0 {
 		nb = buildize(nil)
 	} else {
-		nb = buildize(spec[0])
+		nb = buildizeLiteral(spec[0])
 	}
-	nb.n.open = false
-	nb.n.openSet = true
-	nb.n.objRest = nil
-	if nb.n.kind == KindArray && nb.n.arrChild != nil && len(nb.n.arrChildren) == 0 {
-		// Make a single-shape array fixed (tuple of one) when explicitly closed.
-		nb.n.arrChildren = []*node{nb.n.arrChild}
-		nb.n.arrChild = nil
-	}
-	return nb
+	return nb.Closed()
 }
 
-// Closed (chained).
+// Closed (chained). As TS clears the node's child shape: an object takes no
+// property it does not declare, and an array no element past its tuple. A
+// single-shape array becomes a fixed tuple of one.
 func (n *Node) Closed() *Node {
 	n.n.open = false
 	n.n.openSet = true
 	n.n.objRest = nil
-	if n.n.kind == KindArray && n.n.arrChild != nil && len(n.n.arrChildren) == 0 {
-		n.n.arrChildren = []*node{n.n.arrChild}
-		n.n.arrChild = nil
+	if n.n.kind == KindArray {
+		c := n.n.arrChild
+		if c == nil {
+			c = n.n.arrRest
+		}
+		if c != nil && len(n.n.arrChildren) == 0 {
+			n.n.arrChildren = []*node{c}
+		}
+		n.n.arrChild, n.n.arrRest = nil, nil
 	}
 	return n
 }
@@ -260,11 +264,9 @@ func Default(dval any, spec ...any) *Node {
 				base.empty, base.nullable, base.silent = nb.n.empty, nb.n.nullable, nb.n.silent
 				base.faultMsg, base.argFault = nb.n.faultMsg, nb.n.argFault
 				// Rename, Define and Refer are checks in TS, which the node
-				// built over the default keeps with the others.
-				base.renameTo, base.renameKeep, base.renameClaim = nb.n.renameTo, nb.n.renameKeep, nb.n.renameClaim
-				// The shape's befores lead, so its Rename and claim keep
-				// their places.
-				base.claimAt, base.renameAt = nb.n.claimAt, nb.n.renameAt
+				// built over the default keeps with the others. The shape's
+				// befores lead, so its Renames keep their places.
+				base.renames = nb.n.renames
 				base.defineName = nb.n.defineName
 				base.referName, base.referFill, base.referStrict = nb.n.referName, nb.n.referFill, nb.n.referStrict
 				for k, v := range nb.n.meta {
@@ -1224,7 +1226,7 @@ func countSpan(lo, hi float64, yes []int, k, open int) int {
 func countBounds(n *node) (lo, hi float64, interval bool) {
 	lo, hi = 0, math.Inf(1)
 	interval = (n.kind == KindAny || n.kind == KindNumber || n.kind == KindInteger) &&
-		len(n.afters) == 0 && !n.silent && n.renameTo == ""
+		len(n.afters) == 0 && !n.silent && len(n.renames) == 0
 	for _, cv := range n.befores {
 		switch cv.name {
 		case "Min":
@@ -1439,7 +1441,7 @@ func nofKinds(list []*node) []string {
 	kinds := make([]string, len(list))
 	for i, sn := range list {
 		k := kindOfType[sn.kind]
-		if k == "" || sn.nullable || sn.silent || sn.renameTo != "" || contains(kinds[:i], k) ||
+		if k == "" || sn.nullable || sn.silent || len(sn.renames) > 0 || contains(kinds[:i], k) ||
 			!keepsKind(sn.befores) || !keepsKind(sn.afters) {
 			return nil
 		}
@@ -1514,37 +1516,19 @@ func makeListBuilder(mode listMode, shapes []any) *Node {
 func Child(child any, spec ...any) *Node {
 	var nb *Node
 	if len(spec) == 0 {
-		// Given no shape, Child is an object with the empty default TS gives
-		// it (f = {}), which its JSON Schema carries.
-		nb = buildize(map[string]any{})
-		nb.n.hasDefault = true
+		nb = buildize(nil)
 	} else {
-		nb = buildize(spec[0])
+		nb = buildizeLiteral(spec[0])
 	}
-	cn, err := normalize(child)
-	if err != nil {
-		cn = faultNode(err.Error())
-	}
-	switch nb.n.kind {
-	case KindObject:
-		nb.n.objRest = cn
-		nb.n.open = true
-		nb.n.openSet = true
-	case KindArray:
-		nb.n.arrChild = cn
-	default:
-		nb.n.kind = KindObject
-		nb.n.objRest = cn
-		nb.n.open = true
-		nb.n.openSet = true
-		if nb.n.objChildren == nil {
-			nb.n.objChildren = map[string]*node{}
-		}
-	}
-	return nb
+	return nb.Child(child)
 }
 
-// Child (chained).
+// Child (chained). As TS sets the node's child shape: an object's unknown
+// properties, an array's elements (a tuple's past its positions) take it. A
+// node with no value of its own (an Any, Never, a composition, the Date
+// token) becomes an object with the empty default TS gives it, which its
+// JSON Schema carries; one with a value (a string, a number, null, a
+// regexp, a date literal) keeps its kind.
 func (n *Node) Child(child any) *Node {
 	cn, err := normalize(child)
 	if err != nil {
@@ -1556,7 +1540,25 @@ func (n *Node) Child(child any) *Node {
 		n.n.open = true
 		n.n.openSet = true
 	case KindArray:
-		n.n.arrChild = cn
+		if n.n.arrRest != nil {
+			n.n.arrRest = cn
+		} else {
+			n.n.arrChild = cn
+		}
+	case KindString, KindNumber, KindInteger, KindBoolean, KindNull, KindNaN, KindRegexp:
+	default:
+		if n.n.kind == KindDate && n.n.hasLiteral {
+			break
+		}
+		n.n.kind = KindObject
+		n.n.objRest = cn
+		n.n.open = true
+		n.n.openSet = true
+		if n.n.objChildren == nil {
+			n.n.objChildren = map[string]*node{}
+		}
+		n.n.hasDefault = true
+		n.n.defaultValue = map[string]any{}
 	}
 	return n
 }
@@ -1769,13 +1771,17 @@ func RenameWith(name string, opts RenameOptions, spec ...any) *Node {
 	} else {
 		nb = buildize(spec[0])
 	}
-	nb.n.renameTo = name
-	nb.n.renameKeep = opts.Keep
-	nb.n.renameAt = len(nb.n.befores)
-	if len(opts.Claim) > 0 {
-		nb.n.renameClaim = append([]string{}, opts.Claim...)
-		nb.n.claimAt = len(nb.n.befores)
-	}
+	// Each Rename applies, after those the shape already had, as TS
+	// attaches each as checks of its own. The list is made anew, as nodes
+	// share it.
+	rs := nb.n.renames
+	nb.n.renames = append(rs[:len(rs):len(rs)], renameOp{
+		to:    name,
+		keep:  opts.Keep,
+		claim: append([]string(nil), opts.Claim...),
+		at:    len(nb.n.befores),
+		after: len(nb.n.afters),
+	})
 	return nb
 }
 

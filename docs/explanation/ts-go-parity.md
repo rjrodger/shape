@@ -179,11 +179,6 @@ Some differences are inherent to Go and are unlikely ever to close.
   `keep` at all, so `json()` writes such a `Rename` as `Rename(name)`, where
   TypeScript refuses it.
 
-- **Two `Rename`s on one node.** TypeScript applies both, so
-  `{ a: Rename('y', Rename('x', Number)) }` given `{ a: 3 }` produces
-  `{ x: 3, y: 3 }`. Go and Rust keep the last, producing `{ y: 3 }`, and
-  `json()` writes that one alone.
-
 - **Structs are a Go-only convenience.** A struct is read into the same
   `map[string]any` model that TypeScript's plain objects occupy, on the way in
   (as a value, by its `json` tags) and on the way out (`ValidateInto`), and a
