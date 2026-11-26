@@ -727,6 +727,18 @@ fn array(n: &Node) -> R<ArrayParts> {
             name: "Rest".to_string(),
             args: vec![arg_of(rest)?],
         });
+    } else if let (false, Some(c)) = (n.arr_children.is_empty(), &n.arr_child) {
+        // A tuple that takes more elements than its positions says what
+        // they are, as Open([Number, String]) and Child(Boolean, [Number]) do.
+        let (name, args) = if is_open_any(c) {
+            ("Open", vec![])
+        } else {
+            ("Child", vec![arg_of(c)?])
+        };
+        calls.push(Call {
+            name: name.to_string(),
+            args,
+        });
     }
     calls.extend(tail_calls(n));
 
@@ -915,6 +927,10 @@ pub fn node_json(n: &Node) -> R<Value> {
                     // required number.
                     if n.has_default && !n.default.is_undefined() && !n.required {
                         head = format!("{}({})", head, literal(&n.default, "the default")?);
+                    }
+                    // An Any that Open gave the open Any as its child shape.
+                    if n.obj_rest.as_deref().is_some_and(is_open_any) {
+                        head.push_str(".Open");
                     }
                     head
                 }

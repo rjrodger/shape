@@ -20,6 +20,13 @@ rest-keeps-tuple-positions	{"$call":["Rest",{"$type":"Number"},[{"$type":"String
 rest-keeps-tuple-positions-bad	{"$call":["Rest",{"$type":"Number"},[{"$type":"String"},{"$type":"Number"}]]}	[1,1]		"Validation failed for index \"0\" with number \"1\" because the number is not of type string."
 rest-over-closed-one-tuple	{"$call":["Rest",{"$type":"Number"},{"$closed":[{"$type":"String"}]}]}	["a",1]	["a",1]	
 rest-over-closed-one-tuple-bad	{"$call":["Rest",{"$type":"Number"},{"$closed":[{"$type":"String"}]}]}	[1]		"Validation failed for index \"0\" with number \"1\" because the number is not of type string."
+open-tuple-extra	{"a":{"$call":["Open",[{"$type":"Number"},{"$type":"String"}]]}}	{"a":[1,"x",true]}	{"a":[1,"x",true]}	
+child-tuple-extra	{"a":{"$call":["Child",{"$type":"Boolean"},[{"$type":"Number"},{"$type":"String"}]]}}	{"a":[1,"x",true]}	{"a":[1,"x",true]}	
+child-tuple-extra-bad	{"a":{"$call":["Child",{"$type":"Boolean"},[{"$type":"Number"},{"$type":"String"}]]}}	{"a":[1,"x",2]}		"Validation failed for index \"a.2\" with number \"2\" because the number is not of type boolean."
+child-tuple-of-one-extra	{"a":{"$call":["Child",{"$type":"Boolean"},{"$closed":[{"$type":"Number"}]}]}}	{"a":[1,true]}	{"a":[1,true]}	
+child-tuple-root	{"$call":["Child",{"$type":"Boolean"},[{"$type":"Number"},{"$type":"String"}]]}	[1,"x",false]	[1,"x",false]	
+closed-rest-one	{"a":{"$closed":{"$call":["Rest",{"$type":"Number"},[]]}}}	{"a":[1,2]}		"Validation failed for index \"a\" with array \"[1,2]\" because the index \"1\" is not allowed."
+closed-tuple-extra	{"a":{"$closed":{"$call":["Child",{"$type":"Boolean"},[{"$type":"Number"},{"$type":"String"}]]}}}	{"a":[1,"x",true]}		"Validation failed for index \"a\" with array \"[1,x,true]\" because the index \"2\" is not allowed."
 array-ignore-drops-bad	[{"$expr":"Ignore(Number)"}]	[1,"x"]	[1,null]	
 array-ignore-keeps-good	[{"$expr":"Ignore(Number)"}]	[1,2]	[1,2]	
 array-ignore-bound	[{"$expr":"Ignore(Min(2,Number))"}]	[1,3]	[null,3]	

@@ -250,9 +250,9 @@ than a whole number of one or more is the default.
 
 | Builder | Effect |
 | ------- | ------ |
-| `Open(spec?)` | Allow unknown object properties. (An empty `{}` is already open.) |
-| `Closed(spec?)` | Forbid unknown properties; makes a single-shape array a fixed tuple-of-one. |
-| `Child(child, spec?)` | Default shape for every unknown object value (or array element). |
+| `Open(spec?)` | Allow unknown object properties. (An empty `{}` is already open.) On a tuple, the elements past the fixed positions may be anything: `Open([Number, String])` passes `[1, 'x', true]`. Bare, it is an open `Any`, which passes any value. |
+| `Closed(spec?)` | Forbid unknown properties; makes a single-shape array a fixed tuple-of-one, and takes away the elements a tuple allows past its positions, a rest's too: `Closed(Rest(Number, []))` is a tuple of one number. |
+| `Child(child, spec?)` | Default shape for every unknown object value (or array element, or tuple element past the fixed positions: `Child(Boolean, [Number, String])` passes `[1, 'x', true]`). Bare, or on `Any`, it makes an object, with the empty object as its default. A string, a number, a boolean, `null` or a regexp keeps its kind, and the child shape has nothing to apply to. |
 | `Rest(child, spec?)` | Tail shape for array elements past the fixed tuple positions: `Rest(Number, [String, Boolean])`. A single-shape array is an element shape, not a tuple, so a one-element prefix is `Rest(Number, Closed([String]))`, and `Rest(Number, [String])` is an array of numbers—the rest replaces a plain element shape. Bare `Rest(Number)` is the same as `[Number]`. |
 | `Contains(count, shape, spec?)` | The number of the array's items that match `shape` must be one the count admits: a whole number, for exactly that many, or a shape the number must satisfy (`Contains(Min(1), Number)` is at least one number). Bare, it is an array of anything; the items are left as they were. |
 | `Unique(spec?)` | No two of the array's items may be equal as JSON values: a number by its value, an array by its items in order, an object by its keys and their values in any order. Bare, it is an array of anything. |

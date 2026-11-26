@@ -558,9 +558,16 @@ func validateArray(n *node, in any, path []string, pathArr []any, parent any, ct
 		// Tuple validation.
 		tupleLen := len(n.arrChildren)
 
+		// The elements past the positions take the rest shape, or the child
+		// shape, as TS's one child of an array is either.
+		extra := n.arrRest
+		if extra == nil {
+			extra = n.arrChild
+		}
+
 		// Closed tuple with extra elements: TS emits a single "index N is not
 		// allowed" error (N = tuple length) and does not validate any element.
-		if len(arr) > tupleLen && n.arrRest == nil {
+		if len(arr) > tupleLen && extra == nil {
 			state := &State{Path: path, PathArr: pathArr, Key: strconv.Itoa(tupleLen), Value: arr, Node: n, Match: match, Ctx: ctx}
 			err := makeErr(state, WhyClosed, markArrayClosed, "")
 			if !n.silent {
@@ -571,11 +578,11 @@ func validateArray(n *node, in any, path []string, pathArr []any, parent any, ct
 
 		p := newProduced(arr, boxed, ctx, match)
 		for i, v := range arr {
-			cn := n.arrRest
+			cn := extra
 			if i < tupleLen {
 				cn = n.arrChildren[i]
 			}
-			// len(arr) > tupleLen only reaches here when arrRest is set.
+			// len(arr) > tupleLen only reaches here when extra is set.
 			if cn.plain && plainOK(cn, v) {
 				continue
 			}

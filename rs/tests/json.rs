@@ -354,6 +354,61 @@ fn arrays() {
 }
 
 #[test]
+fn tuple_extras() {
+    let ns = || arr([Token::Number, Token::String]);
+    // A tuple that Open or Child lets take more elements says what they are.
+    round_trip(
+        obj([("a", Open(ns())), ("b", Child(Token::Boolean, ns()))]),
+        r#"{"a: Open":["Number","String"],"b: Child(Boolean)":["Number","String"]}"#,
+        &[
+            v(r#"{"a":[1,"x",null],"b":[1,"x",true]}"#),
+            v(r#"{"b":[1,"x",2]}"#),
+            v(r#"{"a":[1,2]}"#),
+        ],
+    );
+    round_trip(
+        obj([
+            ("a", Open(Closed(arr([Token::Number])))),
+            ("b", Child(Token::Boolean, Closed(arr([Token::Number])))),
+        ]),
+        r#"{"a":{"$$":"Open(Closed($$0))","$$0":["Number"]},"b":{"$$":"Child(Boolean,Closed($$0))","$$0":["Number"]}}"#,
+        &[v(r#"{"a":[1,"x"],"b":[1,true]}"#), v(r#"{"b":[1,2]}"#)],
+    );
+    // A child shape with a call of its own, or no expression, is a carrier.
+    round_trip(
+        obj([
+            ("a", Child(Min(2, Token::Number), ns())),
+            ("b", Child(obj([("x", 1)]), ns())),
+        ]),
+        r#"{"a":{"$$":"Child(Number.Min(2),$$0)","$$0":["Number","String"]},"b":{"$$":"Child($$1,$$0)","$$0":["Number","String"],"$$1":{"x":1}}}"#,
+        &[
+            v(r#"{"a":[1,"x",3],"b":[1,"x",{}]}"#),
+            v(r#"{"a":[1,"x",1]}"#),
+            v(r#"{"b":[1,"x",1]}"#),
+        ],
+    );
+    round_trip(
+        Child(Token::Boolean, ns()),
+        r#"{"$$":"Child(Boolean,$$0)","$$0":["Number","String"]}"#,
+        &[v(r#"[1,"x",false]"#), v(r#"[1,"x",0]"#)],
+    );
+    // Closed takes the extras away again, a rest's too: Closed(Rest(Number,
+    // [])) is a tuple of one.
+    round_trip(
+        obj([
+            ("a", Closed(Open(ns()))),
+            ("b", Closed(Rest(Token::Number, arr::<Spec>([])))),
+        ]),
+        r#"{"a":["Number","String"],"b":{"$$":"Closed($$0)","$$0":["Number"]}}"#,
+        &[
+            v(r#"{"a":[1,"x"],"b":[1]}"#),
+            v(r#"{"a":[1,"x",2]}"#),
+            v(r#"{"b":[1,2]}"#),
+        ],
+    );
+}
+
+#[test]
 fn lists() {
     round_trip(
         obj([("a", Nof(1, [Token::String, Token::Number]))]),

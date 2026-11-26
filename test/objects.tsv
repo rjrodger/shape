@@ -31,3 +31,9 @@ child-bound	{"o":{"$call":["Child",{"$expr":"Min(2,Number)"},{}]}}	{"o":{"a":3}}
 child-bound-bad	{"o":{"$call":["Child",{"$expr":"Min(2,Number)"},{}]}}	{"o":{"a":1}}		"Value \"1\" for property \"o.a\" must be a minimum of 2 (was 1)."
 child-refer	{"def":{"$call":["Define","R",{"$type":"Number"}]},"o":{"$call":["Child",{"$expr":"Refer(\"R\")"},{}]}}	{"def":2,"o":{"a":1}}	{"def":2,"o":{"a":1}}	
 child-refer-bad	{"def":{"$call":["Define","R",{"$type":"Number"}]},"o":{"$call":["Child",{"$expr":"Refer(\"R\")"},{}]}}	{"def":2,"o":{"a":"x"}}		"Validation failed for property \"o.a\" with string \"x\" because the string is not of type number."
+open-bare-any	{"o":{"$expr":"Open"}}	{"o":1}	{"o":1}	
+open-bare-absent	{"o":{"$expr":"Open"}}	{}	{}	
+child-of-any-default	{"o":{"$call":["Child",{"$type":"Number"},{"$expr":"Any"}]}}	{}	{"o":{}}	
+child-of-any-bad	{"o":{"$call":["Child",{"$type":"Number"},{"$expr":"Any"}]}}	{"o":{"a":"x"}}		"Validation failed for property \"o.a\" with string \"x\" because the string is not of type number."
+child-of-string	{"o":{"$call":["Child",{"$type":"Number"},{"$type":"String"}]}}	{"o":"x"}	{"o":"x"}	
+child-of-string-bad	{"o":{"$call":["Child",{"$type":"Number"},{"$type":"String"}]}}	{"o":1}		"Validation failed for property \"o\" with number \"1\" because the number is not of type string."

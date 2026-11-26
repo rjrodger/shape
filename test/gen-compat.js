@@ -114,6 +114,14 @@ const files = {
     ['child-bound-bad', { o: CALL('Child', { $expr: 'Min(2,Number)' }, {}) }, { o: { a: 1 } }],
     ['child-refer', { def: RDEF(N), o: CALL('Child', { $expr: 'Refer("R")' }, {}) }, { def: 2, o: { a: 1 } }],
     ['child-refer-bad', { def: RDEF(N), o: CALL('Child', { $expr: 'Refer("R")' }, {}) }, { def: 2, o: { a: 'x' } }],
+    // Open with no shape is an open Any. Child makes an Any an object of
+    // its child shape, the empty object by default; a value keeps its kind.
+    ['open-bare-any', { o: { $expr: 'Open' } }, { o: 1 }],
+    ['open-bare-absent', { o: { $expr: 'Open' } }, {}],
+    ['child-of-any-default', { o: CALL('Child', N, { $expr: 'Any' }) }, {}],
+    ['child-of-any-bad', { o: CALL('Child', N, { $expr: 'Any' }) }, { o: { a: 'x' } }],
+    ['child-of-string', { o: CALL('Child', N, T) }, { o: 'x' }],
+    ['child-of-string-bad', { o: CALL('Child', N, T) }, { o: 1 }],
   ],
   arrays: [
     ['array-of-number', [N], [1, 2, 3]],
@@ -141,6 +149,16 @@ const files = {
     ['rest-keeps-tuple-positions-bad', CALL('Rest', N, [T, N]), [1, 1]],
     ['rest-over-closed-one-tuple', CALL('Rest', N, { $closed: [T] }), ['a', 1]],
     ['rest-over-closed-one-tuple-bad', CALL('Rest', N, { $closed: [T] }), [1]],
+    // Open or Child gives a tuple a shape for the elements after its
+    // positions, and Closed takes it away again: Closed(Rest(Number, [])) is
+    // a tuple of one.
+    ['open-tuple-extra', { a: CALL('Open', [N, T]) }, { a: [1, 'x', true] }],
+    ['child-tuple-extra', { a: CALL('Child', B, [N, T]) }, { a: [1, 'x', true] }],
+    ['child-tuple-extra-bad', { a: CALL('Child', B, [N, T]) }, { a: [1, 'x', 2] }],
+    ['child-tuple-of-one-extra', { a: CALL('Child', B, { $closed: [N] }) }, { a: [1, true] }],
+    ['child-tuple-root', CALL('Child', B, [N, T]), [1, 'x', false]],
+    ['closed-rest-one', { a: { $closed: CALL('Rest', N, []) } }, { a: [1, 2] }],
+    ['closed-tuple-extra', { a: { $closed: CALL('Child', B, [N, T]) } }, { a: [1, 'x', true] }],
     ['array-ignore-drops-bad', [{ $expr: 'Ignore(Number)' }], [1, 'x']],
     ['array-ignore-keeps-good', [{ $expr: 'Ignore(Number)' }], [1, 2]],
     ['array-ignore-bound', [{ $expr: 'Ignore(Min(2,Number))' }], [1, 3]],

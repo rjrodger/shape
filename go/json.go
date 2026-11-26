@@ -676,8 +676,15 @@ func jsonArray(n *node) jsonArrayParts {
 
 	a.calls = append(jsonRequiredCalls(n, false), jsonFlagCalls(n, false)...)
 	a.calls = append(a.calls, jsonValidatorCalls(n, nil)...)
-	if n.arrRest != nil {
+	switch {
+	case n.arrRest != nil:
 		a.calls = append(a.calls, jsonCall{n: "Rest", a: []jsonArg{jsonArgOf(n.arrRest)}})
+	case len(n.arrChildren) > 0 && n.arrChild != nil && jsonIsOpen(n.arrChild):
+		// A tuple that takes more elements than its positions says what
+		// they are, as Open([Number, String]) and Child(Boolean, [Number]) do.
+		a.calls = append(a.calls, jsonCall{n: "Open"})
+	case len(n.arrChildren) > 0 && n.arrChild != nil:
+		a.calls = append(a.calls, jsonCall{n: "Child", a: []jsonArg{jsonArgOf(n.arrChild)}})
 	}
 	a.calls = append(a.calls, jsonTailCalls(n)...)
 

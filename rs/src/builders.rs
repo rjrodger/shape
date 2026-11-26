@@ -1061,30 +1061,58 @@ impl Node {
         self
     }
 
+    /// As TypeScript sets the node's child shape to Any: an object takes any
+    /// property, an array any element past its tuple (a list, any element),
+    /// and an Any, which TypeScript opens too, still takes any value.
     pub fn Open(mut self) -> Node {
-        if self.kind == Kind::Object && self.obj_rest.is_none() {
-            self.obj_rest = Some(Box::new(Node::of(Kind::Any)));
+        let any = || Some(Box::new(Node::of(Kind::Any)));
+        match self.kind {
+            Kind::Object | Kind::Any => self.obj_rest = any(),
+            Kind::Array if self.arr_rest.is_some() => self.arr_rest = any(),
+            Kind::Array => self.arr_child = any(),
+            _ => {}
         }
         self
     }
 
+    /// As TypeScript clears the node's child shape: an object takes no
+    /// property it does not declare, and an array no element past its
+    /// tuple. A single-shape array becomes a fixed tuple of one.
     pub fn Closed(mut self) -> Node {
         self.obj_rest = None;
-        if self.kind == Kind::Array && self.arr_children.is_empty() {
-            // A single-shape array made fixed: a tuple of one.
-            self.arr_children = self.arr_child.take().map(|c| vec![*c]).unwrap_or_default();
+        if self.kind == Kind::Array {
+            let c = self.arr_child.take().or(self.arr_rest.take());
+            if self.arr_children.is_empty() {
+                self.arr_children = c.map(|c| vec![*c]).unwrap_or_default();
+            }
         }
         self
     }
 
+    /// As TypeScript sets the node's child shape: an object's unknown
+    /// properties, an array's elements (a tuple's past its positions) take
+    /// it. A node with no value of its own (an Any, Never, a composition)
+    /// becomes an object with the empty default TypeScript gives it; one
+    /// with a value (a string, a number, null, a regexp) keeps its kind.
     pub fn Child(mut self, child: impl Into<Spec>) -> Node {
         let cn = Box::new(buildize(child));
         match self.kind {
+            Kind::Array if self.arr_rest.is_some() => self.arr_rest = Some(cn),
             Kind::Array => self.arr_child = Some(cn),
             Kind::Object => self.obj_rest = Some(cn),
+            Kind::String
+            | Kind::Number
+            | Kind::Integer
+            | Kind::Boolean
+            | Kind::Null
+            | Kind::NaN
+            | Kind::Regexp
+            | Kind::BigInt => {}
             _ => {
                 self.kind = Kind::Object;
                 self.obj_rest = Some(cn);
+                self.has_default = true;
+                self.default = Value::Obj(Default::default());
             }
         }
         self
@@ -2620,8 +2648,12 @@ mod tests {
         assert!(Closed(arr([Spec::from(1), Spec::from(2)]))
             .arr_child
             .is_none());
+        // A node with a value keeps its kind; one with none becomes an
+        // object with the empty default, as in TypeScript.
         let c = Child(Token::Number, Token::Number);
-        assert!(c.kind == Kind::Object && c.obj_rest.is_some());
+        assert!(c.kind == Kind::Number && c.obj_rest.is_none());
+        let c = Child(Token::Number, Any());
+        assert!(c.kind == Kind::Object && c.obj_rest.is_some() && c.has_default);
         assert!(buildize(Token::Array)
             .Child(Token::Number)
             .arr_child

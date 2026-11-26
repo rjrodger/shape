@@ -449,7 +449,7 @@ fn build_call(name: &str, mut args: Vec<Spec>) -> Result<Node, ExprError> {
     match name {
         "Required" => unary(&mut args, Required),
         "Optional" => unary(&mut args, Optional),
-        "Open" => Ok(Open(shape_at(&mut args, 0, Spec::Obj(Vec::new())))),
+        "Open" => unary(&mut args, Open),
         "Closed" => unary(&mut args, Closed),
         "Skip" => unary(&mut args, Skip),
         "Ignore" => unary(&mut args, Ignore),
@@ -1060,7 +1060,7 @@ mod tests {
             ("Optional(Number)", "0"),
             ("Required()", "Any"),
             ("Required(null)", "null"),
-            ("Open", "{}.Open()"),
+            ("Open", "Open"),
             ("Open(Number)", "Number"),
             ("Closed", "Any"),
             ("Child(Number)", "{}.Child(Number)"),

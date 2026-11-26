@@ -702,6 +702,48 @@ function build() {
   // A parenthesis in a string or a regexp is no call: the key form stands.
   add('json-child-literal', { o: CALL('Child', E('"("'), {}) }, [{ o: { x: '(' } }, { o: { x: 'y' } }, { o: {} }])
   add('json-child-regexp', { o: CALL('Child', E('/a(b)/'), {}) }, [{ o: { x: 'ab' } }, { o: { x: 'z' } }, { o: {} }])
+  // Open, Closed and Child on a shape that is no object: none at all, an
+  // Any a check made, a scalar, an array.
+  const BARE_IN = [{}, { o: {} }, { o: { a: 1 } }, { o: { a: 'x' } }, { o: 1 }, { o: 'x' }, { o: null }, { o: [1] }, { o: ['x'] }]
+  add('bare-open', { o: E('Open') }, BARE_IN)
+  add('bare-open-min', { o: E('Open.Min(1)') }, BARE_IN)
+  add('bare-min-open', { o: E('Min(1).Open') }, BARE_IN)
+  add('bare-optional-open', { o: E('Optional(Open)') }, BARE_IN)
+  add('bare-required-open', { o: E('Required.Open') }, BARE_IN)
+  add('bare-open-root', E('Open'), [{}, { a: 1 }, 1, 'x', [1]])
+  add('bare-closed', { o: E('Closed') }, BARE_IN)
+  add('bare-closed-min', { o: E('Min(1).Closed') }, BARE_IN)
+  add('bare-min-child', { o: E('Min(1).Child(Number)') }, BARE_IN)
+  add('bare-child-min', { o: E('Child(Number).Min(1)') }, BARE_IN)
+  add('bare-child-of-min', { o: CALL('Child', N, E('Min(1)')) }, BARE_IN)
+  add('bare-child-of-any', { o: CALL('Child', N, E('Any')) }, BARE_IN)
+  add('bare-string-child', { o: E('String.Child(Number)') }, BARE_IN)
+  add('bare-child-of-string', { o: CALL('Child', N, T) }, BARE_IN)
+  add('bare-open-string', { o: { $open: T } }, BARE_IN)
+  add('bare-open-array', { o: { $open: [N] } }, BARE_IN)
+  add('bare-closed-array', { o: { $closed: [N] } }, BARE_IN)
+  const TUPLE_IN = [{ o: [1, 'x'] }, { o: [1, 'x', 2] }, { o: [1, 'x', 'y'] }, { o: [1] }, { o: ['x'] }, {}]
+  add('bare-open-tuple', { o: { $open: [N, T] } }, TUPLE_IN)
+  add('bare-closed-tuple', { o: { $closed: [N, T] } }, TUPLE_IN)
+  add('bare-child-of-array', { o: CALL('Child', N, [T]) }, BARE_IN)
+  add('bare-child-of-tuple', { o: CALL('Child', B, [N, T]) }, TUPLE_IN.concat([{ o: [1, 'x', true] }]))
+  add('bare-open-child', { o: { $open: CALL('Child', N, {}) } }, BARE_IN)
+  add('bare-closed-list', { o: { $closed: CALL('Child', N, [T]) } }, BARE_IN.concat([{ o: [1, 2] }]))
+  // A node with no value of its own becomes an object; one with a value
+  // keeps its kind.
+  add('bare-child-of-never', { o: CALL('Child', N, E('Never')) }, BARE_IN)
+  add('bare-child-of-date', { o: CALL('Child', N, D) }, BARE_IN)
+  add('bare-child-of-null', { o: CALL('Child', N, null) }, BARE_IN)
+  add('bare-child-of-regexp', { o: CALL('Child', N, E('/x/')) }, BARE_IN)
+  add('bare-child-of-boolean', { o: CALL('Child', N, B) }, BARE_IN.concat([{ o: true }]))
+  add('bare-child-of-object', { o: CALL('Child', N, O) }, BARE_IN)
+  add('bare-child-of-array-token', { o: CALL('Child', N, A) }, BARE_IN)
+  // With a Rest, the rest shape is the array's one child shape.
+  const BREST_IN = [{ o: ['x', 'y'] }, { o: [1] }, { o: [true] }, { o: [1, 2] }, { o: [] }, {}]
+  add('bare-open-rest', { o: { $open: CALL('Rest', N, [T]) } }, BREST_IN)
+  add('bare-child-of-rest', { o: CALL('Child', B, CALL('Rest', N, [T])) }, BREST_IN)
+  add('bare-closed-rest', { o: { $closed: CALL('Rest', N, []) } }, BREST_IN)
+  add('bare-closed-child-tuple', { o: { $closed: CALL('Child', B, [N, T]) } }, TUPLE_IN.concat([{ o: [1, 'x', true] }]))
   add('json-rest-bound', { a: CALL('Rest', E('Min(2,Number)'), []) }, [{ a: [3, 4] }, { a: [3, 1] }, { a: [] }, {}])
   add('json-rest-refer', { d: DEF(N), a: CALL('Rest', E('Refer("R")'), [T]) }, [{ d: 1, a: ['s', 2] }, { d: 1, a: ['s', 's'] }])
   // A node a Refer puts in place that injects null for an absent value.
