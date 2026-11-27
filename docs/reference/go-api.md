@@ -381,9 +381,7 @@ name keys `a`, `b`, `c`, … to fix argument positions.
 
 ## Version
 
-```go
-const Version = "0.5.0"
-```
+`shape.Version` is the module version.
 
 See [Use Shape in Go](../how-to/use-shape-in-go.md) for idioms and the
 [parity notes](../explanation/ts-go-parity.md) for behavioural differences.
